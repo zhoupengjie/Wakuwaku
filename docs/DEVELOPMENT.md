@@ -1,0 +1,106 @@
+# 开发说明
+
+## 目录
+
+```
+src/
+  main/index.js       应用生命周期、窗口、拖动、走动、鼠标位置、右键菜单
+  main/state.js       状态机：消息 → mood；Review 还是挥手、自动回 idle、过期兜底、反应动作
+  main/server.js      127.0.0.1:47213 上的 HTTP 接口
+  main/config.js      设置读写（Electron userData 下的 config.json：宠物、大小、气泡、走动、注视、位置）
+  main/pets.js        列出 pets/ 下已下载的宠物
+  preload/index.js    contextBridge 暴露给页面的 window.pet
+  renderer/sprite.js  图集布局、mood → 动作、16 方向注视换算（页面和测试共用）
+  renderer/pet.js     每 40ms 决定画哪一格：拖动 > 反应 > 走动 > 注视 > mood
+  renderer/           index.html、style.css
+hooks/claude-hook.js  Claude Code command hook：事件 → 消息 → POST
+scripts/
+  fetch-pet.js        从 codex-pets.net 下载 spritesheet.webp + pet.json
+  install-hooks.js    写入 / 移除 settings.json 里的 hooks
+  smoke.js            端到端冒烟测试
+test/                 node:test 单元测试
+pets/<id>/            下载的宠物（gitignore）
+out/                  冒烟测试截图（gitignore）
+```
+
+## 消息
+
+hook 发给窗口的消息格式（详见 `src/main/state.js`）：
+
+```json
+{ "mood": "working", "detail": "Bash", "event": "tool-done", "react": "failed", "say": "Bash 失败了" }
+```
+
+| 字段 | 取值 |
+| --- | --- |
+| `mood` | `idle` / `working` / `waiting` / `done` / `review` / `error` |
+| `detail` | 气泡里跟在状态后面的说明，最多 80 字 |
+| `event` | `turn-start`（发了新消息）/ `tool-done`（工具执行完）。窗口靠它判断这一轮有没有改过文件 |
+| `react` | `wave` / `jump` / `failed`，在当前 mood 上播一次，不改变 mood |
+| `say` | 反应期间气泡里显示的话 |
+
+`mood` 和 `react` 至少要有一个。`done` 时，如果这一轮里 Edit / Write / MultiEdit / NotebookEdit 执行过，就变成 `review`。
+
+## HTTP 接口
+
+| 请求 | 说明 |
+| --- | --- |
+| `GET /health` | `{ ok, app: "claude-pets", state }` |
+| `POST /state` | 一条消息 |
+| `GET /snapshot` | 当前窗口截图（PNG） |
+| `POST /debug/look` | `{ dx, dy }`：假装鼠标在宠物脸旁边这个位置。只在 `CLAUDE_PETS_DEBUG=1` 时开放 |
+
+手动测试：
+
+```bash
+echo '{"hook_event_name":"PreToolUse","tool_name":"Read"}' | node hooks/claude-hook.js
+curl http://127.0.0.1:47213/snapshot -o snap.png
+```
+
+在 Windows 的 Git Bash 里，命令行参数中的中文不是按 UTF-8 发送的，会变成乱码；要测中文，就把 JSON 写进 UTF-8 文件，再用 `--data-binary @file` 发，或者直接通过 hook 脚本发。
+
+| 环境变量 | 作用 |
+| --- | --- |
+| `CLAUDE_PETS_PORT` | 端口 |
+| `CLAUDE_PETS_AUTOSTART=0` | hook 不自动启动窗口 |
+| `CLAUDE_PETS_USER_DATA` | 换一个配置目录（也就换了单实例锁），冒烟测试用它和你正在用的窗口互不干扰 |
+| `CLAUDE_PETS_DEBUG=1` | 开放 `/debug/look` |
+
+## 精灵图
+
+Codex pet v2 图集为 1536×2288，8 列 × 11 行，每格 192×208。
+
+| 行 | 网站上的名字 | 帧数 | 用于 |
+| --- | --- | --- | --- |
+| 0 | Idle | 6（v2 规范允许第 7 帧放中性注视姿势，deepseek-chan 没画） | idle |
+| 1 / 2 | Run right / left | 8 | 空闲走动、拖动 |
+| 3 | Waving | 4 | done、打招呼 |
+| 4 | Jumping | 5 | TaskCompleted、单击 |
+| 5 | Failed | 8 | error、工具失败 |
+| 6 | Waiting | 6 | waiting |
+| 7 | Running | 6 | working |
+| 8 | Review | 6 | review |
+| 9 / 10 | Look around | 8 + 8 | 16 个注视方向 |
+
+注视方向的索引 `i` 从正上方开始顺时针算，每 22.5° 一档；对应格子是 `row = 9 + floor(i / 8)`、`frame = i % 8`，与 codex-pets.net 的 "Looking with you" 模式一致。
+
+## 测试
+
+- `npm test`：单元测试，包括 hook 映射（含真实进程：不输出、总返回 0、UTF-8）、状态机（用模拟计时器）、注视换算、install-hooks（用临时 settings 文件）。
+- `npm run smoke`：启动真实窗口（端口 47299 + 临时配置目录，不影响你正在用的那只），通过 hook 脚本走一遍所有事件，检查状态并截图到 `out/smoke/`。拖动和真实鼠标跟随需要人工检查。
+
+## 踩过的坑
+
+- **preload 全局重名**：preload 通过 `contextBridge` 暴露了 `window.pet`，页面里再声明 `const pet` 会报重复声明错误，导致整个脚本不执行。
+- **动画停住**：窗口不抢焦点、又是半透明，Chromium 会节流它，动画会停。必须设 `backgroundThrottling: false`。
+- **中文乱码**：POST body 要先把 Buffer 拼完整再解码 UTF-8，否则跨数据块的多字节字符会被切坏。
+- **拖动不跟手**：拖动是在主进程里轮询鼠标位置来移动窗口，不依赖页面的 mousemove，所以快速甩动也不会丢。
+- **点击穿透**：透明区域的穿透靠 `setIgnoreMouseEvents(true, { forward: true })`；鼠标进入宠物时由页面通知主进程关掉穿透。
+- **压缩时被打回空闲**：自动压缩上下文会触发 `SessionStart`（`source: compact`），必须忽略，否则干活到一半会变回空闲。
+- **hook 往对话里塞内容**：`UserPromptSubmit` / `SessionStart` 的 stdout 会被加进对话，所以 hook 绝对不能输出任何东西。
+- **Electron 二进制没下载**：npm 装 electron 时 postinstall 可能不下载二进制，补跑 `node node_modules/electron/install.js` 即可。
+- **Node 24 的 `node --test`**：不接受目录参数，要用 `"test/*.test.js"` 这种 glob。
+
+## 历史
+
+这个项目最初是一个 Claude Code 函数式插件（status-pet），把宠物画在输入框上方，但会占掉浏览空间，所以改成了现在的独立悬浮窗加标准 hooks。

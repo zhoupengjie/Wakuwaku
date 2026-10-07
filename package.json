@@ -1,0 +1,21 @@
+{
+  "name": "claude-pets",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A floating desktop pet that shows what Claude Code is doing, using Codex pet sprites",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/*.test.js\"",
+    "smoke": "node scripts/smoke.js",
+    "fetch-pet": "node scripts/fetch-pet.js",
+    "install-hooks": "node scripts/install-hooks.js",
+    "uninstall-hooks": "node scripts/install-hooks.js --uninstall"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0"
+  }
+}

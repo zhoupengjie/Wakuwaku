@@ -1,0 +1,11 @@
+node_modules/
+dist/
+out/
+
+# Downloaded pets are their authors' work: npm run fetch-pet
+pets/*
+!pets/.gitkeep
+
+*.log
+.DS_Store
+Thumbs.db

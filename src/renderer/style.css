@@ -1,0 +1,55 @@
+:root {
+  --scale: 0.55;
+  --accent: #9aa4b2;
+  --sprite: none;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', system-ui, sans-serif;
+}
+
+#stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+#bubble {
+  max-width: 92%;
+  margin-bottom: calc(6px * var(--scale) / 0.55);
+  padding: 0.35em 0.7em;
+  border-radius: 0.9em;
+  border: 2px solid var(--accent);
+  background: rgba(255, 255, 255, 0.94);
+  color: #1f2430;
+  font-size: calc(13px * var(--scale) / 0.55);
+  line-height: 1.35;
+  text-align: center;
+  overflow-wrap: anywhere;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+
+#bubble.hidden {
+  opacity: 0;
+}
+
+/* One 192x208 cell of the 1536x2288 sheet, scaled. */
+#pet {
+  width: calc(192px * var(--scale));
+  height: calc(208px * var(--scale));
+  background-image: var(--sprite);
+  background-repeat: no-repeat;
+  background-size: calc(1536px * var(--scale)) calc(2288px * var(--scale));
+  cursor: grab;
+}

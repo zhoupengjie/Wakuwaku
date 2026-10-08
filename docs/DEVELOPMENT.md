@@ -19,7 +19,7 @@ src/
   renderer/panel.js   确认面板（只用 textContent，不拼 HTML：内容来自工具调用）
 hooks/claude-hook.js  SessionStart 用的 command hook：窗口没开就启动，否则发消息
 scripts/
-  fetch-pet.js        从 codex-pets.net 下载 spritesheet.webp + pet.json
+  fetch-pet.js        从 codex-pets.net 下载 spritesheet.webp + pet.json；接受 id 或宠物页面地址（parsePetRef）
   install-hooks.js    写入 / 移除 settings.json 里的 hooks
   smoke.js            端到端冒烟测试
 test/                 node:test 单元测试

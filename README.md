@@ -68,13 +68,17 @@ npm run install-hooks    # 把 hooks 写进 ~/.claude/settings.json
 
 ### 换一只宠物
 
-在 codex-pets.net 上找到喜欢的宠物，页面地址是 `https://codex-pets.net/#/pets/<id>`：
+在 codex-pets.net 上找到喜欢的宠物，把浏览器地址栏里的地址复制过来：
 
 ```bash
-npm run fetch-pet -- <id>
+npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan
 ```
 
 然后右键 → 宠物 → 选它。
+
+- 也可以只写 id（地址最后那一段），比如 `npm run fetch-pet -- deepseek-chan`；一次可以给好几个，用空格隔开。
+- 只接受 codex-pets.net 上的地址，也只会从那里下载。
+- 地址里如果带 `&`，要用引号把整个地址括起来。
 
 ### 暂时关掉
 

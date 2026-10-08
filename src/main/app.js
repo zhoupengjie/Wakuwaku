@@ -28,6 +28,7 @@ const { createTray } = require('./tray')
 const connection = require('./connection')
 const { toMessage } = require('../agents/claude-code/events')
 const i18n = require('../shared/i18n')
+const { debugLog } = require('./debug-log')
 
 const IS_DEBUG = process.env.WAKUWAKU_DEBUG === '1'
 const ICON = path.join(__dirname, '..', 'assets', 'icon.png')
@@ -330,14 +331,6 @@ function debugRoutes() {
 
 // --- App --------------------------------------------------------------------------
 
-// Debug only: a line in <userData>/debug.log, for what happens before any window.
-function debugLog(line) {
-  if (!IS_DEBUG) return
-  try {
-    require('fs').appendFileSync(path.join(app.getPath('userData'), 'debug.log'), `${new Date().toISOString()} ${process.pid} ${line}
-`)
-  } catch {}
-}
 
 // One pet at a time. When another copy holds the lock: if it answers on the
 // port it is the pet (and has heard from us, see second-instance); if not, it

@@ -8,6 +8,8 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron')
 
 const config = require('./config')
 const { createClickThrough } = require('./click-through')
+const { debugLog } = require('./debug-log')
+const { isPrimaryDown } = require('./mouse-button')
 
 // Window size at scale 1: room for the bubble above a 192x208 cell.
 const BASE_W = 300
@@ -48,6 +50,7 @@ function createPetWindow(ctx) {
   const mine = e => alive(win) && e.sender === win.webContents
 
   const pointer = createClickThrough({
+    name: 'pet',
     getWin: () => alive(win),
     isShown,
     isHeld: () => !!drag,
@@ -214,7 +217,7 @@ function createPetWindow(ctx) {
     win.setVisibleOnAllWorkspaces(true)
     // Clicks pass through the transparent parts; see click-through.js.
     pointer.setMode('pass')
-    win.webContents.on('console-message', e => console.log(`[pet] ${e.message}`))
+    win.webContents.on('console-message', e => debugLog('pet page:', e.message))
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     win.webContents.on('will-navigate', e => e.preventDefault())
 
@@ -320,10 +323,16 @@ function createPetWindow(ctx) {
   // mouse events still carries the window. The page hears which way it moves,
   // to run that way; the island hears where she is, to reach for her.
   function follow(grab, { carried }) {
+    debugLog('pet', 'follow', carried ? 'carried' : 'dragged')
     stopWalking()
+    // Only ever one drag: a new one replaces whatever was still held.
+    if (drag) clearInterval(drag.timer)
     const { x, y } = win.getBounds()
     drag = { ...grab, x, y, moved: carried, carried, timer: undefined }
     drag.timer = setInterval(() => {
+      // Carried, the button is held on the island's window and its release
+      // may reach neither page: the button's own state says when to let go.
+      if (drag.carried && isPrimaryDown() === false) return letGo()
       const p = screen.getCursorScreenPoint()
       const nx = p.x - drag.dx
       const ny = p.y - drag.dy
@@ -340,12 +349,14 @@ function createPetWindow(ctx) {
 
   // Let go: back into the island if she is close enough to it, else she lands.
   function letGo() {
+    debugLog('pet', 'let go', drag ? (drag.carried ? 'carried' : 'dragged') : 'nothing held')
     if (!drag) return
     clearInterval(drag.timer)
     const { x, y, moved, carried } = drag
     drag = undefined
     parked = null
     win.webContents.send('pet:drag-end')
+    if (carried) ctx.island.endHold()
     if (isIslandMode() && moved) {
       if (ctx.island.reach(herPoint(), { final: true }) === 'snap') return ctx.absorb(herPoint())
       ctx.island.reach(null)
@@ -400,14 +411,19 @@ function createPetWindow(ctx) {
   })
 
   ipcMain.on('pet:drag-start', e => {
+    debugLog('pet', 'drag-start from', mine(e) ? 'pet page' : 'another page')
     if (!mine(e)) return
     const { x, y } = win.getBounds()
     const cursor = screen.getCursorScreenPoint()
     follow({ dx: cursor.x - x, dy: cursor.y - y }, { carried: false })
   })
 
+  // The button went up over her: that ends a carry as well (the island may
+  // have lost the button on the way).
   ipcMain.on('pet:drag-end', e => {
-    if (mine(e) && !drag?.carried) letGo()
+    if (!mine(e)) return
+    debugLog('pet', 'drag-end from pet page', drag?.carried ? '(carried)' : '')
+    letGo()
   })
 
   ipcMain.on('pet:menu', e => mine(e) && ctx.tray.popUp(win))

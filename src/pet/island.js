@@ -327,13 +327,16 @@
     // No mouse events follow, so the island does not take this for a click.
     e.preventDefault()
     pull = { x0: e.clientX, y0: e.clientY, started: false, broken: false, at: null, carrying: false }
+    window.pet.holding(true)
     window.addEventListener('pointermove', pullMove)
     window.addEventListener('pointerup', pullUp)
     window.addEventListener('pointercancel', pullUp)
     // The button is held on this window wherever the cursor goes, so the
-    // pointer events keep coming here even once her own window has her.
+    // pointer events keep coming here even once her own window has her. On the
+    // island, not on her: her element is hidden once she is out, and a hidden
+    // element loses the pointer.
     try {
-      her.setPointerCapture(e.pointerId)
+      island.setPointerCapture(e.pointerId)
     } catch {}
   }
 
@@ -415,6 +418,7 @@
   // The drop let go of her: her window takes her where she is, and the island
   // wobbles back with her seat empty.
   function handOff(e) {
+    console.log('hand-off')
     pull.carrying = true
     clearTimeout(dropTimer)
     window.pet.releaseHer({ dx: pull.at.cx - e.clientX, dy: pull.at.cy - e.clientY })
@@ -431,10 +435,12 @@
     setTimeout(() => body.classList.remove('wobble'), 520)
   }
 
-  function pullUp() {
+  function pullUp(e) {
+    console.log('pull up:', e?.type, pull ? (pull.carrying ? 'carrying' : pull.started ? 'pulling' : 'pressed') : 'no pull')
     window.removeEventListener('pointermove', pullMove)
     window.removeEventListener('pointerup', pullUp)
     window.removeEventListener('pointercancel', pullUp)
+    window.pet.holding(false)
     if (!pull) return
     const done = pull
     pull = null
@@ -445,7 +451,7 @@
     if (done.carrying) {
       // Let go: she lands there, or comes home if she was let go by the island.
       window.pet.dropHer()
-      window.pet.hover(island.matches(':hover'))
+      window.pet.hover(false)
       return
     }
     pull = done
@@ -548,8 +554,20 @@
 
   window.pet.onReach(reach)
   window.pet.onAbsorb(absorb)
+  // She landed but this page never heard the button go up: forget the pull.
+  window.pet.onLanded(() => {
+    if (!pull?.carrying) return
+    console.log('landed without a pointerup here')
+    window.removeEventListener('pointermove', pullMove)
+    window.removeEventListener('pointerup', pullUp)
+    window.removeEventListener('pointercancel', pullUp)
+    pull = null
+    window.pet.hover(false)
+    update()
+  })
 
   her.addEventListener('pointerdown', pullDown)
+  island.addEventListener('lostpointercapture', () => console.log('lost pointer capture', pull ? (pull.carrying ? 'while carrying' : 'while pulling') : ''))
 
   // --- On and off ---------------------------------------------------------------
 

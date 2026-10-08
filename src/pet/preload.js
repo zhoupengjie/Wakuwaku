@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('pet', {
   // take her in.
   releaseHer: offset => ipcRenderer.send('island:release', offset),
   dropHer: () => ipcRenderer.send('island:drop'),
+  // The button is held on her in the island (a pull, or carrying her out).
+  holding: isHolding => ipcRenderer.send('island:holding', isHolding),
   onReach: fn => ipcRenderer.on('island:reach', (_, at) => fn(at)),
   onAbsorb: fn => ipcRenderer.on('island:absorb', (_, at) => fn(at)),
+  onLanded: fn => ipcRenderer.on('island:landed', () => fn()),
 })

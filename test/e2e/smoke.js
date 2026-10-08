@@ -314,6 +314,9 @@ async function main() {
     report('几秒后：岛收起，她缩回小头像，窗口恢复原样', (await islandSize())[2] === 'compact' && (await herWidth()) === 24 && rested.size.height === 132, `${rested.size.height}`)
 
     // --- Pulling her out of the island like a drop, and taking her back.
+    // Her window carries her to the real cursor, and lands her at once (no
+    // real button is held): keep the mouse away from the island meanwhile, or
+    // she lands right by it and goes straight back in.
     const pointer = (type, dy) =>
       onIsland(
         `(() => { const her = document.getElementById('island-her'); const r = her.getBoundingClientRect(); const target = r.width ? her : document.body; target.dispatchEvent(new PointerEvent('${type}', { bubbles: true, button: 0, pointerId: 7, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 + ${dy} })); return 'ok' })()`,

@@ -7,6 +7,7 @@ const path = require('path')
 const { BrowserWindow, ipcMain, screen } = require('electron')
 
 const { createClickThrough } = require('./click-through')
+const { debugLog } = require('./debug-log')
 const { alive, handleOf } = require('./pet-window')
 
 // The window without extra room: the island at its widest without a prompt
@@ -30,12 +31,14 @@ function createIslandWindow(ctx) {
   // A press on the island (not on her): a click, which opens the main window.
   let isPressed = false
   let isReaching = false
+  // The button held on her (a pull, or carrying her out): the window keeps the pointer.
+  let isHolding = false
 
   const settings = () => ctx.settings
   const isShown = () => ctx.isVisible() && settings().display === 'island'
   const mine = e => alive(win) && e.sender === win.webContents
 
-  const pointer = createClickThrough({ getWin: () => alive(win), isShown })
+  const pointer = createClickThrough({ name: 'island', getWin: () => alive(win), isShown, isHeld: () => isHolding })
 
   function size() {
     return room ? { width: Math.max(ISLAND.width, room.width), height: Math.max(ISLAND.height, room.height) } : { ...ISLAND }
@@ -83,7 +86,7 @@ function createIslandWindow(ctx) {
     win.setAlwaysOnTop(true, 'floating')
     win.setVisibleOnAllWorkspaces(true)
     pointer.setMode('pass')
-    win.webContents.on('console-message', e => console.log(`[island] ${e.message}`))
+    win.webContents.on('console-message', e => debugLog('island page:', e.message))
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     win.webContents.on('will-navigate', e => e.preventDefault())
     win.webContents.on('did-finish-load', () => {
@@ -152,6 +155,15 @@ function createIslandWindow(ctx) {
     return state
   }
 
+  // She has landed (or come home): whatever the island's page heard of the
+  // button, it is no longer held there.
+  function endHold() {
+    if (!isHolding) return
+    isHolding = false
+    pointer.schedule()
+    alive(win)?.webContents.send('island:landed')
+  }
+
   // Take her in from where she is (her middle on the screen).
   function absorb(point) {
     isReaching = false
@@ -196,8 +208,20 @@ function createIslandWindow(ctx) {
   })
   // The drop pinched off: she is out, under the cursor, her middle this far
   // from it. The button is still held here; island:drop says when it is let go.
-  ipcMain.on('island:release', (e, offset) => mine(e) && ctx.letOut(offset))
-  ipcMain.on('island:drop', e => mine(e) && ctx.petWindow.drop())
+  ipcMain.on('island:holding', (e, is) => {
+    if (!mine(e)) return
+    isHolding = is === true
+    debugLog('island', 'holding', isHolding)
+    pointer.schedule()
+  })
+  ipcMain.on('island:release', (e, offset) => {
+    debugLog('island', 'release', JSON.stringify(offset))
+    if (mine(e)) ctx.letOut(offset)
+  })
+  ipcMain.on('island:drop', e => {
+    debugLog('island', 'drop')
+    if (mine(e)) ctx.petWindow.drop()
+  })
 
   function where() {
     const bounds = alive(win)?.getBounds()
@@ -212,6 +236,7 @@ function createIslandWindow(ctx) {
     send,
     reach,
     absorb,
+    endHold,
     where,
   }
 }

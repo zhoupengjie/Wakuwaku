@@ -1,15 +1,20 @@
 // The island: a black pill at the top of the screen, after the iPhone's
-// Dynamic Island. It springs between three shapes:
-//   compact   her face, a few words and the clock (just the face when idle)
-//   expanded  hovered, or for a few seconds when something happens: her
-//             animated head, what is going on, the clock
+// Dynamic Island, and her home. It springs between three shapes:
+//   compact   her portrait, a few words and the clock (just her when idle)
+//   expanded  hovered, or when she has something to say: her animated head,
+//             what is going on, the clock
 //   ask       a prompt from Claude, answered right in the island
 // and a second, round bubble beside it when another session wants you too.
 //
-// The window around it is fixed and clicks pass through it; only the island
-// takes the pointer. Shapes change in CSS, never by resizing the window, so
-// the spring stays smooth. A prompt is the exception: the window grows first,
-// then the island; it shrinks back once the island has.
+// When something wants you (a prompt, a turn done, an error), she peeks out
+// from under the island, playing that mood, then slips back in. She never
+// takes a click: whatever is under her still gets it.
+//
+// The window is just big enough for all this and clicks pass through it; only
+// the island takes the pointer. Shapes change in CSS, never by resizing the
+// window frame by frame, so the spring stays smooth. When a shape needs more
+// room, the window grows first and the island after; when it needs less, the
+// island shrinks first and the window after.
 ;(function () {
   const { t, render: say } = window.I18n
   const { CELL_W, CELL_H, CLIPS, MOOD_CLIP } = window.Sprite
@@ -24,21 +29,35 @@
     error: '#ff5c6c',
   }
 
-  // How long the island opens by itself when something happens, and how long
-  // the pointer has to rest on it before it opens (so passing by does not).
-  const PEEK_MS = 3200
+  // What she plays when she peeks out for each mood.
+  const PEEK_CLIP = { waiting: 'waiting', done: 'waving', review: 'review', error: 'failed' }
+
+  // How long she stays out (or the island stays open) when something
+  // happens, and how long the pointer has to rest on the island before it
+  // opens (so passing by does not).
+  const NUDGE_MS = 3600
   const HOVER_OPEN_MS = 140
   const HOVER_CLOSE_MS = 260
-  // Matches the spring in style.css: the window waits this long to shrink.
+  // Matches the springs in style.css: the window waits this long to shrink.
   const SPRING_MS = 560
   const MIN_W = 112
   const HEAD = 48
   const HEAD_SCALE = 0.42
+  // The window without extra room (main's ISLAND), the island's distance from
+  // the top, and her size peeking out: how far she tucks under the island.
+  const BASE = { width: 460, height: 132 }
+  const TOP = 8
+  const PEEK_SCALE = 0.5
+  const PEEK_W = Math.round(CELL_W * PEEK_SCALE)
+  const PEEK_H = Math.round(CELL_H * PEEK_SCALE)
+  const TUCK = 24
 
+  const bar = document.getElementById('island-bar')
   const island = document.getElementById('island')
   const compact = document.getElementById('island-compact')
   const expanded = document.getElementById('island-expanded')
   const side = document.getElementById('island-side')
+  const peekSprite = document.getElementById('peek-sprite')
   const panel = document.getElementById('panel')
   const stage = document.getElementById('stage')
 
@@ -49,16 +68,22 @@
   let second = null
   let isHover = false
   let hoverTimer
-  let peek = null // { until, text }
-  let peekTimer
+  // Something just happened: { until, clip, text }. With text, the island
+  // opens to say it; either way she peeks out playing clip.
+  let nudge = null
+  let nudgeTimer
   let view = ''
   let clockTimer
-  let shrinkTimer
   let headTimer
   let blinkTimer
+  let peekClip = null
+  let peekTimer
+  let room = null
+  let roomTimer
 
   const isOn = () => config.display === 'island'
   const isAsking = () => isOn() && !panel.hidden
+  const isNudging = () => !!nudge && Date.now() < nudge.until
 
   function clock(ms) {
     const s = Math.max(0, Math.floor(ms / 1000))
@@ -82,11 +107,34 @@
     return node
   }
 
-  // A round face with two capsule eyes, in a mood's colour.
+  // A round face with two capsule eyes, in a mood's colour: for a second
+  // session, and for her when there is no pet yet.
   function face(mood, px) {
     const node = el('span', 'face')
     node.style.cssText = `width:${px}px;height:${px}px;background:${COLOR[mood] || COLOR.idle}`
     node.append(el('i'), el('i'))
+    return node
+  }
+
+  // --- Her, from the sheet ----------------------------------------------------------
+
+  function sheet(scale) {
+    return `background-image:url("${spriteUrl}");background-size:${1536 * scale}px ${(config.sheetH || 2288) * scale}px`
+  }
+
+  // Her head, px across: a frame of a row, cropped round.
+  function showHead(node, px, row, frame) {
+    const k = (HEAD_SCALE * px) / HEAD
+    const x = -(frame * CELL_W * k) - (CELL_W * k - px) / 2
+    const y = -(row * CELL_H * k) - (4 * px) / HEAD
+    node.style.backgroundPosition = `${x}px ${y}px`
+  }
+
+  function portrait(px, mood) {
+    if (!spriteUrl) return face(mood, px)
+    const node = el('span', 'portrait')
+    node.style.cssText = `width:${px}px;height:${px}px;${sheet((HEAD_SCALE * px) / HEAD)};box-shadow:0 0 0 1.5px ${COLOR[mood]}`
+    showHead(node, px, CLIPS[MOOD_CLIP[mood]].row, 0)
     return node
   }
 
@@ -96,18 +144,13 @@
     const label = now.mood === 'idle' ? '' : [now.project, t(lang, `island.${now.mood}`)].filter(Boolean).join(' · ')
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
-    compact.replaceChildren(face(now.mood, 24), el('span', 'label', label), clockText)
+    compact.replaceChildren(portrait(24, now.mood), el('span', 'label', label), clockText)
     compact.classList.toggle('bare', !label && !clockText.textContent)
   }
 
   function fillExpanded() {
-    const head = el('span', 'portrait')
-    if (spriteUrl) {
-      head.style.cssText = `width:${HEAD}px;height:${HEAD}px;background-image:url("${spriteUrl}");background-size:${1536 * HEAD_SCALE}px ${(config.sheetH || 2288) * HEAD_SCALE}px`
-    } else {
-      head.append(face(now.mood, HEAD))
-    }
-    const title = peek?.text || t(lang, `mood.${now.mood}`)
+    const head = portrait(HEAD, now.mood)
+    const title = (isNudging() && nudge.text) || t(lang, `mood.${now.mood}`)
     const sub = [now.project, say(lang, now.detail)].filter(Boolean).join(' · ')
     const more = now.others > 0 ? t(lang, 'detail.moreSessions', { n: now.others }) : ''
     const lines = el('span', 'lines')
@@ -127,9 +170,7 @@
     const clip = CLIPS[MOOD_CLIP[now.mood]]
     let frame = 0
     const step = () => {
-      const x = -(frame * CELL_W * HEAD_SCALE) - (CELL_W * HEAD_SCALE - HEAD) / 2
-      const y = -(clip.row * CELL_H * HEAD_SCALE) - 4
-      head.style.backgroundPosition = `${x}px ${y}px`
+      showHead(head, HEAD, clip.row, frame)
       frame = (frame + 1) % clip.frames
       if (view === 'expanded') headTimer = setTimeout(step, clip.ms)
     }
@@ -141,11 +182,56 @@
     side.classList.toggle('shown', !!second && view !== 'ask')
   }
 
-  // The size a shape wants, measured off the page.
-  function sizeOf(name) {
-    if (name === 'ask') return { width: panel.offsetWidth + 28, height: panel.offsetHeight + 26 }
-    if (name === 'expanded') return { width: Math.min(400, Math.max(300, expanded.offsetWidth)), height: 84 }
-    return { width: Math.max(MIN_W, compact.offsetWidth), height: 36 }
+  // --- Peeking out ------------------------------------------------------------------
+
+  // Out with a clip, or back in (null). She slides from behind the island.
+  function setPeek(clip) {
+    if (!spriteUrl) clip = null
+    if (clip === peekClip) return
+    peekClip = clip
+    clearTimeout(peekTimer)
+    if (!clip) {
+      bar.classList.remove('peeking')
+      return
+    }
+    peekSprite.style.cssText = `width:${PEEK_W}px;height:${PEEK_H}px;${sheet(PEEK_SCALE)}`
+    const { row, frames, ms } = CLIPS[clip]
+    let frame = 0
+    const step = () => {
+      peekSprite.style.backgroundPosition = `${-frame * CELL_W * PEEK_SCALE}px ${-row * CELL_H * PEEK_SCALE}px`
+      frame = (frame + 1) % frames
+      if (peekClip === clip) peekTimer = setTimeout(step, ms)
+    }
+    step()
+    // A frame to lay her out hidden, then out she comes.
+    requestAnimationFrame(() => peekClip === clip && bar.classList.add('peeking'))
+  }
+
+  // --- Room: the window grows before the island does, and shrinks after ----------------
+
+  function roomFor(want, isPeeking) {
+    const sideW = second && view !== 'ask' ? 42 : 0
+    const width = Math.max(want.width + sideW + 48, isPeeking ? PEEK_W + 48 : 0)
+    const height = TOP + want.height + (isPeeking ? PEEK_H - TUCK + 6 : 0) + 24
+    return width <= BASE.width && height <= BASE.height ? null : { width, height }
+  }
+
+  // Returns true when the window has to grow first.
+  function setRoom(next) {
+    const size = r => r || BASE
+    if (JSON.stringify(next) === JSON.stringify(room)) {
+      clearTimeout(roomTimer)
+      return false
+    }
+    clearTimeout(roomTimer)
+    const grows = size(next).width > size(room).width || size(next).height > size(room).height
+    const apply = () => {
+      room = next
+      window.pet.panel(next)
+    }
+    if (grows) apply()
+    else roomTimer = setTimeout(apply, SPRING_MS)
+    return grows
   }
 
   function setSize({ width, height }) {
@@ -156,26 +242,35 @@
 
   // --- Deciding ---------------------------------------------------------------
 
+  function sizeOf(name) {
+    if (name === 'ask') return { width: panel.offsetWidth + 28, height: panel.offsetHeight + 26 }
+    if (name === 'expanded') return { width: Math.min(400, Math.max(300, expanded.offsetWidth)), height: 84 }
+    return { width: Math.max(MIN_W, compact.offsetWidth), height: 36 }
+  }
+
   function update() {
     clearInterval(clockTimer)
     if (!isOn()) return
-    const was = view
-    view = isAsking() ? 'ask' : isHover || (peek && Date.now() < peek.until) ? 'expanded' : 'compact'
+    // A prompt answered: she has done her job, back in she goes.
+    if (view === 'ask' && !isAsking()) nudge = null
+    view = isAsking() ? 'ask' : isHover || (isNudging() && nudge.text) ? 'expanded' : 'compact'
     island.dataset.view = view
     fillCompact()
     fillExpanded()
     fillSide()
 
+    // Out from under the island while a prompt waits, or for a moment when
+    // something happens.
+    const clip = view === 'ask' ? 'waiting' : isNudging() ? nudge.clip : null
     const want = sizeOf(view)
-    clearTimeout(shrinkTimer)
-    if (view === 'ask') {
-      // Room first, then the island grows into it.
-      window.pet.panel({ width: want.width + 48, height: want.height + 40 })
-      setTimeout(() => setSize(sizeOf('ask')), was === 'ask' ? 0 : 40)
-    } else {
-      setSize(want)
-      if (was === 'ask') shrinkTimer = setTimeout(() => window.pet.panel(null), SPRING_MS)
+    const grows = setRoom(roomFor(want, !!clip && !!spriteUrl))
+    // The window has its room before the island (and she) grow into it.
+    const grow = () => {
+      setSize(view === 'ask' ? sizeOf('ask') : want)
+      setPeek(clip)
     }
+    if (grows) setTimeout(grow, 40)
+    else grow()
 
     if (time()) {
       clockTimer = setInterval(() => {
@@ -184,13 +279,13 @@
     }
   }
 
-  function openFor(text) {
-    peek = { until: Date.now() + PEEK_MS, text }
-    clearTimeout(peekTimer)
-    peekTimer = setTimeout(() => {
-      peek = null
+  function nudgeFor(clip, text) {
+    nudge = { until: Date.now() + NUDGE_MS, clip, text }
+    clearTimeout(nudgeTimer)
+    nudgeTimer = setTimeout(() => {
+      nudge = null
       update()
-    }, PEEK_MS)
+    }, NUDGE_MS)
     update()
   }
 
@@ -220,6 +315,8 @@
     if (!isOn()) {
       clearInterval(clockTimer)
       clearTimeout(headTimer)
+      setPeek(null)
+      room = null
       view = ''
     }
   }
@@ -232,13 +329,14 @@
     spriteUrl = data.sprite
     second = data.second || null
     place()
-    // Something new that wants you, or is finished: open for a moment.
-    if (isOn() && before !== now.mood && ['waiting', 'done', 'review', 'error'].includes(now.mood)) openFor(null)
+    // Something new that wants you, or is finished: she peeks out for a moment.
+    if (isOn() && before !== now.mood && PEEK_CLIP[now.mood]) nudgeFor(PEEK_CLIP[now.mood], null)
     else update()
   })
 
+  // A hello, or something to fix: the island opens to say it, and she waves.
   window.pet.onReact(({ say: text }) => {
-    if (isOn() && text) openFor(say(lang, text))
+    if (isOn() && text) nudgeFor('waving', say(lang, text))
   })
 
   // --- The pointer ----------------------------------------------------------------

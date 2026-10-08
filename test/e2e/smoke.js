@@ -259,6 +259,9 @@ async function main() {
     report('灵动岛收起时：项目、状态和用时', /alpha · 干活\d:\d\d/.test(compactText), compactText)
     const [cw, ch, cv] = await islandSize()
     report('收起时是一颗小胶囊', cv === 'compact' && ch === 36 && cw >= 112 && cw <= 340, `${cw}x${ch} ${cv}`)
+    const isPeeking = () => evaluate('pet', "document.getElementById('island-bar').classList.contains('peeking')")
+    report('岛里是她本人的小头像', await evaluate('pet', "!!document.querySelector('#island-compact .portrait')"))
+    report('干活时她待在岛里', !(await isPeeking()))
     await snap('08-island')
 
     await evaluate('pet', "(document.getElementById('island').dispatchEvent(new MouseEvent('mouseenter')), 'ok')")
@@ -281,12 +284,14 @@ async function main() {
       `island ${aw}x${ah}, window ${islandWin.size.width}x${islandWin.size.height}`,
     )
     report('面板在岛里面', (await evaluate('pet', "document.querySelector('#island #panel .title')?.textContent")) === 'Write 需要你批准')
+    report('确认请求：她从岛下探出来，窗口留出她的位置', (await isPeeking()) && islandWin.size.height >= ah + 8 + 70, `window ${islandWin.size.height}`)
     await snap('10-island-ask')
     await click('[data-action="deny"]')
     report('灵动岛里点「拒绝」', (await askInIsland)?.hookSpecificOutput?.decision?.behavior === 'deny')
     await sleep(1000)
     const afterAsk = (await state()).window
     report('答完：岛缩回去，窗口恢复原样', (await islandSize())[2] !== 'ask' && afterAsk.size.height === 132, `${afterAsk.size.width}x${afterAsk.size.height}`)
+    report('答完：她回到岛里', !(await isPeeking()))
 
     await hook({ ...S, session_id: 'smoke-2', cwd: 'D:/work/other', hook_event_name: 'UserPromptSubmit', prompt: 'two' })
     await sleep(700)
@@ -294,6 +299,12 @@ async function main() {
     await snap('11-island-two')
     await hook({ ...S, session_id: 'smoke-2', cwd: 'D:/work/other', hook_event_name: 'SessionEnd', reason: 'exit' })
     await hook({ ...S, hook_event_name: 'Stop' })
+    await sleep(800)
+    report('做完：她探出来挥手，岛不展开', (await isPeeking()) && (await islandSize())[2] === 'compact')
+    await snap('12-island-done')
+    await sleep(3800)
+    const rested = (await state()).window
+    report('几秒后：她回到岛里，窗口恢复原样', !(await isPeeking()) && rested.size.height === 132, `${rested.size.height}`)
     await settingsPatch({ display: 'pet' })
     await sleep(500)
     const back = (await state()).window

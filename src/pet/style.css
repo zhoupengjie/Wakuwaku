@@ -262,10 +262,42 @@ body {
   position: absolute;
   inset: 0;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 8px;
+}
+
+#island-row {
+  position: relative;
+  z-index: 2;
+  display: flex;
   align-items: flex-start;
   gap: 6px;
-  padding-top: 8px;
+}
+
+/* Under the island, a doorway she slides out of: it starts a little above the
+   island's lower edge (behind it) and clips whatever is above, so she comes
+   from behind the island. She never takes the pointer. */
+#island-peek {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  margin-top: -24px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#peek-sprite {
+  width: 96px;
+  height: 104px;
+  background-repeat: no-repeat;
+  transform: translateY(-100%);
+  transition: transform 0.3s cubic-bezier(0.5, 0, 0.75, 0);
+}
+
+.peeking #peek-sprite {
+  transform: translateY(0);
+  transition: transform 0.55s cubic-bezier(0.3, 1.4, 0.5, 1);
 }
 
 /* Always black, light theme or dark: colour is only in the faces and clocks.
@@ -374,7 +406,7 @@ body {
   color: #a1a1a6;
 }
 
-#island-expanded .portrait {
+#island .portrait {
   flex: none;
   border-radius: 50%;
   background-color: #1c1c1e;

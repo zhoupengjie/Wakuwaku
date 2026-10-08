@@ -97,7 +97,7 @@ npm run install-hooks    # 把 hooks 写进 ~/.claude/settings.json
 
 ### 换一只宠物
 
-在设置窗口的「宠物」里粘贴地址下载，或者用命令行：
+在主窗口的「宠物」页粘贴地址下载，或者用命令行：
 
 ```bash
 npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan

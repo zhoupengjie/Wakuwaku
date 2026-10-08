@@ -97,7 +97,7 @@ If `node_modules/electron/dist` is empty after `npm install`, run `node node_mod
 
 ### Another pet
 
-Paste its URL under Pets in the settings, or:
+Paste its URL on the Pets tab of the main window, or:
 
 ```bash
 npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan

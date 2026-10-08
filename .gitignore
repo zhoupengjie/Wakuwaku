@@ -9,3 +9,8 @@ pets/*
 *.log
 .DS_Store
 Thumbs.db
+
+# Art and research stay local: others' characters, fan art, references.
+# Only the note about them goes in (see art/README.md).
+art/*
+!art/README.md

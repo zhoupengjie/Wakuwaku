@@ -34,13 +34,13 @@ const settingsPatch = async patch => (await post('/debug/settings', patch)).resu
 const walkBy = (dx, ms) => post('/debug/walk', { dx, ms })
 const bubble = () => evaluate('pet', "document.getElementById('bubble').textContent")
 // The main window: switch tab, click, read.
-const tab = name => evaluate('settings', `(document.querySelector('[data-tab="${name}"]').click(), 'ok')`)
-const press = selector => evaluate('settings', `(() => { const b = document.querySelector(${JSON.stringify(selector)}); if (!b) return 'missing'; b.click(); return 'ok' })()`)
-const read = (selector, what = 'textContent') => evaluate('settings', `document.querySelector(${JSON.stringify(selector)})?.${what}`)
+const tab = name => evaluate('home', `(document.querySelector('[data-tab="${name}"]').click(), 'ok')`)
+const press = selector => evaluate('home', `(() => { const b = document.querySelector(${JSON.stringify(selector)}); if (!b) return 'missing'; b.click(); return 'ok' })()`)
+const read = (selector, what = 'textContent') => evaluate('home', `document.querySelector(${JSON.stringify(selector)})?.${what}`)
 
 async function snap(name, page = 'pet') {
   // A covered window stops painting: bring the main window up first.
-  if (page === 'settings') {
+  if (page === 'home') {
     await post('/debug/settings', 'open')
     await sleep(400)
   }
@@ -136,11 +136,11 @@ async function main() {
     // --- First run: the main window opens to set up.
     report('第一次打开：主窗口自己弹出', (await read('.welcome', 'className')) !== undefined && (await read('.welcome', 'className')) !== null)
     report('主窗口：没有连接时提示', (await read('[data-connection]', 'dataset.connection')) === 'none')
-    await snap('01-home-now', 'settings')
+    await snap('01-home-now', 'home')
 
     await tab('claude')
     await sleep(200)
-    await snap('02-home-claude', 'settings')
+    await snap('02-home-claude', 'home')
     report('Claude Code 页：推荐插件，给出安装命令', (await read('[data-plugin]', 'dataset.plugin')) === 'off' && (await read('.steps code')) === '/plugin marketplace add zhoupengjie/wakuwaku')
     report('Claude Code 页：点「复制」', (await press('[data-action="copy-1"]')) === 'ok')
     await sleep(150)
@@ -193,7 +193,7 @@ async function main() {
     await sleep(900)
     await expect('PermissionRequest', { mood: 'waiting', detail: 'Bash 需要你批准' })
     report('主窗口「现在」页：列出会话', (await read('[data-session="alpha"]', 'dataset.session')) === 'alpha')
-    await snap('04-home-now-asking', 'settings')
+    await snap('04-home-now-asking', 'home')
     report('主窗口里点「允许」', (await press('[data-action="ask-allow"]')) === 'ok')
     report('回给 Claude 的是 allow', (await fromHome)?.hookSpecificOutput?.decision?.behavior === 'allow')
 
@@ -235,7 +235,7 @@ async function main() {
     await snap('07-two-sessions')
     const two = await bubble()
     report('两个会话：显示做完的 beta，并说另一个在忙', two.startsWith('beta：搞定啦') && two.includes('另有 1 个会话在忙'), JSON.stringify(two))
-    report('主窗口列出两个会话', (await evaluate('settings', "document.querySelectorAll('[data-session]').length")) === 2)
+    report('主窗口列出两个会话', (await evaluate('home', "document.querySelectorAll('[data-session]').length")) === 2)
     await hook({ ...B, hook_event_name: 'SessionEnd', reason: 'exit' })
     await hook({ ...S, hook_event_name: 'SessionEnd', reason: 'exit' })
     await sleep(300)
@@ -305,13 +305,13 @@ async function main() {
 
     // --- Language: English from the Look tab.
     await tab('look')
-    await evaluate('settings', "(() => { const s = document.querySelector('[data-key=\"lang\"]'); s.value = 'en'; s.dispatchEvent(new Event('change')); return 'ok' })()")
+    await evaluate('home', "(() => { const s = document.querySelector('[data-key=\"lang\"]'); s.value = 'en'; s.dispatchEvent(new Event('change')); return 'ok' })()")
     await sleep(400)
     await hook({ ...S, hook_event_name: 'UserPromptSubmit', prompt: 'hi' })
     await sleep(300)
     report('切到英文：气泡', (await bubble()).startsWith('Working…'), await bubble())
     report('切到英文：主窗口', (await read('[data-tab="now"]')) === 'Now')
-    await snap('10-home-look-english', 'settings')
+    await snap('10-home-look-english', 'home')
     const askEn = hook({ ...S, hook_event_name: 'PermissionRequest', tool_name: 'Write', tool_input: { file_path: 'notes.md' } })
     await sleep(800)
     report('切到英文：面板', (await evaluate('pet', "document.querySelector('#panel .title').textContent")) === 'Write needs your approval')
@@ -432,16 +432,16 @@ async function main() {
 
     // --- Pets: the gallery and downloading from it.
     await tab('pets')
-    report('宠物页：图库加载出来', await waitFor(async () => (await evaluate('settings', "document.querySelectorAll('[data-gallery]').length")) > 0), `${await evaluate('settings', "document.querySelectorAll('[data-gallery]').length")} 只`)
+    report('宠物页：图库加载出来', await waitFor(async () => (await evaluate('home', "document.querySelectorAll('[data-gallery]').length")) > 0), `${await evaluate('home', "document.querySelectorAll('[data-gallery]').length")} 只`)
     await sleep(1500)
-    await snap('13-home-pets', 'settings')
+    await snap('13-home-pets', 'home')
     const bad = await evaluate(
-      'settings',
+      'home',
       "(async () => { const box = document.querySelector('[data-key=\"fetch\"]'); box.value = 'https://example.com/#/pets/x'; box.dispatchEvent(new Event('input')); document.querySelector('[data-action=\"fetch\"]').click(); await new Promise(r => setTimeout(r, 600)); return document.querySelector('[data-note]')?.textContent })()",
     )
     report('别的网站的地址被拒绝', /只支持 codex-pets\.net/.test(bad || ''), bad)
     const good = await evaluate(
-      'settings',
+      'home',
       "(async () => { const box = document.querySelector('[data-key=\"fetch\"]'); box.value = 'https://codex-pets.net/#/pets/deepseek-chan'; box.dispatchEvent(new Event('input')); document.querySelector('[data-action=\"fetch\"]').click(); for (let i = 0; i < 60; i++) { await new Promise(r => setTimeout(r, 500)); const n = document.querySelector('[data-note]'); if (n && n.dataset.note !== 'busy') return n.textContent } return 'timeout' })()",
     )
     report('粘贴地址下载宠物', /已下载/.test(good || ''), good)

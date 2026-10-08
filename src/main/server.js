@@ -4,11 +4,11 @@
 //   POST /hook         a Claude Code hook event, as an HTTP hook sends it; answers {},
 //                      or for a prompt, the person's answer on the pet
 //   POST /state        a message (src/main/state.js): { mood, detail, event, react, say }
-//   GET  /snapshot     the window as a PNG (debugging); ?page=settings for that one
+//   GET  /snapshot     the window as a PNG (debugging); ?page=home for the main window
 //   POST /debug/look   { dx, dy }: look as if the cursor were there (WAKUWAKU_DEBUG=1 only)
 //   POST /debug/walk   { dx, ms }: take a walk now (WAKUWAKU_DEBUG=1 only)
 //   POST /debug/click  { selector }: click that element in the page (WAKUWAKU_DEBUG=1 only)
-//   POST /debug/eval   { page, code }: run code in the pet or settings page (WAKUWAKU_DEBUG=1 only)
+//   POST /debug/eval   { page, code }: run code in the pet page or the main window (page: 'home') (WAKUWAKU_DEBUG=1 only)
 //   POST /debug/settings  "open", or a settings patch (WAKUWAKU_DEBUG=1 only)
 //   POST /debug/fullscreen  true / false: as if another app went full screen (WAKUWAKU_DEBUG=1 only)
 const http = require('http')

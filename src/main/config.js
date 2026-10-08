@@ -3,6 +3,9 @@ const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
 
+// The sizes she comes in.
+const SCALES = { small: 0.4, medium: 0.55, large: 0.75 }
+
 const DEFAULTS = {
   // 'auto' follows the system; or 'zh' / 'en'.
   lang: 'auto',
@@ -52,4 +55,4 @@ function save(config) {
   }
 }
 
-module.exports = { DEFAULTS, load, save }
+module.exports = { DEFAULTS, SCALES, load, save }

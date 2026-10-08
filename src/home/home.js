@@ -4,7 +4,7 @@
 // Everything from outside (pet names, tool input) is set as text.
 ;(function () {
   const { t, render: say } = window.I18n
-  const api = window.settings
+  const api = window.home
   const app = document.getElementById('app')
   const peek = document.getElementById('peek')
 

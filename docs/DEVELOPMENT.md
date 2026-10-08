@@ -49,6 +49,8 @@ art/                    美术和调查资料，只在本地（只有 art/README
 
 `hooks.status()`（`agents/claude-code/hooks.js`）判断我们的条目处于什么状态：`ok`、`httpOnly`（没有启动命令）、`missing`、`partial`（缺事件）、`stale`（端口不对、指向另一份程序，或者是早期的 node 版本）。主窗口据此显示「安装 / 重新安装 / 修复 / 移除」。识别"是我们的"靠 URL 里的 `from=wakuwaku`、参数里的 `--wakuwaku-ensure-running`，以及早期版本的 `claude-hook.js`。
 
+**数据放在哪**（`src/main/index.js` 的 `dataFolder()`）：测试用 `WAKUWAKU_USER_DATA`；从源码运行放在项目的 `data/`（gitignore）；便携版放在 exe 旁边的 `wakuwaku-data/`（electron-builder 的 portable 目标会设 `PORTABLE_EXECUTABLE_DIR`）；只有安装版用 `%APPDATA%\wakuwaku`。源码和便携版第一次运行时，从 `%APPDATA%\wakuwaku` 复制 `config.json` 和 `pets/`。这样从源码调试时不会碰到 MSIX 打包应用（比如 Windows 上的 Claude 桌面版）对 AppData 写入的重定向：它的子进程写进 AppData 的东西，外面的程序看不到。数据目录里放一个 `debug.on` 文件，就会打开 `debug.log`（只写日志，不开调试接口）。
+
 改名前（claude-pets）写进 settings.json 的条目（`from=claude-pets`、`--claude-pets-ensure-running`）仍算"我们的"：状态显示为 `stale`，可以修复或移除；旧的启动参数照样能用。旧的设置目录 `%APPDATA%\claude-pets` 在第一次启动时整个搬到 `wakuwaku`，搬不动（旧程序还开着）就只复制 `config.json` 和 `pets/`。
 
 ## 消息

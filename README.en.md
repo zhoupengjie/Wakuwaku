@@ -51,7 +51,10 @@ Both v2 pets (11 animations) and older v1 pets (9, without looking around; she j
 
 ### 1. Get the pet
 
-- **Installer (Windows)**: run `Wakuwaku Setup <version>.exe` (for now you build it yourself: `npm run dist`, see below).
+- **Installer (Windows)**: run `Wakuwaku Setup <version>.exe`.
+- **Portable (Windows)**: `Wakuwaku-<version>-portable.exe` runs from any folder and keeps her settings, pets and caches in a `wakuwaku-data` folder beside it, writing nothing else to the system; to remove her, delete the two.
+
+For now you build both yourself: `npm run dist`, see below.
 - **From source**: see below.
 
 The main window opens on first launch: pick a pet on the Pets tab (the gallery comes straight from codex-pets.net; click Download), or paste a pet page URL.
@@ -81,7 +84,7 @@ npm run fetch-pet        # downloads the default pet, deepseek-chan, from codex-
 npm run install-hooks    # adds the hooks to ~/.claude/settings.json
 ```
 
-New Claude Code sessions then start her by themselves; `npm start` works too. `npm run dist` builds an installer into `dist/`.
+New Claude Code sessions then start her by themselves; `npm start` works too. `npm run dist` builds the installer and the portable exe into `dist/`. Run from source, her settings, downloaded pets and caches live in the project's `data/` folder (not in git), never in the system's folders; the first run copies over whatever settings and pets she had in `%APPDATA%\wakuwaku`.
 
 If `node_modules/electron/dist` is empty after `npm install`, run `node node_modules/electron/install.js` once.
 
@@ -121,7 +124,7 @@ While she's closed, Claude Code works as usual: the events sent to her are refus
 1. If you turned on **Start at login**, turn it off in the main window.
 2. With the plugin: in Claude Code, `/plugin uninstall wakuwaku@wakuwaku`, then `/plugin marketplace remove wakuwaku`. With hooks in settings.json: click Remove on the Claude Code tab (`npm run uninstall-hooks` from source); only this project's entries go, your own hooks stay, and the file as it was before the first change is at `~/.claude/settings.json.wakuwaku.bak`.
 3. Quit her, then uninstall the app or delete the folder. The installer's uninstaller does steps 1 and 2 for you.
-4. (Optional) Delete her settings and downloaded pets: `%APPDATA%\wakuwaku` on Windows, `~/Library/Application Support/wakuwaku` on macOS, `~/.config/wakuwaku` on Linux.
+4. (Optional) Delete her settings and downloaded pets. Installed: `%APPDATA%\wakuwaku` on Windows, `~/Library/Application Support/wakuwaku` on macOS, `~/.config/wakuwaku` on Linux; portable: the `wakuwaku-data` folder beside the exe; from source: the project's `data/`.
 
 > From source, remove the hooks before deleting the folder: they hold the program's path. If you moved the folder, settings will say the hooks point somewhere else; click Repair.
 

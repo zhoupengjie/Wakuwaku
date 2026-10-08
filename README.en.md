@@ -51,62 +51,53 @@ Both v2 pets (11 animations) and older v1 pets (9, without looking around; she j
 
 ### 1. Get the pet
 
-- **Portable (Windows)**: `Wakuwaku-<version>-portable.exe` runs from any folder and keeps her settings, pets and caches in a `wakuwaku-data` folder beside it, writing nothing else to the system; to remove her, delete the two.
+- **One exe (Windows)**: `wakuwaku.exe` is about 5 MB, runs from any folder and keeps her settings and pets in a `wakuwaku-data` folder beside it; to remove her, delete the two. It uses the WebView2 that comes with Windows 11, nothing else to install.
 
-For now you build it yourself: `npm run dist`, see below. There is no installer.
+For now you build it yourself: `cargo build --release`, see below. There is no installer.
 - **From source**: see below.
 
-On first launch she downloads the default pet, Claude小姐 (online; offline, the main window opens so you can pick one later). For another, pick one on the main window's Pets tab (the gallery comes straight from codex-pets.net; click Download), or paste a pet page URL.
+On first launch she downloads the default pet, Claude小姐 (online; offline, the settings rise at the top of the screen so you can pick one later). For another, click the island to open the settings and pick one on the Pets page (the gallery comes straight from codex-pets.net; click Download), or paste a pet page URL.
 
 ### 2. Connect Claude Code (the plugin is recommended)
 
-In Claude Code, enter (the Claude Code tab of the main window has copy buttons):
+In Claude Code, enter (the Connect page of the settings has copy buttons):
 
 ```
 /plugin marketplace add zhoupengjie/wakuwaku
 /plugin install wakuwaku@wakuwaku
 ```
 
-Claude Code installs and removes the plugin itself, and **we don't touch your settings file** (Claude Code notes it in its own `enabledPlugins` and takes it out on uninstall). A plugin can't start the pet, so turn on Start at login in the main window.
+Claude Code installs and removes the plugin itself, and **we don't touch your settings file** (Claude Code notes it in its own `enabledPlugins` and takes it out on uninstall). A plugin can't start the pet, so turn on Start at login on the Connect page.
 
-If you'd rather not use a plugin, Advanced on the Claude Code tab writes the hooks into `~/.claude/settings.json` (backed up first; removing takes out only our entries). In return, new sessions start the pet. With both on, the main window warns that events arrive twice and offers to remove the old hooks.
+If you'd rather not use a plugin, Advanced on the Connect page writes the hooks into `~/.claude/settings.json` (backed up first; removing takes out only our entries). In return, new sessions start the pet. With both on, the Connect page warns that events arrive twice.
 
 ### From source
 
-Needs Node.js 18+. Only tested on Windows 11 so far; macOS and Linux should work (on Linux, transparent windows need a compositor; full-screen detection is Windows only).
+Needs Rust (the MSVC toolchain on Windows). Only tested on Windows 11 so far; Tauri builds on macOS and Linux too, but full-screen detection, start at login, notifications and the button state are written for Windows only.
 
 ```bash
 git clone https://github.com/zhoupengjie/wakuwaku.git
-cd wakuwaku
-npm install
-npm run fetch-pet        # downloads the default pet, Claude小姐, from codex-pets.net (or let the first run do it)
-npm run install-hooks    # adds the hooks to ~/.claude/settings.json
+cd wakuwaku/src-tauri
+cargo run                 # debug
+cargo build --release     # target/release/wakuwaku.exe, one file
 ```
 
-New Claude Code sessions then start her by themselves; `npm start` works too. `npm run dist` builds the portable exe into `dist/`. Run from source, her settings, downloaded pets and caches live in the project's `data/` folder (not in git), never in the system's folders; the first run copies over whatever settings and pets she had in `%APPDATA%\wakuwaku`.
-
-If `node_modules/electron/dist` is empty after `npm install`, run `node node_modules/electron/install.js` once.
+No Node and no Tauri CLI needed. The first run downloads the default pet; connect Claude Code from the Connect page of the settings. Run from source, her settings, downloaded pets and log live in the project's `data/` folder (not in git); the first run copies over whatever settings and pets the old version had in `%APPDATA%\wakuwaku`.
 
 ## Use
 
 - **Drag** her anywhere; she runs the way you drag, and remembers the spot.
-- **Click** her: she jumps. **Double-click**: out of the island, she flies back into it; as the pet on her own, the main window.
-- **Right-click** her (or the tray icon): switch pets, size, bubble, walking, follow the mouse, island mode, back to the corner, do not disturb, main window, quit. Left-click the tray icon to show or hide her. The tray face changes with her mood: idle, working, waiting, done, review, error.
-- **Island mode**: if the whole pet is too much, she moves into a small black island at the top centre of the screen, like the iPhone's Dynamic Island. Most of the time it shows her round portrait, ringed in the colour of her mood, with the project, the status and the time. When something happens (a prompt, a turn done, changes to review, an error) the island opens by itself and the portrait grows into her whole self, standing inside and playing that mood, then shrinks back after a few seconds; a prompt opens it into a panel with her beside it. Hovering opens it too. When other sessions are busy too, a small "+1" sits by the time. Double-click the island to open the main window (a single click opens nothing).
+- **Click** her: she jumps. **Double-click**: out of the island, she flies back into it; as the pet on her own, the settings.
+- **Right-click** her (or the tray icon): switch pets, size, bubble, walking, follow the mouse, island mode, back to the corner, do not disturb, settings, quit. Left-click the tray icon to show or hide her (in do not disturb, the settings). The tray face changes with her mood: idle, working, waiting, done, review, error.
+- **Island mode**: if the whole pet is too much, she moves into a small black island at the top centre of the screen, like the iPhone's Dynamic Island. Most of the time it shows her round portrait, ringed in the colour of her mood, with the project, the status and the time. When something happens (a prompt, a turn done, changes to review, an error) the island opens by itself and the portrait grows into her whole self, standing inside and playing that mood, then shrinks back after a few seconds; a prompt opens it into a panel with her beside it. Hovering opens it too. When other sessions are busy too, a small "+1" sits by the time.
 - **Letting her out, and back in**: press her in the island and pull down. The island stretches like a drop of ink with her in it; pull far enough and the drop pinches off and she follows the cursor anywhere, landing where you let go. The island stays while she is out, her seat empty, still showing the status, the time and any prompt (on the desktop she only acts, she does not talk). To bring her home, drag her under the island: it reaches out a drop for her, and letting go close enough draws her back in; or double-click her and she flies back by herself. The right-click menu has Let her out and Call her back in too.
-- **Main window**: Now lists every session (project, status, time) and any prompt waiting on you, to answer right there; Pets manages and downloads pets, with the codex-pets.net gallery; Look and Alerts hold the settings; Claude Code is how she's connected; About. Your current pet peeks in from the bottom left.
+- **Settings grow out of the island**: there is no main window. Click the island and it opens into the settings; only then does it take the keyboard. Hovering, opening by itself or a prompt arriving never take it, so nothing you type in the terminal is lost. Esc, a click outside, ✕ or a click on the head close them, and the keyboard goes back where it was. Five pages: Now (sessions and four quick switches), Pets (yours, downloads, the codex-pets.net gallery), Look and Alerts (the settings), Connect (how Claude Code reaches her, start at login, about); ← → switch pages. A prompt arriving while they are open shows as a banner below the pages, with a dot on Now. With the pet on her own, opening the settings raises an island at the top of the screen for them, gone again once they close.
 - Clicks pass through her transparent parts to whatever is underneath.
-- **Lost her?** Start the app again (`npm start` or the Start menu) and she comes back to the bottom right. She also checks every 2 s and walks back if she ends up off screen.
+- **Lost her?** Start the app again and she comes back to the bottom right. She also checks every 2 s and walks back if she ends up off screen.
 
 ### Another pet
 
-Paste its URL on the Pets tab of the main window, or:
-
-```bash
-npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan
-```
-
-Several at once work, separated by spaces, and so does the bare id (the URL's last part). Only codex-pets.net URLs are taken, and only that site is downloaded from. Quote a URL that contains `&`.
+Paste its URL (like `https://codex-pets.net/#/pets/deepseek-chan`) on the Pets page of the settings, or just its id (the URL's last part); or click Download in the gallery below. Only codex-pets.net URLs are taken, and only that site is downloaded from.
 
 ### Off for a while
 
@@ -114,16 +105,16 @@ Several at once work, separated by spaces, and so does the bare id (the URL's la
 | --- | --- |
 | Off for now | Right-click → Quit. The next new Claude Code session brings her back |
 | Some quiet | Right-click → Do not disturb: she hides, no notifications, prompts go to the terminal |
-| No automatic start, only when I open her | In settings, tick "Don't let Claude Code start the pet" and install the hooks again (`npm run install-hooks -- --http-only` from source); open her yourself, or turn on Start at login |
+| No automatic start, only when I open her | Connect with the plugin (it never starts her) and turn off Start at login; open her yourself |
 
 While she's closed, Claude Code works as usual: the events sent to her are refused at once (about 1 ms) and nothing waits.
 
 ### Uninstall
 
-1. If you turned on **Start at login**, turn it off in the main window.
-2. With the plugin: in Claude Code, `/plugin uninstall wakuwaku@wakuwaku`, then `/plugin marketplace remove wakuwaku`. With hooks in settings.json: click Remove on the Claude Code tab (`npm run uninstall-hooks` from source); only this project's entries go, your own hooks stay, and the file as it was before the first change is at `~/.claude/settings.json.wakuwaku.bak`.
-3. Quit her, then delete the portable exe or the project folder.
-4. Delete her settings and downloaded pets: the `wakuwaku-data` folder beside the portable exe, or the project's `data/` when run from source. She writes nowhere else.
+1. If you turned on **Start at login**, turn it off on the Connect page.
+2. With the plugin: in Claude Code, `/plugin uninstall wakuwaku@wakuwaku`, then `/plugin marketplace remove wakuwaku`. With hooks in settings.json: click Remove on the Connect page; only this project's entries go, your own hooks stay, and the file as it was before the first change is at `~/.claude/settings.json.wakuwaku.bak`.
+3. Quit her, then delete the exe or the project folder. Notifications register her name in `HKCU\Software\Classes\AppUserModelId\com.zhoupengjie.wakuwaku`; delete that key too.
+4. Delete her settings and downloaded pets: the `wakuwaku-data` folder beside the exe, or the project's `data/` when run from source.
 
 > From source, remove the hooks before deleting the folder: they hold the program's path. If you moved the folder, settings will say the hooks point somewhere else; click Repair.
 
@@ -136,7 +127,7 @@ Claude Code ──HTTP hooks──▶ the pet (127.0.0.1:47213/hook)
 
 - Every event is a Claude Code **HTTP hook** sent straight to her, so a tool call starts no process (about 0.3 ms here). She answers `{}` at once, meaning no decision; only a prompt waits until you answer on the panel.
 - Claude Code runs no HTTP hook for `SessionStart`. The settings.json way gives it a background command instead: the app itself, which passes the event on if she's up (a hello) or starts her if not. No Node needed. The plugin has no such command; she starts at login.
-- At rest she takes about 1% of one core (measured on Windows 11) and about 180 MB of memory, mostly Electron itself.
+- At rest she takes about 1% of one core (measured on Windows 11) and about 185 MB of private memory, mostly WebView2 (that is, Chromium) itself.
 
 | Variable | Does |
 | --- | --- |
@@ -146,8 +137,8 @@ Claude Code ──HTTP hooks──▶ the pet (127.0.0.1:47213/hook)
 ## Tests
 
 ```bash
-npm test          # unit tests: hook mapping, the multi-session state machine, prompt replies and queueing, hooks install, i18n, 16 look directions...
-npm run smoke     # end to end: a real window on its own port and profile, through every feature, snapshots in out/smoke/
+cd src-tauri && cargo test     # Rust: hook mapping, the multi-session state machine, prompt replies and queueing, hooks install, pet URLs...
+node --test "test/*.test.js"   # the page: i18n, 16 look directions (no npm install needed)
 ```
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (in Chinese) for development notes.
@@ -155,6 +146,6 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (in Chinese) for development note
 ## License and credits
 
 - The code is under the [MIT License](LICENSE).
-- The pet sprites come from [codex-pets.net](https://codex-pets.net) and belong to their authors. **They are not in this repository or the portable build**; you download them in the settings or with `npm run fetch-pet`.
-- The default pet, [Claude小姐](https://codex-pets.net/#/pets/claude-chan), is pixel art by zhoupengjie: an unofficial fan work of the Claude小姐 character by Bilibili creator [ZipZipPipe](https://space.bilibili.com/4168597). It too is not in this repository or the portable build; the first run downloads it from codex-pets.net.
+- The pet sprites come from [codex-pets.net](https://codex-pets.net) and belong to their authors. **They are not in this repository or the exe**; you download them in the settings.
+- The default pet, [Claude小姐](https://codex-pets.net/#/pets/claude-chan), is pixel art by zhoupengjie: an unofficial fan work of the Claude小姐 character by Bilibili creator [ZipZipPipe](https://space.bilibili.com/4168597). It too is not in this repository or the exe; the first run downloads it from codex-pets.net.
 - The 16 look directions follow codex-pets.net's mapping (clockwise from straight up, one step per 22.5°).

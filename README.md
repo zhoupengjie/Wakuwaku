@@ -51,62 +51,53 @@
 
 ### 1. 装上宠物
 
-- **便携版（Windows）**：`Wakuwaku-<版本>-portable.exe`，放进哪个文件夹都能直接运行，设置、宠物和缓存都存在它旁边的 `wakuwaku-data` 文件夹里，不往系统里写任何东西；不要了直接删掉这两样。
+- **单个 exe（Windows）**：`wakuwaku.exe` 只有约 5 MB，放进哪个文件夹都能直接运行，设置和宠物都存在它旁边的 `wakuwaku-data` 文件夹里；不要了直接删掉这两样。用的是 Windows 11 自带的 WebView2，不用另装运行库。
 
-目前需要自己打包，见下面"从源码运行"里的 `npm run dist`。不提供安装程序。
+目前需要自己构建，见下面"从源码运行"里的 `cargo build --release`。不提供安装程序。
 - **从源码运行**：见下文。
 
-第一次打开时，她会自动下载默认宠物 Claude 小姐（需要联网；没网时会弹出主窗口，之后再挑）。想换别的，在主窗口「宠物」页挑一只（图库直接来自 codex-pets.net，点「下载」即可），或者粘贴宠物页面的地址。
+第一次打开时，她会自动下载默认宠物 Claude 小姐（需要联网；没网时屏幕顶部会升起设置面板，之后再挑）。想换别的，单击灵动岛打开设置，在「宠物」页挑一只（图库直接来自 codex-pets.net，点「下载」即可），或者粘贴宠物页面的地址。
 
 ### 2. 连上 Claude Code（推荐用插件）
 
-在 Claude Code 里依次输入（主窗口「Claude Code」页有复制按钮）：
+在 Claude Code 里依次输入（设置的「连接」页有复制按钮）：
 
 ```
 /plugin marketplace add zhoupengjie/wakuwaku
 /plugin install wakuwaku@wakuwaku
 ```
 
-插件由 Claude Code 自己安装和卸载，**我们不改你的设置文件**（Claude Code 会在它自己的 `enabledPlugins` 里记一笔，卸载时去掉）。插件没法自动启动宠物，所以建议在主窗口里打开「开机自动启动」。
+插件由 Claude Code 自己安装和卸载，**我们不改你的设置文件**（Claude Code 会在它自己的 `enabledPlugins` 里记一笔，卸载时去掉）。插件没法自动启动宠物，所以建议在设置的「连接」页打开「开机自动启动」。
 
-不想用插件的话，主窗口「Claude Code」页的「高级」里可以直接写入 `~/.claude/settings.json`（会先备份，卸载时只删我们加的条目）。这种方式的好处是新会话开始时能自动把宠物拉起来。两种都装了，主窗口会提示事件重复，并给一个「移除旧 hooks」的按钮。
+不想用插件的话，「连接」页的「高级」里可以直接写入 `~/.claude/settings.json`（会先备份，卸载时只删我们加的条目）。这种方式的好处是新会话开始时能自动把宠物拉起来。两种都装了，「连接」页会提示事件重复。
 
 ### 从源码运行
 
-需要 Node.js 18+。目前只在 Windows 11 上测试过；macOS / Linux 理论上也能跑（Linux 上透明窗口需要开启窗口合成器，全屏检测只支持 Windows）。
+需要 Rust（Windows 上用 MSVC 工具链）。目前只在 Windows 11 上测试过；Tauri 也能在 macOS / Linux 上构建，但全屏检测、开机自启、系统通知和按键状态只写了 Windows 的。
 
 ```bash
 git clone https://github.com/zhoupengjie/wakuwaku.git
-cd wakuwaku
-npm install
-npm run fetch-pet        # 从 codex-pets.net 下载默认宠物 Claude 小姐（不跑这步，第一次启动时也会自动下载）
-npm run install-hooks    # 把 hooks 写进 ~/.claude/settings.json
+cd wakuwaku/src-tauri
+cargo run                 # 调试版
+cargo build --release     # target/release/wakuwaku.exe，单个文件
 ```
 
-之后新开的 Claude Code 会话会自动把她拉起来，也可以手动 `npm start`。打包用 `npm run dist`，便携版输出在 `dist/`。从源码运行时，她的设置、下载的宠物和缓存都放在项目里的 `data/` 文件夹（不进仓库），不碰系统目录；第一次运行时会把 `%APPDATA%\wakuwaku` 里原有的设置和宠物复制过来。
-
-如果 `npm install` 之后 `node_modules/electron/dist` 是空的，补跑一次 `node node_modules/electron/install.js`。
+不需要 Node，也不需要 Tauri CLI。第一次运行会自动下载默认宠物；连接 Claude Code 在设置的「连接」页里点就行。从源码运行时，她的设置、下载的宠物和日志都放在项目里的 `data/` 文件夹（不进仓库）；第一次运行时会把 `%APPDATA%\wakuwaku` 里旧版的设置和宠物复制过来。
 
 ## 使用
 
 - **拖动**：按住她拖到任意位置，她会朝拖动方向跑，位置会记住。
-- **单击**：跳一下。**双击**：灵动岛模式下她在桌面上时，飞回岛里；只有宠物时，打开主窗口。
-- **右键**（或右键任务栏托盘图标）：切换宠物、调大小、开关气泡、走动、眼睛跟着鼠标、灵动岛模式、回到右下角、勿扰、主窗口、退出。左键托盘图标可以显示或隐藏她。托盘图标会随状态变脸：空闲、干活、等你、做完、改好了、出错各一种。
-- **灵动岛模式**：嫌整只宠物太大，可以换成屏幕顶部正中的一颗小黑岛，像 iPhone 的灵动岛，她就住在里面。平时是她的圆形小头像，外圈颜色表示状态，旁边是项目、状态和用时；有事发生（等你确认、做完、改好了、出错）时，岛自己展开，小头像长成她的全身，站在里面播对应的动作，几秒后再缩回去；有确认请求时岛展开成面板，她站在旁边。鼠标停在岛上也会展开。另外还有会话在忙时，用时旁边会标一个小小的「+1」。双击岛打开主窗口（单击不会弹出任何东西）。
+- **单击**：跳一下。**双击**：灵动岛模式下她在桌面上时，飞回岛里；只有宠物时，打开设置。
+- **右键**（或右键任务栏托盘图标）：切换宠物、调大小、开关气泡、走动、眼睛跟着鼠标、灵动岛模式、回到右下角、勿扰、设置、退出。左键托盘图标可以显示或隐藏她（勿扰时打开设置）。托盘图标会随状态变脸：空闲、干活、等你、做完、改好了、出错各一种。
+- **灵动岛模式**：嫌整只宠物太大，可以换成屏幕顶部正中的一颗小黑岛，像 iPhone 的灵动岛，她就住在里面。平时是她的圆形小头像，外圈颜色表示状态，旁边是项目、状态和用时；有事发生（等你确认、做完、改好了、出错）时，岛自己展开，小头像长成她的全身，站在里面播对应的动作，几秒后再缩回去；有确认请求时岛展开成面板，她站在旁边。鼠标停在岛上也会展开。另外还有会话在忙时，用时旁边会标一个小小的「+1」。
 - **把她放出来、放回去**：按住岛里的她往下拉，岛会像水滴一样拉出一截把她托着；拉够远，水滴"啵"地断开，她就跟着鼠标走，拖到哪都行，松手的地方就是她落脚的地方。她出门后灵动岛还在，座位空着，状态、用时和确认面板照样在岛上（她在桌面上只做动作，不说话）。想让她回家，把她拖到岛下面，岛会伸出一滴去够她，靠得够近时松手，她就被吸回岛里；或者直接双击她，她会自己飞回去。右键菜单里也有「放她出来」「叫她回岛里」。
-- **主窗口**：「现在」列出所有会话（项目、状态、用时）和等你确认的请求，可以直接点；「宠物」管理和下载宠物，带 codex-pets.net 图库；「外观」「提醒」是各种设置；「Claude Code」是连接方式；「关于」。你当前的宠物会从左下角探出头。
+- **设置长在岛里**：没有单独的主窗口。单击灵动岛，岛就展开成设置面板，这时它才拿键盘焦点；悬停展开、自动展开、来了确认请求都不抢焦点，不会吃掉你在终端里打的字。按 Esc、点岛外面、点 ✕ 或点面板头部就收起，焦点还给原来的窗口。五个页签：「现在」是会话列表和 4 个快捷开关；「宠物」管理和下载宠物，带 codex-pets.net 图库；「外观」「提醒」是各种设置；「连接」是连接方式、开机自启和关于。← → 切换页签。设置开着时来了确认请求，它会以横幅插在页签下面，「现在」上出现一个小圆点。只有整只宠物时，打开设置会在屏幕顶部临时升起一颗岛，收起后岛就消失。
 - 透明区域会点击穿透，不挡你操作下面的窗口。
-- **找不到她了**：再运行一次（`npm start` 或开始菜单），她会回到右下角；窗口每 2 秒也会自查一次，跑出屏幕就自己回来。
+- **找不到她了**：再运行一次程序，她会回到右下角；窗口每 2 秒也会自查一次，跑出屏幕就自己回来。
 
 ### 换一只宠物
 
-在主窗口的「宠物」页粘贴地址下载，或者用命令行：
-
-```bash
-npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan
-```
-
-一次可以给好几个，用空格隔开；只写 id（地址最后那一段）也行。只接受 codex-pets.net 上的地址，也只会从那里下载。地址里带 `&` 时要用引号括起来。
+在设置的「宠物」页粘贴地址（比如 `https://codex-pets.net/#/pets/deepseek-chan`）下载，只写 id（地址最后那一段）也行；或者在下面的图库里直接点「下载」。只接受 codex-pets.net 上的地址，也只会从那里下载。
 
 ### 暂时关掉
 
@@ -114,16 +105,16 @@ npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan
 | --- | --- |
 | 现在先关掉 | 右键 → 退出。下次新开 Claude Code 会话她会自己回来 |
 | 暂时别打扰我 | 右键 → 勿扰：她藏起来、不发通知、确认都交给终端 |
-| 不要她自动出来，想用时手动开 | 设置里勾选「不让 Claude Code 自动启动宠物」后重新安装 hooks（命令行：`npm run install-hooks -- --http-only`）；想用时手动打开，或开启「开机自动启动」 |
+| 不要她自动出来，想用时手动开 | 用插件连接（插件不会启动她），关掉「开机自动启动」；想用时手动打开 |
 
 她没开的时候，Claude Code 照常工作：发给她的事件会被立即拒绝连接（约 1ms），不会卡住你。
 
 ### 卸载
 
-1. 如果打开过**开机自动启动**，先在主窗口里取消。
-2. 用插件连接的：在 Claude Code 里 `/plugin uninstall wakuwaku@wakuwaku`，再 `/plugin marketplace remove wakuwaku`。写入 settings.json 的：在主窗口「Claude Code」页点「移除」（命令行：`npm run uninstall-hooks`），只会删掉本项目加的条目，你自己的 hooks 不受影响，第一次修改前的原文件备份在 `~/.claude/settings.json.wakuwaku.bak`。
-3. 退出她，然后删掉便携版 exe 或项目文件夹。
-4. 删除她的设置和下载的宠物：便携版是 exe 旁边的 `wakuwaku-data`，从源码运行是项目里的 `data/`。她不往别处写东西。
+1. 如果打开过**开机自动启动**，先在设置的「连接」页里关掉。
+2. 用插件连接的：在 Claude Code 里 `/plugin uninstall wakuwaku@wakuwaku`，再 `/plugin marketplace remove wakuwaku`。写入 settings.json 的：在「连接」页点「移除」，只会删掉本项目加的条目，你自己的 hooks 不受影响，第一次修改前的原文件备份在 `~/.claude/settings.json.wakuwaku.bak`。
+3. 退出她，然后删掉 exe 或项目文件夹。系统通知用的应用登记在注册表 `HKCU\Software\Classes\AppUserModelId\com.zhoupengjie.wakuwaku`，可以一并删掉。
+4. 删除她的设置和下载的宠物：exe 旁边的 `wakuwaku-data`，从源码运行是项目里的 `data/`。
 
 > 从源码运行时，一定要先移除 hooks 再删文件夹：hooks 里记的是程序的路径。移动了文件夹的话，设置里会显示「指向了别的位置」，点「修复」就行。
 
@@ -136,7 +127,7 @@ Claude Code ──HTTP hooks──▶ 宠物窗口 (127.0.0.1:47213/hook)
 
 - 所有事件都用 Claude Code 的 **HTTP hook** 直接发给她，调用工具时不启动任何进程（本机实测每次约 0.3ms）。她立刻回 `{}`，表示不做任何决定；只有确认请求会等你在面板上点了再回。
 - Claude Code 不对 `SessionStart` 运行 HTTP hook。写入 settings.json 的方式给它配了一条后台命令：直接运行程序本身，她在就把事件转给她（打招呼），不在就启动她，不需要 Node。插件方式没有这条命令，靠开机自动启动。
-- 空闲时约占单核 1% 的 CPU（Windows 11 实测），内存约 180MB（大部分是 Electron 本身）。
+- 空闲时约占单核 1% 的 CPU（Windows 11 实测），私有内存约 185MB，大部分是 WebView2（也就是 Chromium）本身。
 
 | 环境变量 | 作用 |
 | --- | --- |
@@ -146,8 +137,8 @@ Claude Code ──HTTP hooks──▶ 宠物窗口 (127.0.0.1:47213/hook)
 ## 测试
 
 ```bash
-npm test          # 单元测试：hook 映射、多会话状态机、确认面板的回复格式和排队、hooks 安装、多语言、16 方向注视……
-npm run smoke     # 端到端：用独立端口和配置目录启动真实窗口，走一遍所有功能并截图到 out/smoke/
+cd src-tauri && cargo test     # Rust：hook 映射、多会话状态机、确认面板的回复格式和排队、hooks 安装、宠物地址解析……
+node --test "test/*.test.js"   # 页面：多语言、16 方向注视（不需要 npm install）
 ```
 
 开发相关的说明见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
@@ -155,6 +146,6 @@ npm run smoke     # 端到端：用独立端口和配置目录启动真实窗口
 ## 许可与致谢
 
 - 代码以 [MIT 许可](LICENSE) 发布。
-- 宠物精灵图来自 [codex-pets.net](https://codex-pets.net)，版权归各自作者所有，**不包含在本仓库和便携版里**，由用户在设置里或用 `npm run fetch-pet` 下载到本地。
-- 默认宠物 [Claude 小姐](https://codex-pets.net/#/pets/claude-chan) 的像素形象由 zhoupengjie 制作，是基于 B 站 UP 主 [ZipZipPipe](https://space.bilibili.com/4168597) 的 Claude 小姐形象的非官方二创。它同样不在本仓库和便携版里，第一次运行时从 codex-pets.net 下载。
+- 宠物精灵图来自 [codex-pets.net](https://codex-pets.net)，版权归各自作者所有，**不包含在本仓库和 exe 里**，由用户在设置里下载到本地。
+- 默认宠物 [Claude 小姐](https://codex-pets.net/#/pets/claude-chan) 的像素形象由 zhoupengjie 制作，是基于 B 站 UP 主 [ZipZipPipe](https://space.bilibili.com/4168597) 的 Claude 小姐形象的非官方二创。它同样不在本仓库和 exe 里，第一次运行时从 codex-pets.net 下载。
 - 16 个注视方向的映射规则（从正上方开始顺时针，每 22.5° 一档）与 codex-pets.net 保持一致。

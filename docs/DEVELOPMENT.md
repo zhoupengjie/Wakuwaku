@@ -1,61 +1,90 @@
 # 开发说明
 
+Wakuwaku 是一个 Tauri 2 程序：页面是 `src/` 里的 HTML / JS / CSS，由系统自带的 WebView2 显示；其余都在 `src-tauri/` 的 Rust 里。（2026-10 之前是 Electron 版，在 git 历史里。）
+
 ## 目录
 
 ```
-src/
-  main/                 主进程
-    index.js            入口：按参数决定这次是当宠物，还是做启动检查（--wakuwaku-ensure-running）；决定数据目录
-    app.js              组装下面各块，持有它们共享的东西（设置、语言、状态、请求队列、显示与隐藏）；她在哪（宠物 / 岛里 / 出门）、设置补丁的校验、通知、hook 入口
-    pet-window.js       她在桌面上的窗口：尺寸和位置、她的眼睛、拖动和被"携带"、走动
-    island-window.js    灵动岛的窗口：挂在顶部正中，按页面的要求扩大；伸手够她、把她吸回去
-    click-through.js    两个窗口共用的点击穿透：鼠标靠近才转发、在她身上才接住点击
-    home-window.js      主窗口，以及它的页面能请求的一切（快照、设置、下载宠物、图库、连接）
-    tray.js             托盘图标（随心情变脸）和右键菜单
-    connection.js       Claude Code 怎么连上她：插件、settings.json 里的 hooks；开机启动
-    state.js            状态机：按会话记 mood，挑最需要你的那个显示；Review 还是挥手、做完后等你看到、用时、提醒
-    asks.js             等你确认的请求：排队、超时、发现终端已经答过就收起
-    server.js           127.0.0.1:47213 上的 HTTP 接口
-    launch.js           这份程序怎么启动（给 hook 和开机启动用）、启动检查、卸载清理
-    fullscreen.js       别的程序是否全屏（Windows：通过 koffi 调 user32）
-    config.js           设置读写（userData 下的 config.json）、尺寸档位
-    pets.js             已下载的宠物：<userData>/pets 和源码里的 pets/
-  agents/claude-code/   只和 Claude Code 有关的部分（纯函数，单元测试直接 require）
-    events.js           hook 事件 → 消息；每个事件怎么安装
-    hooks.js            settings.json 里我们那几条的添加、移除和状态检查；插件的 hooks
-    prompts.js          PermissionRequest → 面板内容；你的选择 → 回给 Claude Code 的 JSON
-  pet/                  宠物页面：pet.js（动画、气泡、空闲行为）、island.js（灵动岛）、panel.js（确认面板）、sprite.js（图集布局、16 方向）、preload.js（window.pet）
-  home/                 主窗口页面（现在 / 宠物 / 外观 / 提醒 / Claude Code / 关于）：home.js、preload.js（window.home）、style.css
-  shared/               两边都用的：i18n.js（中英文）、pet-fetch.js（从 codex-pets.net 下载宠物）
-  assets/               图标：icon.png、tray/<心情>.png、faces/<心情>.png；由 npm run icons 生成
-integrations/claude-code/  Claude Code 插件 wakuwaku（由 build-plugin 生成）
-.claude-plugin/         插件市场入口 marketplace.json（位置是 Claude Code 规定的）
-scripts/                fetch-pet.js、install-hooks.js（从源码运行时用）、build-plugin.js、make-icons.js
-test/                   node:test 单元测试；e2e/smoke.js 是端到端测试（npm run smoke）
-build/                  打包资源：图标（只打便携版，没有安装程序）
-pets/                   从源码运行时下载的宠物（不进仓库）
-art/                    美术和调查资料，只在本地（只有 art/README.md 进仓库）
+src/                      页面，Tauri 直接把整个文件夹打进 exe（tauri.conf.json 的 frontendDist）
+  pet/
+    index.html            她的窗口（?role=pet）和灵动岛的窗口（?role=island）共用的页面
+    bridge.js             window.pet：页面和 Rust 之间的调用和事件；替页面补发鼠标进出（见"点击穿透"）
+    pet.js                她的动画、气泡、空闲时走动和东张西望
+    island.js             灵动岛：几种形状、她在岛里、把她拉出来和放回去
+    settings.js           长在岛里的设置（五个页签）
+    panel.js              确认面板：在岛里、在设置的横幅里，或在她头顶
+    sprite.js             图集布局、16 个注视方向
+    style.css, settings.css
+  shared/i18n.js          中英文（页面用；Rust 那边的几句在 src-tauri/src/i18n.rs）
+src-tauri/
+  src/
+    main.rs               入口：--wakuwaku-ensure-running、单实例、各部分共享的 Shared、页面能调的命令
+    pet.rs                她的窗口：大小和位置、眼睛、拖动和被"携带"、走动、头顶的面板、飞回岛里
+    island.rs             灵动岛的窗口：挂在顶部正中、按页面要求扩大、伸手够她、把她吸回去、为设置临时升起
+    settings.rs           设置看到的快照、校验后的设置补丁、设置的各个命令
+    pointer.rs            两个窗口共用的点击穿透
+    screen.rs             各个显示器的工作区
+    asks.rs               确认请求：显示什么、每个选择回给 Claude Code 什么、排队和超时
+    connection.rs         插件、settings.json 里的 hooks（安装 / 移除 / 状态）、开机自启
+    fetch.rs              codex-pets.net：解析地址、下载宠物、图库
+    fullscreen.rs         别的程序是否全屏（user32）
+    focus.rs              前台窗口：设置拿走键盘前记下，收起时还回去
+    notify.rs             系统通知（登记 AppUserModelId 后发 toast）
+    tray.rs               托盘图标（随心情变脸）和菜单
+    server.rs             127.0.0.1:47213 上的 HTTP 接口
+    state.rs              状态机：按会话记 mood，挑最需要你的那个显示
+    events.rs             hook 事件 → 消息
+    data.rs               数据目录、设置读写、已下载的宠物
+  icons/                  exe、窗口、托盘和通知的图标（npm 不需要：scripts/make-icons.js 用 ImageMagick 画）
+  capabilities/           页面能用的 Tauri 权限：两个窗口都要列进去
+integrations/claude-code/ Claude Code 插件 wakuwaku（只有 HTTP hooks）
+.claude-plugin/           插件市场入口 marketplace.json（位置是 Claude Code 规定的）
+scripts/make-icons.js     画图标（node + ImageMagick），输出提交在 src-tauri/icons
+test/                     页面的单元测试（node --test，不需要 npm install）
+docs/prototypes/          设计原型：island-settings.html 是设置长在岛里的手感原型
+data/                     从源码运行时她的设置、宠物和日志（不进仓库）
+pets/                     从源码运行时也会读这里的宠物（不进仓库）
+art/                      美术和调查资料，只在本地（只有 art/README.md 进仓库）
 ```
+
+## 构建和运行
+
+```bash
+cd src-tauri
+cargo run                 # 调试版：有控制台窗口
+cargo build --release     # target/release/wakuwaku.exe：单个文件，约 5 MB，没有控制台
+cargo test                # Rust 单元测试
+cd .. && node --test "test/*.test.js"   # 页面的单元测试
+```
+
+页面是打进 exe 的：改了 `src/` 要重新编译（cargo 会发现）。不需要 Node 和 Tauri CLI；`Cargo.toml` 默认开着 `custom-protocol`，所以 `cargo run` 也直接用打进去的页面，不找开发服务器。
+
+**数据放在哪**（`data.rs` 的 `folder()`）：`WAKUWAKU_USER_DATA`（测试用）；从源码树里运行时是项目的 `data/`；否则是 exe 旁边的 `wakuwaku-data/`。第一次运行时从 `%APPDATA%\wakuwaku`（旧的 Electron 安装版）复制设置和宠物，但不复制位置：旧版记的是逻辑像素，这一版记物理像素。数据目录里放一个 `debug.on` 文件，就会写 `debug.log`（两个页面的 console.log 也在里面）。
+
+| 环境变量 | 作用 |
+| --- | --- |
+| `WAKUWAKU_PORT` | 端口（默认 47213） |
+| `WAKUWAKU_USER_DATA` | 换一个数据目录 |
+| `CLAUDE_CONFIG_DIR` | Claude Code 的配置目录（测试里指向临时目录，不碰真实设置） |
+| `WAKUWAKU_DEBUG=1` | `/health` 带上两个窗口和设置，开放 `/debug/eval`、`/debug/walk` |
 
 ## 插件
 
-`integrations/claude-code/` 是 Claude Code 插件（名字 `wakuwaku`），仓库根目录的 `.claude-plugin/marketplace.json` 让整个仓库成为插件市场。两者都由 `npm run build-plugin` 从 `agents/claude-code/hooks.js` 的 `pluginHooks()` 生成，单元测试会检查仓库里的文件和代码一致。插件只有 HTTP hook（插件不知道程序装在哪，也没法不依赖 Node 跑命令），所以靠开机自动启动。实测（临时的 `CLAUDE_CONFIG_DIR`）：安装后 HTTP hook 正常送达；卸载并移除市场后，`settings.json` 只剩空的 `enabledPlugins` 和 `extraKnownMarketplaces`。
+`integrations/claude-code/` 是 Claude Code 插件（名字 `wakuwaku`），仓库根目录的 `.claude-plugin/marketplace.json` 让整个仓库成为插件市场。插件只有 HTTP hook（插件不知道程序装在哪，没法启动她），所以靠开机自启。它的 `hooks.json` 和 `connection.rs` 里 `EVENTS` 写入 settings.json 的 HTTP 部分要保持一致（端口、`from=wakuwaku`、事件和 matcher、PermissionRequest 的 300 秒超时）。
 
-主窗口读 `enabledPlugins["wakuwaku@wakuwaku"]` 判断插件是否启用（只读），连接方式分 `plugin` / `hooks` / `both`（事件会重复）/ `none`。
+设置里读 `enabledPlugins["wakuwaku@wakuwaku"]` 判断插件是否启用（只读），连接方式分 `plugin` / `hooks` / `both`（事件会重复）/ `none`。
 
 ## hook 怎么送到宠物
 
-除 `SessionStart` 外的事件都是 HTTP hook（`type: "http"`，POST 到 `/hook?from=wakuwaku`），不开进程；`/hook` 一般立刻回 `{}`，只有 `PermissionRequest` 会挂起，等面板上的回答。**Claude Code 不对 `SessionStart` 运行 HTTP hook**（源码里会跳过：`HTTP hooks are not supported for SessionStart`），所以它只有一条后台命令（`async: true`）：用参数列表直接运行程序本身加 `--wakuwaku-ensure-running`，它从 stdin 读到事件，端口有人应答就把事件转过去（打招呼、登记会话），没人应答就以独立进程启动一份宠物，然后马上退出。注意：Electron 主进程在 Windows 上 `process.stdin` 读不到管道数据，要用 `fs.createReadStream(null, { fd: 0 })`。参数列表写法不经过 shell，路径里有空格也不用加引号，也不需要 Node。
+除 `SessionStart` 外的事件都是 HTTP hook（`type: "http"`，POST 到 `/hook?from=wakuwaku`），不开进程；`/hook` 一般立刻回 `{}`，只有 `PermissionRequest` 会挂起，等面板上的回答。**Claude Code 不对 `SessionStart` 运行 HTTP hook**，所以写入 settings.json 的方式给它配了一条后台命令（`async: true`）：程序本身加 `--wakuwaku-ensure-running`。它从 stdin 读事件，端口上有 wakuwaku 应答就把事件转过去（打招呼、登记会话），没有就以独立进程（`DETACHED_PROCESS`）启动一份宠物，然后马上退出。
 
-`hooks.status()`（`agents/claude-code/hooks.js`）判断我们的条目处于什么状态：`ok`、`httpOnly`（没有启动命令）、`missing`、`partial`（缺事件）、`stale`（端口不对、指向另一份程序，或者是早期的 node 版本）。主窗口据此显示「安装 / 重新安装 / 修复 / 移除」。识别"是我们的"靠 URL 里的 `from=wakuwaku`、参数里的 `--wakuwaku-ensure-running`，以及早期版本的 `claude-hook.js`。
+`connection.rs` 的 `status_of()` 判断我们的条目：`ok`、`httpOnly`（没有启动命令）、`missing`、`partial`（缺事件）、`stale`（端口不对、指向另一份程序，或者是旧版本）。识别"是我们的"靠 URL 里的 `from=wakuwaku`、参数里的 `--wakuwaku-ensure-running`，以及改名前的 `claude-pets` 两个记号和更早的 `claude-hook.js`。写之前把原文件备份到 `settings.json.wakuwaku.bak`（只备份一次）。
 
-**数据放在哪**（`src/main/index.js` 的 `dataFolder()`）：测试用 `WAKUWAKU_USER_DATA`；从源码运行放在项目的 `data/`（gitignore）；便携版放在 exe 旁边的 `wakuwaku-data/`（便携版其实是解压到临时目录里跑的，electron-builder 会用 `PORTABLE_EXECUTABLE_DIR` / `PORTABLE_EXECUTABLE_FILE` 告诉它 exe 本身在哪；hooks 命令和开机启动也指向 `PORTABLE_EXECUTABLE_FILE`，不指向临时目录）；打包后的 macOS / Linux 写不进程序旁边，才用系统的应用数据目录。源码和便携版第一次运行时，从 `%APPDATA%\wakuwaku` 复制 `config.json` 和 `pets/`。这样从源码调试时不会碰到 MSIX 打包应用（比如 Windows 上的 Claude 桌面版）对 AppData 写入的重定向：它的子进程写进 AppData 的东西，外面的程序看不到。数据目录里放一个 `debug.on` 文件，就会打开 `debug.log`（只写日志，不开调试接口）。
-
-改名前（claude-pets）写进 settings.json 的条目（`from=claude-pets`、`--claude-pets-ensure-running`）仍算"我们的"：状态显示为 `stale`，可以修复或移除；旧的启动参数照样能用。旧的设置目录 `%APPDATA%\claude-pets` 在第一次启动时整个搬到 `wakuwaku`，搬不动（旧程序还开着）就只复制 `config.json` 和 `pets/`。
+单实例：谁占着端口谁是宠物。再启动一份时端口被占，这份会 POST `/come-home`（让她重新出现、回到右下角）然后退出。
 
 ## 消息
 
-hook 事件在宠物里换算成消息（`src/agents/claude-code/events.js`），`/state` 也收这个格式：
+hook 事件在 `events.rs` 换算成消息，`/state` 也收这个格式：
 
 ```json
 { "session": "…", "project": "wakuwaku", "mood": "working", "detail": "Bash", "event": "tool-done", "react": "failed", "say": { "key": "say.toolFailed", "vars": { "tool": "Bash" } } }
@@ -69,45 +98,69 @@ hook 事件在宠物里换算成消息（`src/agents/claude-code/events.js`）�
 | `event` | `turn-start` / `tool-done` / `session-end` |
 | `react` / `say` | `wave` / `jump` / `failed`，在当前 mood 上播一次，期间气泡显示 `say` |
 
-显示哪个会话：等你确认 > 出错 > 改好了 > 做完 > 干活 > 空闲，同级取最新。做完、改好、出错默认一直保持，直到 `seen()`（鼠标经过宠物）；设置里 `hold` 可以改成 8 / 30 / 120 秒。干活和等你超过 15 分钟没有新事件就当作结束；做完的状态 2 小时没人看就回空闲，空闲会话 2 小时后被忘掉。
+显示哪个会话：等你确认 > 出错 > 改好了 > 做完 > 干活 > 空闲，同级取最新。做完、改好、出错默认一直保持，直到鼠标经过她（或离开灵动岛）；设置里可以改成 8 / 30 / 120 秒。干活和等你超过 15 分钟没有新事件就当作结束；做完的状态 2 小时没人看就回空闲，空闲会话 2 小时后被忘掉。
 
 ## HTTP 接口
 
 | 请求 | 说明 |
 | --- | --- |
-| `GET /health` | `{ ok, app: "wakuwaku", state }` |
-| `POST /hook` | Claude Code 的 hook 事件；一般立刻回 `{}`，`PermissionRequest` 等面板上的回答 |
+| `GET /health` | `{ ok, app: "wakuwaku", runtime: "tauri", state }`；调试模式下还有 `window`、`island`、`settings` |
+| `POST /hook` | Claude Code 的 hook 事件；一般立刻回 `{}`，`PermissionRequest` 等面板上的回答。正文上限 16 MB（Edit 的 PostToolUse 带着改之前的整个文件） |
 | `POST /state` | 一条消息 |
-| `GET /snapshot` | 宠物窗口截图；`?page=home` 截主窗口；`/debug/eval` 的 page 也用 `home` |
-| `POST /debug/look`、`/debug/walk`、`/debug/click`、`/debug/eval`、`/debug/settings`、`/debug/fullscreen` | 测试用，只在 `WAKUWAKU_DEBUG=1` 时开放；这时 `/health` 还会带上窗口位置、等待中的请求和设置 |
-
-| 环境变量 | 作用 |
-| --- | --- |
-| `WAKUWAKU_PORT` | 端口 |
-| `WAKUWAKU_USER_DATA` | 换一个配置目录（也就换了单实例锁），测试用它和你正在用的宠物互不干扰 |
-| `CLAUDE_CONFIG_DIR` | Claude Code 的配置目录（测试里指向临时目录，不碰你的真实设置） |
-| `WAKUWAKU_DEBUG=1` | 开放调试接口 |
+| `POST /come-home` | 再次启动时用：她重新出现 |
+| `POST /debug/eval` | `{ page: "pet" \| "island", code }`：在页面里运行一段表达式，返回结果（可以是 Promise） |
+| `POST /debug/walk` | `{ dx, ms }`：立刻走一段 |
 
 ## 在宠物上确认
 
-依据（本机 2.1.293 源码）：交互模式下，终端确认框弹出的同时，PermissionRequest hook 在后台运行，先到先得（`claim()`）。但后台子 agent（交互会话里）和 `claude -p` 这类没有确认框的场景，会先等 hook 回复再决定，所以面板的等待时间（设置里 30 秒到 5 分钟）就是它们最多被拖住的时间。
+交互模式下，终端确认框弹出的同时 PermissionRequest hook 在后台运行，先到先得。`server.rs` 把这个请求交给 `asks.rs` 挂起（`Responder` 里拿着 tiny_http 的请求），回答、超时、终端已答时才回复。后台子 agent 和 `claude -p` 会先等 hook 回复再决定，所以面板的等待时间（30 秒到 5 分钟）就是它们最多被拖住的时间。她不可见时（勿扰、隐藏、全屏），确认直接回 `{}`。
 
 | 选择 | 回给 Claude Code 的 `hookSpecificOutput.decision` |
 | --- | --- |
-| 允许 | `{ behavior: "allow" }` |
+| 允许 | `{ behavior: "allow" }`（计划带回 `updatedInput`） |
 | 以后都允许 | `{ behavior: "allow", updatedPermissions }`，取事件 `permission_suggestions` 里"允许"类的几条 |
 | 拒绝 | `{ behavior: "deny", message }`（按当前语言） |
 | 回答问题 | `{ behavior: "allow", updatedInput: { ...tool_input, answers } }`；选项、自己输入的文字、数字题都按题目文字作键 |
-| 批准计划 | `{ behavior: "allow", updatedInput: tool_input }` |
 | 去终端处理 / 超时 / 终端已答 / 勿扰 / 全屏 | `{}` |
 
-AskUserQuestion 的题目类型字段叫 `kind`（`choice` / `text` / `number`，数字题有 `min`、`max`、`step`、`defaultValue`、`unit`）；选择题的"其他"由 Claude Code 自动提供，所以面板上总有一个输入框。
+面板什么时候收起：同一个调用的 `PostToolUse` / `PostToolUseFailure` 到达（比较输入时忽略 `answers`）；同一个会话的 `UserPromptSubmit`、`Stop`、`StopFailure`、`SessionEnd`；同一个 agent 又来了新请求；等待时间到。
 
-面板什么时候收起（`src/main/asks.js`）：同一个调用的 `PostToolUse` / `PostToolUseFailure` 到达（比较输入时忽略 `answers`）；同一个会话的 `UserPromptSubmit`、`Stop`、`StopFailure`、`SessionEnd`；同一个 agent 又来了新请求；等待时间到；Claude Code 断开了请求。
+面板在哪：灵动岛模式在岛里（岛的 `ask` 形状）；设置开着时是设置里的横幅（`panel.js` 的 `holdsPanel()` 看 `settingsOpen`）；只有宠物时在她头顶，她的窗口向上、向两侧长大，她本人不动（`pet.rs` 的 `set_panel`，挡在屏幕边上时用 `pet:shift` 把她挪回原位）。
+
+## 点击穿透
+
+窗口要"透明处点击穿透，她身上接住点击"。Electron 可以穿透的同时照样收到 mousemove（`setIgnoreMouseEvents(true, { forward: true })`），Tauri 没有 forward，所以：
+
+1. Rust 轮询光标（`pointer.rs`，由 `pet.rs`、`island.rs` 的 `poll` 调用；平时 200ms，靠近 80ms，在窗口里 30ms）。光标靠近窗口时，把它在页面里的位置发给页面（`pet:pointer`）。
+2. `bridge.js` 用 `elementFromPoint` 算出光标下有哪些元素，替页面补发 `mouseenter` / `mouseleave`。
+3. 页面照旧调用 `window.pet.hover(true)`，Rust 让窗口接住鼠标（`set_ignore_cursor_events(false)`）；离开时再变回穿透。
+
+拖动由 Rust 跟随光标，并直接读鼠标按键（`GetAsyncKeyState`）：松手时页面没收到 mouseup 也能结束。鼠标在她身上时 Rust 也盯着按键，按下就开始拖（在岛里进出过之后，Windows 有时会吞掉她窗口的按下）。她被拖着经过灵动岛时，岛只做穿透，不会被"悬停"展开。
+
+## 灵动岛
+
+`display: "island"` 时岛的窗口挂在所在屏幕工作区的顶部正中，平时 460×132（逻辑像素）。岛有四种形状：收起（她的圆形小头像、项目、状态、用时）、展开（悬停 140ms 后；或者状态变化时自己展开 3.6 秒）、确认面板、设置。
+
+她在岛里只有一个元素 `#island-her`：外层管裁剪框（位置、大小、圆角），里层 `.sheet` 是原尺寸的一格图集，用 `transform: translate() scale()` 缩放。收起时是 0.21 倍、24px 的圆形头像；设置里是 0.28 倍、32px 的头像；展开和面板时是 0.5 倍的全身。都是同一组 CSS 属性，所以头像是"长成"全身的。形状变化全在 CSS 里（弹簧曲线 `cubic-bezier(0.3, 1.45, 0.5, 1)`，0.56 秒），不逐帧改窗口大小：需要更多空间时页面先通过 `pet_panel` 让窗口变大，40ms 后再让岛长大；收回时等动画做完再缩窗口。
+
+**把她拉出来**：在 `#island-her` 上按下并移动超过 5px，岛的窗口扩到 760×440。`#goo` 层里岛的替身、一段脖子、一滴水三块黑色形状套 SVG 滤镜，就像液体一样连在一起。拉过 110px 断开：页面发 `island_release`（她的中心相对光标的偏移），Rust 把她的窗口放到光标下、设 `out: true`，然后跟随光标"携带"她（这时她的窗口完全穿透，按键还在岛的窗口上）。松手由岛的页面发 `island_drop`，或者由 Rust 读到按键已松开。没拉断就松手，她弹回座位。拉完那一下浏览器会在岛上补发一次 click，岛会忽略它（`pulledAt`），不当成"单击打开设置"。
+
+**放回去**：她的窗口被拖动时，Rust 每帧算她的中心离岛下沿多远（280px 内靠近，140px 内够近），通过 `island:reach` 告诉岛的页面（坐标用逻辑像素，和页面的 `window.screenX` 一致），页面伸出一滴去够她。够近时松手：Rust 立刻藏起她的窗口，岛的页面播一段吸回去的动画（`island:absorb`），380ms 后设 `out: false`。在桌面上双击她，她会飞回岛里（`pet.rs` 的 `fly_home`）。
+
+## 设置（长在岛里）
+
+没有单独的主窗口。设计和手感见 `docs/prototypes/island-settings.html`。
+
+- **打开**：单击岛（不是拉她、不在确认面板上），或者托盘菜单「设置…」、勿扰时左键托盘、只有宠物时双击她、首次运行（没连接 Claude Code 时开在「连接」页；默认宠物下载失败时开在「宠物」页）。都走 Rust 的 `island::open_settings`，它再发 `island:settings` 给岛的页面；页面还没起来时先记着，起来后再发。
+- **焦点**：只有设置会拿键盘。页面打开设置时调 `pet_keyboard(true)`，Rust 先记下当前前台窗口（`focus.rs`），再让岛的窗口可获得焦点并聚焦。悬停展开、自动展开、来了确认请求都不碰焦点，所以终端里打的字不会被吃掉。
+- **收起**：Esc、点 ✕、点面板头部，或窗口失去焦点（点岛外面：`WindowEvent::Focused(false)` → `island:blur`）。鼠标移开不收起。收起时页面发 `settings_closed`，Rust 让窗口变回不可获得焦点；如果前台还是岛（Esc、✕ 的情况），把焦点还给记下的窗口。
+- **只有宠物时**：打开设置会临时升起一颗岛（`Island.temp`，`payload.islandTemp` 让页面把自己当成"岛开着"），收起后等岛缩回（620ms）再藏起来。设置里切成灵动岛模式，岛就留下来。
+- **数据**：页面打开时取一次快照（`settings_get`），之后 Rust 在状态、确认请求、设置变化时推 `settings:changed`（每秒最多 4 次）。改动先在页面上显示，再发 `settings_set` 补丁，Rust 按白名单校验（`settings.rs` 的 `is_ok`），大小、显示方式、出门通过窗口去改，她的位置不跳。
+- **高度**：面板宽 520px，正文高度不超过屏幕（`screen.availHeight` 减去头、页签、脚），超出的在正文里滚动；页签切换时岛的高度用弹簧过渡。
 
 ## 精灵图
 
-Codex pet v2 图集为 1536×2288，8 列 × 11 行，每格 192×208。
+Codex pet v2 图集为 1536×2288，8 列 × 11 行，每格 192×208。v1 是 1536×1872、9 行，没有注视动作。
 
 | 行 | 网站上的名字 | 帧数 | 用于 |
 | --- | --- | --- | --- |
@@ -119,54 +172,37 @@ Codex pet v2 图集为 1536×2288，8 列 × 11 行，每格 192×208。
 | 6 | Waiting | 6 | waiting |
 | 7 | Running | 6 | working |
 | 8 | Review | 6 | review |
-| 9 / 10 | Look around | 8 + 8 | 16 个注视方向：从正上方顺时针，每 22.5° 一档，`row = 9 + floor(i / 8)`、`frame = i % 8` |
+| 9 / 10 | Look around | 8 + 8 | 16 个注视方向：从正上方顺时针，每 22.5° 一档 |
 
-## 测试
+精灵图从数据目录读，经 Tauri 的 asset 协议给页面：`http://asset.localhost/<编码后的绝对路径>`（`data::asset_url`），宠物文件夹在启动时加进 asset 的允许范围。图库的预览用站点的 `posterUrl`（单帧 192×208）；`previewUrl` 是所有帧连成的一长条，缩进格子里只剩一条线。
 
-- `npm test`：单元测试。
-- `npm run smoke`：端到端。启动真实窗口（端口 47299、临时配置目录、临时 Claude Code 配置目录），走一遍首次运行、在设置里装 hooks、所有心情、多会话、等你看到、中英文切换、勿扰与全屏、走动不出屏、确认面板（含打字和数字题）、在设置里下载宠物、注视、会话开始时的启动检查，并截图到 `out/smoke/`。真实的鼠标跟随和拖动需要人工检查。
+## 实测（Windows 11，125% 缩放，空闲）
 
-## 性能
+| | Electron 版（旧） | Tauri 版 |
+| --- | --- | --- |
+| 发布文件 | 88.5 MB（便携版 exe） | 约 5 MB（只有宠物模式时是 3.7 MB；HTTPS、注册表、通知加了 1.3 MB） |
+| 进程数 | 4 | 7（1 + WebView2 的 6 个） |
+| 私有内存合计 | 约 183 MB | 约 185 MB |
+| 空闲 CPU（3 分钟平均） | 1.13% | 0.89% |
 
-空闲时 CPU 主要花在两处，都已处理：
-
-- **每帧重绘**：Windows 上透明窗口每画一帧都要整块拷贝一次画面（主进程 + GPU 进程合计约 3%）。所以待机动画播一轮就停 4 秒，帧也只在变化时才画（`kick()` 按下一帧到来的时间排定，不用固定 40ms 的定时器）。
-- **鼠标转发**：为了让透明窗口"点击穿透、又能感知鼠标经过"，Electron 在 Windows 上会装全局低层鼠标钩子，屏幕上任何鼠标移动都要经过主进程。现在只有鼠标靠近窗口时才开启转发（`setMouseMode`），平时只轮询一次鼠标坐标。
-
-结果：空闲约占单核 1.1%（之前 3%–4.8%），藏起来时约 0.2%–0.5%。
+CPU 主要花在 GPU 进程和渲染进程上，两边几乎一样（页面是同一个）。Windows 上 WebView2 本身就是 Chromium，所以内存和 CPU 跟 Electron 持平，省下来的是安装包体积。
 
 ## 踩过的坑
 
-- **preload 全局重名**：preload 暴露了 `window.pet`，页面里再声明 `const pet` 会导致整个脚本不执行。
-- **动画停住**：不抢焦点的半透明窗口会被 Chromium 节流，必须 `backgroundThrottling: false`。
-- **中文乱码**：POST body 要先把 Buffer 拼完整再解码 UTF-8。
-- **宠物走出屏幕**：Windows 在 125% 这类非整数缩放下，对透明无边框窗口调用 `setPosition`，每次宽度多 1px。所有移动都走 `moveTo()`，用 `setBounds` 显式传宽高；`keepOnScreen()` 定时把窗口拉回屏幕。
-- **窗口关了定时器还在用它**：宠物窗口关闭（而主窗口还开着）后，定时器访问已销毁的窗口会报 `Object has been destroyed`。所有访问都经过 `alive(win)`，宠物窗口关闭即退出程序。
+- **右键菜单一闪就没**：muda 弹菜单前调用 `SetForegroundWindow`，不能获得焦点的窗口做不到，菜单立刻关掉。弹菜单前临时让窗口可获得焦点（`main.rs` 的 `pet_menu`）。
+- **页面的 CSP**：精灵图走 `http://asset.localhost`，IPC 走 `http://ipc.localhost`，图库图片来自 `https://codex-pets.net`，都要在 `index.html` 的 CSP 里放行；否则 IPC 会退回 postMessage，图也加载不出来。
+- **监听要先注册好**：`listen()` 本身也是一次 IPC，是异步的。bridge 等所有监听注册完再发 `pet_ready`，Rust 收到后才开始推状态。
+- **新窗口要写进 capability**：`capabilities/default.json` 的 `windows` 里没有 `island` 时，岛的页面调 `listen()` 会被拒绝，页面永远等不到 `pet_ready`。
+- **调用要排队**：每次 `invoke` 都是独立请求，async 命令的执行顺序没有保证。拉她出来时页面依次发 holding、release、drop，顺序乱了就会出错，所以 bridge 把调用排成队一个个发（`walk` 除外，它要等走完才回复）。
+- **锁和窗口 getter**：Tauri 的 getter（`outer_position`、`cursor_position` 等）要等主线程回复，菜单回调又在主线程上拿锁。所以拿着锁时绝不调 getter，同一时间也不拿两把锁；页面的命令一律写成 async，不在主线程上跑。
+- **在主线程上建窗口会卡死**：菜单回调在主线程上，第一次建岛的窗口要放到另一个线程去建。
+- **路径里不能有 `..`**：asset 协议的允许范围按路径匹配，带 `..` 的路径匹配不上（`data.rs` 的 `in_tree`）。
+- **16 位 PNG**：Tauri 的 PNG 解码只要 8 位 RGBA，托盘和窗口图标都用 8 位（`make-icons.js` 加了 `-depth 8`）。
+- **单击 ✕ 又打开了设置**：同一次 click 冒泡到岛上，岛那时已经不在设置里，就当成"单击打开"。岛的 click 忽略来自设置面板里的点击。
+- **系统通知**：未安装（没有开始菜单快捷方式）的程序要先在 `HKCU\Software\Classes\AppUserModelId\<id>` 登记名字和图标，toast 才会显示。
+- **搬动 Rust 工程之后**：`target/` 里的构建产物带着绝对路径，搬家后要 `cargo clean` 一次。
+- **全屏判断**：最大化窗口会比屏幕多出几像素边框，但底部止于任务栏；判断全屏还要看有没有标题栏。
 - **hook 回包必须是对象**：服务端只会回对象，其他任何值都回 `{}`。
 - **压缩时被打回空闲**：自动压缩会触发 `SessionStart`（`source: compact`），要忽略。
-- **Linux 的中文 locale**：`zh_CN.UTF-8` 里下划线是单词字符，`/^zh\b/` 匹配不上。
-- **最大化不是全屏**：最大化窗口会比屏幕多出 9px 边框，但底部止于任务栏；判断全屏还要看有没有标题栏。
-- **PowerShell 里 `Measure` 是 `Measure-Object` 的别名**，同名函数会被别名盖住（写测量脚本时踩到）。
-- **Electron 二进制没下载**：补跑 `node node_modules/electron/install.js`。
-- **Node 24 的 `node --test`** 不接受目录参数，要用 `"test/*.test.js"`。
-- **主窗口的 CSP 不允许 style 属性**：`setAttribute('style', …)` 会被拦，要用 `element.style.cssText`（CSSOM）。
-- **单实例锁的交接**：刚退出的旧进程可能还占着锁，这时启动的新进程拿不到锁就会退出。现在拿不到锁时先看端口：有宠物应答就退出，没有就每 250ms 重试，最多 6 秒。
-- **被挡住的窗口不重绘**：截图（`capturePage`）拿到的可能是旧画面，冒烟测试截主窗口前先把它调到前面。
-- **v1 宠物**：1536×1872、9 行，没有第 9、10 行的注视动作；页面按 `spriteVersion` 跳过注视，背景图高度也跟着变。
-
-## 灵动岛
-
-`display: "island"` 时岛的窗口挂在所在屏幕工作区的顶部正中，平时 460×132。岛在三种形状之间弹：收起（她的圆形小头像、项目、状态、用时）、展开（悬停 140ms 后；或者变成等你 / 做完 / 改好 / 出错、打招呼时自己展开 3.6 秒）、确认面板。
-
-她在岛里只有一个元素 `#island-her`：外层管裁剪框（位置、大小、圆角），里层 `.sheet` 是原尺寸的一格图集，用 `transform: translate() scale()` 缩放。收起时是 0.21 倍、裁成 24px 的圆形头像；展开和面板时是 0.5 倍的全身。两者都是同一组 CSS 属性，所以头像是"长成"全身的，不是换了一张图。换帧只改 `background-position`（不过渡），形状变化走带回弹的过渡。
-
-形状变化全在 CSS 里，不逐帧改窗口大小。需要更多空间时（展开、确认面板、拉她出来）页面先通过 `pet:panel` 让主进程把窗口变大，再让岛长大；收回时等动画做完（560ms）再缩窗口。
-
-**两个窗口**：灵动岛和她各有一个窗口，加载同一个页面（`index.html?role=island` / `?role=pet`），页面按 role 决定画什么。`display: "pet"` 只有她的窗口（带气泡和面板）；`display: "island"` 时岛的窗口一直在，`out` 决定她在不在桌面上——在桌面上时她的窗口只做动作，气泡、确认面板都在岛上。两个窗口各自做点击穿透（`click-through.js`），主进程按 `e.sender` 区分消息来自哪个窗口。
-
-**把她拉出来**：在 `#island-her` 上按下并移动超过 5px，岛的窗口扩到 760×440。`#goo` 层里有岛的替身、一段脖子、一滴水三块黑色形状，整层套 SVG 滤镜（高斯模糊再拉高 alpha 对比），三块就像液体一样连在一起。脖子随距离变细，拉过 110px 就断开：页面发 `island:release`（她的中心相对光标的偏移），主进程把她的窗口放到光标下、设 `out: true`，然后由主进程跟随光标"携带"她，拖到屏幕哪里都行。按键还按在岛的窗口上（指针被它捕获），所以松手时由岛的页面发 `island:drop`。没拉断就松手，她弹回座位。
-
-**放回去**：她的窗口被拖动时，主进程每帧算她的中心离岛下沿多远（280px 内算靠近，140px 内算够近），通过 `island:reach` 告诉岛的页面，页面就伸出一滴去够她（够近时一直伸到她身边）。在够近的地方松手：主进程立刻收起她的窗口，岛的页面从她的位置播一段被吸回座位的动画（`island:absorb`），380ms 后再设 `out: false`。页面画液体之前会先等窗口扩好（`whenRoomy`），否则岛会在画好的形状下面挪开。
-
-**她的圈**：小头像外那圈状态色是 `#island-her::after` 上的内阴影，离开收起状态时 60ms 内淡出、回到收起状态 0.45s 后再淡入。直接画在裁剪框的 box-shadow 上的话，裁剪框从圆变方、变大的过程中会闪出一个方框。
-
+- **Linux 的中文 locale**：`zh_CN.UTF-8` 里下划线是单词字符，`/^zh\b/` 匹配不上（`i18n.js` 的 `detectLang`）。
+- **PowerShell 里 `h` 是 `Get-History` 的别名**，写测试脚本时同名函数会被别名盖住。

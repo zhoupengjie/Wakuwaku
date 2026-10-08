@@ -248,57 +248,264 @@ body {
   color: #5a6170;
 }
 
-/* Capsule mode: a pill instead of the pet. */
-#capsule {
+/* --- The island (island.js) ------------------------------------------------ */
+
+#island-bar {
   display: none;
 }
 
-.capsule #pet,
-.capsule #bubble {
+.island #stage {
   display: none;
 }
 
-.capsule #capsule {
+.island #island-bar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+/* Always black, light theme or dark: colour is only in the faces and clocks.
+   The spring: a curve that overshoots, then settles. */
+#island {
+  position: relative;
   flex: none;
+  width: 112px;
+  height: 36px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #000;
+  color: #f5f5f7;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+  transition:
+    width 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    height 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    border-radius 0.4s ease;
+}
+
+#island-compact,
+#island-expanded {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
   box-sizing: border-box;
-  width: 330px;
-  height: 52px;
-  margin-bottom: 6px;
-  padding: 0 16px 0 6px;
-  border-radius: 26px;
-  border: 2px solid var(--accent);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
-  color: #1f2430;
+  width: max-content;
+  white-space: nowrap;
+  opacity: 0;
+  transform: scale(0.94);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+  pointer-events: none;
+}
+
+#island-compact {
+  height: 36px;
+  max-width: 340px;
+  gap: 10px;
+  padding: 0 16px 0 7px;
   font-size: 13px;
-  cursor: grab;
 }
 
-/* Her head, from the first frame of her mood's row. */
-#capsule-face {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: #e7f0fb;
-  background-image: var(--sprite);
-  background-repeat: no-repeat;
-  background-size: calc(1536px * 0.36) calc(var(--sheet-h, 2288px) * 0.36);
+#island-compact.bare {
+  padding-right: 7px;
 }
 
-#capsule-face.empty {
-  background-image: url('../assets/faces/idle.png');
-  background-size: cover;
-  background-position: center;
+#island-expanded {
+  height: 84px;
+  max-width: 400px;
+  min-width: 300px;
+  gap: 14px;
+  padding: 0 22px 0 18px;
 }
 
-#capsule-text {
+/* The shape now: its content comes in once the old one has gone. */
+[data-view='compact'] #island-compact,
+[data-view='expanded'] #island-expanded {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.12s;
+}
+
+#island-compact .label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
   text-overflow: ellipsis;
+  color: #d1d1d6;
+}
+
+#island-bar .clock {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+#island-expanded .clock {
+  font-size: 18px;
+}
+
+#island-expanded .lines {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+}
+
+#island-expanded .title,
+#island-expanded .sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#island-expanded .title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#island-expanded .sub {
+  font-size: 12px;
+  color: #a1a1a6;
+}
+
+#island-expanded .portrait {
+  flex: none;
+  border-radius: 50%;
+  background-color: #1c1c1e;
+  background-repeat: no-repeat;
+}
+
+/* A face: a circle and two capsule eyes, which blink now and then. */
+.face {
+  position: relative;
+  flex: none;
+  display: inline-block;
+  border-radius: 50%;
+}
+
+.face i {
+  position: absolute;
+  top: 33%;
+  width: 15%;
+  height: 34%;
+  border-radius: 99px;
+  background: #0b0b0c;
+  transition: transform 0.07s;
+}
+
+.face i:first-child {
+  left: 27%;
+}
+
+.face i:last-child {
+  right: 27%;
+}
+
+.blink .face i {
+  transform: scaleY(0.15);
+}
+
+/* Another session that wants you: a round bubble that buds off the island. */
+#island-side {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  height: 36px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #000;
+  cursor: pointer;
+  transition: width 0.5s cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+
+#island-side.shown {
+  width: 36px;
+}
+
+/* The prompt inside the island: the panel, dressed for black. */
+.island #panel {
+  position: absolute;
+  top: 13px;
+  left: 14px;
+  width: 340px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: #f5f5f7;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+[data-view='ask'] #panel {
+  opacity: 1;
+  transition-delay: 0.2s;
+}
+
+.island #panel .chip,
+.island #panel .more {
+  background: #2c2c2e;
+  color: #c7c7cc;
+}
+
+.island #panel .code {
+  background: #1c1c1e;
+  color: #e5e5ea;
+}
+
+.island #panel .btn {
+  border-color: #3a3a3c;
+  background: #2c2c2e;
+  color: #f5f5f7;
+  border-radius: 14px;
+}
+
+.island #panel .btn.primary {
+  border-color: #34d27b;
+  background: #34d27b;
+  color: #04220f;
+}
+
+.island #panel .btn.always {
+  border-color: #5e9bff;
+  background: #5e9bff;
+  color: #04122b;
+}
+
+.island #panel .btn.danger {
+  border-color: #3a3a3c;
+  color: #ff6b7a;
+}
+
+.island #panel .btn.option.picked {
+  border-color: #5e9bff;
+  background: #16233d;
+}
+
+.island #panel .btn.ghost {
+  background: none;
+  color: #8e8e93;
+}
+
+.island #panel .input {
+  border-color: #3a3a3c;
+  background: #1c1c1e;
+  color: #f5f5f7;
+}
+
+.island #panel .note,
+.island #panel .unit,
+.island #panel .hint,
+.island #panel .qdesc,
+.island #panel .btn.option .desc {
+  color: #98989d;
 }

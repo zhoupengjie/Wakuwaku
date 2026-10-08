@@ -236,6 +236,8 @@
 
   // Tell main how much room the panel needs; null when it is gone.
   function report() {
+    // In the island, the island sizes itself and the window around it.
+    if (window.Island?.isOn()) return window.Island.changed()
     requestAnimationFrame(() => {
       window.pet.panel(panel.hidden ? null : { width: panel.offsetWidth + 16, height: panel.offsetHeight + 10 })
     })
@@ -252,7 +254,8 @@
       shownId = null
       typed = ''
       letGoOfKeyboard()
-      window.pet.hover(false)
+      // The island is still under the pointer when its prompt goes.
+      if (!window.Island?.isOn()) window.pet.hover(false)
       return report()
     }
 
@@ -315,7 +318,8 @@
     render()
   })
 
-  // The panel takes clicks; the rest of the window lets them through.
-  panel.addEventListener('mouseenter', () => window.pet.hover(true))
-  panel.addEventListener('mouseleave', () => window.pet.hover(false))
+  // The panel takes clicks; the rest of the window lets them through. In the
+  // island, the island itself does this for the panel inside it.
+  panel.addEventListener('mouseenter', () => window.Island?.isOn() || window.pet.hover(true))
+  panel.addEventListener('mouseleave', () => window.Island?.isOn() || window.pet.hover(false))
 })()

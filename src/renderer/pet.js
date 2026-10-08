@@ -26,9 +26,6 @@ const LOOK_FAR = 900
 
 const sprite = document.getElementById('pet')
 const bubble = document.getElementById('bubble')
-const capsule = document.getElementById('capsule')
-const capsuleFace = document.getElementById('capsule-face')
-const capsuleText = document.getElementById('capsule-text')
 
 let lang = 'en'
 let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0 }
@@ -37,7 +34,8 @@ let spriteUrl = null
 // 2: the 11-row sheet; 1: the older 9-row one, without the look-around rows.
 let spriteVersion = 2
 
-const isCapsule = () => config.display === 'capsule'
+// The island (island.js) shows instead of her.
+const isIsland = () => config.display === 'island'
 
 let reaction = null // { clip, times, say, start }
 let dragged = null // { dir, at }
@@ -89,6 +87,9 @@ function drawLoop(name, at) {
 function frame() {
   const at = performance.now()
 
+  // In the island she is not drawn at all.
+  if (isIsland()) return 60 * 60 * 1000
+
   if (dragged && at - dragged.at < 160) {
     drawLoop(dragged.dir > 0 ? 'running-right' : 'running-left', at)
     return 40
@@ -107,9 +108,6 @@ function frame() {
   }
 
   if (walking) return drawLoop(walking.dir > 0 ? 'running-right' : 'running-left', at)
-
-  // The capsule shows a still face; nothing to animate.
-  if (isCapsule()) return 60 * 60 * 1000
 
   if (looking && spriteVersion === 2 && now.mood === 'idle' && at < looking.until) {
     loop = { clip: '', start: 0 }
@@ -162,8 +160,7 @@ function render() {
   drawn = ''
 
   clearInterval(clockTimer)
-  document.body.classList.toggle('capsule', isCapsule())
-  if (isCapsule()) return renderCapsule()
+  if (isIsland()) return
 
   // No sprite yet: say how to get one, and keep a box to right-click.
   if (!spriteUrl) {
@@ -187,26 +184,6 @@ function render() {
   }
 }
 
-// --- The capsule: a still face and one line --------------------------------------
-
-// The face in the capsule: the first frame of her mood's row, head only.
-function renderCapsule() {
-  capsule.style.setProperty('--accent', COLOR[now.mood])
-  if (spriteUrl) {
-    const { row } = CLIPS[MOOD_CLIP[now.mood]]
-    capsuleFace.classList.remove('empty')
-    capsuleFace.style.backgroundPosition = `-14px ${-(row * CELL_H * 0.36) - 4}px`
-  } else {
-    capsuleFace.classList.add('empty')
-  }
-  const line = () => (spriteUrl ? (reaction?.say ? say(lang, reaction.say) : words().replace('\n', ' · ')) : t(lang, 'say.noSprite'))
-  capsuleText.textContent = line()
-  capsule.title = words()
-  if (now.since && (now.mood === 'working' || now.mood === 'waiting')) {
-    clockTimer = setInterval(() => (capsuleText.textContent = line()), 1000)
-  }
-}
-
 // --- Idle life: walk a little, glance around ---------------------------------------
 
 let idleTimer
@@ -214,7 +191,7 @@ let glanceTimer
 
 function scheduleIdle() {
   clearTimeout(idleTimer)
-  if (now.mood !== 'idle' || isCapsule()) return
+  if (now.mood !== 'idle' || isIsland()) return
   idleTimer = setTimeout(idleAct, 12000 + Math.random() * 18000)
 }
 
@@ -319,7 +296,7 @@ window.pet.onAlert(({ mood }) => chime(mood))
 
 // Eyes on the cursor while it moves near enough.
 window.pet.onCursor(({ dx, dy }) => {
-  if (!config.look || isCapsule() || spriteVersion !== 2 || now.mood !== 'idle' || reaction || walking || dragged) return
+  if (!config.look || isIsland() || spriteVersion !== 2 || now.mood !== 'idle' || reaction || walking || dragged) return
   const distance = Math.hypot(dx, dy)
   if (distance < LOOK_NEAR || distance > LOOK_FAR) return
   clearTimeout(glanceTimer)
@@ -342,20 +319,18 @@ window.pet.onDragEnd(() => {
 
 // --- Pointer: hover turns click-through off, press drags --------------------------------
 
-for (const target of [sprite, capsule]) {
-  target.addEventListener('mouseenter', () => window.pet.hover(true))
-  target.addEventListener('mouseleave', () => window.pet.hover(false))
-  target.addEventListener('mousedown', e => {
-    if (e.button === 0) {
-      stopIdle()
-      window.pet.dragStart()
-    }
-  })
-  target.addEventListener('contextmenu', e => {
-    e.preventDefault()
-    window.pet.menu()
-  })
-}
+sprite.addEventListener('mouseenter', () => window.pet.hover(true))
+sprite.addEventListener('mouseleave', () => window.pet.hover(false))
+sprite.addEventListener('mousedown', e => {
+  if (e.button === 0) {
+    stopIdle()
+    window.pet.dragStart()
+  }
+})
+sprite.addEventListener('contextmenu', e => {
+  e.preventDefault()
+  window.pet.menu()
+})
 
 window.addEventListener('mouseup', e => {
   if (e.button === 0) window.pet.dragEnd()

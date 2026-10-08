@@ -8,7 +8,7 @@ const DEFAULTS = {
   lang: 'auto',
   pet: 'deepseek-chan',
   scale: 0.55,
-  // 'pet' (the whole pet) or 'capsule' (a small pill).
+  // 'pet' (the whole pet) or 'island' (a black pill at the top of the screen).
   display: 'pet',
   bubble: true,
   walk: true,
@@ -35,6 +35,8 @@ function file() {
 function load() {
   try {
     const saved = JSON.parse(fs.readFileSync(file(), 'utf8'))
+    // The capsule of earlier versions is the island now.
+    if (saved.display === 'capsule') saved.display = 'island'
     return { ...DEFAULTS, ...saved, notify: { ...DEFAULTS.notify, ...(saved.notify || {}) } }
   } catch {
     return { ...DEFAULTS, notify: { ...DEFAULTS.notify } }

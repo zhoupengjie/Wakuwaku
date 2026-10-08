@@ -89,8 +89,8 @@ If `node_modules/electron/dist` is empty after `npm install`, run `node node_mod
 
 - **Drag** her anywhere; she runs the way you drag, and remembers the spot.
 - **Click** her: she jumps.
-- **Right-click** her (or the tray icon): switch pets, size, bubble, walking, follow the mouse, capsule mode, back to the corner, do not disturb, main window, quit. Left-click the tray icon to show or hide her. The tray face changes with her mood: idle, working, waiting, done, review, error.
-- **Capsule mode**: if the whole pet is too much, she becomes a small pill at the screen edge with her face, status and time; prompt panels still pop up above it. Click the capsule to open the main window.
+- **Right-click** her (or the tray icon): switch pets, size, bubble, walking, follow the mouse, island mode, back to the corner, do not disturb, main window, quit. Left-click the tray icon to show or hide her. The tray face changes with her mood: idle, working, waiting, done, review, error.
+- **Island mode**: if the whole pet is too much, she becomes a small black island at the top centre of the screen, like the iPhone's Dynamic Island. It shows her face, the project, the status and the time; hover over it, or let something happen (she needs you, a turn is done, an error), and it springs open for a few seconds with her head and what is going on; a prompt opens it into a panel you answer right there. When another session wants you too, a small round bubble buds off beside it. Click the island to open the main window.
 - **Main window**: Now lists every session (project, status, time) and any prompt waiting on you, to answer right there; Pets manages and downloads pets, with the codex-pets.net gallery; Look and Alerts hold the settings; Claude Code is how she's connected; About. Your current pet peeks in from the bottom left.
 - Clicks pass through her transparent parts to whatever is underneath.
 - **Lost her?** Start the app again (`npm start` or the Start menu) and she comes back to the bottom right. She also checks every 2 s and walks back if she ends up off screen.

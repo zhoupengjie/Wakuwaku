@@ -161,7 +161,7 @@
           chip(T('home.showPet'), snap.isVisible, on => api.showPet(on).then(next => ((snap = next), draw())), 'show'),
           chip(T('menu.dnd'), s.dnd, on => set({ dnd: on }), 'dnd'),
           chip(T('settings.sound'), s.sound, on => set({ sound: on }), 'sound'),
-          chip(T('menu.capsule'), s.display === 'capsule', on => set({ display: on ? 'capsule' : 'pet' }), 'capsule'),
+          chip(T('menu.island'), s.display === 'island', on => set({ display: on ? 'island' : 'pet' }), 'island'),
         ),
       ),
     ]
@@ -298,7 +298,7 @@
           s.display,
           [
             ['pet', T('home.displayPet')],
-            ['capsule', T('home.displayCapsule')],
+            ['island', T('home.displayIsland')],
           ],
           v => set({ display: v }),
         ),

@@ -21,10 +21,11 @@ const ICON = path.join(__dirname, '..', 'assets', 'icon.png')
 const TRAY_ICON = mood => path.join(__dirname, '..', 'assets', 'tray', `${mood}.png`)
 
 // Window size at scale 1: room for the bubble above a 192x208 cell. The
-// capsule is a fixed-size pill.
+// island's window is fixed: room for the island at its widest without a
+// prompt (hovered, with a second session beside it), and for its spring.
 const BASE_W = 300
 const BASE_H = 320
-const CAPSULE = { width: 340, height: 64 }
+const ISLAND = { width: 460, height: 132 }
 const CELL_H = 208
 const SCALES = { small: 0.4, medium: 0.55, large: 0.75 }
 // The cursor further than this from her face does not catch her eye.
@@ -53,6 +54,8 @@ let isFullscreen = false
 function alive(w) {
   return w && !w.isDestroyed() ? w : null
 }
+
+const isIsland = () => settings.display === 'island'
 
 function lang() {
   return settings.lang === 'zh' || settings.lang === 'en' ? settings.lang : i18n.detectLang(app.getLocale())
@@ -116,9 +119,9 @@ function watchFullscreen() {
 
 // --- Window -----------------------------------------------------------------
 
-// The window without a prompt: the bubble and the pet, or the capsule.
+// The window without a prompt: the bubble and the pet, or the island.
 function baseSize() {
-  if (settings.display === 'capsule') return { ...CAPSULE }
+  if (isIsland()) return { ...ISLAND }
   return { width: Math.round(BASE_W * settings.scale), height: Math.round(BASE_H * settings.scale) }
 }
 
@@ -126,12 +129,19 @@ function baseSize() {
 function size() {
   const base = baseSize()
   if (!panel) return base
+  // The island holds the prompt itself; the page says how much room it takes.
+  if (isIsland()) return { width: Math.max(base.width, panel.width), height: Math.max(base.height, panel.height) }
   return { width: Math.max(base.width, panel.width), height: base.height + panel.height }
 }
 
 // The panel grows the window upwards and both ways, the pet staying put.
 function setPanel(next) {
   if (!alive(win)) return
+  if (isIsland()) {
+    panel = next
+    const p = islandSpot()
+    return moveTo(p.x, p.y)
+  }
   const old = win.getBounds()
   const before = size()
   const petX = old.x + before.width / 2 + shift
@@ -174,6 +184,16 @@ function homeSpot() {
   return { x: area.x + area.width - width - 24, y: area.y + area.height - height - 24 }
 }
 
+// The island hangs at the top centre of the display she is on (the primary
+// one to start with), below a taskbar that sits at the top.
+function islandSpot() {
+  const { width } = size()
+  const b = alive(win)?.getBounds()
+  const display = b ? screen.getDisplayNearestPoint({ x: b.x + b.width / 2, y: b.y + b.height / 2 }) : screen.getPrimaryDisplay()
+  const area = display.workArea
+  return { x: Math.round(area.x + (area.width - width) / 2), y: area.y }
+}
+
 // Every move goes through here, size and all. On Windows at a fractional
 // display scale, setPosition on a transparent window rounds the width up by a
 // pixel each call; a walk makes hundreds of calls and the window, the pet at
@@ -190,7 +210,7 @@ function keepOnScreen() {
   if (!alive(win) || drag || walking) return
   const b = win.getBounds()
   const want = size()
-  const p = clamp(b.x, b.y)
+  const p = isIsland() ? islandSpot() : clamp(b.x, b.y)
   const isStretched = Math.abs(b.width - want.width) > 3 || Math.abs(b.height - want.height) > 3
   if (isStretched || p.x !== b.x || p.y !== b.y) {
     remember(moveTo(p.x, p.y))
@@ -199,6 +219,8 @@ function keepOnScreen() {
 
 // Save where the window is, as where it would be without a prompt panel.
 function remember({ x, y }) {
+  // The island has its own place; the pet's spot stays for when she is back.
+  if (isIsland()) return
   const now = size()
   const base = baseSize()
   Object.assign(settings, {
@@ -212,7 +234,8 @@ function comeHome() {
   stopWalking()
   isUserHidden = false
   applyVisibility()
-  remember(moveTo(homeSpot().x, homeSpot().y))
+  const p = isIsland() ? islandSpot() : homeSpot()
+  remember(moveTo(p.x, p.y))
 }
 
 setInterval(keepOnScreen, 2000)
@@ -221,6 +244,10 @@ function createWindow() {
   const { width, height } = size()
   const home = homeSpot()
   const start = clamp(settings.x ?? home.x, settings.y ?? home.y)
+  if (isIsland()) {
+    const area = screen.getPrimaryDisplay().workArea
+    Object.assign(start, { x: Math.round(area.x + (area.width - width) / 2), y: area.y })
+  }
 
   win = new BrowserWindow({
     ...start,
@@ -281,6 +308,8 @@ function send() {
     lang: lang(),
     sprite: s && s.url,
     spriteVersion: s ? s.version : 2,
+    // The next session that wants something, for the island's second bubble.
+    second: pet.list().filter(x => x.mood !== 'idle')[1]?.mood || null,
   })
 }
 
@@ -362,7 +391,7 @@ function pollCursor() {
   setMouseMode(drag || isOverPet ? 'catch' : near ? 'forward' : 'pass')
 
   // Her eyes follow only while idle, with no panel up.
-  const canLook = settings.look && settings.display !== 'capsule' && !drag && !panel && pet.get().mood === 'idle'
+  const canLook = settings.look && !isIsland() && !drag && !panel && pet.get().mood === 'idle'
   if (cursor.x === lastCursor.x && cursor.y === lastCursor.y) return scheduleCursor(near ? 80 : 200)
   lastCursor = cursor
   if (canLook) {
@@ -390,12 +419,22 @@ function change(patch) {
   alive(settingsWin)?.webContents.send('settings:changed', snapshot())
 }
 
-// A new size (or display mode) keeps the pet's spot: her bottom centre.
+// A new size keeps the pet's spot: her bottom centre. Into the island, the
+// window goes to the top of the screen; out of it, back to where she was.
 function resize(patch) {
   const before = win.getBounds()
   const old = size()
+  const wasIsland = isIsland()
   change(patch)
   const now = size()
+  if (isIsland()) {
+    const p = islandSpot()
+    return moveTo(p.x, p.y)
+  }
+  if (wasIsland) {
+    const home = homeSpot()
+    return remember(moveTo(settings.x ?? home.x, settings.y ?? home.y))
+  }
   remember(moveTo(before.x + (old.width - now.width) / 2, before.y + old.height - now.height))
 }
 
@@ -415,7 +454,7 @@ const CHECKS = {
   dnd: v => typeof v === 'boolean',
   hideInFullscreen: v => typeof v === 'boolean',
   onboarded: v => typeof v === 'boolean',
-  display: v => v === 'pet' || v === 'capsule',
+  display: v => v === 'pet' || v === 'island',
   hold: v => v === 'seen' || [8, 30, 120].includes(v),
   promptWaitSec: v => [30, 60, 120, 290].includes(v),
   notify: v => v && typeof v === 'object' && ['waiting', 'done', 'error'].every(k => typeof v[k] === 'boolean'),
@@ -656,7 +695,7 @@ function menuItems({ isTray }) {
     { label: T('menu.bubble'), type: 'checkbox', checked: settings.bubble, click: item => change({ bubble: item.checked }) },
     { label: T('menu.walk'), type: 'checkbox', checked: settings.walk, click: item => change({ walk: item.checked }) },
     { label: T('menu.look'), type: 'checkbox', checked: settings.look, click: item => change({ look: item.checked }) },
-    { label: T('menu.capsule'), type: 'checkbox', checked: settings.display === 'capsule', click: item => resize({ display: item.checked ? 'capsule' : 'pet' }) },
+    { label: T('menu.island'), type: 'checkbox', checked: isIsland(), click: item => resize({ display: item.checked ? 'island' : 'pet' }) },
     { label: T('menu.home'), click: comeHome },
     { type: 'separator' },
     { label: T('menu.dnd'), type: 'checkbox', checked: settings.dnd, click: item => change({ dnd: item.checked }) },
@@ -713,8 +752,9 @@ function refreshTray() {
 ipcMain.on('pet:hover', (_, isOver) => {
   isOverPet = isOver === true
   if (!drag) setMouseMode(isOverPet ? 'catch' : 'forward')
-  // The pointer on her: you have seen what she had to say.
-  if (isOver) pet.seen()
+  // The pointer on her: you have seen what she had to say. The island opens
+  // up to say it while hovered, so it counts once the pointer leaves.
+  if (isIsland() ? !isOver : isOver) pet.seen()
 })
 
 // Typing an answer needs the keyboard, which the window does not take otherwise.
@@ -729,6 +769,11 @@ ipcMain.on('pet:keyboard', (_, needs) => {
 // it moves, to run that way.
 ipcMain.on('pet:drag-start', () => {
   stopWalking()
+  // The island stays where it hangs: a press is only ever a click.
+  if (isIsland()) {
+    drag = { isIsland: true, moved: false }
+    return
+  }
   const { x, y } = win.getBounds()
   const cursor = screen.getCursorScreenPoint()
   drag = { dx: cursor.x - x, dy: cursor.y - y, x, y, moved: false, timer: undefined }
@@ -749,6 +794,10 @@ ipcMain.on('pet:drag-start', () => {
 
 ipcMain.on('pet:drag-end', () => {
   if (!drag) return
+  if (drag.isIsland) {
+    drag = undefined
+    return openSettings()
+  }
   clearInterval(drag.timer)
   const wasClick = !drag.moved
   const { x, y } = drag
@@ -756,10 +805,7 @@ ipcMain.on('pet:drag-end', () => {
   parked = null
   remember(moveTo(x, y))
   win.webContents.send('pet:drag-end')
-  if (wasClick) {
-    if (settings.display === 'capsule') openSettings()
-    else pet.apply({ react: 'jump' })
-  }
+  if (wasClick) pet.apply({ react: 'jump' })
 })
 
 ipcMain.on('pet:menu', () => Menu.buildFromTemplate(menuItems({ isTray: false })).popup({ window: win }))

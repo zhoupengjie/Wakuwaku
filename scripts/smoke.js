@@ -241,25 +241,63 @@ async function main() {
     await sleep(300)
     await expect('SessionEnd', { mood: 'idle' })
 
-    // --- Capsule mode.
-    await settingsPatch({ display: 'capsule' })
-    await sleep(500)
-    const pill = (await state()).window
-    report('胶囊模式：窗口变成小药丸', pill.size.width === 340 && pill.size.height === 64, `${pill.size.width}x${pill.size.height}`)
-    await hook({ ...S, hook_event_name: 'UserPromptSubmit', prompt: 'pill' })
+    // --- Island mode.
+    await settingsPatch({ display: 'island' })
+    await sleep(700)
+    const top = (await state()).window
+    const centre = top.workArea.x + top.workArea.width / 2
+    report(
+      '灵动岛：窗口挂在屏幕顶部正中',
+      top.bounds.y === top.workArea.y && Math.abs(top.bounds.x + top.bounds.width / 2 - centre) <= 1 && top.size.width === 460,
+      `${top.bounds.x},${top.bounds.y} ${top.size.width}x${top.size.height}`,
+    )
+    const islandSize = () => evaluate('pet', "(() => { const r = document.getElementById('island').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), document.getElementById('island').dataset.view] })()")
+    await hook({ ...S, hook_event_name: 'UserPromptSubmit', prompt: 'island' })
     await hook({ ...S, hook_event_name: 'PreToolUse', tool_name: 'Read' })
-    await sleep(400)
-    const pillText = await evaluate('pet', "document.getElementById('capsule-text').textContent")
-    report('胶囊里一行字：状态和用时', /干活中… · Read · \d:\d\d/.test(pillText), pillText)
-    await snap('08-capsule')
-    const askInPill = hook({ ...S, hook_event_name: 'PermissionRequest', tool_name: 'Write', tool_input: { file_path: 'notes.md' } })
     await sleep(900)
-    await snap('09-capsule-panel')
-    report('胶囊上方弹出确认面板', (await evaluate('pet', "document.querySelector('#panel .title')?.textContent")) === 'Write 需要你批准')
+    const compactText = await evaluate('pet', "document.getElementById('island-compact').textContent")
+    report('灵动岛收起时：项目、状态和用时', /alpha · 干活\d:\d\d/.test(compactText), compactText)
+    const [cw, ch, cv] = await islandSize()
+    report('收起时是一颗小胶囊', cv === 'compact' && ch === 36 && cw >= 112 && cw <= 340, `${cw}x${ch} ${cv}`)
+    await snap('08-island')
+
+    await evaluate('pet', "(document.getElementById('island').dispatchEvent(new MouseEvent('mouseenter')), 'ok')")
+    await sleep(900)
+    const [ew, eh, ev] = await islandSize()
+    const expandedText = await evaluate('pet', "document.getElementById('island-expanded').textContent")
+    report('鼠标移上去：展开，写明在做什么', ev === 'expanded' && eh === 84 && ew >= 300 && /Read/.test(expandedText), `${ew}x${eh} ${expandedText}`)
+    await snap('09-island-expanded')
+    await evaluate('pet', "(document.getElementById('island').dispatchEvent(new MouseEvent('mouseleave')), 'ok')")
+    await sleep(900)
+    report('鼠标移开：缩回去', (await islandSize())[2] === 'compact')
+
+    const askInIsland = hook({ ...S, hook_event_name: 'PermissionRequest', tool_name: 'Write', tool_input: { file_path: 'notes.md' } })
+    await sleep(1200)
+    const [aw, ah, av] = await islandSize()
+    const islandWin = (await state()).window
+    report(
+      '确认请求：岛展开成面板，窗口跟着变大',
+      av === 'ask' && ah > 100 && islandWin.size.height >= ah + 8 && islandWin.bounds.y === islandWin.workArea.y,
+      `island ${aw}x${ah}, window ${islandWin.size.width}x${islandWin.size.height}`,
+    )
+    report('面板在岛里面', (await evaluate('pet', "document.querySelector('#island #panel .title')?.textContent")) === 'Write 需要你批准')
+    await snap('10-island-ask')
     await click('[data-action="deny"]')
-    report('胶囊模式下点「拒绝」', (await askInPill)?.hookSpecificOutput?.decision?.behavior === 'deny')
+    report('灵动岛里点「拒绝」', (await askInIsland)?.hookSpecificOutput?.decision?.behavior === 'deny')
+    await sleep(1000)
+    const afterAsk = (await state()).window
+    report('答完：岛缩回去，窗口恢复原样', (await islandSize())[2] !== 'ask' && afterAsk.size.height === 132, `${afterAsk.size.width}x${afterAsk.size.height}`)
+
+    await hook({ ...S, session_id: 'smoke-2', cwd: 'D:/work/other', hook_event_name: 'UserPromptSubmit', prompt: 'two' })
+    await sleep(700)
+    report('第二个会话：旁边分出一颗小圆', await evaluate('pet', "document.getElementById('island-side').classList.contains('shown')"))
+    await snap('11-island-two')
+    await hook({ ...S, session_id: 'smoke-2', cwd: 'D:/work/other', hook_event_name: 'SessionEnd', reason: 'exit' })
     await hook({ ...S, hook_event_name: 'Stop' })
     await settingsPatch({ display: 'pet' })
+    await sleep(500)
+    const back = (await state()).window
+    report('退出灵动岛：她回到原来的位置', back.bounds.y > back.workArea.y + 100 && back.size.width !== 460, `${back.bounds.x},${back.bounds.y}`)
     await sleep(500)
     report('切回整只宠物', (await state()).window.size.height > 100)
     await evaluate('pet', "document.getElementById('pet').dispatchEvent(new MouseEvent('mouseenter')), 'ok'")
@@ -434,7 +472,7 @@ async function main() {
   } finally {
     await post('/debug/eval', { page: 'pet', code: "setTimeout(() => window.close(), 50), 'ok'" }).catch(() => {})
     await sleep(800)
-    for (const dir of [profile, claudeDir]) fs.rmSync(dir, { recursive: true, force: true })
+    for (const dir of [profile, claudeDir]) fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 })
   }
 
   console.log(failures ? `\n${failures} 步不对` : `\n全部通过，截图在 ${OUT}`)

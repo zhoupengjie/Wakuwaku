@@ -14,7 +14,7 @@ src/
   main/config.js        设置读写（userData 下的 config.json）
   main/pets.js          已下载的宠物：<userData>/pets 和源码里的 pets/
   preload/index.js      给宠物页面的 window.pet
-  renderer/             宠物页面：pet.js（动画、气泡、空闲行为）、panel.js（确认面板）、sprite.js（图集布局、16 方向）
+  renderer/             宠物页面：pet.js（动画、气泡、空闲行为）、island.js（灵动岛）、panel.js（确认面板）、sprite.js（图集布局、16 方向）
   settings/             主窗口（现在 / 宠物 / 外观 / 提醒 / Claude Code / 关于）：settings.js、preload.js、style.css
   assets/               图标：icon.png、tray/<心情>.png（托盘随心情变脸）、faces/<心情>.png；由 npm run icons 生成
   shared/hook-events.js hook 事件 → 消息；每个事件怎么安装
@@ -142,3 +142,7 @@ Codex pet v2 图集为 1536×2288，8 列 × 11 行，每格 192×208。
 - **单实例锁的交接**：刚退出的旧进程可能还占着锁，这时启动的新进程拿不到锁就会退出。现在拿不到锁时先看端口：有宠物应答就退出，没有就每 250ms 重试，最多 6 秒。
 - **被挡住的窗口不重绘**：截图（`capturePage`）拿到的可能是旧画面，冒烟测试截主窗口前先把它调到前面。
 - **v1 宠物**：1536×1872、9 行，没有第 9、10 行的注视动作；页面按 `spriteVersion` 跳过注视，背景图高度也跟着变。
+
+## 灵动岛
+
+`display: "island"` 时窗口固定 460×132，挂在所在屏幕工作区的顶部正中，宠物和气泡不画。岛在三种形状之间弹：收起（脸、项目、状态、用时）、展开（悬停 140ms 后，或者变成等你 / 做完 / 改好 / 出错、打招呼时自动弹开 3.2 秒）、确认面板。形状变化全在 CSS 里（width / height 过渡，带回弹的贝塞尔曲线），不改窗口大小，所以不卡；只有确认面板例外：先让窗口变大再让岛长大，收回时等岛缩完（560ms）再缩窗口。面板（#panel）在岛模式下被挪进岛里，由 island.js 量尺寸、通知主进程。悬停展开时会显示做完的内容，所以岛模式下鼠标**离开**才算「看过了」。旧配置里的 `display: "capsule"` 读进来就是 island。

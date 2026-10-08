@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('pet', {
   dragEnd: () => ipcRenderer.send('pet:drag-end'),
   menu: () => ipcRenderer.send('pet:menu'),
   openSettings: () => ipcRenderer.send('pet:open-settings'),
+  doubleClick: () => ipcRenderer.send('pet:double-click'),
   walk: (dx, ms) => ipcRenderer.invoke('pet:walk', dx, ms),
   walkStop: () => ipcRenderer.send('pet:walk-stop'),
   // The island's page: she broke free of the drop (her middle this far from

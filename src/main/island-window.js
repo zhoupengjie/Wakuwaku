@@ -125,8 +125,10 @@ function createIslandWindow(ctx) {
     alive(win)?.webContents.send('pet:update', ctx.payload())
   }
 
-  // Where the island hangs: the middle of its lower edge (compact).
+  // Where the island hangs: the middle of its lower edge (compact), on the
+  // screen; null while it is not up.
   function anchor() {
+    if (!alive(win) || !isShown()) return null
     const b = win.getBounds()
     return { x: b.x + b.width / 2, y: b.y + TOP + COMPACT_H }
   }
@@ -143,6 +145,7 @@ function createIslandWindow(ctx) {
     }
     if (!point) return stop()
     const a = anchor()
+    if (!a) return 'far'
     const distance = Math.hypot(point.x - a.x, point.y - a.y)
     const state = distance < SNAP_PX ? 'snap' : distance < REACH_PX ? 'near' : 'far'
     if (state === 'far') return stop()
@@ -226,6 +229,7 @@ function createIslandWindow(ctx) {
     reach,
     absorb,
     endHold,
+    seat: anchor,
     where,
   }
 }

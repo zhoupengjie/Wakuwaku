@@ -350,10 +350,54 @@ function createPetWindow(ctx) {
     }, 16)
   }
 
-  // Two clicks on her this close together: the main window. Counted here as
-  // well as by her page, which misses presses Windows has eaten.
+  // Two clicks on her this close together are a double-click. Counted here
+  // as well as by her page, which misses presses Windows has eaten.
   const DOUBLE_MS = 500
   let lastClick = 0
+
+  // A double-click: out of the island, she flies back into it; as the pet
+  // on her own, the main window.
+  function doubleClick() {
+    if (isIslandMode() && settings().out === true) flyHome()
+    else ctx.home.open()
+  }
+
+  // Back to the island from wherever she is: drawn in faster and faster,
+  // running that way, the island reaching out for her; then it takes her in.
+  // Her spot on the desktop stays where it was, for when she is let out again.
+  const FLY_MS = 380
+  let flying
+
+  function flyHome() {
+    if (flying || !alive(win) || !win.isVisible()) return
+    const seat = ctx.island.seat()
+    if (!seat) return
+    stopWalking()
+    if (drag) {
+      clearInterval(drag.timer)
+      drag = undefined
+    }
+    const start = herPoint()
+    const b = win.getBounds()
+    const inWindow = { x: start.x - b.x, y: start.y - b.y }
+    // Just under the island, where the drop can take her.
+    const end = { x: seat.x, y: seat.y + 70 }
+    const started = Date.now()
+    win.webContents.send('pet:drag', end.x - start.x || 1)
+    flying = setInterval(() => {
+      const t = Math.min(1, (Date.now() - started) / FLY_MS)
+      const k = t * t
+      const p = { x: Math.round(start.x + (end.x - start.x) * k), y: Math.round(start.y + (end.y - start.y) * k) }
+      moveTo(p.x - inWindow.x, p.y - inWindow.y, { isFree: true })
+      win.webContents.send('pet:drag', end.x - start.x || 1)
+      ctx.island.reach(p)
+      if (t < 1) return
+      clearInterval(flying)
+      flying = undefined
+      win.webContents.send('pet:drag-end')
+      ctx.absorb(p)
+    }, 16)
+  }
 
   // Let go: back into the island if she is close enough to it, else she lands.
   function letGo() {
@@ -383,7 +427,7 @@ function createPetWindow(ctx) {
     if (!moved && !carried) {
       const isDouble = Date.now() - lastClick < DOUBLE_MS
       lastClick = isDouble ? 0 : Date.now()
-      if (isDouble) ctx.home.open()
+      if (isDouble) return doubleClick()
     }
     if (!moved || carried) ctx.pet.apply({ react: 'jump' })
   }
@@ -499,6 +543,7 @@ function createPetWindow(ctx) {
     if (JSON.stringify(next) !== JSON.stringify(panel)) setPanel(next)
   })
   ipcMain.on('pet:open-settings', e => mine(e) && ctx.home.open())
+  ipcMain.on('pet:double-click', e => mine(e) && doubleClick())
   ipcMain.handle('pet:walk', (e, dx, ms) => (mine(e) && isShown() ? walk(dx, ms) : false))
   ipcMain.on('pet:walk-stop', e => mine(e) && stopWalking())
 

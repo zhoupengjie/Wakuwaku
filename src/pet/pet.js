@@ -342,8 +342,9 @@ window.addEventListener('mouseup', e => {
   console.log('mouseup, button', e.button)
   if (e.button === 0) window.pet.dragEnd()
 })
-// A double-click opens the main window (a single one makes her jump).
-sprite.addEventListener('dblclick', () => window.pet.openSettings())
+// A double-click: back into the island if she is out of it, else the main
+// window (main decides). A single one makes her jump.
+sprite.addEventListener('dblclick', () => window.pet.doubleClick())
 
 // The first pet:update (on load) brings the sprite and the first render.
 kick()

@@ -1,6 +1,8 @@
 node_modules/
 dist/
 out/
+# Her settings, pets and caches when run from source (see src/main/index.js).
+data/
 
 # Downloaded pets are their authors' work: npm run fetch-pet
 pets/*

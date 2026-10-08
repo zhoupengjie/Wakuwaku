@@ -9,11 +9,14 @@ const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
 
-// Settings live in one folder whatever the build calls itself; a separate one
-// for tests (its own settings and single-instance lock). The folder from
-// before the rename (claude-pets) moves over the first time.
-const userData = process.env.WAKUWAKU_USER_DATA || path.join(app.getPath('appData'), 'wakuwaku')
-if (!process.env.WAKUWAKU_USER_DATA) moveOldFolder(path.join(app.getPath('appData'), 'claude-pets'), userData)
+// Where her settings, downloaded pets and caches live. Run from source or as
+// the portable build, nothing goes outside her own folder; installed, they go
+// where installed apps keep theirs. Tests bring their own (its own settings
+// and single-instance lock).
+const APP_DATA = path.join(app.getPath('appData'), 'wakuwaku')
+const userData = dataFolder()
+if (userData === APP_DATA) moveOldFolder(path.join(app.getPath('appData'), 'claude-pets'), userData)
+else if (!process.env.WAKUWAKU_USER_DATA) adoptSettings(APP_DATA, userData)
 app.setPath('userData', userData)
 
 const launch = require('./launch')
@@ -27,6 +30,27 @@ if (process.argv.includes(launch.ENSURE_FLAG) || process.argv.includes(launch.LE
   app.whenReady().then(() => launch.cleanup())
 } else {
   require('./app').start({ port: PORT })
+}
+
+function dataFolder() {
+  if (process.env.WAKUWAKU_USER_DATA) return process.env.WAKUWAKU_USER_DATA
+  // From source: data/ in the project (not in git).
+  if (!app.isPackaged) return path.join(app.getAppPath(), 'data')
+  // The portable build runs from a temporary copy; this is where its .exe is.
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'wakuwaku-data')
+  return APP_DATA
+}
+
+// A folder of her own for the first time: start from the settings and pets
+// she had in AppData, if any (the caches are not worth copying).
+function adoptSettings(from, to) {
+  if (fs.existsSync(to)) return
+  try {
+    fs.mkdirSync(to, { recursive: true })
+    for (const name of ['config.json', 'pets']) {
+      if (fs.existsSync(path.join(from, name))) fs.cpSync(path.join(from, name), path.join(to, name), { recursive: true })
+    }
+  } catch {}
 }
 
 // Move the whole folder; if something holds it (the old app still running),

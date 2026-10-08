@@ -109,6 +109,11 @@
   // the drop pinches off she is carrying: her window has her, this page only
   // waits for the button to be let go.
   let pull = null
+  // When she was last clicked in the island: a second click soon after is a
+  // double-click (her press is held for pulling, so the page's own dblclick
+  // cannot be relied on there).
+  let lastTap = 0
+  const DOUBLE_MS = 500
   let dropTimer
   // Reaching for her (her middle on the screen, close), or taking her in.
   let isReaching = false
@@ -446,8 +451,11 @@
     const done = pull
     pull = null
     if (!done.started) {
-      // A click on her: the main window, as a click on the island.
-      return window.pet.openSettings()
+      // A double-click on her: the main window, as on the island. One click does nothing.
+      const isDouble = Date.now() - lastTap < DOUBLE_MS
+      lastTap = isDouble ? 0 : Date.now()
+      if (isDouble) window.pet.openSettings()
+      return
     }
     if (done.carrying) {
       // Let go: she lands there, or comes home if she was let go by the island.
@@ -630,10 +638,10 @@
         update()
       }, HOVER_CLOSE_MS)
     })
-    // A click opens the main window; the prompt's own buttons and she are not clicks on the island.
-    target.addEventListener('mousedown', e => {
-      console.log('mousedown on the island, button', e.button)
-      if (e.button === 0 && !panel.contains(e.target) && !her.contains(e.target)) window.pet.dragStart()
+    // A double-click opens the main window (one click does nothing: hovering
+    // already opens the island); the prompt's own buttons and she are not the island.
+    target.addEventListener('dblclick', e => {
+      if (!panel.contains(e.target) && !her.contains(e.target)) window.pet.openSettings()
     })
     target.addEventListener('contextmenu', e => {
       if (panel.contains(e.target) && e.target.matches('input')) return

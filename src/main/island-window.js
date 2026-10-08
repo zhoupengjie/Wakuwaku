@@ -28,8 +28,6 @@ function createIslandWindow(ctx) {
   let win = null
   // Extra room the page asked for, or null.
   let room = null
-  // A press on the island (not on her): a click, which opens the main window.
-  let isPressed = false
   let isReaching = false
   // The button held on her (a pull, or carrying her out): the window keeps the pointer.
   let isHolding = false
@@ -183,15 +181,6 @@ function createIslandWindow(ctx) {
     if (!mine(e)) return
     win.setFocusable(needs === true)
     if (needs === true) win.focus()
-  })
-  // A press on the island stays where it is: only ever a click.
-  ipcMain.on('pet:drag-start', e => {
-    if (mine(e)) isPressed = true
-  })
-  ipcMain.on('pet:drag-end', e => {
-    if (!mine(e) || !isPressed) return
-    isPressed = false
-    ctx.home.open()
   })
   ipcMain.on('pet:menu', e => mine(e) && ctx.tray.popUp(win))
   ipcMain.on('pet:answer', (e, id, choice) => mine(e) && ctx.asks.answer(id, choice))

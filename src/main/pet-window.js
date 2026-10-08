@@ -350,6 +350,11 @@ function createPetWindow(ctx) {
     }, 16)
   }
 
+  // Two clicks on her this close together: the main window. Counted here as
+  // well as by her page, which misses presses Windows has eaten.
+  const DOUBLE_MS = 500
+  let lastClick = 0
+
   // Let go: back into the island if she is close enough to it, else she lands.
   function letGo() {
     debugLog('pet', 'let go', drag ? (drag.carried ? 'carried' : 'dragged') : 'nothing held')
@@ -374,7 +379,12 @@ function createPetWindow(ctx) {
       ctx.island.reach(null)
     }
     remember(moveTo(x, y))
-    // A click: a jump. Carried out of the island: she lands with one.
+    // A click: a jump (two: the main window). Carried out of the island: she lands with one.
+    if (!moved && !carried) {
+      const isDouble = Date.now() - lastClick < DOUBLE_MS
+      lastClick = isDouble ? 0 : Date.now()
+      if (isDouble) ctx.home.open()
+    }
     if (!moved || carried) ctx.pet.apply({ react: 'jump' })
   }
 

@@ -342,10 +342,8 @@ window.addEventListener('mouseup', e => {
   console.log('mouseup, button', e.button)
   if (e.button === 0) window.pet.dragEnd()
 })
-// No sprite yet: a double-click opens the settings to get one.
-sprite.addEventListener('dblclick', () => {
-  if (!spriteUrl) window.pet.openSettings()
-})
+// A double-click opens the main window (a single one makes her jump).
+sprite.addEventListener('dblclick', () => window.pet.openSettings())
 
 // The first pet:update (on load) brings the sprite and the first render.
 kick()

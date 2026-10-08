@@ -1,50 +1,60 @@
 # claude-pets
 
-一只浮在桌面上的小宠物，实时显示 Claude Code 在干什么：干活、等你批准、改完了等你看、做完了，还是出错了。
+[English](README.en.md) · 中文
+
+一只浮在桌面上的小宠物，实时显示 Claude Code 在干什么：干活、等你批准、改完了等你看、做完了，还是出错了。需要你确认的时候，可以直接在她头顶的面板上点。
 
 形象用的是 [Codex Pets](https://codex-pets.net) 社区的 v2 精灵图格式，网站上任意一只 v2 宠物都能换上。默认是 [大肥鱼/Deepseek Chan](https://codex-pets.net/#/pets/deepseek-chan)。
 
-## 状态
+## 她会做什么
 
-网站上每只 v2 宠物有 11 组动作，这里每一组都有对应的用途：
+网站上每只 v2 宠物有 11 组动作，这里每一组都有用处：
 
 | 动作 | 什么时候 | 来自哪个 hook |
 | --- | --- | --- |
-| Idle | 空闲 | `SessionEnd`；或者做完、出错 8 秒后、Review 20 秒后自动回到这里 |
-| Running | Claude 在干活 | `UserPromptSubmit`、`PreToolUse`、`PostToolUse` |
-| Waiting | 等你：授权框、Claude 问你问题、计划等你确认、MCP 要你填表 | `PermissionRequest`；`PreToolUse`（AskUserQuestion / ExitPlanMode）；`Elicitation` |
+| Idle | 空闲（眨一轮眼，停几秒） | 做完、出错后你看过她（鼠标经过）；`SessionEnd` |
+| Running | Claude 在干活，气泡里显示这一轮的用时 | `UserPromptSubmit`、`PreToolUse`、`PostToolUse` |
+| Waiting | 等你：授权、Claude 问你问题、计划等你确认、MCP 要你填表 | `PermissionRequest`；`PreToolUse`（AskUserQuestion / ExitPlanMode）；`Elicitation` |
 | Review | 这一轮改过文件，结束了等你看 | `Stop`（这一轮里 Edit / Write 等工具执行过） |
-| Waving | 这一轮结束、没有改文件；会话开始和窗口刚打开时也会打招呼 | `Stop`、`SessionStart` |
-| Jumping | 任务清单里完成了一项；单击宠物 | `TaskCompleted` |
-| Failed | 请求失败（会持续一会儿）；工具调用失败（闪一下） | `StopFailure`；`PostToolUseFailure` |
-| Run right / left | 空闲时随机走几步；拖动窗口时朝拖动方向跑 | — |
+| Waving | 这一轮结束、没有改文件；会话开始和她刚出现时打招呼 | `Stop`、`SessionStart` |
+| Jumping | 任务清单里完成了一项；单击她 | `TaskCompleted` |
+| Failed | 请求失败（会一直等你看到）；工具调用失败（闪一下） | `StopFailure`；`PostToolUseFailure` |
+| Run right / left | 空闲时随机走几步；拖动时朝拖动方向跑 | — |
 | Look around（16 个方向） | 空闲时眼睛跟着鼠标转；偶尔自己东张西望 | — |
 
-上下文自动压缩时也会触发 `SessionStart`（`source: compact`），这时候宠物保持原样，不会被打回空闲。
+- **同时开好几个 Claude Code 会话**：每个会话单独记状态。她显示最需要你注意的那个（等你确认 > 出错 > 改好了 > 做完 > 干活），气泡里写明是哪个项目，并告诉你另外还有几个在忙。
+- **做完不会错过**：做完、改好、出错这几种状态会一直保持，直到鼠标经过她，也可以在设置里改成停留几秒。可选系统通知和提示音。
+- **上下文自动压缩**时也会触发 `SessionStart`，这时她保持原样，不会被打回空闲。
 
 ## 在宠物上直接确认
 
-Claude 需要你确认时，宠物头顶会弹出面板，可以直接点：
-
 | 场景 | 面板上能做的 |
 | --- | --- |
-| 授权（"允许 Bash 执行 npm test？"） | **允许** / **以后都允许** / **拒绝**；会显示要执行的命令和项目名 |
-| Claude 问你选择题（AskUserQuestion） | 点选项作答，支持多道题和多选；需要手打的题目请到终端回答 |
+| 授权（"允许 Bash 执行 npm test？"） | **允许** / **以后都允许** / **拒绝**，并显示要执行的命令和项目名 |
+| Claude 问你问题（AskUserQuestion） | 点选项、在「其他答案」里打字、填文字题和数字题，支持多道题和多选 |
 | 计划确认（ExitPlanMode） | **批准** / **拒绝** |
 
 - 终端里的确认框照常弹出，**两边先答的算数**：在宠物上点了，终端的确认框会自动关掉；在终端答了，宠物的面板会收起。
-- **以后都允许**用的是 Claude Code 自己给出的建议规则（和终端里"以后不再询问"一样），面板上会写清楚要加什么规则、加在哪里，比如 `Bash(npm test:*)（本项目（仅自己））`。只会加"允许"类的规则。
-- 面板刚弹出的 0.6 秒内按钮是灰的，防止你正好在那个位置点击而误点到。
-- 面板底部的「去终端处理」会收起面板，把决定留给终端。
-- 多个会话同时请求时会排队，面板上会显示"还有 N 个"。
+- **以后都允许**用的是 Claude Code 自己给出的建议规则（和终端里的"以后不再询问"一样），面板上会写清楚要加什么规则、加在哪里。只会加"允许"类的规则。
+- 面板刚弹出的 0.6 秒内按钮是灰的，防止误点。要打字时，点一下输入框她才会接管键盘，不会抢你正在打字的窗口。
+- 面板最多等多久可以在设置里改（30 秒到 5 分钟），到时间就交给终端。勿扰模式下、或者有程序全屏时，确认直接交给终端，不弹面板。
 - 局限：
-  - 在终端答完后，宠物要等这个会话的下一个事件（工具执行完、这一轮结束等）才知道，面板可能会多停留一会儿；这时再点面板，Claude 不会理会。
-  - `claude -p` 这类非交互模式会先等 hook 回复再做决定，宠物那边没人点的话，最多会卡 5 分钟。
-  - MCP 弹出的表单（Elicitation）只做提醒，不在宠物上填写。
+  - 在终端答完后，要等这个会话的下一个事件，面板才会收起，所以可能多停留一会儿。这时再点面板，Claude 不会理会。
+  - `claude -p` 这类非交互模式会先等 hook 回复再做决定，没人点的话最多会卡到面板等待时间结束。
+  - MCP 弹出的表单（Elicitation）只做提醒。
 
 ## 安装
 
-需要 Node.js 18+。目前只在 Windows 11 上测试过；macOS / Linux 理论上也能跑（Linux 上透明窗口需要开启窗口合成器）。
+### 用安装程序（Windows）
+
+运行 `Claude Pets Setup <版本>.exe`（目前需要自己打包，见下面"从源码运行"里的 `npm run dist`）。第一次打开会弹出设置窗口：
+
+1. 在「宠物」里粘贴 codex-pets.net 上宠物页面的地址，点「下载」。
+2. 在「Claude Code」里点「安装」，把 hooks 装进 Claude Code。
+
+### 从源码运行
+
+需要 Node.js 18+。目前只在 Windows 11 上测试过；macOS / Linux 理论上也能跑（Linux 上透明窗口需要开启窗口合成器，全屏检测只支持 Windows）。
 
 ```bash
 git clone https://github.com/zhoupengjie/claude-pets.git
@@ -54,97 +64,76 @@ npm run fetch-pet        # 从 codex-pets.net 下载默认宠物 deepseek-chan
 npm run install-hooks    # 把 hooks 写进 ~/.claude/settings.json
 ```
 
-之后新开的 Claude Code 会话会自动把宠物拉起来，也可以手动 `npm start`。
+之后新开的 Claude Code 会话会自动把她拉起来，也可以手动 `npm start`。打包成安装程序用 `npm run dist`，输出在 `dist/`。
 
 如果 `npm install` 之后 `node_modules/electron/dist` 是空的，补跑一次 `node node_modules/electron/install.js`。
 
 ## 使用
 
-- **拖动**：按住宠物拖到任意位置，她会朝拖动的方向跑，位置会记住。
+- **拖动**：按住她拖到任意位置，她会朝拖动方向跑，位置会记住。
 - **单击**：跳一下。
-- **右键**：切换宠物、调大小、开关气泡、开关空闲走动、开关眼睛跟着鼠标、回到右下角、开机自动启动、退出。
+- **右键**（或右键任务栏托盘图标）：切换宠物、调大小、开关气泡、走动、眼睛跟着鼠标、回到右下角、勿扰、设置、退出。左键托盘图标可以显示或隐藏她。
+- **设置窗口**：宠物下载与切换、外观、提醒（做完后停留多久、系统通知、提示音）、确认面板最多等多久、勿扰与全屏时自动隐藏、语言（中文 / English / 跟随系统）、hooks 安装状态与修复、开机自动启动。
 - 透明区域会点击穿透，不挡你操作下面的窗口。
-- **找不到她了**（比如拔掉了外接显示器）：再运行一次 `npm start`，已经在运行的那只会回到右下角。窗口每 2 秒也会自查一次，跑出屏幕就自己回来。
+- **找不到她了**：再运行一次（`npm start` 或开始菜单），她会回到右下角；窗口每 2 秒也会自查一次，跑出屏幕就自己回来。
 
 ### 换一只宠物
 
-在 codex-pets.net 上找到喜欢的宠物，把浏览器地址栏里的地址复制过来：
+在设置窗口的「宠物」里粘贴地址下载，或者用命令行：
 
 ```bash
 npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan
 ```
 
-然后右键 → 宠物 → 选它。
-
-- 也可以只写 id（地址最后那一段），比如 `npm run fetch-pet -- deepseek-chan`；一次可以给好几个，用空格隔开。
-- 只接受 codex-pets.net 上的地址，也只会从那里下载。
-- 地址里如果带 `&`，要用引号把整个地址括起来。
+一次可以给好几个，用空格隔开；只写 id（地址最后那一段）也行。只接受 codex-pets.net 上的地址，也只会从那里下载。地址里带 `&` 时要用引号括起来。
 
 ### 暂时关掉
 
 | 想要 | 怎么做 |
 | --- | --- |
-| 现在先关掉 | 右键宠物 → 退出。下次新开 Claude Code 会话时她会自己回来 |
-| 一直不要她自动出来，但想用时手动开 | `npm run install-hooks -- --http-only`，之后要用时 `npm start`；想恢复自动启动就再运行一次 `npm run install-hooks` |
-| 彻底不用 | 看下面的卸载 |
+| 现在先关掉 | 右键 → 退出。下次新开 Claude Code 会话她会自己回来 |
+| 暂时别打扰我 | 右键 → 勿扰：她藏起来、不发通知、确认都交给终端 |
+| 不要她自动出来，想用时手动开 | 设置里勾选「不让 Claude Code 自动启动宠物」后重新安装 hooks（命令行：`npm run install-hooks -- --http-only`）；想用时手动打开，或开启「开机自动启动」 |
 
-宠物没开的时候，Claude Code 照常工作：发给她的事件会被立即拒绝连接（约 1ms），不会卡住你。
+她没开的时候，Claude Code 照常工作：发给她的事件会被立即拒绝连接（约 1ms），不会卡住你。
 
 ### 卸载
 
-按顺序做（在项目目录里）：
+1. 如果打开过**开机自动启动**，先在设置里取消。
+2. 在设置里点「移除」hooks（命令行：`npm run uninstall-hooks`）。只会删掉本项目加的条目，你自己的 hooks 不受影响。第一次修改前的原文件备份在 `~/.claude/settings.json.claude-pets.bak`。
+3. 退出她，然后卸载程序或删除项目文件夹。安装版的卸载程序会自动做第 1、2 步。
+4. （可选）删除她的设置和下载的宠物：Windows 上是 `%APPDATA%\claude-pets`，macOS 是 `~/Library/Application Support/claude-pets`，Linux 是 `~/.config/claude-pets`。
 
-1. 如果打开过**开机自动启动**，先右键宠物把它取消勾选，否则系统启动项里会留下一个失效的条目。
-2. 右键宠物 → 退出。
-3. 移除 hooks：
-
-   ```bash
-   npm run uninstall-hooks
-   ```
-
-   只会删掉本项目加的条目，你自己的 hooks 不受影响。第一次修改前的原文件备份在 `~/.claude/settings.json.claude-pets.bak`，确认没问题后可以删掉。
-4. 删除项目文件夹。
-5. （可选）删除宠物的设置（位置、大小等）：Windows 上是 `%APPDATA%\claude-pets`，macOS 是 `~/Library/Application Support/claude-pets`，Linux 是 `~/.config/claude-pets`。
-
-> 一定要先做第 3 步再删文件夹。hooks 里记的是项目文件夹的绝对路径，文件夹没了，每次开会话都会去运行一个不存在的脚本。同理，如果你**移动**了项目文件夹，在新位置重新运行一次 `npm run install-hooks` 就行。
+> 从源码运行时，一定要先移除 hooks 再删文件夹：hooks 里记的是程序的路径。移动了文件夹的话，设置里会显示「指向了别的位置」，点「修复」就行。
 
 ## 工作原理
 
 ```
-Claude Code ──HTTP hooks──▶ 悬浮窗 (Electron, 127.0.0.1:47213/hook)
-            └─SessionStart─▶ hooks/claude-hook.js（后台运行，窗口没开就启动它）
+Claude Code ──HTTP hooks──▶ 宠物窗口 (127.0.0.1:47213/hook)
+            └─SessionStart─▶ 程序本身 --claude-pets-ensure-running（后台运行，她没开就启动）
 ```
 
-- 除 `SessionStart` 以外的事件都用 Claude Code 的 **HTTP hook**：Claude Code 直接把事件 POST 给窗口，窗口立刻回 `{}`（表示不做任何决定）。调用工具时**不会启动任何进程**，本机实测每次约 0.3ms。
-- `SessionStart` 每个会话只触发一次，要负责在窗口没开时把它启动起来，所以走 node 脚本，并且设成 `async` 在后台运行，不耽误会话启动。窗口是独立进程，关掉会话它也还在。
-- HTTP hook 只能把事件发给一个已经在监听的地址，没法启动程序，所以 `SessionStart` 保留成命令。如果你连这一次后台进程也不想要，可以全部改成 HTTP，再在宠物右键菜单里打开「开机自动启动」：
-
-  ```bash
-  npm run install-hooks -- --http-only
-  ```
-
-  代价是你手动退出宠物之后，要等下次开机，或者手动 `npm start`，她才会回来。
-- 窗口没开时，HTTP hook 连接会被直接拒绝（约 1ms），Claude 照常工作。
-- 窗口 15 分钟没收到新状态时自动回到空闲，防止会话崩溃后一直卡在"干活中"。
-
-> 早期版本每个事件都启动一次 node（通过 bash），每次约 120ms；一次工具调用有前后两个事件，加起来约 0.24 秒。重新运行 `npm run install-hooks` 会把旧条目换成 HTTP 版。
+- 所有事件都用 Claude Code 的 **HTTP hook** 直接发给她，调用工具时不启动任何进程（本机实测每次约 0.3ms）。她立刻回 `{}`，表示不做任何决定；只有确认请求会等你在面板上点了再回。
+- `SessionStart` 另外带一条后台命令：直接运行程序本身来检查她在不在，不在就启动，不需要 Node。她是独立进程，关掉会话她也还在。
+- 空闲时约占单核 1% 的 CPU（Windows 11 实测），内存约 180MB（大部分是 Electron 本身）。
 
 | 环境变量 | 作用 |
 | --- | --- |
-| `CLAUDE_PETS_PORT` | 换端口（默认 47213），窗口和 hook 两边都要设 |
-| `CLAUDE_PETS_AUTOSTART=0` | 会话开始时不自动启动窗口 |
+| `CLAUDE_PETS_PORT` | 换端口（默认 47213），她和 hooks 两边都要设 |
+| `CLAUDE_CONFIG_DIR` | Claude Code 的配置目录不在 `~/.claude` 时 |
 
 ## 测试
 
 ```bash
-npm test          # 单元测试：hook 事件映射、HTTP 接口、状态机、确认面板的回复格式和排队、16 方向注视、install-hooks
-npm run smoke     # 端到端：用独立端口和配置目录启动真实窗口，走一遍所有状态、走动、确认面板（点按钮并检查回给 Claude 的内容），截图存到 out/smoke/
+npm test          # 单元测试：hook 映射、多会话状态机、确认面板的回复格式和排队、hooks 安装、多语言、16 方向注视……
+npm run smoke     # 端到端：用独立端口和配置目录启动真实窗口，走一遍所有功能并截图到 out/smoke/
 ```
 
 开发相关的说明见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
-## 素材与致谢
+## 许可与致谢
 
-- 宠物精灵图来自 [codex-pets.net](https://codex-pets.net)，版权归各自作者所有，**不包含在本仓库里**，由 `npm run fetch-pet` 下载到本地的 `pets/`。
+- 代码以 [MIT 许可](LICENSE) 发布。
+- 宠物精灵图来自 [codex-pets.net](https://codex-pets.net)，版权归各自作者所有，**不包含在本仓库和安装包里**，由用户在设置里或用 `npm run fetch-pet` 下载到本地。
 - 默认宠物 [大肥鱼/Deepseek Chan](https://codex-pets.net/#/pets/deepseek-chan) 的作者是 Dullsaw。
 - 16 个注视方向的映射规则（从正上方开始顺时针，每 22.5° 一档）与 codex-pets.net 保持一致。

@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
 
-const { parsePetRef } = require('../scripts/fetch-pet')
+const { parsePetRef, describe } = require('../src/shared/pet-fetch')
 
 test('a pet is found from its id or any codex-pets.net link to it', () => {
   const cases = [
@@ -21,15 +21,16 @@ test('a pet is found from its id or any codex-pets.net link to it', () => {
   for (const ref of cases) assert.equal(parsePetRef(ref), 'deepseek-chan', ref)
 })
 
-test('links elsewhere, or with no pet in them, are refused in words', () => {
+test('links elsewhere, or with no pet in them, are refused, in either language', () => {
   const cases = [
-    ['https://example.com/#/pets/deepseek-chan', /只支持 codex-pets\.net/],
-    ['https://codex-pets.net.evil.com/#/pets/x', /只支持 codex-pets\.net/],
-    ['https://codex-pets.net/', /没找到宠物 id/],
-    ['https://codex-pets.net/#/creators/dullsaw', /没找到宠物 id/],
-    ['https://codex-pets.net/#/pets/../../etc', /没找到宠物 id/],
-    ['../evil', /看不懂|只支持|没找到/],
-    ['', /看不懂|只支持|没找到/],
+    ['https://example.com/#/pets/deepseek-chan', 'otherSite', /只支持 codex-pets.net/, /Only pets on codex-pets.net/],
+    ['https://codex-pets.net.evil.com/#/pets/x', 'otherSite', /只支持/, /Only pets/],
+    ['https://codex-pets.net/', 'noId', /没找到宠物 id/, /No pet id/],
+    ['https://codex-pets.net/#/creators/dullsaw', 'noId', /没找到/, /No pet id/],
+    ['https://codex-pets.net/#/pets/../../etc', 'noId', /没找到/, /No pet id/],
   ]
-  for (const [ref, message] of cases) assert.throws(() => parsePetRef(ref), message, ref)
+  for (const [ref, code, zh, en] of cases) {
+    assert.throws(() => parsePetRef(ref), err => err.code === code && zh.test(describe('zh', err)) && en.test(describe('en', err)), ref)
+  }
+  for (const ref of ['../evil', '']) assert.throws(() => parsePetRef(ref), err => typeof err.code === 'string', ref)
 })

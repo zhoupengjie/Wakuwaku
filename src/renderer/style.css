@@ -34,6 +34,7 @@ body {
   font-size: calc(13px * var(--scale) / 0.55);
   line-height: 1.35;
   text-align: center;
+  white-space: pre-line;
   overflow-wrap: anywhere;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   transition: opacity 0.25s;
@@ -53,6 +54,14 @@ body {
   background-repeat: no-repeat;
   background-size: calc(1536px * var(--scale)) calc(2288px * var(--scale));
   cursor: grab;
+}
+
+/* No sprite yet: a box to right-click or double-click. */
+#pet.empty {
+  border: 2px dashed #9aa4b2;
+  border-radius: 14px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.35);
 }
 
 /* The prompt panel: fixed size text, whatever the pet's scale. */
@@ -202,4 +211,39 @@ body {
   color: #5a6170;
   font-size: 12px;
   text-decoration: underline;
+}
+
+#panel .field {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+#panel .input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid #c9ceda;
+  border-radius: 7px;
+  font: inherit;
+  color: #1f2430;
+  background: #fff;
+}
+
+#panel .input:focus {
+  outline: 2px solid #4d6bfe;
+  outline-offset: -1px;
+}
+
+#panel .unit,
+#panel .hint {
+  align-self: center;
+  font-size: 11px;
+  color: #5a6170;
+}
+
+#panel .qdesc {
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: #5a6170;
 }

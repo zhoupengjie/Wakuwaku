@@ -10,12 +10,73 @@
     "smoke": "node scripts/smoke.js",
     "fetch-pet": "node scripts/fetch-pet.js",
     "install-hooks": "node scripts/install-hooks.js",
-    "uninstall-hooks": "node scripts/install-hooks.js --uninstall"
+    "uninstall-hooks": "node scripts/install-hooks.js --uninstall",
+    "dist": "electron-builder",
+    "dist:dir": "electron-builder --dir"
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
-    "electron": "^44.7.0"
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "koffi": "^3.3.2"
+  },
+  "license": "MIT",
+  "author": "Pengjie Zhou",
+  "homepage": "https://github.com/zhoupengjie/claude-pets",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zhoupengjie/claude-pets.git"
+  },
+  "build": {
+    "appId": "com.zhoupengjie.claude-pets",
+    "productName": "Claude Pets",
+    "copyright": "Copyright © 2026 Pengjie Zhou",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "LICENSE"
+    ],
+    "asarUnpack": [
+      "node_modules/koffi/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh",
+      "shortcutName": "Claude Pets"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Development"
+    },
+    "electronLanguages": [
+      "en-US",
+      "zh-CN"
+    ]
   }
 }

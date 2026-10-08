@@ -4,10 +4,13 @@
 //   POST /hook         a Claude Code hook event, as an HTTP hook sends it; answers {},
 //                      or for a prompt, the person's answer on the pet
 //   POST /state        a message (src/main/state.js): { mood, detail, event, react, say }
-//   GET  /snapshot     the window as a PNG (debugging)
+//   GET  /snapshot     the window as a PNG (debugging); ?page=settings for that one
 //   POST /debug/look   { dx, dy }: look as if the cursor were there (CLAUDE_PETS_DEBUG=1 only)
 //   POST /debug/walk   { dx, ms }: take a walk now (CLAUDE_PETS_DEBUG=1 only)
 //   POST /debug/click  { selector }: click that element in the page (CLAUDE_PETS_DEBUG=1 only)
+//   POST /debug/eval   { page, code }: run code in the pet or settings page (CLAUDE_PETS_DEBUG=1 only)
+//   POST /debug/settings  "open", or a settings patch (CLAUDE_PETS_DEBUG=1 only)
+//   POST /debug/fullscreen  true / false: as if another app went full screen (CLAUDE_PETS_DEBUG=1 only)
 const http = require('http')
 
 const MAX_BODY = 4096
@@ -37,7 +40,7 @@ function readJson(req) {
   })
 }
 
-function serve({ port, getState, setState, onHook, snapshot, lookAt, walkBy, click, onTaken }) {
+function serve({ port, getState, setState, onHook, snapshot, lookAt, walkBy, click, evaluate, debugSettings, debugFullscreen, onTaken }) {
   const server = http.createServer(async (req, res) => {
     const reply = (code, body) => {
       res.writeHead(code, { 'content-type': 'application/json' })
@@ -75,9 +78,9 @@ function serve({ port, getState, setState, onHook, snapshot, lookAt, walkBy, cli
       return reply(200, { ok: true, app: 'claude-pets', state: getState() })
     }
 
-    if (req.method === 'GET' && req.url === '/snapshot') {
+    if (route === 'GET /snapshot') {
       try {
-        const png = await snapshot()
+        const png = await snapshot(new URL(req.url, 'http://x').searchParams.get('page') || 'pet')
         res.writeHead(200, { 'content-type': 'image/png' })
         return res.end(png)
       } catch {
@@ -90,6 +93,15 @@ function serve({ port, getState, setState, onHook, snapshot, lookAt, walkBy, cli
         return setState(await readJson(req)) ? reply(200, { ok: true }) : reply(400, { error: 'nothing to do' })
       } catch {
         return reply(400, { error: 'bad json' })
+      }
+    }
+
+    const debug = { '/debug/eval': evaluate, '/debug/settings': debugSettings, '/debug/fullscreen': debugFullscreen }[req.url]
+    if (req.method === 'POST' && debug) {
+      try {
+        return reply(200, { result: await debug(await readJson(req)) })
+      } catch (err) {
+        return reply(400, { error: String(err?.message || err) })
       }
     }
 

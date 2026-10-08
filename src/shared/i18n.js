@@ -1,0 +1,281 @@
+// The app's words in Chinese and English. Loaded by the pages as a script
+// (window.I18n) and required by the main process, the scripts and the tests.
+;(function (root) {
+  const STRINGS = {
+    zh: {
+      // Moods
+      'mood.idle': '摸鱼中',
+      'mood.working': '干活中…',
+      'mood.waiting': '等你回复！',
+      'mood.done': '搞定啦 ✓',
+      'mood.review': '改好了，来看看 ✓',
+      'mood.error': '呜…出错了',
+
+      // What she says, and the bubble's details
+      'say.hello': '你好呀',
+      'say.arrived': '来啦',
+      'say.toolFailed': '{tool} 失败了',
+      'say.taskDone': '完成：{task}',
+      'say.taskDoneGeneric': '完成一项',
+      'say.hooksStale': 'hooks 指向了旧位置，右键 → 设置 修复',
+      'say.noSprite': '还没有宠物：右键 → 设置 下载一只',
+      'detail.needsApproval': '{tool} 需要你批准',
+      'detail.asksQuestion': '有问题问你',
+      'detail.planToConfirm': '计划等你确认',
+      'detail.needsInput': '{server} 需要你填写',
+      'detail.took': '用时 {time}',
+      'detail.moreSessions': '另有 {n} 个会话在忙',
+
+      // The prompt panel
+      'panel.needsApproval': '{tool} 需要你批准',
+      'panel.allow': '允许',
+      'panel.always': '以后都允许',
+      'panel.deny': '拒绝',
+      'panel.alwaysNote': '以后都允许：{rules}（{where}）',
+      'panel.planTitle': '计划等你确认',
+      'panel.approve': '批准',
+      'panel.emptyPlan': '（没有内容）',
+      'panel.questionTitle': 'Claude 有问题问你',
+      'panel.other': '其他答案…',
+      'panel.typeAnswer': '输入你的回答',
+      'panel.numberRange': '{min} 到 {max}',
+      'panel.confirm': '确定',
+      'panel.next': '下一题',
+      'panel.toTerminal': '去终端处理',
+      'panel.gotIt': '知道了',
+      'panel.more': '还有 {n} 个',
+      'panel.cannotAnswer': '这道题需要在终端里回答。',
+      'where.session': '本次会话',
+      'where.localSettings': '本项目（仅自己）',
+      'where.projectSettings': '本项目',
+      'where.userSettings': '所有项目',
+      'rule.directories': '访问目录 {dirs}',
+      'rule.mode': '切换到 {mode} 模式',
+      'deny.message': '用户在桌宠上拒绝了。',
+
+      // Menus and tray
+      'menu.pet': '宠物',
+      'menu.noPets': '还没有，去设置里下载',
+      'menu.size': '大小',
+      'menu.small': '小',
+      'menu.medium': '中',
+      'menu.large': '大',
+      'menu.bubble': '显示气泡',
+      'menu.walk': '空闲时走动',
+      'menu.look': '眼睛跟着鼠标',
+      'menu.home': '回到右下角',
+      'menu.dnd': '勿扰',
+      'menu.show': '显示宠物',
+      'menu.hide': '隐藏宠物',
+      'menu.settings': '设置…',
+      'menu.quit': '退出',
+      'tray.tooltip': 'Claude Pets：{status}',
+
+      // Notifications
+      'notify.waiting': '{project}需要你确认',
+      'notify.done': '{project}做完了',
+      'notify.review': '{project}改好了，等你看看',
+      'notify.error': '{project}出错了',
+      'notify.project': '{project}：',
+
+      // Settings window
+      'settings.title': 'Claude Pets 设置',
+      'settings.language': '语言',
+      'settings.languageAuto': '跟随系统',
+      'settings.pets': '宠物',
+      'settings.petsEmpty': '还没有宠物。',
+      'settings.fetch': '下载',
+      'settings.fetchPlaceholder': '粘贴 codex-pets.net 上宠物页面的地址',
+      'settings.fetching': '下载中…',
+      'settings.fetched': '已下载 {name}（作者 {author}）',
+      'settings.fetchNote': '宠物来自 codex-pets.net，版权归各自作者。',
+      'settings.browse': '去 codex-pets.net 挑一只',
+      'settings.look': '外观',
+      'settings.alerts': '提醒',
+      'settings.hold': '做完后',
+      'settings.holdSeen': '一直等我看到（鼠标经过她）',
+      'settings.holdSeconds': '停留 {n} 秒',
+      'settings.notify': '系统通知',
+      'settings.notifyWaiting': '需要我确认时',
+      'settings.notifyDone': '做完时',
+      'settings.notifyError': '出错时',
+      'settings.sound': '提示音',
+      'settings.prompts': '确认面板',
+      'settings.promptWait': '面板最多等',
+      'settings.promptWaitNote': '时间到了就交给终端处理，终端的确认框一直都在。',
+      'settings.seconds': '{n} 秒',
+      'settings.minutes': '{n} 分钟',
+      'settings.quiet': '勿扰',
+      'settings.dnd': '勿扰模式：隐藏宠物、不发通知、确认交给终端',
+      'settings.hideInFullscreen': '有程序全屏时自动隐藏',
+      'settings.claude': 'Claude Code',
+      'settings.hooks': 'hooks',
+      'settings.hooksOk': '已安装',
+      'settings.hooksMissing': '未安装',
+      'settings.hooksStale': '指向了别的位置（项目可能被移动过）',
+      'settings.hooksPartial': '只装了一部分',
+      'settings.hooksHttpOnly': '已安装（不自动启动宠物）',
+      'settings.install': '安装',
+      'settings.reinstall': '重新安装',
+      'settings.repair': '修复',
+      'settings.remove': '移除',
+      'settings.httpOnly': '不让 Claude Code 自动启动宠物',
+      'settings.startAtLogin': '开机自动启动',
+      'settings.about': '关于',
+      'settings.version': '版本 {version} · MIT 许可',
+      'settings.welcome': '欢迎！先下载一只宠物，再安装 hooks，就可以开始了。',
+      'settings.done': '完成',
+      'settings.error': '出错了：{message}',
+    },
+
+    en: {
+      'mood.idle': 'Taking a break',
+      'mood.working': 'Working…',
+      'mood.waiting': 'Waiting for you!',
+      'mood.done': 'All done ✓',
+      'mood.review': 'Changes ready for review ✓',
+      'mood.error': 'Oops, something went wrong',
+
+      'say.hello': 'Hi there!',
+      'say.arrived': "I'm here!",
+      'say.toolFailed': '{tool} failed',
+      'say.taskDone': 'Done: {task}',
+      'say.taskDoneGeneric': 'One task done',
+      'say.hooksStale': 'Hooks point to an old location. Right-click → Settings to fix',
+      'say.noSprite': 'No pet yet: right-click → Settings to get one',
+      'detail.needsApproval': '{tool} needs your approval',
+      'detail.asksQuestion': 'has a question for you',
+      'detail.planToConfirm': 'plan needs your OK',
+      'detail.needsInput': '{server} needs your input',
+      'detail.took': 'took {time}',
+      'detail.moreSessions': '{n} more sessions busy',
+
+      'panel.needsApproval': '{tool} needs your approval',
+      'panel.allow': 'Allow',
+      'panel.always': 'Always allow',
+      'panel.deny': 'Deny',
+      'panel.alwaysNote': 'Always allow: {rules} ({where})',
+      'panel.planTitle': 'Plan needs your OK',
+      'panel.approve': 'Approve',
+      'panel.emptyPlan': '(empty)',
+      'panel.questionTitle': 'Claude has a question',
+      'panel.other': 'Something else…',
+      'panel.typeAnswer': 'Type your answer',
+      'panel.numberRange': '{min} to {max}',
+      'panel.confirm': 'OK',
+      'panel.next': 'Next',
+      'panel.toTerminal': 'Handle in terminal',
+      'panel.gotIt': 'Got it',
+      'panel.more': '{n} more',
+      'panel.cannotAnswer': 'Please answer this one in the terminal.',
+      'where.session': 'this session',
+      'where.localSettings': 'this project, just me',
+      'where.projectSettings': 'this project',
+      'where.userSettings': 'all projects',
+      'rule.directories': 'access to {dirs}',
+      'rule.mode': 'switch to {mode} mode',
+      'deny.message': 'The user denied this on the desktop pet.',
+
+      'menu.pet': 'Pet',
+      'menu.noPets': 'None yet. Get one in Settings',
+      'menu.size': 'Size',
+      'menu.small': 'Small',
+      'menu.medium': 'Medium',
+      'menu.large': 'Large',
+      'menu.bubble': 'Show bubble',
+      'menu.walk': 'Walk around when idle',
+      'menu.look': 'Follow the mouse',
+      'menu.home': 'Back to the corner',
+      'menu.dnd': 'Do not disturb',
+      'menu.show': 'Show pet',
+      'menu.hide': 'Hide pet',
+      'menu.settings': 'Settings…',
+      'menu.quit': 'Quit',
+      'tray.tooltip': 'Claude Pets: {status}',
+
+      'notify.waiting': '{project}needs your OK',
+      'notify.done': '{project}is done',
+      'notify.review': '{project}has changes for you to review',
+      'notify.error': '{project}hit an error',
+      'notify.project': '{project}: ',
+
+      'settings.title': 'Claude Pets Settings',
+      'settings.language': 'Language',
+      'settings.languageAuto': 'Same as system',
+      'settings.pets': 'Pets',
+      'settings.petsEmpty': 'No pets yet.',
+      'settings.fetch': 'Download',
+      'settings.fetchPlaceholder': 'Paste a pet page URL from codex-pets.net',
+      'settings.fetching': 'Downloading…',
+      'settings.fetched': 'Downloaded {name} by {author}',
+      'settings.fetchNote': 'Pets come from codex-pets.net and belong to their authors.',
+      'settings.browse': 'Browse codex-pets.net',
+      'settings.look': 'Look',
+      'settings.alerts': 'Alerts',
+      'settings.hold': 'When done',
+      'settings.holdSeen': 'Wait until I notice (mouse over her)',
+      'settings.holdSeconds': 'Stay {n} seconds',
+      'settings.notify': 'System notifications',
+      'settings.notifyWaiting': 'When it needs my OK',
+      'settings.notifyDone': 'When done',
+      'settings.notifyError': 'On errors',
+      'settings.sound': 'Sound',
+      'settings.prompts': 'Prompt panel',
+      'settings.promptWait': 'Panel waits up to',
+      'settings.promptWaitNote': 'Then the terminal takes over. Its dialog is there the whole time.',
+      'settings.seconds': '{n} seconds',
+      'settings.minutes': '{n} minutes',
+      'settings.quiet': 'Quiet',
+      'settings.dnd': 'Do not disturb: hide the pet, no notifications, prompts go to the terminal',
+      'settings.hideInFullscreen': 'Hide while an app is full screen',
+      'settings.claude': 'Claude Code',
+      'settings.hooks': 'Hooks',
+      'settings.hooksOk': 'Installed',
+      'settings.hooksMissing': 'Not installed',
+      'settings.hooksStale': 'Point somewhere else (was the app moved?)',
+      'settings.hooksPartial': 'Partly installed',
+      'settings.hooksHttpOnly': "Installed (Claude Code won't start the pet)",
+      'settings.install': 'Install',
+      'settings.reinstall': 'Reinstall',
+      'settings.repair': 'Repair',
+      'settings.remove': 'Remove',
+      'settings.httpOnly': "Don't let Claude Code start the pet",
+      'settings.startAtLogin': 'Start at login',
+      'settings.about': 'About',
+      'settings.version': 'Version {version} · MIT License',
+      'settings.welcome': 'Welcome! Download a pet, then install the hooks, and you are set.',
+      'settings.done': 'Done',
+      'settings.error': 'Something went wrong: {message}',
+    },
+  }
+
+  const LANGS = Object.keys(STRINGS)
+
+  // 'zh' for any Chinese locale (zh, zh-CN, zh_CN.UTF-8, ...), else 'en'.
+  function detectLang(locale) {
+    return /^zh(?:$|[-_.@])/i.test(String(locale || '')) ? 'zh' : 'en'
+  }
+
+  // The words for key in lang, {name} filled from vars; English, then the
+  // key itself, when a translation is missing.
+  function t(lang, key, vars) {
+    const table = STRINGS[lang] || STRINGS.en
+    const text = table[key] ?? STRINGS.en[key] ?? key
+    return text.replace(/\{(\w+)\}/g, (all, name) => (vars && vars[name] !== undefined ? String(vars[name]) : all))
+  }
+
+  // A text the pet shows: a plain string, or { key, vars } to translate.
+  function render(lang, text) {
+    if (!text) return ''
+    if (typeof text === 'string') return text
+    return t(lang, text.key, text.vars)
+  }
+
+  const api = { STRINGS, LANGS, detectLang, t, render }
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api
+  } else {
+    root.I18n = api
+  }
+})(this)

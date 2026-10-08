@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// End-to-end check: starts a real pet window on its own port and profile,
-// drives it through hooks/claude-hook.js as Claude Code would, checks each
-// state and saves a snapshot of each step to out/smoke/ for a look.
+// End-to-end check: starts a real pet window on its own port, profile and
+// Claude Code settings folder, drives it as Claude Code's hooks would, checks
+// each step and saves snapshots to out/smoke/ for a look.
 //
 //   npm run smoke
 const { spawn } = require('child_process')
@@ -9,70 +9,47 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
+const { render, t } = require('../src/shared/i18n')
+const { ENSURE_FLAG } = require('../src/shared/hooks-config')
+
 const ROOT = path.join(__dirname, '..')
-const HOOK = path.join(ROOT, 'hooks', 'claude-hook.js')
 const OUT = path.join(ROOT, 'out', 'smoke')
 const PORT = 47299
 const URL = `http://127.0.0.1:${PORT}`
-
-const { EVENTS } = require('../src/shared/hook-events')
+const electron = require(path.join(ROOT, 'node_modules', 'electron'))
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
-// Deliver an event the way the installed hooks do: most as an HTTP hook,
-// SessionStart through the command.
-async function hook(event) {
-  if (EVENTS[event.hook_event_name]?.via !== 'http') return runCommand(event)
-  const res = await fetch(`${URL}/hook?from=claude-pets`, { method: 'POST', body: JSON.stringify(event) })
-  const body = await res.text()
-  if (res.status !== 200 || body !== '{}') throw new Error(`/hook answered ${res.status} ${body}`)
-}
-
-function runCommand(event) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [HOOK], {
-      env: { ...process.env, CLAUDE_PETS_PORT: String(PORT), CLAUDE_PETS_AUTOSTART: '0' },
-      stdio: ['pipe', 'pipe', 'inherit'],
-    })
-    let out = ''
-    child.stdout.on('data', chunk => (out += chunk))
-    child.on('close', code => (code === 0 && out === '' ? resolve() : reject(new Error(`hook: exit ${code}, printed ${JSON.stringify(out)}`))))
-    child.stdin.end(JSON.stringify(event))
-  })
-}
-
-async function mood() {
-  return (await (await fetch(`${URL}/health`)).json()).state
-}
-
-async function snap(name) {
-  const png = Buffer.from(await (await fetch(`${URL}/snapshot`)).arrayBuffer())
-  fs.writeFileSync(path.join(OUT, `${name}.png`), png)
-}
-
-async function look(dx, dy) {
-  await fetch(`${URL}/debug/look`, { method: 'POST', body: JSON.stringify({ dx, dy }) })
-}
-
-// A prompt as Claude Code's HTTP hook sends it; resolves to the hook output.
-async function askHook(event) {
-  const res = await fetch(`${URL}/hook?from=claude-pets`, { method: 'POST', body: JSON.stringify(event) })
+async function post(route, body) {
+  const res = await fetch(`${URL}${route}`, { method: 'POST', body: JSON.stringify(body) })
   return res.json()
 }
 
-async function click(selector) {
-  const res = await fetch(`${URL}/debug/click`, { method: 'POST', body: JSON.stringify({ selector }) })
-  return (await res.json()).result
-}
+// An event as Claude Code's HTTP hook sends it; resolves to the hook output.
+const hook = event => post('/hook?from=claude-pets', event)
+const state = async () => (await (await fetch(`${URL}/health`)).json()).state
+const click = async selector => (await post('/debug/click', { selector })).result
+const evaluate = async (page, code) => (await post('/debug/eval', { page, code })).result
+const settingsPatch = async patch => (await post('/debug/settings', patch)).result
+const walkBy = (dx, ms) => post('/debug/walk', { dx, ms })
+const bubble = () => evaluate('pet', "document.getElementById('bubble').textContent")
 
-async function walkBy(dx, ms) {
-  await fetch(`${URL}/debug/walk`, { method: 'POST', body: JSON.stringify({ dx, ms }) })
+async function snap(name, page = 'pet') {
+  const png = Buffer.from(await (await fetch(`${URL}/snapshot?page=${page}`)).arrayBuffer())
+  fs.writeFileSync(path.join(OUT, `${name}.png`), png)
 }
 
 let failures = 0
 function report(step, ok, info) {
   if (!ok) failures += 1
   console.log(`${ok ? '✔' : '✘'} ${step}${info ? `: ${info}` : ''}`)
+}
+
+async function expect(step, want) {
+  const { mood, detail } = await state()
+  const shown = render('zh', detail)
+  const ok = mood === want.mood && (want.detail === undefined || shown === want.detail)
+  report(step, ok, `${mood}${shown ? ` · ${shown}` : ''}${ok ? '' : `（应为 ${want.mood}${want.detail ? ` · ${want.detail}` : ''}）`}`)
 }
 
 // The window is its own size (a pixel or two of rounding aside) and wholly
@@ -84,191 +61,318 @@ function checkWindow(step, now, start) {
   report(step, isSize && isInside, `${b.width}x${b.height} @ ${b.x},${b.y}（开始时 ${start.bounds.width}x${start.bounds.height}）`)
 }
 
-async function expect(step, want) {
-  const { mood: got, detail } = await mood()
-  const ok = got === want.mood && (want.detail === undefined || detail === want.detail)
-  if (!ok) failures += 1
-  console.log(`${ok ? '✔' : '✘'} ${step}: ${got}${detail ? ` · ${detail}` : ''}${ok ? '' : `（应为 ${want.mood}${want.detail ? ` · ${want.detail}` : ''}）`}`)
+async function waitUp(ms = 15000) {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    try {
+      if ((await fetch(`${URL}/health`)).ok) return true
+    } catch {}
+    await sleep(250)
+  }
+  return false
+}
+
+async function isDown() {
+  try {
+    await fetch(`${URL}/health`)
+    return false
+  } catch {
+    return true
+  }
+}
+
+function run(args, env) {
+  return new Promise(resolve => {
+    const started = Date.now()
+    const child = spawn(electron, args, { env, stdio: 'ignore' })
+    child.on('exit', code => resolve({ code, ms: Date.now() - started }))
+  })
 }
 
 async function main() {
   if (!fs.existsSync(path.join(ROOT, 'pets', 'deepseek-chan', 'spritesheet.webp'))) {
     throw new Error('先运行 npm run fetch-pet')
   }
+  fs.rmSync(OUT, { recursive: true, force: true })
   fs.mkdirSync(OUT, { recursive: true })
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-pets-smoke-'))
+  const claudeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-pets-smoke-claude-'))
+  const env = {
+    ...process.env,
+    CLAUDE_PETS_PORT: String(PORT),
+    CLAUDE_PETS_USER_DATA: profile,
+    CLAUDE_CONFIG_DIR: claudeDir,
+    CLAUDE_PETS_DEBUG: '1',
+  }
+  // The test talks Chinese unless told otherwise.
+  fs.writeFileSync(path.join(profile, 'config.json'), JSON.stringify({ lang: 'zh' }))
 
-  const electron = require(path.join(ROOT, 'node_modules', 'electron'))
-  const appEnv = { ...process.env, CLAUDE_PETS_PORT: String(PORT), CLAUDE_PETS_USER_DATA: profile, CLAUDE_PETS_DEBUG: '1' }
-  const app = spawn(electron, [ROOT], {
-    env: appEnv,
-    stdio: 'ignore',
-  })
+  const app = spawn(electron, [ROOT], { env, stdio: 'ignore' })
 
   try {
-    for (let i = 0; ; i += 1) {
-      if (i > 60) throw new Error('窗口 15 秒内没有起来')
-      try {
-        if ((await fetch(`${URL}/health`)).ok) break
-      } catch {}
-      await sleep(250)
-    }
-    await sleep(400)
-    await snap('01-greeting-waving')
-    await expect('打开窗口', { mood: 'idle' })
+    if (!(await waitUp())) throw new Error('窗口 15 秒内没有起来')
+    await sleep(1200)
 
-    await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'hi' })
-    await sleep(1600)
+    // --- First run: the settings open to set up; install the hooks from there.
+    report('第一次打开：设置窗口自己弹出', (await evaluate('settings', "!!document.querySelector('.welcome')")) === true)
+    await snap('01-settings-welcome', 'settings')
+    report('设置：点「安装」', (await evaluate('settings', "document.querySelector('[data-action=\"install\"]').click(), 'ok'")) === 'ok')
+    await sleep(500)
+    const written = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf8'))
+    const starter = written.hooks.SessionStart[0].hooks.find(h => h.type === 'command')
+    report('设置：hooks 写进了 Claude Code 的设置', starter?.command === electron && starter.args.includes(ENSURE_FLAG), `${Object.keys(written.hooks).length} 个事件`)
+    report('设置：状态显示「已安装」', (await evaluate('settings', "document.querySelector('[data-status]').dataset.status")) === 'ok')
+
+    // --- Moods, one session.
+    const S = { session_id: 'one', cwd: path.join(os.tmpdir(), 'alpha') }
+    await hook({ ...S, hook_event_name: 'SessionStart', source: 'startup' })
+    await hook({ ...S, hook_event_name: 'UserPromptSubmit', prompt: 'hi' })
+    // The greeting (a wave, about 1.4 s) plays first.
+    await sleep(1800)
     await snap('02-running')
     await expect('UserPromptSubmit', { mood: 'working' })
+    report('干活时显示用时', /\d:\d\d/.test(await bubble()), await bubble())
 
-    await hook({ hook_event_name: 'PreToolUse', tool_name: 'Bash' })
+    await hook({ ...S, hook_event_name: 'PreToolUse', tool_name: 'Bash' })
     await expect('PreToolUse', { mood: 'working', detail: 'Bash' })
-
-    await hook({ hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', error: 'exit 1' })
+    await hook({ ...S, hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', error: 'exit 1' })
     await sleep(300)
     await snap('03-tool-failed')
-    await expect('PostToolUseFailure', { mood: 'working', detail: 'Bash' })
+    report('工具失败：闪一下「失败了」', (await bubble()).includes('Bash 失败了'), await bubble())
 
-    // A prompt now waits for an answer; leave it to the "terminal".
-    const waiting = askHook({ hook_event_name: 'PermissionRequest', session_id: 'smoke', tool_name: 'Bash', tool_input: { command: 'ls' } })
-    await sleep(1400)
+    const waiting = hook({ ...S, hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'ls' } })
+    await sleep(1000)
     await snap('04-waiting')
     await expect('PermissionRequest', { mood: 'waiting', detail: 'Bash 需要你批准' })
     await click('[data-action="dismiss"]')
     report('「去终端处理」：不替你做决定', JSON.stringify(await waiting) === '{}')
 
-    await hook({ hook_event_name: 'TaskCompleted', task_subject: '写测试' })
+    await hook({ ...S, hook_event_name: 'TaskCompleted', task_subject: '写测试' })
     await sleep(250)
     await snap('05-task-jumping')
-    await expect('TaskCompleted', { mood: 'waiting' })
+    report('任务完成：跳一下', (await bubble()).includes('完成：写测试'), await bubble())
 
-    await hook({ hook_event_name: 'PostToolUse', tool_name: 'Edit' })
-    await hook({ hook_event_name: 'Stop' })
-    await sleep(500)
+    await hook({ ...S, hook_event_name: 'PostToolUse', tool_name: 'Edit' })
+    await hook({ ...S, hook_event_name: 'Stop' })
+    await sleep(400)
     await snap('06-review')
     await expect('Stop（改过文件）', { mood: 'review' })
+    report('做完显示用时', (await bubble()).includes('用时'), await bubble())
 
-    await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'thanks' })
-    await hook({ hook_event_name: 'Stop' })
-    await sleep(500)
+    // --- Endings wait until you have seen them.
+    await sleep(3000)
+    await expect('3 秒后还在等你看', { mood: 'review' })
+    await evaluate('pet', "document.getElementById('pet').dispatchEvent(new MouseEvent('mouseenter')), 'ok'")
+    await sleep(200)
+    await expect('鼠标经过她：算你看到了', { mood: 'idle' })
+    await evaluate('pet', "document.getElementById('pet').dispatchEvent(new MouseEvent('mouseleave')), 'ok'")
+
+    await hook({ ...S, hook_event_name: 'UserPromptSubmit', prompt: 'thanks' })
+    await hook({ ...S, hook_event_name: 'Stop' })
+    await sleep(400)
     await snap('07-done-waving')
     await expect('Stop（没改文件）', { mood: 'done' })
-
-    await hook({ hook_event_name: 'StopFailure', error: 'rate_limit' })
-    await sleep(500)
+    await hook({ ...S, hook_event_name: 'StopFailure', error: 'rate_limit' })
+    await sleep(400)
     await snap('08-error-failed')
     await expect('StopFailure', { mood: 'error' })
-
-    await hook({ hook_event_name: 'SessionStart', source: 'compact' })
+    await hook({ ...S, hook_event_name: 'SessionStart', source: 'compact' })
     await expect('SessionStart（compact）不打断', { mood: 'error' })
 
-    await hook({ hook_event_name: 'SessionEnd', reason: 'exit' })
+    // --- Two sessions: each its own mood; the one that wants you is shown.
+    const B = { session_id: 'two', cwd: path.join(os.tmpdir(), 'beta') }
+    await hook({ ...S, hook_event_name: 'UserPromptSubmit', prompt: 'more' })
+    await hook({ ...B, hook_event_name: 'UserPromptSubmit', prompt: 'go' })
+    await hook({ ...B, hook_event_name: 'Stop' })
+    await hook({ ...S, hook_event_name: 'PreToolUse', tool_name: 'Grep' })
+    await sleep(300)
+    await snap('09-two-sessions')
+    const two = await bubble()
+    report('两个会话：显示做完的 beta，并说另一个在忙', two.startsWith('beta：搞定啦') && two.includes('另有 1 个会话在忙'), JSON.stringify(two))
+    await hook({ ...B, hook_event_name: 'SessionEnd', reason: 'exit' })
+    await expect('beta 关掉后：回到 alpha', { mood: 'working', detail: 'Grep' })
+    await hook({ ...S, hook_event_name: 'SessionEnd', reason: 'exit' })
     await sleep(300)
     await expect('SessionEnd', { mood: 'idle' })
 
-    // Walking: the window keeps its size and stays on screen. (On Windows at
-    // 125% it used to grow a pixel per step and carry the pet off the screen.)
-    const start = (await mood()).window
+    // --- Language: English from the settings page.
+    await evaluate('settings', "(() => { const s = document.querySelector('[data-key=\"lang\"]'); s.value = 'en'; s.dispatchEvent(new Event('change')); return 'ok' })()")
+    await sleep(400)
+    await hook({ ...S, hook_event_name: 'UserPromptSubmit', prompt: 'hi' })
+    await sleep(300)
+    report('切到英文：气泡', (await bubble()).startsWith('Working…'), await bubble())
+    report('切到英文：设置窗口', (await evaluate('settings', "document.querySelector('h1').textContent")) === 'Claude Pets Settings')
+    await snap('10-settings-english', 'settings')
+    const askEn = hook({ ...S, hook_event_name: 'PermissionRequest', tool_name: 'Write', tool_input: { file_path: 'notes.md' } })
+    await sleep(800)
+    await snap('11-panel-english')
+    report('切到英文：面板', (await evaluate('pet', "document.querySelector('#panel .title').textContent")) === 'Write needs your approval')
+    await click('[data-action="deny"]')
+    report('切到英文：拒绝时留给 Claude 的话', (await askEn)?.hookSpecificOutput?.decision?.message === t('en', 'deny.message'))
+    await settingsPatch({ lang: 'zh' })
+    await hook({ ...S, hook_event_name: 'Stop' })
+    await evaluate('pet', "document.getElementById('pet').dispatchEvent(new MouseEvent('mouseenter')), 'ok'")
+    await evaluate('pet', "document.getElementById('pet').dispatchEvent(new MouseEvent('mouseleave')), 'ok'")
+
+    // --- Quiet: do not disturb, and another app full screen.
+    for (const [name, on, off] of [
+      ['勿扰', () => settingsPatch({ dnd: true }), () => settingsPatch({ dnd: false })],
+      ['全屏时', () => post('/debug/fullscreen', true), () => post('/debug/fullscreen', false)],
+    ]) {
+      await on()
+      await sleep(300)
+      const hidden = (await state()).window.isVisible === false
+      const started = Date.now()
+      const answer = await hook({ ...S, hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'ls' } })
+      const ms = Date.now() - started
+      report(`${name}：宠物藏起来，确认立刻交给终端`, hidden && JSON.stringify(answer) === '{}' && ms < 500, `${ms}ms`)
+      await off()
+      await sleep(300)
+      report(`${name}结束：宠物回来`, (await state()).window.isVisible === true)
+    }
+
+    // --- Walking keeps the window's size and stays on screen.
+    const start = (await state()).window
     for (let i = 0; i < 8; i++) await walkBy(i % 2 ? -300 : 300, 300)
     await walkBy(-5000, 300)
-    checkWindow('来回走 8 趟、再往左走到底', (await mood()).window, start)
+    checkWindow('来回走 8 趟、再往左走到底', (await state()).window, start)
     await walkBy(5000, 300)
-    checkWindow('往右走到底', (await mood()).window, start)
+    checkWindow('往右走到底', (await state()).window, start)
 
     // Started again: she comes home to the bottom right.
     await walkBy(-5000, 200)
-    const again = spawn(electron, [ROOT], { env: appEnv, stdio: 'ignore' })
-    await new Promise(resolve => again.on('exit', resolve))
+    await run([ROOT], env)
     await sleep(500)
-    const home = (await mood()).window
-    const isHome =
-      home.bounds.x + home.size.width >= home.workArea.x + home.workArea.width - 30 &&
-      home.bounds.y + home.size.height >= home.workArea.y + home.workArea.height - 30
-    report('再启动一次，回到右下角', isHome, JSON.stringify(home.bounds))
+    const home = (await state()).window
+    report(
+      '再启动一次，回到右下角',
+      home.bounds.x + home.size.width >= home.workArea.x + home.workArea.width - 30 && home.bounds.y + home.size.height >= home.workArea.y + home.workArea.height - 30,
+      JSON.stringify(home.bounds),
+    )
 
-    // Prompts answered on the pet.
-    const base = (await mood()).window.bounds
+    // --- Prompts answered on the pet.
+    const base = (await state()).window.bounds
     const bash = {
-      hook_event_name: 'PermissionRequest',
-      session_id: 'smoke',
+      ...S,
       cwd: ROOT,
+      hook_event_name: 'PermissionRequest',
       tool_name: 'Bash',
       tool_input: { command: 'npm test -- --watch=false' },
-      permission_suggestions: [
-        { type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }], behavior: 'allow', destination: 'localSettings' },
-      ],
+      permission_suggestions: [{ type: 'addRules', rules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }], behavior: 'allow', destination: 'localSettings' }],
     }
-    let pending = askHook(bash)
+    let pending = hook(bash)
     await sleep(250)
     report('授权面板：刚弹出时按钮还点不了', (await click('[data-action="always"]')) === 'disabled')
     await sleep(500)
-    await snap('13-permission-panel')
-    const grown = (await mood()).window.bounds
-    const { shift } = (await mood()).window
-    const petMoved = grown.x + grown.width / 2 + shift - (base.x + base.width / 2)
-    report('授权面板：窗口变大、宠物原地不动', grown.height > base.height && Math.abs(petMoved) <= 2 && Math.abs(grown.y + grown.height - (base.y + base.height)) <= 2, `${base.width}x${base.height} → ${grown.width}x${grown.height}，宠物偏移 ${petMoved}px（窗口内挪了 ${shift}px）`)
+    await snap('12-permission-panel')
+    const grown = (await state()).window
+    const petMoved = grown.bounds.x + grown.bounds.width / 2 + grown.shift - (base.x + base.width / 2)
+    report('授权面板：窗口变大、宠物原地不动', grown.bounds.height > base.height && Math.abs(petMoved) <= 2, `${base.width}x${base.height} → ${grown.bounds.width}x${grown.bounds.height}`)
     report('授权面板：点「以后都允许」', (await click('[data-action="always"]')) === 'ok')
-    let out = await pending
-    const always = out?.hookSpecificOutput?.decision
-    report('授权面板：回给 Claude 的是 allow + 规则', always?.behavior === 'allow' && always.updatedPermissions?.[0]?.rules?.[0]?.ruleContent === 'npm test:*', JSON.stringify(always))
+    const always = (await pending)?.hookSpecificOutput?.decision
+    report('授权面板：回给 Claude 的是 allow + 规则', always?.behavior === 'allow' && always.updatedPermissions?.[0]?.rules?.[0]?.ruleContent === 'npm test:*')
     await sleep(300)
-    const shrunk = (await mood()).window.bounds
-    report('授权面板：答完窗口恢复原样', shrunk.width === base.width && shrunk.height === base.height && shrunk.x === base.x && shrunk.y === base.y, `${shrunk.width}x${shrunk.height} @ ${shrunk.x},${shrunk.y}`)
+    const shrunk = (await state()).window.bounds
+    report('授权面板：答完窗口恢复原样', shrunk.width === base.width && shrunk.height === base.height && shrunk.x === base.x && shrunk.y === base.y)
 
-    pending = askHook({
+    // Choice with "Other", then a text question: typed answers.
+    pending = hook({
+      ...S,
       hook_event_name: 'PermissionRequest',
-      session_id: 'smoke',
-      cwd: ROOT,
       tool_name: 'AskUserQuestion',
       tool_input: {
         questions: [
           { header: '颜色', question: '气泡用什么颜色？', multiSelect: false, options: [{ label: '蓝', description: '冷静一点' }, { label: '粉', description: '可爱一点' }] },
           { header: '功能', question: '还要哪些功能？', multiSelect: true, options: [{ label: '走动' }, { label: '注视' }, { label: '气泡' }] },
+          { header: '名字', question: '给她起个名字？', kind: 'text', placeholder: '比如：小鲸' },
+          { header: '大小', question: '多大合适？', kind: 'number', min: 1, max: 10, defaultValue: 5, unit: '级' },
         ],
       },
     })
     await sleep(800)
-    await snap('14-question-panel')
-    report('选择题：单选点「蓝」', (await click('[data-option="蓝"]')) === 'ok')
+    await snap('13-question-other')
+    const type = text =>
+      evaluate('pet', `(() => { const box = document.querySelector('[data-input="answer"]'); box.value = ${JSON.stringify(text)}; box.dispatchEvent(new Event('input', { bubbles: true })); return 'ok' })()`)
+    await type('紫色')
+    await sleep(100)
+    report('选择题：「其他」里打字后点确定', (await click('[data-action="confirm"]')) === 'ok')
     await sleep(250)
     await click('[data-option="走动"]')
     await click('[data-option="气泡"]')
-    await sleep(100)
-    await snap('15-question-multiselect')
-    report('选择题：多选后点「确定」', (await click('[data-action="confirm"]')) === 'ok')
-    out = await pending
-    const answers = out?.hookSpecificOutput?.decision?.updatedInput?.answers
-    report('选择题：答案按题目文字回给 Claude', answers?.['气泡用什么颜色？'] === '蓝' && answers?.['还要哪些功能？'] === '走动, 气泡', JSON.stringify(answers))
+    await click('[data-action="confirm"]')
+    await sleep(250)
+    await snap('14-question-text')
+    await type('小鲸')
+    await click('[data-action="confirm"]')
+    await sleep(250)
+    await snap('15-question-number')
+    await type('7')
+    report('数字题：填 7 点确定', (await click('[data-action="confirm"]')) === 'ok')
+    const answers = (await pending)?.hookSpecificOutput?.decision?.updatedInput?.answers
+    report(
+      '四道题的答案都回给了 Claude',
+      answers?.['气泡用什么颜色？'] === '紫色' && answers?.['还要哪些功能？'] === '走动, 气泡' && answers?.['给她起个名字？'] === '小鲸' && answers?.['多大合适？'] === '7',
+      JSON.stringify(answers),
+    )
 
-    pending = askHook({ hook_event_name: 'PermissionRequest', session_id: 'smoke', cwd: ROOT, tool_name: 'ExitPlanMode', tool_input: { plan: '1. 写代码\n2. 跑测试\n3. 推送' } })
+    pending = hook({ ...S, hook_event_name: 'PermissionRequest', tool_name: 'ExitPlanMode', tool_input: { plan: '1. 写代码\n2. 跑测试\n3. 推送' } })
     await sleep(800)
     await snap('16-plan-panel')
     await click('[data-action="deny"]')
-    out = await pending
-    report('计划：点「拒绝」', out?.hookSpecificOutput?.decision?.behavior === 'deny')
+    report('计划：点「拒绝」', (await pending)?.hookSpecificOutput?.decision?.behavior === 'deny')
 
-    pending = askHook(bash)
+    pending = hook(bash)
     await sleep(300)
-    await hook({ hook_event_name: 'PostToolUse', session_id: 'smoke', tool_name: 'Bash', tool_input: bash.tool_input })
-    out = await pending
-    report('在终端答了：面板收起、不替你做决定', JSON.stringify(out) === '{}' && (await mood()).asks.length === 0)
+    await hook({ ...S, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: bash.tool_input })
+    report('在终端答了：面板收起、不替你做决定', JSON.stringify(await pending) === '{}' && (await state()).asks.length === 0)
 
-    // Eyes on the cursor: up, right, down, left of her face.
-    const looks = { up: [0, -200], right: [200, 0], down: [0, 200], left: [-200, 0] }
-    let n = 9
-    for (const [name, [dx, dy]] of Object.entries(looks)) {
-      await look(dx, dy)
+    // A shorter wait from the settings: the panel lets go sooner.
+    await settingsPatch({ promptWaitSec: 30 })
+    report('设置：面板最多等 30 秒', (await state()).settings.promptWaitSec === 30)
+    await settingsPatch({ promptWaitSec: 290 })
+
+    // --- Downloading a pet from the settings window.
+    const bad = await evaluate(
+      'settings',
+      "(async () => { const box = document.querySelector('[data-key=\"fetch\"]'); box.value = 'https://example.com/#/pets/x'; box.dispatchEvent(new Event('input')); document.querySelector('[data-action=\"fetch\"]').click(); await new Promise(r => setTimeout(r, 600)); return document.querySelector('[data-note]')?.textContent })()",
+    )
+    report('设置：别的网站的地址被拒绝', /只支持 codex-pets\.net/.test(bad || ''), bad)
+    const good = await evaluate(
+      'settings',
+      "(async () => { const box = document.querySelector('[data-key=\"fetch\"]'); box.value = 'https://codex-pets.net/#/pets/deepseek-chan'; box.dispatchEvent(new Event('input')); document.querySelector('[data-action=\"fetch\"]').click(); for (let i = 0; i < 60; i++) { await new Promise(r => setTimeout(r, 500)); const n = document.querySelector('[data-note]'); if (n && n.dataset.note !== 'busy') return n.textContent } return 'timeout' })()",
+    )
+    report('设置：粘贴地址下载宠物', /已下载/.test(good || ''), good)
+    report('下载的宠物存在自己的目录', fs.existsSync(path.join(profile, 'pets', 'deepseek-chan', 'spritesheet.webp')))
+
+    // --- Eyes on the cursor: up, right, down, left of her face.
+    let n = 17
+    for (const [name, [dx, dy]] of Object.entries({ up: [0, -200], right: [200, 0], down: [0, 200], left: [-200, 0] })) {
+      await post('/debug/look', { dx, dy })
       await sleep(150)
-      await snap(`${String(n++).padStart(2, '0')}-look-${name}`)
+      await snap(`${n++}-look-${name}`)
     }
 
-    console.log(failures ? `\n${failures} 步不对` : `\n全部通过，截图在 ${OUT}`)
+    // --- The SessionStart starter: quick and quiet while she is up...
+    const whileUp = await run([ROOT, ENSURE_FLAG], env)
+    report('会话开始时她已经在：启动器很快退出', whileUp.code === 0 && whileUp.ms < 5000, `${whileUp.ms}ms`)
   } finally {
     app.kill()
-    await sleep(500)
-    fs.rmSync(profile, { recursive: true, force: true })
+    await sleep(800)
   }
+
+  // ...and starts her when she is not.
+  try {
+    report('窗口关掉了', await isDown())
+    const whileDown = await run([ROOT, ENSURE_FLAG], env)
+    const isUpAgain = await waitUp(15000)
+    report('会话开始时她不在：启动器把她拉起来', whileDown.code === 0 && isUpAgain, `${whileDown.ms}ms`)
+  } finally {
+    await post('/debug/eval', { page: 'pet', code: "setTimeout(() => window.close(), 50), 'ok'" }).catch(() => {})
+    await sleep(800)
+    for (const dir of [profile, claudeDir]) fs.rmSync(dir, { recursive: true, force: true })
+  }
+
+  console.log(failures ? `\n${failures} 步不对` : `\n全部通过，截图在 ${OUT}`)
 }
 
 main()

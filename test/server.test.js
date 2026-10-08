@@ -33,7 +33,7 @@ test('an HTTP hook gets {} back at once, and the event reaches the pet', async t
   const res = await post(`${url}/hook?from=claude-pets`, JSON.stringify(event))
   assert.deepEqual(res, { status: 200, body: '{}' })
   assert.deepEqual(hooks, [event])
-  assert.deepEqual(toMessage(hooks[0]), { mood: 'waiting', detail: 'Bash 需要你批准' })
+  assert.deepEqual(toMessage(hooks[0]), { mood: 'waiting', detail: { key: 'detail.needsApproval', vars: { tool: 'Bash' } } })
 })
 
 test('a hook body we cannot read still gets {} and does nothing', async t => {

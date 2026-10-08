@@ -5,7 +5,10 @@
 // answer comes first, so answering here never blocks the terminal.
 const path = require('path')
 
+const { t } = require('./i18n')
+
 const MAX_SUMMARY = 400
+const MAX_ANSWER = 2000
 
 // What a tool call does, in one short text.
 function summarize(tool, input) {
@@ -36,28 +39,6 @@ function summarize(tool, input) {
   return text.length > MAX_SUMMARY ? `${text.slice(0, MAX_SUMMARY)}…` : text
 }
 
-// What an "always allow" would add, as the terminal says it: Bash(npm test:*).
-function describeSuggestion(s) {
-  switch (s?.type) {
-    case 'addRules':
-    case 'replaceRules':
-      return (s.rules || []).map(r => (r.ruleContent ? `${r.toolName}(${r.ruleContent})` : r.toolName)).join('、')
-    case 'addDirectories':
-      return `访问目录 ${(s.directories || []).join('、')}`
-    case 'setMode':
-      return `切换到 ${s.mode} 模式`
-    default:
-      return ''
-  }
-}
-
-const WHERE = {
-  session: '本次会话',
-  localSettings: '本项目（仅自己）',
-  projectSettings: '本项目',
-  userSettings: '所有项目',
-}
-
 // Only suggestions that add an allowance; never one that removes or denies.
 function allowSuggestions(list) {
   return (Array.isArray(list) ? list : []).filter(
@@ -68,9 +49,44 @@ function allowSuggestions(list) {
   )
 }
 
-// A choice question the pet can answer; text and number ones stay in the terminal.
-function isChoice(q) {
-  return Array.isArray(q?.options) && q.options.length > 0 && (q.type === undefined || q.type === 'choice')
+// What an "always allow" would add, as data the page words in its language:
+// { rules: ['Bash(npm test:*)'], dirs: [...], modes: [...], where: ['localSettings'] }
+function describeAlways(list) {
+  const always = { rules: [], dirs: [], modes: [], where: [] }
+  for (const s of list) {
+    if (s.type === 'addRules') always.rules.push(...(s.rules || []).map(r => (r.ruleContent ? `${r.toolName}(${r.ruleContent})` : r.toolName)))
+    if (s.type === 'addDirectories') always.dirs.push(...(s.directories || []))
+    if (s.type === 'setMode') always.modes.push(s.mode)
+    if (s.destination && !always.where.includes(s.destination)) always.where.push(s.destination)
+  }
+  return always
+}
+
+// How a question is answered: pick options (choice, the default), type a text, or a number.
+function kindOf(q) {
+  return q?.kind === 'text' || q?.kind === 'number' ? q.kind : 'choice'
+}
+
+function isAnswerable(q) {
+  const kind = kindOf(q)
+  if (kind === 'choice') return Array.isArray(q.options) && q.options.length > 0
+  if (kind === 'number') return Number.isFinite(q.min) && Number.isFinite(q.max) && q.min <= q.max
+  return true
+}
+
+function questionView(q) {
+  const kind = kindOf(q)
+  const view = {
+    kind,
+    header: String(q.header || ''),
+    question: String(q.question || ''),
+    description: String(q.description || ''),
+    multiSelect: kind === 'choice' && q.multiSelect === true,
+    options: kind === 'choice' ? (q.options || []).map(o => ({ label: String(o.label || ''), description: String(o.description || '') })) : [],
+  }
+  if (kind === 'text') view.placeholder = String(q.placeholder || '')
+  if (kind === 'number') Object.assign(view, { min: q.min, max: q.max, step: q.step ?? 1, defaultValue: q.defaultValue ?? q.min, unit: String(q.unit || '') })
+  return view
 }
 
 // The view of a PermissionRequest event, or null when it is not one.
@@ -89,13 +105,9 @@ function viewOf(e) {
     return {
       ...base,
       kind: 'question',
-      canAnswer: questions.length > 0 && questions.every(isChoice),
-      questions: questions.map(q => ({
-        header: String(q.header || ''),
-        question: String(q.question || ''),
-        multiSelect: q.multiSelect === true,
-        options: (q.options || []).map(o => ({ label: String(o.label || ''), description: String(o.description || '') })),
-      })),
+      title: typeof input.title === 'string' ? input.title : '',
+      canAnswer: questions.length > 0 && questions.every(isAnswerable),
+      questions: questions.map(questionView),
     }
   }
 
@@ -109,12 +121,7 @@ function viewOf(e) {
     ...base,
     kind: 'permission',
     summary: summarize(e.tool_name, input),
-    always: always.length
-      ? {
-          rules: always.map(describeSuggestion).filter(Boolean).join('；'),
-          where: [...new Set(always.map(s => WHERE[s.destination] || s.destination))].join('、'),
-        }
-      : null,
+    always: always.length ? describeAlways(always) : null,
   }
 }
 
@@ -122,19 +129,41 @@ function output(decision) {
   return { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } }
 }
 
+// One question's answer as Claude Code takes it, or null when it does not fit.
+//   choice   ['label', ...] picked options, or { text } typed instead ("Other")
+//   text     { text }
+//   number   { number }
+function answerText(q, picked) {
+  if (picked && typeof picked === 'object' && !Array.isArray(picked) && 'text' in picked) {
+    if (q.kind === 'number') return null
+    const text = String(picked.text ?? '').trim()
+    return text && text.length <= MAX_ANSWER ? text : null
+  }
+  if (q.kind === 'number') {
+    const n = Number(picked?.number)
+    return Number.isFinite(n) && n >= q.min && n <= q.max ? String(n) : null
+  }
+  if (q.kind !== 'choice' || !Array.isArray(picked) || picked.length === 0) return null
+  const labels = q.options.map(o => o.label)
+  if (!picked.every(l => labels.includes(l))) return null
+  if (!q.multiSelect && picked.length !== 1) return null
+  return picked.join(', ')
+}
+
 // The hook output for a choice, or null when the choice does not fit the event.
-//   { action: 'allow' }                     allow once
-//   { action: 'always' }                    allow, adding the suggested rules
-//   { action: 'deny' }                      deny
-//   { action: 'answer', answers: [[...]] }  AskUserQuestion: labels per question
-function replyFor(e, choice) {
+//   { action: 'allow' }                  allow once
+//   { action: 'always' }                 allow, adding the suggested rules
+//   { action: 'deny' }                   deny
+//   { action: 'answer', answers: [...] } AskUserQuestion, one answer per question
+// lang: the language of the note a deny leaves for Claude.
+function replyFor(e, choice, lang = 'en') {
   const view = viewOf(e)
   if (!view) return null
   const input = e.tool_input && typeof e.tool_input === 'object' ? e.tool_input : {}
 
   switch (choice?.action) {
     case 'deny':
-      return output({ behavior: 'deny', message: '用户在桌宠上拒绝了。' })
+      return output({ behavior: 'deny', message: t(lang, 'deny.message') })
     case 'allow':
       if (view.kind === 'question') return null
       // A tool that needs the person (ExitPlanMode) only takes an allow that
@@ -150,11 +179,9 @@ function replyFor(e, choice) {
       if (choice.answers.length !== view.questions.length) return null
       const answers = {}
       for (const [n, q] of view.questions.entries()) {
-        const picked = choice.answers[n]
-        const labels = q.options.map(o => o.label)
-        if (!Array.isArray(picked) || picked.length === 0 || !picked.every(l => labels.includes(l))) return null
-        if (!q.multiSelect && picked.length !== 1) return null
-        answers[q.question] = picked.join(', ')
+        const text = answerText(q, choice.answers[n])
+        if (text === null) return null
+        answers[q.question] = text
       }
       return output({ behavior: 'allow', updatedInput: { ...input, answers } })
     }
@@ -163,4 +190,4 @@ function replyFor(e, choice) {
   }
 }
 
-module.exports = { viewOf, replyFor, summarize, describeSuggestion }
+module.exports = { viewOf, replyFor, summarize }

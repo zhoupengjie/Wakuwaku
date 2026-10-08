@@ -6,8 +6,10 @@ const path = require('node:path')
 const { test } = require('node:test')
 
 const { EVENTS } = require('../src/shared/hook-events')
+const hooksConfig = require('../src/shared/hooks-config')
 
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'install-hooks.js')
+const ROOT = path.join(__dirname, '..')
 
 function tempSettings(t, content) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-pets-'))
@@ -25,15 +27,13 @@ function run(file, ...args) {
 // Our entries, as [event, matcher, hook].
 function ours(settings) {
   return Object.entries(settings.hooks || {}).flatMap(([event, groups]) =>
-    groups.flatMap(g =>
-      g.hooks
-        .filter(h => String(h.url || '').includes('from=claude-pets') || String(h.command || '').includes('claude-hook.js'))
-        .map(h => [event, g.matcher, h]),
-    ),
+    groups.flatMap(g => g.hooks.filter(hooksConfig.isOurs).map(h => [event, g.matcher, h])),
   )
 }
 
-test('install adds one entry per event, HTTP except SessionStart, and can run twice', t => {
+const launch = { command: require('electron'), args: [ROOT] }
+
+test('the script installs an HTTP hook per event, plus the starter, and can run twice', t => {
   const mine = { type: 'command', command: 'echo mine' }
   const file = tempSettings(t, { model: 'opus', hooks: { Stop: [{ hooks: [mine] }] } })
 
@@ -43,64 +43,55 @@ test('install adds one entry per event, HTTP except SessionStart, and can run tw
   assert.equal(settings.model, 'opus')
   assert.deepEqual(settings.hooks.Stop[0].hooks, [mine])
   const entries = ours(settings)
-  assert.equal(entries.length, Object.keys(EVENTS).length)
+  assert.equal(entries.length, Object.keys(EVENTS).length + 1)
 
-  for (const [event, { matcher, via }] of Object.entries(EVENTS)) {
-    const found = entries.filter(([e]) => e === event)
-    assert.equal(found.length, 1, event)
-    const [, gotMatcher, hook] = found[0]
-    assert.equal(gotMatcher, matcher ? '*' : undefined, event)
-    if (via === 'http') {
-      assert.equal(hook.type, 'http', event)
-      assert.equal(hook.timeout, event === 'PermissionRequest' ? 300 : 2, event)
-      assert.match(hook.url, /^http:\/\/127\.0\.0\.1:\d+\/hook\?from=claude-pets$/, event)
-    } else {
-      assert.equal(hook.type, 'command', event)
-      assert.equal(hook.async, true, event)
-      assert.match(hook.command, /claude-hook\.js"$/, event)
-    }
+  for (const [event, { matcher, timeout }] of Object.entries(EVENTS)) {
+    const http = entries.filter(([e, , h]) => e === event && h.type === 'http')
+    assert.equal(http.length, 1, event)
+    assert.equal(http[0][1], matcher ? '*' : undefined, event)
+    assert.equal(http[0][2].url, 'http://127.0.0.1:47213/hook?from=claude-pets', event)
+    assert.equal(http[0][2].timeout, timeout ?? 2, event)
   }
+
+  // SessionStart also starts the pet: this copy's Electron, as an argument list.
+  const [starter] = entries.filter(([, , h]) => h.type === 'command')
+  assert.equal(starter[0], 'SessionStart')
+  assert.equal(starter[2].async, true)
+  assert.equal(starter[2].command, launch.command)
+  assert.deepEqual(starter[2].args, [ROOT, hooksConfig.ENSURE_FLAG])
+  assert.equal(hooksConfig.status(settings, { port: 47213, launch }), 'ok')
   assert.ok(fs.existsSync(`${file}.claude-pets.bak`))
 })
 
-test('--http-only makes SessionStart an HTTP hook too, and switching back works', t => {
+test('--http-only leaves out the starter', t => {
   const file = tempSettings(t)
-
-  const all = ours(run(file, '--http-only'))
-  assert.equal(all.length, Object.keys(EVENTS).length)
-  assert.ok(all.every(([, , hook]) => hook.type === 'http'))
-
-  const mixed = ours(run(file))
-  assert.equal(mixed.length, Object.keys(EVENTS).length)
-  assert.equal(mixed.find(([e]) => e === 'SessionStart')[2].type, 'command')
+  const settings = run(file, '--http-only')
+  assert.equal(ours(settings).length, Object.keys(EVENTS).length)
+  assert.ok(ours(settings).every(([, , h]) => h.type === 'http'))
+  assert.equal(hooksConfig.status(settings, { port: 47213, launch }), 'httpOnly')
 })
 
-test('install replaces the command hooks an older version added', t => {
+test('install replaces what older versions added', t => {
   const old = { type: 'command', command: 'node "D:/somewhere/hooks/claude-hook.js"', timeout: 5 }
-  const file = tempSettings(t, {
-    hooks: {
-      PreToolUse: [{ matcher: '*', hooks: [old] }],
-      Stop: [{ hooks: [old] }],
-    },
-  })
+  const oldHttp = { type: 'http', url: 'http://127.0.0.1:47213/hook?from=claude-pets', timeout: 2 }
+  const file = tempSettings(t, { hooks: { SessionStart: [{ hooks: [old] }], Stop: [{ hooks: [oldHttp] }] } })
 
+  assert.equal(hooksConfig.status(JSON.parse(fs.readFileSync(file, 'utf8')), { port: 47213, launch }), 'stale')
   const settings = run(file)
-  assert.equal(ours(settings).length, Object.keys(EVENTS).length)
-  assert.equal(settings.hooks.PreToolUse.length, 1)
-  assert.equal(settings.hooks.PreToolUse[0].hooks[0].type, 'http')
+  assert.equal(ours(settings).length, Object.keys(EVENTS).length + 1)
+  assert.equal(settings.hooks.Stop.length, 1)
+  assert.equal(hooksConfig.status(settings, { port: 47213, launch }), 'ok')
 })
 
 test('uninstall takes back exactly what install added', t => {
   const before = { model: 'opus', hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo mine' }] }] } }
   const file = tempSettings(t, before)
-
   run(file)
   assert.deepEqual(run(file, '--uninstall'), before)
 })
 
 test('install creates the settings file when there is none', t => {
   const file = path.join(path.dirname(tempSettings(t)), 'sub', 'settings.json')
-
-  assert.equal(ours(run(file)).length, Object.keys(EVENTS).length)
+  assert.equal(ours(run(file)).length, Object.keys(EVENTS).length + 1)
   assert.deepEqual(run(file, '--uninstall'), {})
 })

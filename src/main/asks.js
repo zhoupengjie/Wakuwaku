@@ -7,7 +7,8 @@
 // newer prompt from the same agent. And before Claude Code's own timeout.
 const { viewOf, replyFor } = require('../shared/ask')
 
-// Under the 300 s timeout install-hooks gives the PermissionRequest hook.
+// The longest a prompt can wait: under the 300 s timeout the PermissionRequest
+// hook is installed with. The settings can make it shorter.
 const ASK_TIMEOUT_MS = 290 * 1000
 
 // Events that mean the session has moved past any dialog it showed.
@@ -22,7 +23,10 @@ function sameInput(a, b) {
   return JSON.stringify(strip(a)) === JSON.stringify(strip(b))
 }
 
-function createAsks({ onChange, timeoutMs = ASK_TIMEOUT_MS, timers = globalThis }) {
+// timeoutMs: a number, or a function giving it as each prompt arrives.
+// lang(): the language for the note a deny leaves for Claude.
+function createAsks({ onChange, timeoutMs = ASK_TIMEOUT_MS, lang = () => 'en', timers = globalThis }) {
+  const waitMs = () => Math.min(ASK_TIMEOUT_MS, typeof timeoutMs === 'function' ? timeoutMs() : timeoutMs)
   let nextId = 1
   let list = []
 
@@ -50,7 +54,7 @@ function createAsks({ onChange, timeoutMs = ASK_TIMEOUT_MS, timers = globalThis 
     }
 
     const ask = { id: nextId++, event, view, respond, timer: undefined }
-    ask.timer = timers.setTimeout(() => finish(ask, {}), timeoutMs)
+    ask.timer = timers.setTimeout(() => finish(ask, {}), waitMs())
     list = [...list, ask]
     changed()
     return ask.id
@@ -60,7 +64,7 @@ function createAsks({ onChange, timeoutMs = ASK_TIMEOUT_MS, timers = globalThis 
   function answer(id, choice) {
     const ask = list.find(a => a.id === id)
     if (!ask) return false
-    const reply = replyFor(ask.event, choice)
+    const reply = replyFor(ask.event, choice, lang())
     if (!reply) return false
     finish(ask, reply)
     return true
@@ -95,7 +99,12 @@ function createAsks({ onChange, timeoutMs = ASK_TIMEOUT_MS, timers = globalThis 
     return list.map(a => ({ id: a.id, ...a.view }))
   }
 
-  return { add, answer, dismiss, cancel, seen, views }
+  // Hand every prompt to the terminal (do not disturb).
+  function dismissAll() {
+    for (const ask of [...list]) finish(ask, {})
+  }
+
+  return { add, answer, dismiss, dismissAll, cancel, seen, views }
 }
 
 module.exports = { createAsks, ASK_TIMEOUT_MS }

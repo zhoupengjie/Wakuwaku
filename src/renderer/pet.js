@@ -1,19 +1,14 @@
-// What the pet shows, decided every tick in this order:
+// What the pet shows, decided whenever a frame is due, in this order:
 //   dragged   runs the way the window is dragged
 //   reaction  a one-off (wave, jump, failed) over the mood
 //   walking   an idle stroll along the screen
 //   looking   idle, eyes on the cursor (or a glance around): rows 9-10
 //   mood      the mood's own loop
+//
+// Frames are drawn when they change, not on a fixed tick, so a pet at rest
+// costs next to nothing.
 const { CELL_W, CELL_H, CLIPS, MOOD_CLIP, REACTIONS, lookCell } = window.Sprite
-
-const LABEL = {
-  idle: '摸鱼中',
-  working: '干活中…',
-  waiting: '等你回复！',
-  done: '搞定啦 ✓',
-  review: '改好了，来看看 ✓',
-  error: '呜…出错了',
-}
+const { t, render: say } = window.I18n
 
 const COLOR = {
   idle: '#9aa4b2',
@@ -32,9 +27,9 @@ const LOOK_FAR = 900
 const sprite = document.getElementById('pet')
 const bubble = document.getElementById('bubble')
 
-let mood = 'idle'
-let detail = ''
-let config = { scale: 0.55, bubble: true, walk: true, look: true }
+let lang = 'en'
+let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0 }
+let config = { scale: 0.55, bubble: true, walk: true, look: true, sound: false, dnd: false }
 let spriteUrl = null
 
 let reaction = null // { clip, times, say, start }
@@ -43,9 +38,10 @@ let walking = null // { dir }
 let looking = null // { row, frame, until }
 let loop = { clip: '', start: 0 }
 
-// --- Drawing ----------------------------------------------------------------
+// --- Drawing ------------------------------------------------------------------
 
 let drawn = ''
+let frameTimer
 
 function drawCell(row, frame) {
   const key = `${row}:${frame}:${config.scale}`
@@ -55,81 +51,142 @@ function drawCell(row, frame) {
   sprite.style.backgroundPosition = `${-frame * CELL_W * s}px ${-row * CELL_H * s}px`
 }
 
-// Loop a clip, keeping its clock while it stays the same clip.
-function drawLoop(name, now) {
-  if (loop.clip !== name) loop = { clip: name, start: now }
+// At rest she blinks through the idle row once, then holds still this long.
+// Every frame of a transparent window costs a full repaint (most of her CPU),
+// and a pet at rest is most of the day.
+const IDLE_HOLD_MS = 4000
+
+// Loop a clip, keeping its clock while it stays the same clip. Returns the
+// time until its next frame.
+function drawLoop(name, at) {
+  if (loop.clip !== name) loop = { clip: name, start: at }
   const clip = CLIPS[name]
-  drawCell(clip.row, Math.floor((now - loop.start) / clip.ms) % clip.frames)
+  const t = at - loop.start
+
+  if (name === 'idle') {
+    const playMs = clip.frames * clip.ms
+    const inCycle = t % (playMs + IDLE_HOLD_MS)
+    if (inCycle >= playMs) {
+      drawCell(clip.row, 0)
+      return playMs + IDLE_HOLD_MS - inCycle
+    }
+    drawCell(clip.row, Math.floor(inCycle / clip.ms))
+    return clip.ms - (inCycle % clip.ms)
+  }
+
+  drawCell(clip.row, Math.floor(t / clip.ms) % clip.frames)
+  return clip.ms - (t % clip.ms)
 }
 
-function tick() {
-  const now = performance.now()
+// Draw what is due now; returns ms until something next changes.
+function frame() {
+  const at = performance.now()
 
-  if (dragged && now - dragged.at < 160) {
-    return drawLoop(dragged.dir > 0 ? 'running-right' : 'running-left', now)
+  if (dragged && at - dragged.at < 160) {
+    drawLoop(dragged.dir > 0 ? 'running-right' : 'running-left', at)
+    return 40
   }
 
   if (reaction) {
     const clip = CLIPS[reaction.clip]
-    const frame = Math.floor((now - reaction.start) / clip.ms)
-    if (frame < clip.frames * reaction.times) {
+    const step = Math.floor((at - reaction.start) / clip.ms)
+    if (step < clip.frames * reaction.times) {
       loop = { clip: '', start: 0 }
-      return drawCell(clip.row, frame % clip.frames)
+      drawCell(clip.row, step % clip.frames)
+      return clip.ms - ((at - reaction.start) % clip.ms)
     }
     reaction = null
     render()
   }
 
-  if (walking) {
-    return drawLoop(walking.dir > 0 ? 'running-right' : 'running-left', now)
-  }
+  if (walking) return drawLoop(walking.dir > 0 ? 'running-right' : 'running-left', at)
 
-  if (looking && mood === 'idle' && now < looking.until) {
+  if (looking && now.mood === 'idle' && at < looking.until) {
     loop = { clip: '', start: 0 }
-    return drawCell(looking.row, looking.frame)
+    drawCell(looking.row, looking.frame)
+    return looking.until - at
   }
 
-  drawLoop(MOOD_CLIP[mood], now)
+  return drawLoop(MOOD_CLIP[now.mood], at)
 }
 
-setInterval(tick, 40)
+// Draw now and plan the next frame; called again on anything that changes her.
+function kick() {
+  clearTimeout(frameTimer)
+  const wait = frame()
+  frameTimer = setTimeout(kick, Math.max(16, Math.ceil(wait)))
+}
 
-// --- Bubble ---------------------------------------------------------------
+// --- Bubble -------------------------------------------------------------------
+
+function clock(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = String(s % 60).padStart(2, '0')
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+}
+
+// The bubble's words: whose, what, for how long, and who else is busy.
+function words() {
+  const parts = [t(lang, `mood.${now.mood}`)]
+  const detail = say(lang, now.detail)
+  if (detail) parts.push(detail)
+  if ((now.mood === 'working' || now.mood === 'waiting') && now.since) parts.push(clock(Date.now() - now.since))
+  if ((now.mood === 'done' || now.mood === 'review' || now.mood === 'error') && now.took) parts.push(t(lang, 'detail.took', { time: clock(now.took) }))
+  let text = parts.join(' · ')
+  // Several sessions: say whose this is, and how many others are busy.
+  if (now.project && now.sessions > 1) text = `${now.project}：${text}`
+  if (now.others > 0) text += `\n${t(lang, 'detail.moreSessions', { n: now.others })}`
+  return text
+}
+
+let clockTimer
 
 function render() {
   const root = document.documentElement.style
   root.setProperty('--scale', config.scale)
-  root.setProperty('--accent', COLOR[mood])
+  root.setProperty('--accent', COLOR[now.mood])
   root.setProperty('--sprite', spriteUrl ? `url("${spriteUrl}")` : 'none')
   drawn = ''
 
+  clearInterval(clockTimer)
+
   // No sprite yet: say how to get one, and keep a box to right-click.
   if (!spriteUrl) {
-    bubble.textContent = '还没有宠物素材：npm run fetch-pet'
+    bubble.textContent = t(lang, 'say.noSprite')
     bubble.classList.remove('hidden')
+    sprite.classList.add('empty')
     return
   }
+  sprite.classList.remove('empty')
 
-  const label = detail ? `${LABEL[mood]} · ${detail}` : LABEL[mood]
-  const text = reaction?.say || label
+  const text = reaction?.say ? say(lang, reaction.say) : words()
   bubble.textContent = text
-  bubble.classList.toggle('hidden', !config.bubble || (mood === 'idle' && !reaction?.say))
-  sprite.title = label
+  bubble.classList.toggle('hidden', !config.bubble || (now.mood === 'idle' && !reaction?.say))
+  sprite.title = words()
+
+  // The running clock in the bubble.
+  if (!reaction?.say && now.since && (now.mood === 'working' || now.mood === 'waiting')) {
+    clockTimer = setInterval(() => {
+      bubble.textContent = words()
+    }, 1000)
+  }
 }
 
-// --- Idle life: walk a little, glance around --------------------------------
+// --- Idle life: walk a little, glance around ---------------------------------------
 
 let idleTimer
 let glanceTimer
 
 function scheduleIdle() {
   clearTimeout(idleTimer)
-  if (mood !== 'idle') return
+  if (now.mood !== 'idle') return
   idleTimer = setTimeout(idleAct, 12000 + Math.random() * 18000)
 }
 
 function isFree() {
-  return mood === 'idle' && !reaction && !walking && !dragged && !(looking && performance.now() < looking.until)
+  return now.mood === 'idle' && !reaction && !walking && !dragged && !(looking && performance.now() < looking.until)
 }
 
 async function idleAct() {
@@ -139,8 +196,10 @@ async function idleAct() {
     const dir = Math.random() < 0.5 ? -1 : 1
     const distance = Math.round((60 + Math.random() * 140) * (config.scale / 0.55))
     walking = { dir }
+    kick()
     await window.pet.walk(dir * distance, distance * 18)
     walking = null
+    kick()
   } else {
     glance(2 + Math.floor(Math.random() * 2))
   }
@@ -150,10 +209,11 @@ async function idleAct() {
 
 // Look at a few random directions in turn, then back to idle.
 function glance(times) {
-  if (times <= 0 || mood !== 'idle') return
+  if (times <= 0 || now.mood !== 'idle') return
   const index = Math.floor(Math.random() * 16)
-  const { row, frame } = lookCell(Math.sin((index * Math.PI) / 8), -Math.cos((index * Math.PI) / 8))
-  looking = { row, frame, until: performance.now() + 700 }
+  const { row, frame: cell } = lookCell(Math.sin((index * Math.PI) / 8), -Math.cos((index * Math.PI) / 8))
+  looking = { row, frame: cell, until: performance.now() + 700 }
+  kick()
   glanceTimer = setTimeout(() => glance(times - 1), 700)
 }
 
@@ -167,51 +227,86 @@ function stopIdle() {
   }
 }
 
-// --- From main --------------------------------------------------------------
+// --- Sound: two soft notes, made here (no audio files) ---------------------------------
+
+let audio
+
+function chime(mood) {
+  if (!config.sound || config.dnd) return
+  try {
+    audio = audio || new AudioContext()
+    const notes = mood === 'error' ? [440, 330] : mood === 'waiting' ? [660, 880] : [523, 784]
+    notes.forEach((hz, i) => {
+      const osc = audio.createOscillator()
+      const gain = audio.createGain()
+      const at = audio.currentTime + i * 0.16
+      osc.frequency.value = hz
+      gain.gain.setValueAtTime(0.0001, at)
+      gain.gain.exponentialRampToValueAtTime(0.12, at + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.3)
+      osc.connect(gain).connect(audio.destination)
+      osc.start(at)
+      osc.stop(at + 0.32)
+    })
+  } catch {
+    // No sound device: nothing to play on.
+  }
+}
+
+// --- From main --------------------------------------------------------------------------
 
 window.pet.onUpdate(data => {
-  const wasMood = mood
-  mood = data.mood
-  detail = data.detail || ''
+  const wasMood = now.mood
+  now = data
+  lang = data.lang || lang
   config = data.config || config
   spriteUrl = data.sprite
 
-  if (mood !== 'idle') {
+  if (now.mood !== 'idle') {
     stopIdle()
   } else if (wasMood !== 'idle') {
     scheduleIdle()
   }
   render()
+  kick()
 })
 
-window.pet.onReact(({ react, say }) => {
+window.pet.onReact(({ react, say: text }) => {
   const r = REACTIONS[react]
   if (!r) return
   stopIdle()
-  reaction = { ...r, say, start: performance.now() }
+  reaction = { ...r, say: text, start: performance.now() }
   render()
+  kick()
   scheduleIdle()
 })
 
+window.pet.onAlert(({ mood }) => chime(mood))
+
 // Eyes on the cursor while it moves near enough.
 window.pet.onCursor(({ dx, dy }) => {
-  if (!config.look || mood !== 'idle' || reaction || walking || dragged) return
+  if (!config.look || now.mood !== 'idle' || reaction || walking || dragged) return
   const distance = Math.hypot(dx, dy)
   if (distance < LOOK_NEAR || distance > LOOK_FAR) return
   clearTimeout(glanceTimer)
   looking = { ...lookCell(dx, dy), until: performance.now() + LOOK_HOLD_MS }
+  kick()
 })
 
 window.pet.onDrag(dx => {
-  if (dx !== 0) dragged = { dir: Math.sign(dx), at: performance.now() }
+  if (dx === 0) return
+  const isNew = !dragged
+  dragged = { dir: Math.sign(dx), at: performance.now() }
+  if (isNew) kick()
 })
 
 window.pet.onDragEnd(() => {
   dragged = null
+  kick()
   scheduleIdle()
 })
 
-// --- Pointer: hover turns click-through off, press drags --------------------
+// --- Pointer: hover turns click-through off, press drags --------------------------------
 
 sprite.addEventListener('mouseenter', () => window.pet.hover(true))
 sprite.addEventListener('mouseleave', () => window.pet.hover(false))
@@ -228,6 +323,11 @@ sprite.addEventListener('contextmenu', e => {
   e.preventDefault()
   window.pet.menu()
 })
+// No sprite yet: a double-click opens the settings to get one.
+sprite.addEventListener('dblclick', () => {
+  if (!spriteUrl) window.pet.openSettings()
+})
 
 // The first pet:update (on load) brings the sprite and the first render.
+kick()
 scheduleIdle()

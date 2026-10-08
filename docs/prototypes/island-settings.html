@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>灵动岛设置 · 手感原型</title>
+<style>
+:root {
+  --g1: #1c1c1e; --g2: #2c2c2e; --g3: #3a3a3c; --g4: #8e8e93; --g5: #a1a1a6; --fg: #f5f5f7;
+  --idle: #8e8e93; --working: #5e9bff; --waiting: #ffb340; --done: #34d27b; --review: #b18cff; --error: #ff5c6c;
+  --spring: cubic-bezier(0.3, 1.45, 0.5, 1);
+  --dur: 0.56s;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  font: 13px/1.45 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  background: linear-gradient(140deg, #5d7398 0%, #a596bd 45%, #e3bc9f 100%);
+  user-select: none;
+}
+button { font: inherit; }
+.grow { flex: 1; min-width: 0; }
+.mono { font-family: 'Cascadia Mono', Consolas, monospace; }
+.ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clock { font-variant-numeric: tabular-nums; font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+
+/* ---------- 桌面道具 ---------- */
+.term { position: fixed; left: 50%; top: 190px; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); border-radius: 10px; overflow: hidden;
+  background: #0f1115; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+.term .bar { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #1b1e24; color: #9aa0aa; font-size: 12px; }
+.term .bar .f { margin-left: auto; padding: 1px 8px; border-radius: 10px; font-size: 11px; }
+.term .bar .f.yes { background: rgba(52,210,123,.15); color: #34d27b; }
+.term .bar .f.no { background: rgba(255,255,255,.06); color: #6b717c; }
+.term textarea { display: block; width: 100%; height: 220px; resize: none; border: 0; outline: none; padding: 12px 14px; background: transparent;
+  color: #d7dae0; font: 13px/1.6 'Cascadia Mono', Consolas, monospace; user-select: text; }
+.hint { position: fixed; left: 16px; top: 64px; width: 250px; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.72); backdrop-filter: blur(18px);
+  color: #1c1c1e; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,.12); }
+.hint b { display: block; margin-bottom: 6px; }
+.hint ol { margin: 0; padding-left: 18px; }
+.hint li { margin: 3px 0; }
+.dbg { position: fixed; right: 16px; bottom: 56px; width: 260px; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.78); backdrop-filter: blur(18px);
+  color: #1c1c1e; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,.12); }
+.dbg b { display: block; margin-bottom: 8px; }
+.dbg .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.dbg button { height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid rgba(0,0,0,.12); background: #fff; cursor: pointer; font-size: 12px; }
+.dbg button.wide { width: 100%; }
+.dbg label { display: flex; align-items: center; gap: 6px; margin-top: 4px; cursor: pointer; }
+.taskbar { position: fixed; left: 0; right: 0; bottom: 0; height: 44px; background: rgba(238,238,244,.82); backdrop-filter: blur(20px); display: flex; align-items: center; justify-content: center; gap: 10px; }
+.taskbar i { width: 28px; height: 28px; border-radius: 7px; background: rgba(0,0,0,.08); }
+.taskbar i.on { background: #0f1115; }
+@media (max-width: 900px) { .hint { display: none; } .term { top: 230px; } }
+
+/* ---------- 灵动岛 ---------- */
+#island {
+  position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 10;
+  width: 140px; height: 36px; border-radius: 18px; background: #000; color: var(--fg); overflow: hidden; outline: none; cursor: default;
+  transition: width var(--dur) var(--spring), height var(--dur) var(--spring), border-radius .4s ease, box-shadow .3s ease;
+}
+#island[data-view='settings'] { box-shadow: 0 18px 50px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.07); }
+#island[data-view='expanded'], #island[data-view='ask'] { box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+
+.layer { position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; transition: opacity .16s ease; }
+.layer.on { opacity: 1; pointer-events: auto; transition: opacity .24s ease .16s; }
+
+/* 她：从小圆头像到整只，都是同一个元素 */
+#her { position: absolute; z-index: 2; overflow: hidden; left: 6px; top: 6px; width: 24px; height: 24px; border-radius: 12px; background: var(--g1); pointer-events: none;
+  transition: left var(--dur) var(--spring), top var(--dur) var(--spring), width var(--dur) var(--spring), height var(--dur) var(--spring), border-radius .4s ease, box-shadow .3s, background .3s; }
+#her.portrait { box-shadow: 0 0 0 2px var(--ring, var(--working)); }
+#her.body { background: transparent; }
+#her .sheet { position: absolute; left: 0; top: 0; width: 192px; height: 208px; background-size: 1536px 2288px; background-repeat: no-repeat; transform-origin: 0 0;
+  transition: transform var(--dur) var(--spring); }
+
+/* 收起 */
+#L-compact { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 14px 0 38px; white-space: nowrap; width: max-content; }
+#L-compact .label { font-size: 13px; color: var(--fg); }
+#L-compact .clock { font-size: 13px; }
+#L-compact .more { padding: 1px 6px; border-radius: 9px; background: rgba(255,255,255,.1); font-size: 11px; font-weight: 600; }
+/* 展开 */
+#L-expanded { width: 400px; height: 116px; display: flex; align-items: center; gap: 12px; padding: 0 20px 0 122px; }
+#L-expanded .title { font-size: 15px; font-weight: 600; }
+#L-expanded .sub { font-size: 12px; color: var(--g5); }
+#L-expanded .clock { font-size: 18px; }
+#L-expanded .tip { font-size: 11px; color: var(--g4); margin-top: 4px; }
+/* 请求 */
+#L-ask { width: 480px; padding: 14px 16px 14px 122px; }
+#L-ask .h { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--g5); }
+#L-ask .h b { color: var(--fg); font-size: 13px; }
+#L-ask code, .s-ask code { display: block; margin: 8px 0 10px; padding: 7px 10px; border-radius: 10px; background: var(--g1); color: #e5e5ea; font-size: 12px; }
+.pbtn { height: 28px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--g3); background: var(--g2); color: var(--fg); font-weight: 600; font-size: 12.5px; cursor: pointer; }
+.pbtn:hover { filter: brightness(1.15); }
+.pbtn.ok { background: var(--done); border-color: var(--done); color: #04220f; }
+.pbtn.al { background: var(--working); border-color: var(--working); color: #04122b; }
+.pbtn.no { color: #ff6b7a; }
+.pbtn.ghost { background: none; border-color: transparent; color: var(--g4); }
+
+/* 设置 */
+#L-settings { width: 520px; padding: 12px 14px; }
+.s-head { display: flex; align-items: center; gap: 10px; height: 34px; padding-left: 46px; margin-bottom: 10px; cursor: pointer; }
+.s-head .t { font-weight: 650; }
+.s-head .s { color: var(--g5); font-size: 12px; }
+.s-head .clock { font-size: 15px; }
+.x { width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--g2); color: var(--g5); cursor: pointer; display: grid; place-items: center; font-size: 12px; }
+.x:hover { background: var(--g3); color: var(--fg); }
+.tabs { position: relative; display: flex; padding: 3px; background: var(--g1); border-radius: 16px; margin-bottom: 10px; }
+.tabs .ind { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 6px) / 5); border-radius: 13px; background: var(--g3);
+  transition: transform var(--dur) var(--spring); }
+.tabs button { flex: 1; position: relative; z-index: 1; border: 0; background: none; color: var(--g4); padding: 6px 0; border-radius: 13px; cursor: pointer; font-size: 12.5px; transition: color .2s; }
+.tabs button:hover { color: var(--g5); }
+.tabs button.on { color: var(--fg); font-weight: 600; }
+.tabs button .n { position: absolute; top: 5px; right: calc(50% - 22px); width: 6px; height: 6px; border-radius: 50%; background: var(--waiting); }
+.s-ask { background: var(--g1); border-radius: 18px; padding: 10px 14px; margin-bottom: 10px; box-shadow: inset 0 0 0 1px rgba(255,179,64,.4); }
+.s-ask .h { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--g5); }
+.s-ask .h b { color: var(--fg); }
+.s-body { overflow-y: auto; overflow-x: hidden; margin-right: -6px; padding-right: 6px; }
+.s-body::-webkit-scrollbar { width: 6px; }
+.s-body::-webkit-scrollbar-thumb { background: var(--g3); border-radius: 3px; }
+.s-body > * { animation: rise .32s var(--spring) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+.s-foot { display: flex; align-items: center; gap: 8px; color: var(--g4); font-size: 11.5px; padding: 10px 6px 0; }
+kbd { font: 10.5px 'Segoe UI', sans-serif; border: 1px solid var(--g3); border-radius: 4px; padding: 0 4px; color: var(--g5); }
+.sec { color: var(--g4); font-size: 11.5px; font-weight: 600; margin: 12px 8px 6px; }
+.sec:first-child { margin-top: 2px; }
+.grp { background: var(--g1); border-radius: 18px; overflow: hidden; }
+.r { display: flex; align-items: center; gap: 12px; padding: 10px 14px; min-height: 46px; }
+.r + .r { border-top: 1px solid #262628; }
+.r .d { color: var(--g4); font-size: 12px; }
+.sw { width: 40px; height: 24px; border-radius: 12px; background: var(--g3); position: relative; flex: none; cursor: pointer; transition: background .25s; border: 0; padding: 0; }
+.sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left var(--dur) var(--spring); }
+.sw.on { background: var(--done); }
+.sw.on::after { left: 18px; }
+.seg { display: inline-flex; padding: 2px; border-radius: 14px; background: var(--g2); font-size: 12px; flex: none; }
+.seg span { padding: 3px 11px; border-radius: 12px; color: var(--g5); cursor: pointer; transition: background .25s, color .25s; }
+.seg span.on { background: var(--g3); color: var(--fg); font-weight: 600; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tile { background: var(--g1); border-radius: 18px; padding: 10px 6px 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11.5px; color: var(--g5); cursor: pointer; }
+.tile .c { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--g2); color: var(--fg); transition: background .25s, color .25s, transform .3s var(--spring); }
+.tile:active .c { transform: scale(.9); }
+.tile.on .c { background: var(--fg); color: #000; }
+.tile svg, .ic { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mode { background: var(--g1); border-radius: 18px; padding: 8px; cursor: pointer; box-shadow: inset 0 0 0 1.5px transparent; transition: box-shadow .25s; }
+.mode.on { box-shadow: inset 0 0 0 1.5px var(--fg); }
+.mode .pv { height: 58px; border-radius: 12px; background: linear-gradient(140deg, #3b4a66, #6f5b70 60%, #8a6a58); position: relative; overflow: hidden; margin-bottom: 6px; }
+.mode .pv i { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 60px; height: 14px; border-radius: 7px; background: #000; box-shadow: 0 0 0 1px rgba(255,255,255,.15); }
+.mode .pv .thumb { position: absolute; right: 10px; bottom: -4px; }
+.mode .l { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 0 4px; }
+.mode .l .rd { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--g3); transition: border .25s var(--spring); }
+.mode.on .l .rd { border: 4px solid var(--fg); }
+.thumb { overflow: hidden; position: relative; flex: none; }
+.thumb .sheet { position: absolute; left: 0; top: 0; width: 192px; height: 208px; background-size: 1536px 2288px; transform-origin: 0 0; }
+.petrow .thumb { width: 52px; height: 56px; border-radius: 12px; background: var(--g2); }
+.in { flex: 1; height: 30px; border-radius: 15px; border: 1px solid var(--g3); background: #000; color: var(--fg); padding: 0 12px; outline: none; font: inherit; user-select: text; }
+.in:focus { border-color: var(--working); }
+.note { color: var(--g4); font-size: 12px; padding: 6px 14px 10px; }
+.cmd { flex: 1; padding: 6px 10px; border-radius: 10px; background: #000; font-size: 12px; color: #e5e5ea; user-select: text; }
+</style>
+</head>
+<body>
+
+<div class="hint">
+  <b>试试这些</b>
+  <ol>
+    <li>先在终端里打几个字</li>
+    <li>鼠标移到岛上：展开，但<b style="display:inline">不抢焦点</b>，可以继续打字</li>
+    <li>单击岛：进入设置，焦点进入岛</li>
+    <li>点页签，或按 <kbd style="color:#555;border-color:#bbb">←</kbd> <kbd style="color:#555;border-color:#bbb">→</kbd> 切换</li>
+    <li>按 <kbd style="color:#555;border-color:#bbb">Esc</kbd> 或点岛外面：收起，焦点回到终端</li>
+    <li>右下角模拟一个批准请求</li>
+  </ol>
+</div>
+
+<div class="term">
+  <div class="bar">claude — pet<span class="f no" id="focusState">焦点：无</span></div>
+  <textarea id="tty" spellcheck="false">&gt; 帮我把主窗口改成灵动岛风格
+
+● 正在修改 src/home/style.css …
+
+&gt; </textarea>
+</div>
+
+<div class="dbg" id="dbg">
+  <b>模拟 Claude Code</b>
+  <div class="btns">
+    <button data-mood="idle">空闲</button>
+    <button data-mood="working">干活中</button>
+    <button data-mood="done">完成</button>
+    <button data-mood="error">出错</button>
+  </div>
+  <div class="btns"><button class="wide" id="askBtn">来一个批准请求</button></div>
+  <label><input type="checkbox" id="dbl"> 保留双击（单击要等 500ms）</label>
+  <label><input type="checkbox" id="slow"> 慢动作 ×3</label>
+</div>
+
+<div class="taskbar"><i></i><i class="on"></i><i></i><i></i></div>
+
+<div id="island" tabindex="-1" data-view="compact">
+  <div id="her" class="portrait"><div class="sheet"></div></div>
+  <div class="layer on" id="L-compact"></div>
+  <div class="layer" id="L-expanded"></div>
+  <div class="layer" id="L-ask"></div>
+  <div class="layer" id="L-settings">
+    <div class="s-head" id="sHead"></div>
+    <div class="tabs" id="tabs"></div>
+    <div id="sAsk"></div>
+    <div class="s-body" id="sBody"></div>
+    <div class="s-foot"><kbd>Esc</kbd> 或点外面收起 · <kbd>←</kbd><kbd>→</kbd> 切换页签<span class="grow"></span>v0.1.0</div>
+  </div>
+</div>
+
+<script>
+;(function () {
+  // ---------- Data ----------
+  const PETS = [
+    { id: 'claude-chan', name: 'Claude小姐', author: 'zhoupengjie', url: '../../pets/claude-chan/spritesheet.webp' },
+    { id: 'deepseek-chan', name: '大肥鱼 / Deepseek Chan', author: 'Dullsaw', url: '../../pets/deepseek-chan/spritesheet.webp' },
+  ]
+  const CLIPS = {
+    idle: [0, 6, 260], running: [7, 6, 140], waiting: [6, 6, 200], waving: [3, 4, 180], failed: [5, 8, 160], review: [8, 6, 180],
+  }
+  const MOOD_CLIP = { idle: 'idle', working: 'running', waiting: 'waiting', done: 'waving', review: 'review', error: 'failed' }
+  const NUDGE_CLIP = { waiting: 'waiting', done: 'waving', review: 'review', error: 'failed' }
+  const MOOD = { idle: '闲着呢', working: '干活中', waiting: '等你回复', done: '搞定啦', review: '请你过目', error: '出错了' }
+  const HEAD = { working: '她正在干活', waiting: '她在等你', done: '她搞定啦', review: '请你过目', error: '她遇到了问题' }
+  const NUDGE_TEXT = { done: '搞定啦！', error: '出了点问题', waiting: '需要你看一下' }
+  const TABS = [['now', '现在'], ['pets', '宠物'], ['look', '外观'], ['alerts', '提醒'], ['connect', '连接']]
+  const ICON = {
+    eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    moon: '<path d="M20 14A8 8 0 1 1 10 4a7 7 0 0 0 10 10z"/>',
+    sound: '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6"/>',
+    pill: '<rect x="3" y="8" width="18" height="8" rx="4"/>',
+  }
+  const svg = n => `<svg viewBox="0 0 24 24">${ICON[n]}</svg>`
+
+  const st = {
+    mood: 'working', project: 'pet', detail: 'Edit src/home/style.css', since: Date.now() - 83000, took: null,
+    ask: null, pet: 'claude-chan', tab: 'now',
+    on: { show: true, dnd: false, sound: false, island: true, bubble: true, walk: true, look: true, nWait: true, nDone: false, nErr: true, fullscreen: true, login: true },
+    seg: { size: '中', lang: '跟随系统', hold: '看到为止' },
+    display: 'island',
+  }
+
+  // ---------- Elements ----------
+  const $ = id => document.getElementById(id)
+  const island = $('island'), her = $('her'), herSheet = her.querySelector('.sheet')
+  const L = { compact: $('L-compact'), expanded: $('L-expanded'), ask: $('L-ask'), settings: $('L-settings') }
+  const sHead = $('sHead'), tabsEl = $('tabs'), sAsk = $('sAsk'), sBody = $('sBody'), dbg = $('dbg'), tty = $('tty')
+
+  let view = 'compact', hover = false, hoverTimer, nudge = null, nudgeTimer, settingsOpen = false, prevFocus = null, openTimer
+  let herTimer, herClip = '', thumbTimers = []
+
+  const pet = () => PETS.find(p => p.id === st.pet)
+  const color = m => `var(--${m})`
+  function clock(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000))
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  }
+  function time() {
+    if ((st.mood === 'working' || st.mood === 'waiting') && st.since) return clock(Date.now() - st.since)
+    if ((st.mood === 'done' || st.mood === 'error') && st.took) return clock(st.took)
+    return ''
+  }
+  const setHTML = (el, html) => { if (el._html !== html) { el._html = html; el.innerHTML = html } }
+
+  // ---------- Sprites ----------
+  function frame(sheet, row, f, scale) {
+    sheet.style.backgroundPosition = `${-f * 192}px ${-row * 208}px`
+  }
+  function playHer(name, stillRow) {
+    if (name === herClip) return
+    herClip = name
+    clearTimeout(herTimer)
+    if (!name.startsWith('still:')) {
+      const [row, n, ms] = CLIPS[name]
+      let f = 0
+      const step = () => { frame(herSheet, row, f); f = (f + 1) % n; herTimer = setTimeout(step, ms) }
+      step()
+    } else frame(herSheet, CLIPS[name.slice(6)][0], 0)
+  }
+  function thumb(px, clip, url) {
+    const s = px / 192
+    return `<div class="thumb" data-clip="${clip}" style="width:${px}px;height:${Math.round(208 * s)}px"><div class="sheet" style="background-image:url(${url});transform:scale(${s})"></div></div>`
+  }
+  function startThumbs(root) {
+    thumbTimers.forEach(clearTimeout)
+    thumbTimers = []
+    root.querySelectorAll('.thumb').forEach(t => {
+      const [row, n, ms] = CLIPS[t.dataset.clip]
+      const sheet = t.querySelector('.sheet')
+      let f = 0
+      const step = () => { frame(sheet, row, f); f = (f + 1) % n; thumbTimers.push(setTimeout(step, ms)) }
+      step()
+    })
+  }
+
+  // ---------- Layers ----------
+  function fillCompact() {
+    const label = st.mood === 'idle' ? '' : `${st.project} · ${MOOD[st.mood]}`
+    setHTML(L.compact,
+      `<span class="label">${label}</span><span class="clock" data-clock style="color:${color(st.mood)}">${time()}</span>` +
+      (st.ask ? `<span class="more" style="color:var(--waiting)">+1</span>` : ''))
+  }
+  function fillExpanded() {
+    const title = (nudge && nudge.text) || MOOD[st.mood]
+    setHTML(L.expanded,
+      `<div class="grow"><div class="title ellip">${title}</div><div class="sub ellip">${st.project} · ${st.detail}</div><div class="tip">单击进入设置</div></div>` +
+      `<span class="clock" data-clock style="color:${color(st.mood)}">${time()}</span>`)
+  }
+  function askHTML(compact) {
+    const a = st.ask
+    if (!a) return ''
+    return `<div class="h"><span class="dot" style="background:var(--waiting)"></span><b>${a.project}</b> 想运行 ${a.tool}<span class="grow"></span>${clock(Date.now() - a.at)}</div>` +
+      `<code class="mono">${a.cmd}</code>` +
+      `<div style="display:flex;gap:6px"><button class="pbtn ok" data-answer="allow">允许</button><button class="pbtn al" data-answer="always">始终允许</button>` +
+      `<button class="pbtn no" data-answer="deny">拒绝</button>${compact ? '' : '<span class="grow"></span><button class="pbtn ghost" data-answer="term">去终端</button>'}</div>`
+  }
+  function fillAsk() { setHTML(L.ask, askHTML(false)) }
+
+  function fillHead() {
+    const p = pet()
+    setHTML(sHead,
+      `<div class="grow ellip"><span class="t">${st.mood === 'idle' ? `${p.name}在休息` : HEAD[st.mood]}</span> <span class="s">· ${st.project}${st.ask ? ' · 1 个请求在等你' : ''}</span></div>` +
+      `<span class="clock" data-clock style="color:${color(st.mood)}">${time()}</span><button class="x" data-close title="收起 (Esc)">✕</button>`)
+  }
+  function fillTabs() {
+    const i = TABS.findIndex(([k]) => k === st.tab)
+    if (!tabsEl.firstChild) {
+      tabsEl.innerHTML = `<span class="ind"></span>` + TABS.map(([k, t]) => `<button data-tab="${k}">${t}<i class="n" hidden></i></button>`).join('')
+    }
+    tabsEl.querySelector('.ind').style.transform = `translateX(${i * 100}%)`
+    tabsEl.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.tab === st.tab))
+    tabsEl.querySelector('[data-tab=now] .n').hidden = !st.ask
+  }
+  function fillSAsk() {
+    setHTML(sAsk, st.ask ? `<div class="s-ask">${askHTML(true)}</div>` : '')
+  }
+
+  const sw = k => `<button class="sw ${st.on[k] ? 'on' : ''}" data-sw="${k}"></button>`
+  const seg = (k, opts) => `<span class="seg" data-seg="${k}">${opts.map(o => `<span class="${st.seg[k] === o ? 'on' : ''}">${o}</span>`).join('')}</span>`
+  const row = (title, desc, ctl) => `<div class="r"><div class="grow"><div>${title}</div>${desc ? `<div class="d">${desc}</div>` : ''}</div>${ctl}</div>`
+
+  const PAGES = {
+    now: () => {
+      const blog = st.ask ? ['waiting', '等你批准', '0:' + String(Math.min(59, Math.floor((Date.now() - st.ask.at) / 1000))).padStart(2, '0')] : ['working', 'Write posts/island.md', '3:05']
+      return `<div class="sec">会话</div><div class="grp">
+        <div class="r"><span class="dot" style="background:${color(st.mood)}"></span><b style="width:84px">${st.project}</b><span class="d grow ellip mono">${st.detail}</span><span class="clock" data-clock style="color:${color(st.mood)}">${time()}</span></div>
+        <div class="r"><span class="dot" style="background:${color(blog[0])}"></span><b style="width:84px">blog</b><span class="d grow ellip mono">${blog[1]}</span><span class="clock" style="color:${color(blog[0])}">${blog[2]}</span></div>
+        <div class="r"><span class="dot" style="background:var(--done)"></span><b style="width:84px">api-server</b><span class="d grow">完成 · 10 分钟前</span><span class="clock" style="color:var(--done)">6:52</span></div>
+      </div>
+      <div class="sec">快捷</div>
+      <div class="tiles">
+        ${[['show', 'eye', '显示宠物'], ['dnd', 'moon', '勿扰'], ['sound', 'sound', '提示音'], ['island', 'pill', '灵动岛']].map(([k, i, t]) =>
+          `<div class="tile ${st.on[k] ? 'on' : ''}" data-tile="${k}"><span class="c">${svg(i)}</span>${t}</div>`).join('')}
+      </div>`
+    },
+    pets: () => `<div class="sec">已下载</div><div class="grp">
+        ${PETS.map(p => `<div class="r petrow">${thumb(52, 'idle', p.url)}<div class="grow"><div>${p.name}</div><div class="d">${p.author}</div></div>
+          ${p.id === st.pet ? '<span class="d" style="color:var(--done)">正在使用</span>' : `<button class="pbtn" data-use="${p.id}">使用</button>`}</div>`).join('')}
+      </div>
+      <div class="sec">从 codex-pets.net 下载</div>
+      <div class="grp"><div class="r"><input class="in" id="dlIn" placeholder="宠物链接或 ID，比如 claude-chan"><button class="pbtn al" data-dl>下载</button></div>
+      <div class="note" id="dlNote">点输入框试试打字：焦点在岛里，所以能输入。</div></div>`,
+    look: () => `<div class="sec">显示方式</div><div class="modes">
+        <div class="mode ${st.display === 'pet' ? 'on' : ''}" data-mode="pet"><div class="pv">${thumb(42, 'idle', pet().url)}</div><div class="l"><span class="rd"></span>整只宠物</div></div>
+        <div class="mode ${st.display === 'island' ? 'on' : ''}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>灵动岛</div></div>
+      </div>
+      <div class="sec">她</div><div class="grp">
+        ${row('大小', '', seg('size', ['小', '中', '大']))}
+        ${row('对话气泡', '状态变化时冒一句话', sw('bubble'))}
+        ${row('闲逛', '空闲时在屏幕底边走来走去', sw('walk'))}
+        ${row('目光跟随鼠标', '', sw('look'))}
+      </div>
+      <div class="sec">通用</div><div class="grp">${row('语言', '', seg('lang', ['跟随系统', '中文', 'EN']))}</div>`,
+    alerts: () => `<div class="sec">提醒停留</div><div class="grp">${row('状态变化后，岛保持展开', '', seg('hold', ['看到为止', '8 秒', '30 秒', '2 分钟']))}</div>
+      <div class="sec">系统通知</div><div class="grp">
+        ${row('等你回复时', '', sw('nWait'))}${row('完成时', '', sw('nDone'))}${row('出错时', '', sw('nErr'))}${row('提示音', '', sw('sound'))}
+      </div>
+      <div class="sec">安静</div><div class="grp">
+        ${row('勿扰', '不弹提醒、不出声，她安静地干活', sw('dnd'))}${row('全屏时隐藏', '看视频、开会、打游戏时自动收起', sw('fullscreen'))}
+      </div>`,
+    connect: () => `<div class="sec">状态</div><div class="grp"><div class="r"><span class="dot" style="background:var(--done)"></span><div class="grow">已通过插件连接 Claude Code</div><span class="d">2 个会话在线</span></div></div>
+      <div class="sec">在 Claude Code 里输入</div><div class="grp">
+        ${['/plugin marketplace add zhoupengjie/wakuwaku', '/plugin install wakuwaku@wakuwaku'].map(c => `<div class="r"><span class="cmd mono">${c}</span><button class="pbtn" data-copy="${c}">复制</button></div>`).join('')}
+      </div>
+      <div class="sec">启动</div><div class="grp">${row('开机自动启动', '插件不会自动启动宠物，建议打开', sw('login'))}
+        <div class="r"><div class="grow"><div>高级：写入 settings.json</div><div class="d">新会话开始时能自动启动宠物</div></div><span class="d">›</span></div></div>
+      <div class="sec">关于</div><div class="grp"><div class="r"><div class="grow">Wakuwaku v0.1.0</div><span class="d">项目主页 ›</span></div></div>`,
+  }
+
+  function fillBody() {
+    sBody.innerHTML = PAGES[st.tab]()
+    sBody.scrollTop = 0
+    startThumbs(sBody)
+  }
+
+  // ---------- Deciding the shape ----------
+  function decide() {
+    if (settingsOpen) return 'settings'
+    if (st.ask) return 'ask'
+    if (hover || nudge) return 'expanded'
+    return 'compact'
+  }
+
+  function size(v) {
+    if (v === 'compact') return { w: Math.max(112, L.compact.offsetWidth), h: 36 }
+    if (v === 'expanded') return { w: 400, h: 116 }
+    if (v === 'ask') return { w: 480, h: Math.max(124, L.ask.offsetHeight) }
+    // Never taller than the screen allows: the body scrolls instead.
+    const rest = L.settings.offsetHeight - sBody.offsetHeight
+    sBody.style.maxHeight = Math.max(160, Math.min(380, innerHeight - 90 - rest)) + 'px'
+    return { w: 520, h: L.settings.offsetHeight }
+  }
+
+  function placeHer(v, h) {
+    const s = her.style
+    const portrait = px => {
+      her.className = 'portrait'
+      Object.assign(s, { width: px + 'px', height: px + 'px', borderRadius: px / 2 + 'px' })
+      const k = px * 0.00875
+      herSheet.style.transform = `translate(${-(192 * k - px) / 2}px, -2px) scale(${k})`
+    }
+    s.setProperty('--ring', color(st.mood))
+    if (v === 'compact') { portrait(24); s.left = '6px'; s.top = '6px' }
+    else if (v === 'settings') { portrait(32); s.left = '16px'; s.top = '13px' }
+    else {
+      her.className = 'body'
+      Object.assign(s, { left: '12px', top: h - 104 - (v === 'ask' ? 10 : 6) + 'px', width: '96px', height: '104px', borderRadius: '0px' })
+      herSheet.style.transform = 'translate(0px, 0px) scale(0.5)'
+    }
+    const clip = v === 'compact' || v === 'settings' ? 'still:' + MOOD_CLIP[st.mood] : v === 'ask' ? 'waiting' : nudge ? nudge.clip : MOOD_CLIP[st.mood]
+    playHer(clip)
+  }
+
+  function update() {
+    herSheet.style.backgroundImage = `url(${pet().url})`
+    fillCompact(); fillExpanded(); fillAsk()
+    if (settingsOpen) { fillHead(); fillTabs(); fillSAsk() }
+    const v = decide()
+    if (v !== view) {
+      view = v
+      island.dataset.view = v
+      for (const [k, el] of Object.entries(L)) el.classList.toggle('on', k === v)
+    }
+    const { w, h } = size(v)
+    island.style.width = w + 'px'
+    island.style.height = h + 'px'
+    island.style.borderRadius = (h > 60 ? 30 : h / 2) + 'px'
+    placeHer(v, h)
+  }
+  // After the content changes height (a tab, a request): measure once laid out.
+  const relayout = () => requestAnimationFrame(update)
+
+  // ---------- Settings: open and close ----------
+  function openSettings() {
+    if (settingsOpen) return
+    prevFocus = document.activeElement
+    settingsOpen = true
+    hover = false
+    fillHead(); fillTabs(); fillSAsk(); fillBody()
+    update()
+    island.focus({ preventScroll: true })
+    showFocus()
+  }
+  function closeSettings(restore = true) {
+    if (!settingsOpen) return
+    settingsOpen = false
+    thumbTimers.forEach(clearTimeout)
+    update()
+    if (restore && prevFocus && prevFocus !== document.body && !island.contains(prevFocus) && document.contains(prevFocus)) prevFocus.focus({ preventScroll: true })
+    else if (island.contains(document.activeElement)) document.activeElement.blur()
+    prevFocus = null
+    showFocus()
+  }
+  function setTab(k) {
+    if (k === st.tab) return
+    st.tab = k
+    fillTabs(); fillBody(); relayout()
+  }
+  // A re-render can take the focused element away: keep the focus in the island.
+  function keepFocus() {
+    if (settingsOpen && !island.contains(document.activeElement)) island.focus({ preventScroll: true })
+  }
+
+  // ---------- Events ----------
+  island.addEventListener('mouseenter', () => {
+    clearTimeout(hoverTimer)
+    hoverTimer = setTimeout(() => { hover = true; update() }, 140)
+  })
+  island.addEventListener('mouseleave', () => {
+    clearTimeout(hoverTimer)
+    hoverTimer = setTimeout(() => { hover = false; update() }, 260)
+  })
+
+  // Like the real island window (focusable: false): pressing it never takes the
+  // focus, so answering a prompt leaves you typing where you were. Only settings do.
+  island.addEventListener('mousedown', e => { if (!settingsOpen) e.preventDefault() })
+
+  island.addEventListener('click', e => {
+    const t = e.target
+    const ans = t.closest('[data-answer]')
+    if (ans) return answer(ans.dataset.answer)
+    if (!settingsOpen) {
+      if (view === 'ask') return
+      clearTimeout(openTimer)
+      if ($('dbl').checked) openTimer = setTimeout(openSettings, 500)
+      else openSettings()
+      return
+    }
+    if (t.closest('[data-close]')) return closeSettings()
+    if (t.closest('.s-head')) return closeSettings()
+    const tab = t.closest('[data-tab]')
+    if (tab) return setTab(tab.dataset.tab)
+    const s = t.closest('[data-sw]')
+    if (s) { st.on[s.dataset.sw] = !st.on[s.dataset.sw]; s.classList.toggle('on'); return }
+    const segItem = t.closest('[data-seg] > span')
+    if (segItem) {
+      const g = segItem.parentElement
+      st.seg[g.dataset.seg] = segItem.textContent
+      g.querySelectorAll('span').forEach(x => x.classList.toggle('on', x === segItem))
+      return
+    }
+    const tile = t.closest('[data-tile]')
+    if (tile) { st.on[tile.dataset.tile] = !st.on[tile.dataset.tile]; tile.classList.toggle('on'); return }
+    const mode = t.closest('[data-mode]')
+    if (mode) { st.display = mode.dataset.mode; sBody.querySelectorAll('[data-mode]').forEach(m => m.classList.toggle('on', m === mode)); return }
+    const use = t.closest('[data-use]')
+    if (use) { st.pet = use.dataset.use; fillHead(); fillBody(); update(); keepFocus(); return }
+    const copy = t.closest('[data-copy]')
+    if (copy) {
+      navigator.clipboard?.writeText(copy.dataset.copy).catch(() => {})
+      copy.textContent = '已复制'
+      setTimeout(() => (copy.textContent = '复制'), 1500)
+      return
+    }
+    if (t.closest('[data-dl]')) {
+      const btn = t.closest('[data-dl]'), note = $('dlNote'), v = $('dlIn').value.trim()
+      if (!v) { note.textContent = '先填一个链接或 ID'; $('dlIn').focus(); return }
+      btn.textContent = '下载中…'
+      setTimeout(() => { btn.textContent = '下载'; note.textContent = `原型不会真的下载「${v}」:)` }, 1100)
+    }
+  })
+
+  island.addEventListener('keydown', e => {
+    if (e.target.matches('input') && e.key === 'Enter') { island.querySelector('[data-dl]')?.click(); return }
+  })
+  document.addEventListener('keydown', e => {
+    if (!settingsOpen) return
+    if (e.key === 'Escape') { e.preventDefault(); return closeSettings() }
+    if (e.target.matches && e.target.matches('input, textarea')) return
+    const i = TABS.findIndex(([k]) => k === st.tab)
+    if (e.key === 'ArrowRight') { e.preventDefault(); setTab(TABS[(i + 1) % TABS.length][0]) }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); setTab(TABS[(i + TABS.length - 1) % TABS.length][0]) }
+  })
+  // Outside the island (the debug panel stands in for Claude Code, so it does not count).
+  document.addEventListener('pointerdown', e => {
+    if (settingsOpen && !island.contains(e.target) && !dbg.contains(e.target)) closeSettings(e.target !== tty)
+  })
+  document.addEventListener('focusin', e => {
+    if (settingsOpen && !island.contains(e.target) && !dbg.contains(e.target)) closeSettings(false)
+    showFocus()
+  })
+  document.addEventListener('focusout', () => setTimeout(showFocus, 0))
+  sBody.addEventListener('focusout', () => setTimeout(keepFocus, 0))
+
+  function showFocus() {
+    const f = $('focusState'), a = document.activeElement
+    if (a === tty) { f.textContent = '焦点：终端 ✓ 可以打字'; f.className = 'f yes' }
+    else if (island.contains(a)) { f.textContent = '焦点：灵动岛'; f.className = 'f no' }
+    else { f.textContent = '焦点：无'; f.className = 'f no' }
+  }
+
+  // ---------- Claude Code, simulated ----------
+  function setMood(m) {
+    if (m === 'working') { st.since = Date.now(); st.took = null; st.detail = 'Edit src/home/style.css' }
+    if (m === 'done' || m === 'error') { st.took = Date.now() - (st.since || Date.now()); st.detail = m === 'done' ? '改完了 3 个文件' : 'npm test 失败' }
+    if (m === 'idle') st.detail = '等你下一条消息'
+    st.mood = m
+    if (NUDGE_CLIP[m]) {
+      nudge = { clip: NUDGE_CLIP[m], text: NUDGE_TEXT[m] }
+      clearTimeout(nudgeTimer)
+      nudgeTimer = setTimeout(() => { nudge = null; update() }, 3600)
+    } else nudge = null
+    if (settingsOpen && st.tab === 'now') fillBody()
+    update()
+    if (settingsOpen) relayout()
+  }
+  function answer(a) {
+    st.ask = null
+    if (settingsOpen) { fillSAsk(); if (st.tab === 'now') fillBody(); relayout(); keepFocus() }
+    update()
+  }
+  dbg.addEventListener('mousedown', e => { if (e.target.matches('button')) e.preventDefault() })
+  dbg.querySelectorAll('[data-mood]').forEach(b => b.addEventListener('click', () => setMood(b.dataset.mood)))
+  $('askBtn').addEventListener('click', () => {
+    st.ask = { project: 'blog', tool: 'Bash', cmd: 'npm run build &amp;&amp; npm test', at: Date.now() }
+    if (settingsOpen) { fillSAsk(); fillTabs(); if (st.tab === 'now') fillBody(); relayout() }
+    update()
+  })
+  $('slow').addEventListener('change', e => document.documentElement.style.setProperty('--dur', e.target.checked ? '1.68s' : '0.56s'))
+
+  // Clocks tick without a redraw.
+  setInterval(() => document.querySelectorAll('[data-clock]').forEach(c => (c.textContent = time())), 1000)
+
+  window.addEventListener('resize', update)
+  update()
+  tty.focus()
+  tty.setSelectionRange(tty.value.length, tty.value.length)
+  showFocus()
+})()
+</script>
+</body>
+</html>

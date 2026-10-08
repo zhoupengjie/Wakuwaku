@@ -564,23 +564,15 @@ body {
   transform: scaleY(0.15);
 }
 
-/* Another session that wants you: a round bubble that buds off the island. */
-#island-side {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 0;
-  height: 36px;
-  border-radius: 18px;
-  overflow: hidden;
-  background: #000;
-  cursor: pointer;
-  transition: width 0.5s cubic-bezier(0.3, 1.45, 0.5, 1);
-}
-
-#island-side.shown {
-  width: 36px;
+/* Other sessions busy too: "+N" by the clock. */
+#island-compact .more {
+  margin-left: -4px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* The prompt inside the island: the panel, dressed for black. */

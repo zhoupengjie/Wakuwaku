@@ -5,7 +5,8 @@
 //             done, an error, she needs you): her whole self standing in it,
 //             playing that mood, beside what is going on
 //   ask       a prompt from Claude, answered right in the island, her beside it
-// and a second, round bubble beside it when another session wants you too.
+// Other sessions busy too: a small "+N" by the clock, in the colour of the
+// next one that wants something.
 //
 // She is one element throughout: the portrait grows into her whole self and
 // shrinks back, so she is never in two places at once.
@@ -76,7 +77,6 @@
   const island = document.getElementById('island')
   const compact = document.getElementById('island-compact')
   const expanded = document.getElementById('island-expanded')
-  const side = document.getElementById('island-side')
   const her = document.getElementById('island-her')
   const herSheet = her.querySelector('.sheet')
   const gooIsland = document.querySelector('#goo .goo-island')
@@ -163,8 +163,10 @@
     const label = now.mood === 'idle' ? '' : [now.project, t(lang, `island.${now.mood}`)].filter(Boolean).join(' · ')
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
-    compact.replaceChildren(...(isHome() ? [] : [face(now.mood, 24)]), el('span', 'label', label), clockText)
-    compact.classList.toggle('bare', !label && !clockText.textContent)
+    const more = now.others > 0 ? el('span', 'more', `+${now.others}`) : null
+    if (more) more.style.color = COLOR[second] || COLOR.working
+    compact.replaceChildren(...(isHome() ? [] : [face(now.mood, 24)]), el('span', 'label', label), clockText, ...(more ? [more] : []))
+    compact.classList.toggle('bare', !label && !clockText.textContent && !more)
   }
 
   function fillExpanded() {
@@ -177,11 +179,6 @@
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
     expanded.replaceChildren(...(isHome() ? [] : [face(now.mood, 48)]), lines, clockText)
-  }
-
-  function fillSide() {
-    side.replaceChildren(second ? face(second, 20) : '')
-    side.classList.toggle('shown', !!second && view !== 'ask')
   }
 
   // --- Her, in the island -----------------------------------------------------------
@@ -224,8 +221,7 @@
   // --- Room: the window grows before the island does, and shrinks after ----------------
 
   function roomFor(want) {
-    const sideW = second && view !== 'ask' ? 42 : 0
-    const width = want.width + sideW + 48
+    const width = want.width + 48
     const height = TOP + want.height + 24
     return width <= BASE.width && height <= BASE.height ? null : { width, height }
   }
@@ -282,7 +278,6 @@
     if (spriteUrl) herSheet.style.backgroundImage = `url("${spriteUrl}")`
     fillCompact()
     fillExpanded()
-    fillSide()
 
     const want = sizeOf(view)
     // Reaching for her keeps the room to reach in.
@@ -319,11 +314,7 @@
     blinkTimer = setTimeout(() => {
       if (isOn() && !document.hidden) {
         island.classList.add('blink')
-        side.classList.add('blink')
-        setTimeout(() => {
-          island.classList.remove('blink')
-          side.classList.remove('blink')
-        }, 140)
+        setTimeout(() => island.classList.remove('blink'), 140)
       }
       blink()
     }, 3500 + Math.random() * 4000)
@@ -454,7 +445,7 @@
     if (done.carrying) {
       // Let go: she lands there, or comes home if she was let go by the island.
       window.pet.dropHer()
-      window.pet.hover(island.matches(':hover') || side.matches(':hover'))
+      window.pet.hover(island.matches(':hover'))
       return
     }
     pull = done
@@ -480,7 +471,7 @@
       pull = null
       isAbsorbing = false
       herClip = null
-      window.pet.hover(island.matches(':hover') || side.matches(':hover'))
+      window.pet.hover(island.matches(':hover'))
       update()
     }, 340)
   }
@@ -602,7 +593,7 @@
 
   // --- The pointer ----------------------------------------------------------------
 
-  for (const target of [island, side]) {
+  for (const target of [island]) {
     target.addEventListener('mouseenter', () => {
       window.pet.hover(true)
       clearTimeout(hoverTimer)

@@ -302,7 +302,7 @@ async function main() {
 
     await hook({ ...S, session_id: 'smoke-2', cwd: 'D:/work/other', hook_event_name: 'UserPromptSubmit', prompt: 'two' })
     await sleep(700)
-    report('第二个会话：旁边分出一颗小圆', await onIsland("document.getElementById('island-side').classList.contains('shown')"))
+    report('第二个会话：岛上用时旁边标出 +1', (await onIsland("document.querySelector('#island-compact .more')?.textContent")) === '+1')
     await snap('11-island-two', 'island')
     await hook({ ...S, session_id: 'smoke-2', cwd: 'D:/work/other', hook_event_name: 'SessionEnd', reason: 'exit' })
     await hook({ ...S, hook_event_name: 'Stop' })

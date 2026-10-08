@@ -20,5 +20,11 @@ contextBridge.exposeInMainWorld('pet', {
   openSettings: () => ipcRenderer.send('pet:open-settings'),
   walk: (dx, ms) => ipcRenderer.invoke('pet:walk', dx, ms),
   walkStop: () => ipcRenderer.send('pet:walk-stop'),
-  dropOut: feet => ipcRenderer.send('pet:drop-out', feet),
+  // The island's page: she broke free of the drop (her middle this far from
+  // the cursor), the button was let go, the island should reach for her or
+  // take her in.
+  releaseHer: offset => ipcRenderer.send('island:release', offset),
+  dropHer: () => ipcRenderer.send('island:drop'),
+  onReach: fn => ipcRenderer.on('island:reach', (_, at) => fn(at)),
+  onAbsorb: fn => ipcRenderer.on('island:absorb', (_, at) => fn(at)),
 })

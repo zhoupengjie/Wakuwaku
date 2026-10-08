@@ -295,12 +295,29 @@ body {
     width 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
     height 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
     border-radius 0.4s ease,
-    box-shadow 0.3s ease,
     opacity 0.12s ease;
 }
 
 .has-her #island-her {
   display: block;
+}
+
+/* Her ring, the mood's colour round the portrait: a layer of its own that
+   fades out before she grows and back in once she is small again. (As a
+   shadow on the clip it showed as a square frame while the clip grew.) */
+#island-her::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--ring, transparent);
+  opacity: 0;
+  transition: opacity 0.06s ease;
+}
+
+.compact-her #island-her::after {
+  opacity: 1;
+  transition: opacity 0.2s ease 0.45s;
 }
 
 #island-her .sheet,
@@ -332,7 +349,8 @@ body {
   pointer-events: none;
 }
 
-.pulling #goo {
+.pulling #goo,
+.reaching #goo {
   display: block;
   inset: 0;
   z-index: 1;

@@ -13,7 +13,7 @@ const petFetch = require('../shared/pet-fetch')
 const ICON = path.join(__dirname, '..', 'assets', 'icon.png')
 
 // ctx: what the app shares (settings, lang, pet, asks, change, applyPatch,
-// petWindow, fullscreen).
+// isVisible, setHidden, send, fullscreen).
 function createHomeWindow(ctx) {
   let win = null
   let pushTimer
@@ -27,7 +27,7 @@ function createHomeWindow(ctx) {
       now: ctx.pet.get(),
       sessions: ctx.pet.list(),
       asks: ctx.asks.views(),
-      isVisible: ctx.petWindow.isVisible(),
+      isVisible: ctx.isVisible(),
       connection: connection.connection(ctx.port),
       pluginCommands: connection.PLUGIN_COMMANDS,
       hooks: connection.hooksStatus(ctx.port),
@@ -105,7 +105,7 @@ function createHomeWindow(ctx) {
       const got = await petFetch.downloadPet(String(ref ?? ''), pets.userDir())
       // The first pet, or one replacing a missing sprite, becomes the pet.
       if (!pets.spriteUrl(ctx.settings.pet) || pets.list().length === 1) ctx.change({ pet: got.id })
-      else ctx.petWindow.send()
+      else ctx.send()
       return { ok: true, pet: got, warning: got.warning ? petFetch.describe(ctx.lang(), got.warning) : undefined, snapshot: snapshot() }
     } catch (err) {
       return { ok: false, error: petFetch.describe(ctx.lang(), err), snapshot: snapshot() }
@@ -120,7 +120,7 @@ function createHomeWindow(ctx) {
   ipcMain.handle('home:answer', (_, id, choice) => ctx.asks.answer(id, choice))
   ipcMain.handle('home:dismiss', (_, id) => ctx.asks.dismiss(id))
   ipcMain.handle('home:show-pet', (_, on) => {
-    ctx.petWindow.setHidden(on !== true)
+    ctx.setHidden(on !== true)
     return snapshot()
   })
 

@@ -11,8 +11,10 @@ const DEFAULTS = {
   lang: 'auto',
   pet: 'deepseek-chan',
   scale: 0.55,
-  // 'pet' (the whole pet) or 'island' (a black pill at the top of the screen).
+  // 'pet' (the whole pet) or 'island' (a black pill at the top of the screen,
+  // her home); with the island, whether she is out on the desktop.
   display: 'pet',
+  out: false,
   bubble: true,
   walk: true,
   look: true,

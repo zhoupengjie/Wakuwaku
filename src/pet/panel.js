@@ -243,8 +243,13 @@
     })
   }
 
+  // Which page holds the panel: the island's in island mode, hers otherwise.
+  const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
+  let display = 'pet'
+  const holdsPanel = () => (ROLE === 'island') === (display === 'island')
+
   function render(armMs = ARM_MS) {
-    const ask = asks[0]
+    const ask = holdsPanel() ? asks[0] : null
     const hadFocus = document.activeElement?.dataset?.input === 'answer'
     panel.replaceChildren()
     document.body.classList.toggle('asking', !!ask)
@@ -307,9 +312,11 @@
   window.pet.onShift(px => document.documentElement.style.setProperty('--shift', `${px}px`))
 
   window.pet.onUpdate(data => {
-    if (data.lang && data.lang !== lang) {
-      lang = data.lang
-      if (asks.length) render(0)
+    const wasHolding = holdsPanel()
+    display = data.config?.display || 'pet'
+    if ((data.lang && data.lang !== lang) || wasHolding !== holdsPanel()) {
+      lang = data.lang || lang
+      render(0)
     }
   })
 

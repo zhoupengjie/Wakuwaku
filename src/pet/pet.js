@@ -34,8 +34,12 @@ let spriteUrl = null
 // 2: the 11-row sheet; 1: the older 9-row one, without the look-around rows.
 let spriteVersion = 2
 
-// The island (island.js) shows instead of her.
-const isIsland = () => config.display === 'island'
+// The same page draws her window (role=pet) and the island's (role=island,
+// island.js); in the island's, she is not drawn here.
+const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
+const isIsland = () => ROLE === 'island'
+// Out of the island on the desktop, the island does the talking.
+const isOutOfIsland = () => ROLE === 'pet' && config.display === 'island'
 
 let reaction = null // { clip, times, say, start }
 let dragged = null // { dir, at }
@@ -173,7 +177,7 @@ function render() {
 
   const text = reaction?.say ? say(lang, reaction.say) : words()
   bubble.textContent = text
-  bubble.classList.toggle('hidden', !config.bubble || (now.mood === 'idle' && !reaction?.say))
+  bubble.classList.toggle('hidden', !config.bubble || isOutOfIsland() || (now.mood === 'idle' && !reaction?.say))
   sprite.title = words()
 
   // The running clock in the bubble.

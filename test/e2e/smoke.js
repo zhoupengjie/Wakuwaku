@@ -241,110 +241,144 @@ async function main() {
     await sleep(300)
     await expect('SessionEnd', { mood: 'idle' })
 
-    // --- Island mode.
+    // --- Island mode: the island's own window at the top, her window hidden while she is in it.
     await settingsPatch({ display: 'island' })
-    await sleep(700)
-    const top = (await state()).window
+    await sleep(1200)
+    const top = (await state()).island
     const centre = top.workArea.x + top.workArea.width / 2
     report(
       '灵动岛：窗口挂在屏幕顶部正中',
-      top.bounds.y === top.workArea.y && Math.abs(top.bounds.x + top.bounds.width / 2 - centre) <= 1 && top.size.width === 460,
+      top.isVisible && top.bounds.y === top.workArea.y && Math.abs(top.bounds.x + top.bounds.width / 2 - centre) <= 1 && top.size.width === 460,
       `${top.bounds.x},${top.bounds.y} ${top.size.width}x${top.size.height}`,
     )
-    const islandSize = () => evaluate('pet', "(() => { const r = document.getElementById('island').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), document.getElementById('island').dataset.view] })()")
+    report('她在岛里时，她自己的窗口收起来', !(await state()).window.isVisible)
+    const onIsland = code => evaluate('island', code)
+    const islandSize = () => onIsland("(() => { const r = document.getElementById('island').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), document.getElementById('island').dataset.view] })()")
+    // Her size in the island: the round portrait (24) or her whole self (96); 0 when her seat is empty.
+    const herWidth = () => onIsland("Math.round(document.getElementById('island-her').getBoundingClientRect().width)")
+    const ringOpacity = () => onIsland("getComputedStyle(document.getElementById('island-her'), '::after').opacity")
     await hook({ ...S, hook_event_name: 'UserPromptSubmit', prompt: 'island' })
     await hook({ ...S, hook_event_name: 'PreToolUse', tool_name: 'Read' })
     await sleep(900)
-    const compactText = await evaluate('pet', "document.getElementById('island-compact').textContent")
+    const compactText = await onIsland("document.getElementById('island-compact').textContent")
     report('灵动岛收起时：项目、状态和用时', /alpha · 干活\d:\d\d/.test(compactText), compactText)
     const [cw, ch, cv] = await islandSize()
     report('收起时是一颗小胶囊', cv === 'compact' && ch === 36 && cw >= 112 && cw <= 340, `${cw}x${ch} ${cv}`)
-    // Her size in the island: the round portrait (24) or her whole self (96).
-    const herWidth = () => evaluate('pet', "Math.round(document.getElementById('island-her').getBoundingClientRect().width)")
-    report('收起时：岛里是她本人的圆形小头像', (await herWidth()) === 24, `${await herWidth()}px`)
-    await snap('08-island')
+    report('收起时：岛里是她本人的圆形小头像，带一圈状态色', (await herWidth()) === 24 && (await ringOpacity()) === '1', `${await herWidth()}px`)
+    await snap('08-island', 'island')
 
-    await evaluate('pet', "(document.getElementById('island').dispatchEvent(new MouseEvent('mouseenter')), 'ok')")
-    await sleep(900)
+    await onIsland("(document.getElementById('island').dispatchEvent(new MouseEvent('mouseenter')), 'ok')")
+    await sleep(260)
+    report('展开的一瞬间：状态色的圈已经收起，不会变成方框', Number(await ringOpacity()) < 0.1, await ringOpacity())
+    await sleep(700)
     const [ew, eh, ev] = await islandSize()
-    const expandedText = await evaluate('pet', "document.getElementById('island-expanded').textContent")
+    const expandedText = await onIsland("document.getElementById('island-expanded').textContent")
     report('鼠标移上去：展开，写明在做什么', ev === 'expanded' && eh === 116 && ew >= 320 && /Read/.test(expandedText), `${ew}x${eh} ${expandedText}`)
     report('展开时：头像长成她的全身，站在岛里', (await herWidth()) === 96, `${await herWidth()}px`)
-    await snap('09-island-expanded')
-    await evaluate('pet', "(document.getElementById('island').dispatchEvent(new MouseEvent('mouseleave')), 'ok')")
+    await snap('09-island-expanded', 'island')
+    await onIsland("(document.getElementById('island').dispatchEvent(new MouseEvent('mouseleave')), 'ok')")
     await sleep(900)
     report('鼠标移开：缩回去', (await islandSize())[2] === 'compact')
 
     const askInIsland = hook({ ...S, hook_event_name: 'PermissionRequest', tool_name: 'Write', tool_input: { file_path: 'notes.md' } })
     await sleep(1200)
     const [aw, ah, av] = await islandSize()
-    const islandWin = (await state()).window
+    const islandWin = (await state()).island
     report(
       '确认请求：岛展开成面板，窗口跟着变大',
       av === 'ask' && ah > 100 && islandWin.size.height >= ah + 8 && islandWin.bounds.y === islandWin.workArea.y,
       `island ${aw}x${ah}, window ${islandWin.size.width}x${islandWin.size.height}`,
     )
-    report('面板在岛里面', (await evaluate('pet', "document.querySelector('#island #panel .title')?.textContent")) === 'Write 需要你批准')
+    report('面板在岛里面', (await onIsland("document.querySelector('#island #panel .title')?.textContent")) === 'Write 需要你批准')
+    report('她的窗口不另外弹面板', (await evaluate('pet', "document.getElementById('panel').hidden")) === true)
     report('确认请求：她站在面板旁边', (await herWidth()) === 96 && aw >= 440, `island ${aw}px`)
-    await snap('10-island-ask')
+    await snap('10-island-ask', 'island')
     await click('[data-action="deny"]')
     report('灵动岛里点「拒绝」', (await askInIsland)?.hookSpecificOutput?.decision?.behavior === 'deny')
     await sleep(1000)
-    const afterAsk = (await state()).window
+    const afterAsk = (await state()).island
     report('答完：岛缩回去，窗口恢复原样', (await islandSize())[2] !== 'ask' && afterAsk.size.height === 132, `${afterAsk.size.width}x${afterAsk.size.height}`)
     report('答完：她缩回小头像', (await herWidth()) === 24)
 
     await hook({ ...S, session_id: 'smoke-2', cwd: 'D:/work/other', hook_event_name: 'UserPromptSubmit', prompt: 'two' })
     await sleep(700)
-    report('第二个会话：旁边分出一颗小圆', await evaluate('pet', "document.getElementById('island-side').classList.contains('shown')"))
-    await snap('11-island-two')
+    report('第二个会话：旁边分出一颗小圆', await onIsland("document.getElementById('island-side').classList.contains('shown')"))
+    await snap('11-island-two', 'island')
     await hook({ ...S, session_id: 'smoke-2', cwd: 'D:/work/other', hook_event_name: 'SessionEnd', reason: 'exit' })
     await hook({ ...S, hook_event_name: 'Stop' })
     await sleep(800)
     report('做完：岛自己展开，她站在里面挥手', (await islandSize())[2] === 'expanded' && (await herWidth()) === 96)
-    await snap('12-island-done')
+    await snap('12-island-done', 'island')
     await sleep(3800)
-    const rested = (await state()).window
+    const rested = (await state()).island
     report('几秒后：岛收起，她缩回小头像，窗口恢复原样', (await islandSize())[2] === 'compact' && (await herWidth()) === 24 && rested.size.height === 132, `${rested.size.height}`)
-    await settingsPatch({ display: 'pet' })
-    await sleep(500)
-    const back = (await state()).window
-    report('退出灵动岛：她回到原来的位置', back.bounds.y > back.workArea.y + 100 && back.size.width !== 460, `${back.bounds.x},${back.bounds.y}`)
-    await sleep(500)
-    report('切回整只宠物', (await state()).window.size.height > 100)
 
-    // --- Pulling her out of the island like a drop.
-    await settingsPatch({ display: 'island' })
-    await sleep(900)
+    // --- Pulling her out of the island like a drop, and taking her back.
     const pointer = (type, dy) =>
-      evaluate(
-        'pet',
-        `(() => { const her = document.getElementById('island-her'); const r = her.getBoundingClientRect(); her.dispatchEvent(new PointerEvent('${type}', { bubbles: true, button: 0, pointerId: 7, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 + ${dy} })); return 'ok' })()`,
+      onIsland(
+        `(() => { const her = document.getElementById('island-her'); const r = her.getBoundingClientRect(); const target = r.width ? her : document.body; target.dispatchEvent(new PointerEvent('${type}', { bubbles: true, button: 0, pointerId: 7, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 + ${dy} })); return 'ok' })()`,
       )
-    const isPulling = () => evaluate('pet', "document.body.classList.contains('pulling')")
+    const isPulling = () => onIsland("document.body.classList.contains('pulling')")
     await pointer('pointerdown', 0)
     await pointer('pointermove', 10)
     await pointer('pointermove', 40)
     await sleep(200)
     report('按住她往下拉：岛拉出一滴，她在里面', await isPulling())
-    await snap('13-island-pull')
+    await snap('13-island-pull', 'island')
     await pointer('pointerup', 40)
     await sleep(700)
-    report('拉得不够远就松手：她弹回岛里', !(await isPulling()) && (await state()).settings.display === 'island' && (await herWidth()) === 24)
+    report('拉得不够远就松手：她弹回岛里', !(await isPulling()) && !(await state()).settings.out && (await herWidth()) === 24)
 
     await pointer('pointerdown', 0)
     await pointer('pointermove', 10)
     await pointer('pointermove', 80)
     await pointer('pointermove', 200)
-    await sleep(200)
-    report('拉过一定距离：水滴断开', (await evaluate('pet', "document.querySelector('#goo .goo-neck').style.width")) === '0px')
-    await snap('14-island-drop')
+    await sleep(600)
+    const out = await state()
+    report('拉过一定距离：水滴断开，她的窗口接住她', out.settings.out === true && out.window.isVisible && !(await isPulling()))
+    report('她出来了，灵动岛还在，座位空着', out.island.isVisible && (await onIsland("document.body.classList.contains('has-her')")) === false)
+    await snap('14-island-empty-seat', 'island')
     await pointer('pointerup', 200)
-    await sleep(900)
+    await sleep(700)
     const landed = await state()
-    report('松手：她落到桌面上，变回整只宠物', landed.settings.display === 'pet' && landed.window.size.width !== 460, `${landed.window.size.width}x${landed.window.size.height}`)
-    await evaluate('pet', "document.getElementById('pet').dispatchEvent(new MouseEvent('mouseenter')), 'ok'")
-    await evaluate('pet', "document.getElementById('pet').dispatchEvent(new MouseEvent('mouseleave')), 'ok'")
+    report('松手：她落在桌面上，岛照样在', landed.settings.display === 'island' && landed.settings.out === true && landed.window.isVisible && landed.island.isVisible)
+    report('她在桌面上时不说话，话都在岛上', (await evaluate('pet', "document.getElementById('bubble').classList.contains('hidden')")) === true)
+
+    // Brought near: the island reaches out a drop for her (as main tells it while she is dragged).
+    const reachAt = dy => onIsland(`(() => { const r = document.getElementById('island').getBoundingClientRect(); window.Island.reach({ x: Math.round(window.screenX + r.left + r.width / 2), y: Math.round(window.screenY + r.bottom + ${dy}), snap: ${dy < 120} }); return 'ok' })()`)
+    await reachAt(220)
+    await sleep(400)
+    await reachAt(200)
+    await sleep(150)
+    report('拖着她靠近岛：岛伸出一滴去够她', await onIsland("document.body.classList.contains('reaching')"))
+    await snap('15-island-reach', 'island')
+    await reachAt(90)
+    await sleep(150)
+    await snap('16-island-reach-close', 'island')
+    await onIsland("(window.Island.reach(null), 'ok')")
+    await sleep(500)
+    report('又拖远了：那一滴缩回去', !(await onIsland("document.body.classList.contains('reaching')")))
+
+    await settingsPatch('absorb')
+    await sleep(150)
+    report('拖回岛边松手：岛把她吸回去', (await onIsland("document.body.classList.contains('pulling')")) && !(await state()).window.isVisible)
+    await snap('17-island-absorb', 'island')
+    await sleep(800)
+    const inSeat = await state()
+    report('吸回去之后：她回到座位，变回小头像', inSeat.settings.out === false && (await herWidth()) === 24 && !inSeat.window.isVisible)
+
+    await settingsPatch({ out: true })
+    await sleep(500)
+    report('菜单「放她出来」：她回到桌面上原来的位置', (await state()).window.isVisible && (await state()).settings.out === true)
+    await settingsPatch({ out: false })
+    await sleep(500)
+    report('菜单「叫她回岛里」', !(await state()).window.isVisible && (await herWidth()) === 24)
+
+    await settingsPatch({ display: 'pet' })
+    await sleep(600)
+    const back = await state()
+    report('退出灵动岛：岛收起，她回到原来的位置', !back.island.isVisible && back.window.isVisible && back.window.bounds.y > back.window.workArea.y + 100, `${back.window.bounds.x},${back.window.bounds.y}`)
+    report('切回整只宠物', back.window.size.height > 100)
     await evaluate('pet', "document.getElementById('pet').dispatchEvent(new MouseEvent('mouseenter')), 'ok'")
     await evaluate('pet', "document.getElementById('pet').dispatchEvent(new MouseEvent('mouseleave')), 'ok'")
 
@@ -513,7 +547,8 @@ async function main() {
     report('窗口关掉了', await isDown())
     const whileDown = await run([ROOT, ENSURE_FLAG], env)
     const isUpAgain = await waitUp(15000)
-    report('会话开始时她不在：启动器把她拉起来', whileDown.code === 0 && isUpAgain, `${whileDown.ms}ms`)
+    const log = fs.existsSync(path.join(profile, 'debug.log')) ? fs.readFileSync(path.join(profile, 'debug.log'), 'utf8').trim() : ''
+    report('会话开始时她不在：启动器把她拉起来', whileDown.code === 0 && isUpAgain, `${whileDown.ms}ms${log ? ` · ${log}` : ''}`)
   } finally {
     await post('/debug/eval', { page: 'pet', code: "setTimeout(() => window.close(), 50), 'ok'" }).catch(() => {})
     await sleep(800)

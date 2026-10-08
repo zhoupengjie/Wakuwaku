@@ -8,7 +8,8 @@ const { SCALES } = require('./config')
 
 const TRAY_ICON = mood => path.join(__dirname, '..', 'assets', 'tray', `${mood}.png`)
 
-// ctx: what the app shares (settings, T, pet, change, petWindow, home).
+// ctx: what the app shares (settings, T, pet, change, isVisible, setHidden,
+// setDisplay, setOut, comeHome, petWindow, home).
 function createTray(ctx) {
   let tray = null
   let trayMood = ''
@@ -20,9 +21,9 @@ function createTray(ctx) {
     return [
       isTray
         ? {
-            label: ctx.petWindow.isVisible() ? T('menu.hide') : T('menu.show'),
+            label: ctx.isVisible() ? T('menu.hide') : T('menu.show'),
             enabled: !s.dnd,
-            click: () => ctx.petWindow.setHidden(ctx.petWindow.isVisible()),
+            click: () => ctx.setHidden(ctx.isVisible()),
           }
         : null,
       {
@@ -47,9 +48,13 @@ function createTray(ctx) {
         label: T('menu.island'),
         type: 'checkbox',
         checked: s.display === 'island',
-        click: item => ctx.petWindow.resize({ display: item.checked ? 'island' : 'pet' }),
+        click: item => ctx.setDisplay(item.checked ? 'island' : 'pet'),
       },
-      { label: T('menu.home'), click: () => ctx.petWindow.comeHome() },
+      // In island mode: let her out onto the desktop, or call her back in.
+      s.display === 'island'
+        ? { label: s.out ? T('menu.callBack') : T('menu.letOut'), click: () => ctx.setOut(!s.out) }
+        : null,
+      { label: T('menu.home'), click: () => ctx.comeHome() },
       { type: 'separator' },
       { label: T('menu.dnd'), type: 'checkbox', checked: s.dnd, click: item => ctx.change({ dnd: item.checked }) },
       { label: T('menu.settings'), click: () => ctx.home.open() },
@@ -79,7 +84,7 @@ function createTray(ctx) {
       // Click: show or hide her; right-click: the menu.
       tray.on('click', () => {
         if (ctx.settings.dnd) return ctx.home.open()
-        ctx.petWindow.setHidden(ctx.petWindow.isVisible())
+        ctx.setHidden(ctx.isVisible())
       })
       tray.on('right-click', () => popUp())
     }

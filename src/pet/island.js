@@ -11,8 +11,14 @@
 // shrinks back, so she is never in two places at once.
 //
 // Press her and pull down, and the island stretches like a drop of ink with
-// her in it; pull far enough and the drop pinches off and she lands on the
-// desktop as the free pet. Let go before that and she springs back in.
+// her in it; pull far enough and the drop pinches off and she is out: her own
+// window takes her, under the cursor, and she lands where you let go. Let go
+// before that and she springs back in. The island stays while she is out, her
+// seat empty; bring her close and it reaches out a drop for her, let go there
+// and it takes her back in.
+//
+// This page runs in the island's own window (role=island); her window loads
+// the same page as role=pet.
 //
 // The window is just big enough for all this and clicks pass through it; only
 // the island takes the pointer. Shapes change in CSS, never by resizing the
@@ -61,6 +67,10 @@
   const PULL_ROOM = { width: 760, height: 440 }
   const BREAK_PX = 110
   const DROP_R = 56
+  // Reaching for her: how far the drop goes out when she is near (part of
+  // the way), and its size at the start.
+  const REACH_SHARE = 0.55
+  const REACH_R = 22
 
   const body = document.body
   const island = document.getElementById('island')
@@ -95,11 +105,20 @@
   let herTimer
   let room = null
   let roomTimer
-  // Her being pulled out: { x0, y0, started, broken, at }.
+  // Her being pulled out: { x0, y0, started, broken, at, carrying }. Once
+  // the drop pinches off she is carrying: her window has her, this page only
+  // waits for the button to be let go.
   let pull = null
   let dropTimer
+  // Reaching for her (her middle on the screen, close), or taking her in.
+  let isReaching = false
+  let isAbsorbing = false
+  let retractTimer
 
-  const isOn = () => config.display === 'island'
+  const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
+  const isOn = () => ROLE === 'island' && config.display === 'island'
+  // In her seat: there is a pet to show, and she is not out on the desktop.
+  const isHome = () => !!spriteUrl && config.out !== true
   const isAsking = () => isOn() && !panel.hidden
   const isNudging = () => !!nudge && Date.now() < nudge.until
 
@@ -144,7 +163,7 @@
     const label = now.mood === 'idle' ? '' : [now.project, t(lang, `island.${now.mood}`)].filter(Boolean).join(' · ')
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
-    compact.replaceChildren(...(spriteUrl ? [] : [face(now.mood, 24)]), el('span', 'label', label), clockText)
+    compact.replaceChildren(...(isHome() ? [] : [face(now.mood, 24)]), el('span', 'label', label), clockText)
     compact.classList.toggle('bare', !label && !clockText.textContent)
   }
 
@@ -157,7 +176,7 @@
     if (sub || more) lines.append(el('span', 'sub', [sub, more].filter(Boolean).join(' · ')))
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
-    expanded.replaceChildren(...(spriteUrl ? [] : [face(now.mood, 48)]), lines, clockText)
+    expanded.replaceChildren(...(isHome() ? [] : [face(now.mood, 48)]), lines, clockText)
   }
 
   function fillSide() {
@@ -171,23 +190,22 @@
   // or her whole self standing at the left. Both are the same sheet, cropped
   // and scaled, so one springs into the other.
   function placeHer({ height }) {
-    if (!spriteUrl) return
+    if (!isHome()) return
     const s = her.style
     if (view === 'compact') {
       Object.assign(s, { left: '6px', top: '6px', width: `${HEAD}px`, height: `${HEAD}px`, borderRadius: `${HEAD / 2}px` })
-      s.boxShadow = `0 0 0 1.5px ${COLOR[now.mood]}`
+      s.setProperty('--ring', COLOR[now.mood])
       herSheet.style.transform = `translate(${-(CELL_W * HEAD_SCALE - HEAD) / 2}px, -2px) scale(${HEAD_SCALE})`
     } else {
       const top = height - BODY_H - (view === 'ask' ? 10 : 6)
       Object.assign(s, { left: '12px', top: `${top}px`, width: `${BODY_W}px`, height: `${BODY_H}px`, borderRadius: '0px' })
-      s.boxShadow = '0 0 0 0 transparent'
       herSheet.style.transform = `translate(0px, 0px) scale(${BODY_SCALE})`
     }
   }
 
   // Still in the portrait (her mood's first frame); playing once she stands.
   function animateHer() {
-    if (!spriteUrl) return
+    if (!isHome()) return
     const name = view === 'compact' ? null : view === 'ask' ? 'waiting' : isNudging() ? nudge.clip : MOOD_CLIP[now.mood]
     if (name && name === herClip) return
     clearTimeout(herTimer)
@@ -236,7 +254,7 @@
   // --- Deciding ---------------------------------------------------------------
 
   function sizeOf(name) {
-    const withHer = !!spriteUrl
+    const withHer = isHome()
     if (name === 'ask') {
       return {
         width: panel.offsetWidth + 28 + (withHer ? 108 : 0),
@@ -254,19 +272,21 @@
   function update() {
     clearInterval(clockTimer)
     // While she is being pulled out, the pull has the island.
-    if (!isOn() || pull?.started) return
+    if (!isOn() || (pull?.started && !pull.carrying) || isAbsorbing) return
     // A prompt answered: the island closes rather than lingering open.
     if (view === 'ask' && !isAsking()) nudge = null
     view = isAsking() ? 'ask' : isHover || isNudging() ? 'expanded' : 'compact'
     island.dataset.view = view
-    body.classList.toggle('has-her', !!spriteUrl)
+    body.classList.toggle('has-her', isHome())
+    body.classList.toggle('compact-her', view === 'compact')
     if (spriteUrl) herSheet.style.backgroundImage = `url("${spriteUrl}")`
     fillCompact()
     fillExpanded()
     fillSide()
 
     const want = sizeOf(view)
-    const grows = setRoom(roomFor(want))
+    // Reaching for her keeps the room to reach in.
+    const grows = setRoom(isReaching ? PULL_ROOM : roomFor(want))
     // The window has its room before the island (and she) grow into it.
     const grow = () => {
       setSize(want)
@@ -312,24 +332,29 @@
   // --- Pulling her out: the drop --------------------------------------------------
 
   function pullDown(e) {
-    if (e.button !== 0 || !spriteUrl || view === 'ask') return
+    if (e.button !== 0 || !isHome() || view === 'ask' || isAbsorbing) return
     // No mouse events follow, so the island does not take this for a click.
     e.preventDefault()
-    pull = { x0: e.clientX, y0: e.clientY, started: false, broken: false, at: null }
+    pull = { x0: e.clientX, y0: e.clientY, started: false, broken: false, at: null, carrying: false }
     window.addEventListener('pointermove', pullMove)
     window.addEventListener('pointerup', pullUp)
+    window.addEventListener('pointercancel', pullUp)
+    // The button is held on this window wherever the cursor goes, so the
+    // pointer events keep coming here even once her own window has her.
     try {
       her.setPointerCapture(e.pointerId)
     } catch {}
   }
 
   function pullMove(e) {
-    if (!pull) return
+    if (!pull || pull.carrying) return
     if (!pull.started) {
       if (Math.hypot(e.clientX - pull.x0, e.clientY - pull.y0) < 5) return
       startPull()
     }
     stretch(e.clientX, e.clientY)
+    // Pinched off: from here her own window carries her, anywhere on the screen.
+    if (pull.broken) handOff(e)
   }
 
   function startPull() {
@@ -339,8 +364,13 @@
     clearInterval(clockTimer)
     // Room to stretch in, then the drop: she hangs in it kicking her legs.
     setRoom(PULL_ROOM)
-    dropSheet.style.backgroundImage = `url("${spriteUrl}")`
+    startDropHer()
     body.classList.add('pulling')
+  }
+
+  function startDropHer() {
+    clearTimeout(dropTimer)
+    dropSheet.style.backgroundImage = `url("${spriteUrl}")`
     const { row, frames, ms } = CLIPS.jumping
     let frame = 0
     const step = () => {
@@ -351,20 +381,12 @@
     step()
   }
 
-  // The island's double, a neck that thins as it stretches, and the drop with
-  // her in it; the filter melts them into one shape until the neck goes.
-  function stretch(x, y) {
+  // The island's double, a neck from it to (cx, cy), and a drop there; the
+  // filter melts them into one shape. A neck of 0 leaves the drop on its own.
+  function drawGoo(cx, cy, { neck, radius = DROP_R }) {
     const r = island.getBoundingClientRect()
-    // You hold her by the head: her middle hangs below the cursor.
-    const cx = x
-    const cy = Math.max(y + 30, r.bottom - 10)
     const ax = Math.min(Math.max(cx, r.left + 24), r.right - 24)
     const ay = r.bottom - 14
-    const dist = Math.hypot(cx - ax, cy - ay)
-    const wasBroken = pull.broken
-    pull.broken = dist > BREAK_PX || (wasBroken && dist > BREAK_PX * 0.7)
-    if (pull.broken && !wasBroken) wobble()
-
     Object.assign(gooIsland.style, {
       left: `${r.left}px`,
       top: `${r.top}px`,
@@ -372,18 +394,43 @@
       height: `${r.height}px`,
       borderRadius: getComputedStyle(island).borderRadius,
     })
-    Object.assign(gooDrop.style, { left: `${cx - DROP_R}px`, top: `${cy - DROP_R}px`, width: `${DROP_R * 2}px`, height: `${DROP_R * 2}px` })
-    const neck = pull.broken ? 0 : Math.max(8, 34 - dist * 0.22)
+    Object.assign(gooDrop.style, { left: `${cx - radius}px`, top: `${cy - radius}px`, width: `${radius * 2}px`, height: `${radius * 2}px` })
+    const length = Math.hypot(cx - ax, cy - ay)
     const angle = (Math.atan2(cy - ay, cx - ax) * 180) / Math.PI - 90
     Object.assign(gooNeck.style, {
       left: `${ax - neck / 2}px`,
       top: `${ay}px`,
       width: `${neck}px`,
-      height: `${dist}px`,
+      height: `${length}px`,
       transform: `rotate(${angle}deg)`,
     })
+    return length
+  }
+
+  // You hold her by the head: her middle hangs below the cursor. The neck
+  // thins as it stretches, and pinches off past BREAK_PX.
+  function stretch(x, y) {
+    const r = island.getBoundingClientRect()
+    const cx = x
+    const cy = Math.max(y + 30, r.bottom - 10)
+    const ax = Math.min(Math.max(cx, r.left + 24), r.right - 24)
+    const dist = Math.hypot(cx - ax, cy - (r.bottom - 14))
+    pull.broken = dist > BREAK_PX
+    drawGoo(cx, cy, { neck: pull.broken ? 0 : Math.max(8, 34 - dist * 0.22) })
     Object.assign(dropHer.style, { left: `${cx - BODY_W / 2}px`, top: `${cy - BODY_H / 2}px` })
     pull.at = { cx, cy }
+  }
+
+  // The drop let go of her: her window takes her where she is, and the island
+  // wobbles back with her seat empty.
+  function handOff(e) {
+    pull.carrying = true
+    clearTimeout(dropTimer)
+    window.pet.releaseHer({ dx: pull.at.cx - e.clientX, dy: pull.at.cy - e.clientY })
+    body.classList.remove('pulling')
+    wobble()
+    herClip = null
+    update()
   }
 
   function wobble() {
@@ -393,43 +440,123 @@
     setTimeout(() => body.classList.remove('wobble'), 520)
   }
 
-  function pullUp(e) {
+  function pullUp() {
     window.removeEventListener('pointermove', pullMove)
     window.removeEventListener('pointerup', pullUp)
+    window.removeEventListener('pointercancel', pullUp)
     if (!pull) return
     const done = pull
+    pull = null
     if (!done.started) {
       // A click on her: the main window, as a click on the island.
-      pull = null
       return window.pet.openSettings()
     }
-    clearTimeout(dropTimer)
-    if (done.broken && done.at) {
-      // Free: she lands where the drop let go of her, feet first.
-      window.pet.dropOut({ dx: done.at.cx - e.clientX, dy: done.at.cy + BODY_H / 2 - e.clientY })
+    if (done.carrying) {
+      // Let go: she lands there, or comes home if she was let go by the island.
+      window.pet.dropHer()
+      window.pet.hover(island.matches(':hover') || side.matches(':hover'))
       return
     }
-    settleBack()
+    pull = done
+    settleBack(done.at)
   }
 
-  // Let go too soon: the drop and she spring back into her seat.
-  function settleBack() {
+  // Into her seat from where the drop has her: the drop and she spring back.
+  function settleBack(at) {
     const r = island.getBoundingClientRect()
     const tx = r.left + 18
     const ty = r.top + 18
-    body.classList.add('settling')
-    Object.assign(gooDrop.style, { left: `${tx - 10}px`, top: `${ty - 10}px`, width: '20px', height: '20px' })
-    Object.assign(gooNeck.style, { width: '0px', height: '0px' })
-    Object.assign(dropHer.style, { left: `${tx - BODY_W / 2}px`, top: `${ty - BODY_H / 2}px`, transform: 'scale(0.25)' })
+    if (at) drawGoo(at.cx, at.cy, { neck: 26 })
+    body.classList.add('pulling')
+    requestAnimationFrame(() => {
+      body.classList.add('settling')
+      drawGoo(tx, ty, { neck: 0, radius: 10 })
+      Object.assign(dropHer.style, { left: `${tx - BODY_W / 2}px`, top: `${ty - BODY_H / 2}px`, transform: 'scale(0.25)' })
+    })
     setTimeout(() => {
-      body.classList.remove('pulling', 'settling')
+      body.classList.remove('pulling', 'settling', 'reaching')
+      clearTimeout(dropTimer)
       dropHer.style.transform = ''
       pull = null
+      isAbsorbing = false
       herClip = null
       window.pet.hover(island.matches(':hover') || side.matches(':hover'))
       update()
-    }, 320)
+    }, 340)
   }
+
+  // --- Reaching for her, and taking her back ------------------------------------------
+
+  // Run fn once the window has its room to reach in: drawn before, the
+  // island would move under the drawing as the window grows around it.
+  function whenRoomy(fn) {
+    setRoom(PULL_ROOM)
+    if (innerWidth >= PULL_ROOM.width - 2 && innerHeight >= PULL_ROOM.height - 2) return fn()
+    const go = () => {
+      window.removeEventListener('resize', go)
+      clearTimeout(timer)
+      fn()
+    }
+    const timer = setTimeout(go, 200)
+    window.addEventListener('resize', go)
+  }
+
+  // Her middle on the screen as she is moved near (snap: let go now and she
+  // is back), or null when she has gone off again.
+  function reach(at) {
+    if (!isOn() || isAbsorbing) return
+    clearTimeout(retractTimer)
+    if (!at) {
+      if (!isReaching) return
+      isReaching = false
+      // The drop draws back into the island.
+      body.classList.add('settling')
+      const r = island.getBoundingClientRect()
+      drawGoo(r.left + r.width / 2, r.bottom - 16, { neck: 0, radius: 8 })
+      retractTimer = setTimeout(() => {
+        body.classList.remove('reaching', 'settling')
+        update()
+      }, 320)
+      return
+    }
+    if (!isReaching) {
+      isReaching = true
+      // The next call draws, once the window has grown.
+      return whenRoomy(() => isReaching && reach(at))
+    }
+    body.classList.remove('settling')
+    body.classList.add('reaching')
+    const x = at.x - window.screenX
+    const y = at.y - window.screenY
+    const r = island.getBoundingClientRect()
+    const ax = Math.min(Math.max(x, r.left + 24), r.right - 24)
+    const ay = r.bottom - 14
+    // Close: the drop reaches all the way and holds her; nearer: part way.
+    const k = at.snap ? 1 : REACH_SHARE * Math.min(1, Math.max(0, 1 - (Math.hypot(x - ax, y - ay) - 140) / 140))
+    const tx = ax + (x - ax) * k
+    const ty = ay + (y - ay) * k
+    drawGoo(tx, ty, { neck: at.snap ? 26 : 20, radius: at.snap ? DROP_R : REACH_R + 14 * k })
+  }
+
+  // She was let go close enough: from her window's spot into the drop, and
+  // the drop back into the island.
+  function absorb(at) {
+    if (!isOn() || !at) return
+    clearTimeout(retractTimer)
+    isReaching = false
+    isAbsorbing = true
+    body.classList.remove('reaching', 'settling')
+    startDropHer()
+    whenRoomy(() => {
+      const cx = at.x - window.screenX
+      const cy = at.y - window.screenY
+      Object.assign(dropHer.style, { left: `${cx - BODY_W / 2}px`, top: `${cy - BODY_H / 2}px`, transform: '' })
+      settleBack({ cx, cy })
+    })
+  }
+
+  window.pet.onReach(reach)
+  window.pet.onAbsorb(absorb)
 
   her.addEventListener('pointerdown', pullDown)
 
@@ -445,8 +572,10 @@
       clearTimeout(herTimer)
       clearTimeout(dropTimer)
       clearTimeout(roomTimer)
-      body.classList.remove('pulling', 'settling', 'has-her')
+      body.classList.remove('pulling', 'settling', 'reaching', 'has-her', 'compact-her')
       pull = null
+      isReaching = false
+      isAbsorbing = false
       herClip = null
       room = null
       view = ''
@@ -505,5 +634,5 @@
   blink()
 
   // panel.js tells the island when its prompt changes.
-  window.Island = { isOn, changed: update }
+  window.Island = { isOn, changed: update, reach, absorb }
 })()

@@ -13,7 +13,8 @@ src/
   renderer/sprite.js  图集布局、mood → 动作、16 方向注视换算（页面和测试共用）
   renderer/pet.js     每 40ms 决定画哪一格：拖动 > 反应 > 走动 > 注视 > mood
   renderer/           index.html、style.css
-hooks/claude-hook.js  Claude Code command hook：事件 → 消息 → POST
+  shared/hook-events.js  hook 事件 → 消息的映射，以及每个事件怎么安装（http / command）
+hooks/claude-hook.js  SessionStart 用的 command hook：窗口没开就启动，否则发消息
 scripts/
   fetch-pet.js        从 codex-pets.net 下载 spritesheet.webp + pet.json
   install-hooks.js    写入 / 移除 settings.json 里的 hooks
@@ -23,9 +24,22 @@ pets/<id>/            下载的宠物（gitignore）
 out/                  冒烟测试截图（gitignore）
 ```
 
+## hook 怎么送到窗口
+
+| 方式 | 事件 | 开销 |
+| --- | --- | --- |
+| HTTP hook（`type: "http"`，POST 到 `/hook?from=claude-pets`） | 除 SessionStart 外全部 | 不开进程，本机约 0.3ms；窗口没开时连接被拒约 1ms |
+| command hook（`async: true`） | SessionStart | 每个会话一次 node，后台运行，不阻塞 |
+
+本机实测，早期"每个事件起一次 node"的方式：通过 bash 约 120ms/次，直接起 node 约 84ms/次；一次工具调用有 Pre 和 Post 两次。
+
+`/hook` 收到什么都立刻回 `200 {}`：Claude Code 会把回包当成 hook 的输出来读，`{}` 表示不做任何决定（比如不会替你批准或拒绝授权）。事件换算在窗口里做（`src/shared/hook-events.js`）。
+
+`install-hooks` 靠 URL 里的 `from=claude-pets`，或者命令里的 `claude-hook.js`，认出哪些条目是自己加的，所以重新安装会把早期的 command 版换成 HTTP 版。http / async hook 在本机 2.1.257、2.1.289、2.1.293 上都确认支持。
+
 ## 消息
 
-hook 发给窗口的消息格式（详见 `src/main/state.js`）：
+窗口内部的消息格式（`/state` 也收这个；详见 `src/main/state.js`）：
 
 ```json
 { "mood": "working", "detail": "Bash", "event": "tool-done", "react": "failed", "say": "Bash 失败了" }
@@ -46,6 +60,7 @@ hook 发给窗口的消息格式（详见 `src/main/state.js`）：
 | 请求 | 说明 |
 | --- | --- |
 | `GET /health` | `{ ok, app: "claude-pets", state }` |
+| `POST /hook` | Claude Code 的原始 hook 事件（HTTP hook 发来的），总是回 `{}` |
 | `POST /state` | 一条消息 |
 | `GET /snapshot` | 当前窗口截图（PNG） |
 | `POST /debug/look` | `{ dx, dy }`：假装鼠标在宠物脸旁边这个位置。只在 `CLAUDE_PETS_DEBUG=1` 时开放 |
@@ -53,7 +68,8 @@ hook 发给窗口的消息格式（详见 `src/main/state.js`）：
 手动测试：
 
 ```bash
-echo '{"hook_event_name":"PreToolUse","tool_name":"Read"}' | node hooks/claude-hook.js
+curl -X POST http://127.0.0.1:47213/hook -d '{"hook_event_name":"PreToolUse","tool_name":"Read"}'
+echo '{"hook_event_name":"SessionStart","source":"startup"}' | node hooks/claude-hook.js
 curl http://127.0.0.1:47213/snapshot -o snap.png
 ```
 

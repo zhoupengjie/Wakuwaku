@@ -4,7 +4,7 @@ const http = require('node:http')
 const path = require('node:path')
 const { test } = require('node:test')
 
-const { toMessage, EVENTS } = require('../hooks/claude-hook')
+const { toMessage, EVENTS } = require('../src/shared/hook-events')
 
 const HOOK = path.join(__dirname, '..', 'hooks', 'claude-hook.js')
 
@@ -45,9 +45,14 @@ test('every installed event maps to something', () => {
   }
   // The tool events, and only they, take a matcher.
   const tools = Object.entries(EVENTS)
-    .filter(([, hasMatcher]) => hasMatcher)
+    .filter(([, e]) => e.matcher)
     .map(([name]) => name)
   assert.deepEqual(tools.sort(), ['PermissionRequest', 'PostToolUse', 'PostToolUseFailure', 'PreToolUse'])
+  // Only SessionStart, which may start the window, runs a process.
+  const commands = Object.entries(EVENTS)
+    .filter(([, e]) => e.via === 'command')
+    .map(([name]) => name)
+  assert.deepEqual(commands, ['SessionStart'])
 })
 
 // Run the hook as Claude Code does: JSON on stdin, against a stand-in window.

@@ -66,12 +66,16 @@ npm run uninstall-hooks
 ## 工作原理
 
 ```
-Claude Code ──hooks──▶ hooks/claude-hook.js ──POST /state──▶ 悬浮窗 (Electron, 127.0.0.1:47213)
+Claude Code ──HTTP hooks──▶ 悬浮窗 (Electron, 127.0.0.1:47213/hook)
+            └─SessionStart─▶ hooks/claude-hook.js（后台运行，窗口没开就启动它）
 ```
 
-- `hooks/claude-hook.js` 收到 hook 事件（stdin 上的 JSON），换算成消息后发给窗口。它不输出任何内容、总是返回 0，窗口没开也不会影响 Claude。
-- `SessionStart` 时如果窗口没开，就以独立进程启动它，所以关掉会话窗口也还在。
+- 除 `SessionStart` 以外的事件都用 Claude Code 的 **HTTP hook**：Claude Code 直接把事件 POST 给窗口，窗口立刻回 `{}`（表示不做任何决定）。调用工具时**不会启动任何进程**，本机实测每次约 0.3ms。
+- `SessionStart` 每个会话只触发一次，要负责在窗口没开时把它启动起来，所以走 node 脚本，并且设成 `async` 在后台运行，不耽误会话启动。窗口是独立进程，关掉会话它也还在。
+- 窗口没开时，HTTP hook 连接会被直接拒绝（约 1ms），Claude 照常工作。
 - 窗口 15 分钟没收到新状态时自动回到空闲，防止会话崩溃后一直卡在"干活中"。
+
+> 早期版本每个事件都启动一次 node（通过 bash），每次约 120ms；一次工具调用有前后两个事件，加起来约 0.24 秒。重新运行 `npm run install-hooks` 会把旧条目换成 HTTP 版。
 
 | 环境变量 | 作用 |
 | --- | --- |
@@ -81,7 +85,7 @@ Claude Code ──hooks──▶ hooks/claude-hook.js ──POST /state──▶
 ## 测试
 
 ```bash
-npm test          # 单元测试：hook 事件映射、状态机、16 方向注视、install-hooks
+npm test          # 单元测试：hook 事件映射、HTTP 接口、状态机、16 方向注视、install-hooks
 npm run smoke     # 端到端：用独立端口和配置目录启动真实窗口，通过 hook 走一遍所有状态，截图存到 out/smoke/
 ```
 

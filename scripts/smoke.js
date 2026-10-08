@@ -15,9 +15,20 @@ const OUT = path.join(ROOT, 'out', 'smoke')
 const PORT = 47299
 const URL = `http://127.0.0.1:${PORT}`
 
+const { EVENTS } = require('../src/shared/hook-events')
+
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
-function hook(event) {
+// Deliver an event the way the installed hooks do: most as an HTTP hook,
+// SessionStart through the command.
+async function hook(event) {
+  if (EVENTS[event.hook_event_name]?.via !== 'http') return runCommand(event)
+  const res = await fetch(`${URL}/hook?from=claude-pets`, { method: 'POST', body: JSON.stringify(event) })
+  const body = await res.text()
+  if (res.status !== 200 || body !== '{}') throw new Error(`/hook answered ${res.status} ${body}`)
+}
+
+function runCommand(event) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [HOOK], {
       env: { ...process.env, CLAUDE_PETS_PORT: String(PORT), CLAUDE_PETS_AUTOSTART: '0' },

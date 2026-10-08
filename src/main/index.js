@@ -10,6 +10,7 @@ if (process.env.CLAUDE_PETS_USER_DATA) {
 
 const config = require('./config')
 const pets = require('./pets')
+const { toMessage } = require('../shared/hook-events')
 const { serve } = require('./server')
 const { createPet } = require('./state')
 
@@ -250,6 +251,10 @@ app.whenReady().then(() => {
     port: PORT,
     getState: () => pet.get(),
     setState: msg => pet.apply(msg),
+    onHook: event => {
+      const message = toMessage(event)
+      if (message) pet.apply(message)
+    },
     snapshot: () => win.webContents.capturePage().then(image => image.toPNG()),
     // Debug only: pretend the cursor is at (dx, dy) from the pet's face.
     lookAt: IS_DEBUG ? at => win.webContents.send('pet:cursor', at) : undefined,

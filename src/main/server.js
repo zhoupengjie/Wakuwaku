@@ -1,6 +1,7 @@
 // The local HTTP port the Claude Code hook reports to.
 //
 //   GET  /health       { ok, app, state }
+//   POST /hook         a Claude Code hook event, as an HTTP hook sends it; answers {}
 //   POST /state        a message (src/main/state.js): { mood, detail, event, react, say }
 //   GET  /snapshot     the window as a PNG (debugging)
 //   POST /debug/look   { dx, dy }: look as if the cursor were there (CLAUDE_PETS_DEBUG=1 only)
@@ -33,11 +34,23 @@ function readJson(req) {
   })
 }
 
-function serve({ port, getState, setState, snapshot, lookAt, onTaken }) {
+function serve({ port, getState, setState, onHook, snapshot, lookAt, onTaken }) {
   const server = http.createServer(async (req, res) => {
     const reply = (code, body) => {
       res.writeHead(code, { 'content-type': 'application/json' })
       res.end(JSON.stringify(body))
+    }
+    const route = `${req.method} ${req.url.split('?')[0]}`
+
+    // Claude Code waits on this answer and reads it as the hook's output:
+    // always at once, always {} (no decision), whatever came in.
+    if (route === 'POST /hook') {
+      try {
+        onHook(await readJson(req))
+      } catch {
+        // Not an event we can read: nothing to show.
+      }
+      return reply(200, {})
     }
 
     if (req.method === 'GET' && req.url === '/health') {

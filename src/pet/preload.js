@@ -20,4 +20,5 @@ contextBridge.exposeInMainWorld('pet', {
   openSettings: () => ipcRenderer.send('pet:open-settings'),
   walk: (dx, ms) => ipcRenderer.invoke('pet:walk', dx, ms),
   walkStop: () => ipcRenderer.send('pet:walk-stop'),
+  dropOut: feet => ipcRenderer.send('pet:drop-out', feet),
 })

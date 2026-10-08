@@ -275,29 +275,120 @@ body {
   gap: 6px;
 }
 
-/* Under the island, a doorway she slides out of: it starts a little above the
-   island's lower edge (behind it) and clips whatever is above, so she comes
-   from behind the island. She never takes the pointer. */
-#island-peek {
-  position: relative;
+/* Her, inside the island: one element all the way from the small round
+   portrait to her whole self, so she grows rather than being swapped. Frame
+   steps move the sheet; the shape (size, place, crop, scale) springs. */
+#island-her {
+  display: none;
+  position: absolute;
   z-index: 1;
-  flex: none;
-  margin-top: -24px;
+  left: 6px;
+  top: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
   overflow: hidden;
+  cursor: grab;
+  transition:
+    left 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    top 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    width 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    height 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    border-radius 0.4s ease,
+    box-shadow 0.3s ease,
+    opacity 0.12s ease;
+}
+
+.has-her #island-her {
+  display: block;
+}
+
+#island-her .sheet,
+#drop-her .sheet {
+  width: 192px;
+  height: 208px;
+  background-repeat: no-repeat;
+  transform-origin: 0 0;
+}
+
+#island-her .sheet {
+  transition: transform 0.56s cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+
+/* Pulled out: her seat in the island is empty while she hangs in the drop. */
+.pulling #island-her {
+  opacity: 0;
+}
+
+/* The drop she is pulled out in: black shapes (the island, a neck, a drop)
+   blurred and sharpened again, so they melt into each other and pinch apart
+   like a liquid. The crisp island sits on top; she rides above it all. */
+#goo,
+#drop-her {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
   pointer-events: none;
 }
 
-#peek-sprite {
-  width: 96px;
-  height: 104px;
-  background-repeat: no-repeat;
-  transform: translateY(-100%);
-  transition: transform 0.3s cubic-bezier(0.5, 0, 0.75, 0);
+.pulling #goo {
+  display: block;
+  inset: 0;
+  z-index: 1;
+  filter: url(#goo-filter);
 }
 
-.peeking #peek-sprite {
-  transform: translateY(0);
-  transition: transform 0.55s cubic-bezier(0.3, 1.4, 0.5, 1);
+#goo div {
+  position: absolute;
+  background: #000;
+}
+
+#goo .goo-neck {
+  border-radius: 99px;
+  transform-origin: 50% 0;
+}
+
+#goo .goo-drop {
+  border-radius: 50%;
+}
+
+.pulling #drop-her {
+  display: block;
+  z-index: 3;
+  width: 96px;
+  height: 104px;
+  overflow: hidden;
+}
+
+#drop-her .sheet {
+  transform: scale(0.5);
+}
+
+/* Let go short of breaking free: everything springs back into the island. */
+.settling #goo div,
+.settling #drop-her {
+  transition:
+    left 0.3s ease-in,
+    top 0.3s ease-in,
+    width 0.3s ease-in,
+    height 0.3s ease-in,
+    transform 0.3s ease-in;
+}
+
+/* The island's own wobble when the drop pinches off. */
+.wobble #island {
+  animation: island-wobble 0.5s ease;
+  transform-origin: 50% 0;
+}
+
+@keyframes island-wobble {
+  30% {
+    transform: scale(1.04, 0.9);
+  }
+  60% {
+    transform: scale(0.98, 1.04);
+  }
 }
 
 /* Always black, light theme or dark: colour is only in the faces and clocks.
@@ -349,12 +440,24 @@ body {
   padding-right: 7px;
 }
 
+.has-her #island-compact {
+  padding-left: 40px;
+}
+
 #island-expanded {
   height: 84px;
   max-width: 400px;
   min-width: 300px;
   gap: 14px;
   padding: 0 22px 0 18px;
+}
+
+/* With her whole self standing at the left. */
+.has-her #island-expanded {
+  height: 116px;
+  max-width: 440px;
+  min-width: 320px;
+  padding-left: 124px;
 }
 
 /* The shape now: its content comes in once the old one has gone. */
@@ -476,6 +579,10 @@ body {
   color: #f5f5f7;
   opacity: 0;
   transition: opacity 0.18s ease;
+}
+
+.island.has-her #panel {
+  left: 122px;
 }
 
 [data-view='ask'] #panel {

@@ -17,11 +17,22 @@
     </div>
     <div id="island-bar">
       <div id="island-row">
-        <div id="island"><div id="island-compact"></div><div id="island-expanded"></div></div>
+        <div id="island">
+          <div id="island-compact"></div>
+          <div id="island-expanded"></div>
+          <div id="island-her"><div class="sheet"></div></div>
+        </div>
         <div id="island-side"></div>
       </div>
-      <div id="island-peek"><div id="peek-sprite"></div></div>
     </div>
+    <div id="goo"><div class="goo-island"></div><div class="goo-neck"></div><div class="goo-drop"></div></div>
+    <div id="drop-her"><div class="sheet"></div></div>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <filter id="goo-filter">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur" />
+        <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" />
+      </filter>
+    </svg>
     <script src="../shared/i18n.js"></script>
     <script src="sprite.js"></script>
     <script src="pet.js"></script>

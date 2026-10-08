@@ -205,6 +205,12 @@ function createPetWindow(ctx) {
     const before = win.getBounds()
     const old = size()
     const wasIsland = isIsland()
+    // A prompt's room belongs to the old shape; the page measures again.
+    if ('display' in patch && patch.display !== settings().display) {
+      panel = null
+      parked = null
+      setShift(0)
+    }
     ctx.change(patch)
     const now = size()
     if (isIsland()) {
@@ -409,6 +415,28 @@ function createPetWindow(ctx) {
     if (isIsland() ? !isOver : isOver) ctx.pet.seen()
   })
 
+  // Pulled out of the island: she lands as the pet with her feet where the
+  // drop let go of her (the page says where, from the cursor).
+  ipcMain.on('pet:drop-out', (_, feet) => {
+    if (!isIsland() || !alive(win)) return
+    const cursor = screen.getCursorScreenPoint()
+    const at = { x: cursor.x + (Number(feet?.dx) || 0), y: cursor.y + (Number(feet?.dy) || 0) }
+    panel = null
+    ctx.change({ display: 'pet' })
+    const { width, height } = size()
+    remember(moveTo(at.x - width / 2, at.y - height))
+    // The pointer is no longer over anything of hers until it moves.
+    isOverPet = false
+    setMouseMode('forward')
+    ctx.pet.apply({ react: 'jump' })
+  })
+
+  // Dragged back up to the top centre of the screen: home into the island.
+  function isAtIsland(cursor) {
+    const area = screen.getDisplayNearestPoint(cursor).workArea
+    return cursor.y - area.y < 48 && Math.abs(cursor.x - (area.x + area.width / 2)) < 240
+  }
+
   // Typing an answer needs the keyboard, which the window does not take otherwise.
   ipcMain.on('pet:keyboard', (_, needs) => {
     if (!alive(win)) return
@@ -455,8 +483,9 @@ function createPetWindow(ctx) {
     const { x, y } = drag
     drag = undefined
     parked = null
-    remember(moveTo(x, y))
     win.webContents.send('pet:drag-end')
+    if (!wasClick && isAtIsland(screen.getCursorScreenPoint())) return resize({ display: 'island' })
+    remember(moveTo(x, y))
     if (wasClick) ctx.pet.apply({ react: 'jump' })
   })
 

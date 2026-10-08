@@ -6,7 +6,7 @@
 
 一只浮在桌面上的小宠物，实时显示 Claude Code 在干什么：干活、等你批准、改完了等你看、做完了，还是出错了。需要你确认的时候，可以直接在她头顶的面板上点。
 
-形象用的是 [Codex Pets](https://codex-pets.net) 社区的 v2 精灵图格式，网站上任意一只 v2 宠物都能换上。默认是 [大肥鱼/Deepseek Chan](https://codex-pets.net/#/pets/deepseek-chan)。
+形象用的是 [Codex Pets](https://codex-pets.net) 社区的 v2 精灵图格式，网站上任意一只 v2 宠物都能换上。默认是 [Claude 小姐](https://codex-pets.net/#/pets/claude-chan)，第一次打开时自动从网站下载。
 
 ## 她会做什么
 
@@ -56,7 +56,7 @@
 目前需要自己打包，见下面"从源码运行"里的 `npm run dist`。不提供安装程序。
 - **从源码运行**：见下文。
 
-第一次打开会弹出主窗口：在「宠物」页挑一只（图库直接来自 codex-pets.net，点「下载」即可），或者粘贴宠物页面的地址。
+第一次打开时，她会自动下载默认宠物 Claude 小姐（需要联网；没网时会弹出主窗口，之后再挑）。想换别的，在主窗口「宠物」页挑一只（图库直接来自 codex-pets.net，点「下载」即可），或者粘贴宠物页面的地址。
 
 ### 2. 连上 Claude Code（推荐用插件）
 
@@ -79,7 +79,7 @@
 git clone https://github.com/zhoupengjie/wakuwaku.git
 cd wakuwaku
 npm install
-npm run fetch-pet        # 从 codex-pets.net 下载默认宠物 deepseek-chan
+npm run fetch-pet        # 从 codex-pets.net 下载默认宠物 Claude 小姐（不跑这步，第一次启动时也会自动下载）
 npm run install-hooks    # 把 hooks 写进 ~/.claude/settings.json
 ```
 
@@ -156,5 +156,5 @@ npm run smoke     # 端到端：用独立端口和配置目录启动真实窗口
 
 - 代码以 [MIT 许可](LICENSE) 发布。
 - 宠物精灵图来自 [codex-pets.net](https://codex-pets.net)，版权归各自作者所有，**不包含在本仓库和便携版里**，由用户在设置里或用 `npm run fetch-pet` 下载到本地。
-- 默认宠物 [大肥鱼/Deepseek Chan](https://codex-pets.net/#/pets/deepseek-chan) 的作者是 Dullsaw。
+- 默认宠物 [Claude 小姐](https://codex-pets.net/#/pets/claude-chan) 的像素形象由 zhoupengjie 制作，是基于 B 站 UP 主 [ZipZipPipe](https://space.bilibili.com/4168597) 的 Claude 小姐形象的非官方二创。它同样不在本仓库和便携版里，第一次运行时从 codex-pets.net 下载。
 - 16 个注视方向的映射规则（从正上方开始顺时针，每 22.5° 一档）与 codex-pets.net 保持一致。

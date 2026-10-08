@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Downloads pets from codex-pets.net into pets/<id>/ (spritesheet.webp, pet.json).
 //
-//   npm run fetch-pet                                        deepseek-chan
+//   npm run fetch-pet                                        claude-chan (Claude小姐)
 //   npm run fetch-pet -- https://codex-pets.net/#/pets/<id>  a pet by its page URL
 //   npm run fetch-pet -- <id> [<id or URL> ...]              by id, several at once
 //
@@ -11,7 +11,7 @@ const path = require('path')
 const { detectLang } = require('../src/shared/i18n')
 const { parsePetRef, downloadPet, describe } = require('../src/shared/pet-fetch')
 
-const DEFAULT_PET = 'deepseek-chan'
+const DEFAULT_PET = 'claude-chan'
 const PETS_DIR = path.join(__dirname, '..', 'pets')
 const lang = detectLang(process.env.LANG || process.env.LC_ALL || Intl.DateTimeFormat().resolvedOptions().locale)
 

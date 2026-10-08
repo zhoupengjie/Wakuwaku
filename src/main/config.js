@@ -9,7 +9,8 @@ const SCALES = { small: 0.4, medium: 0.55, large: 0.75 }
 const DEFAULTS = {
   // 'auto' follows the system; or 'zh' / 'en'.
   lang: 'auto',
-  pet: 'deepseek-chan',
+  // Claude小姐, downloaded from codex-pets.net on first run (app.js).
+  pet: 'claude-chan',
   scale: 0.55,
   // 'pet' (the whole pet) or 'island' (a black pill at the top of the screen,
   // her home); with the island, whether she is out on the desktop.

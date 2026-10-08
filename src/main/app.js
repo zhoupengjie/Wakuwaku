@@ -16,6 +16,7 @@ const { app, Notification } = require('electron')
 
 const config = require('./config')
 const pets = require('./pets')
+const petFetch = require('../shared/pet-fetch')
 const launch = require('./launch')
 const { createFullscreenWatch } = require('./fullscreen')
 const { createAsks } = require('./asks')
@@ -151,6 +152,17 @@ function setHidden(isHidden) {
 function setFullscreen(isFull) {
   hidden.byFullscreen = isFull
   applyVisibility()
+}
+
+// No pet at all yet: download the default one (Claude小姐) and show her. Offline,
+// or the site down: the main window, to pick one by hand later.
+async function fetchDefaultPet() {
+  try {
+    const got = await petFetch.downloadPet(config.DEFAULTS.pet, pets.userDir())
+    change({ pet: got.id })
+  } catch {
+    ctx.home.open()
+  }
 }
 
 // --- Where she is ---------------------------------------------------------------
@@ -363,6 +375,9 @@ async function start(options) {
 
   app.whenReady().then(() => {
     ctx.settings = config.load()
+    // Her pet gone (deleted, or a new default not downloaded here): the first one there is.
+    const found = pets.list()
+    if (found.length && !found.some(p => p.id === ctx.settings.pet)) ctx.settings.pet = found[0].id
     if (process.platform === 'darwin') app.dock?.hide()
 
     ctx.fullscreen = createFullscreenWatch({
@@ -400,8 +415,9 @@ async function start(options) {
     ctx.tray.create()
     watchFullscreen()
 
-    // Nothing to show yet, or never set up: open the main window to begin.
-    if (!pets.list().length || (!ctx.settings.onboarded && connection.connection(ctx.port) === 'none')) ctx.home.open()
+    if (!found.length) fetchDefaultPet()
+    // Never set up: open the main window to begin.
+    if (!ctx.settings.onboarded && connection.connection(ctx.port) === 'none') ctx.home.open()
   })
 
   app.on('window-all-closed', () => app.quit())

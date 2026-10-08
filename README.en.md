@@ -6,7 +6,7 @@ English · [中文](README.md)
 
 A little pet that floats on your desktop and shows what Claude Code is doing: working, waiting for your approval, done with changes for you to review, done, or stuck on an error. When Claude needs your OK, you can answer right on the panel above her head.
 
-She uses the v2 sprite format from the [Codex Pets](https://codex-pets.net) community, so any v2 pet on that site works. The default is [大肥鱼/Deepseek Chan](https://codex-pets.net/#/pets/deepseek-chan).
+She uses the v2 sprite format from the [Codex Pets](https://codex-pets.net) community, so any v2 pet on that site works. The default is [Claude小姐](https://codex-pets.net/#/pets/claude-chan), downloaded from the site on first run.
 
 ## What she does
 
@@ -56,7 +56,7 @@ Both v2 pets (11 animations) and older v1 pets (9, without looking around; she j
 For now you build it yourself: `npm run dist`, see below. There is no installer.
 - **From source**: see below.
 
-The main window opens on first launch: pick a pet on the Pets tab (the gallery comes straight from codex-pets.net; click Download), or paste a pet page URL.
+On first launch she downloads the default pet, Claude小姐 (online; offline, the main window opens so you can pick one later). For another, pick one on the main window's Pets tab (the gallery comes straight from codex-pets.net; click Download), or paste a pet page URL.
 
 ### 2. Connect Claude Code (the plugin is recommended)
 
@@ -79,7 +79,7 @@ Needs Node.js 18+. Only tested on Windows 11 so far; macOS and Linux should work
 git clone https://github.com/zhoupengjie/wakuwaku.git
 cd wakuwaku
 npm install
-npm run fetch-pet        # downloads the default pet, deepseek-chan, from codex-pets.net
+npm run fetch-pet        # downloads the default pet, Claude小姐, from codex-pets.net (or let the first run do it)
 npm run install-hooks    # adds the hooks to ~/.claude/settings.json
 ```
 
@@ -156,5 +156,5 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) (in Chinese) for development note
 
 - The code is under the [MIT License](LICENSE).
 - The pet sprites come from [codex-pets.net](https://codex-pets.net) and belong to their authors. **They are not in this repository or the portable build**; you download them in the settings or with `npm run fetch-pet`.
-- The default pet, [大肥鱼/Deepseek Chan](https://codex-pets.net/#/pets/deepseek-chan), is by Dullsaw.
+- The default pet, [Claude小姐](https://codex-pets.net/#/pets/claude-chan), is pixel art by zhoupengjie: an unofficial fan work of the Claude小姐 character by Bilibili creator [ZipZipPipe](https://space.bilibili.com/4168597). It too is not in this repository or the portable build; the first run downloads it from codex-pets.net.
 - The 16 look directions follow codex-pets.net's mapping (clockwise from straight up, one step per 22.5°).

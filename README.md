@@ -76,13 +76,33 @@ npm run fetch-pet -- <id>
 
 然后右键 → 宠物 → 选它。
 
+### 暂时关掉
+
+| 想要 | 怎么做 |
+| --- | --- |
+| 现在先关掉 | 右键宠物 → 退出。下次新开 Claude Code 会话时她会自己回来 |
+| 一直不要她自动出来，但想用时手动开 | `npm run install-hooks -- --http-only`，之后要用时 `npm start`；想恢复自动启动就再运行一次 `npm run install-hooks` |
+| 彻底不用 | 看下面的卸载 |
+
+宠物没开的时候，Claude Code 照常工作：发给她的事件会被立即拒绝连接（约 1ms），不会卡住你。
+
 ### 卸载
 
-```bash
-npm run uninstall-hooks
-```
+按顺序做（在项目目录里）：
 
-只会删掉本项目加的条目，你自己的 hooks 不受影响；第一次修改前的原文件备份在 `~/.claude/settings.json.claude-pets.bak`。
+1. 如果打开过**开机自动启动**，先右键宠物把它取消勾选，否则系统启动项里会留下一个失效的条目。
+2. 右键宠物 → 退出。
+3. 移除 hooks：
+
+   ```bash
+   npm run uninstall-hooks
+   ```
+
+   只会删掉本项目加的条目，你自己的 hooks 不受影响。第一次修改前的原文件备份在 `~/.claude/settings.json.claude-pets.bak`，确认没问题后可以删掉。
+4. 删除项目文件夹。
+5. （可选）删除宠物的设置（位置、大小等）：Windows 上是 `%APPDATA%\claude-pets`，macOS 是 `~/Library/Application Support/claude-pets`，Linux 是 `~/.config/claude-pets`。
+
+> 一定要先做第 3 步再删文件夹。hooks 里记的是项目文件夹的绝对路径，文件夹没了，每次开会话都会去运行一个不存在的脚本。同理，如果你**移动**了项目文件夹，在新位置重新运行一次 `npm run install-hooks` 就行。
 
 ## 工作原理
 

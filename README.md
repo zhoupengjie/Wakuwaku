@@ -51,10 +51,9 @@
 
 ### 1. 装上宠物
 
-- **安装程序（Windows）**：运行 `Wakuwaku Setup <版本>.exe`。
 - **便携版（Windows）**：`Wakuwaku-<版本>-portable.exe`，放进哪个文件夹都能直接运行，设置、宠物和缓存都存在它旁边的 `wakuwaku-data` 文件夹里，不往系统里写任何东西；不要了直接删掉这两样。
 
-两者目前都需要自己打包，见下面"从源码运行"里的 `npm run dist`。
+目前需要自己打包，见下面"从源码运行"里的 `npm run dist`。不提供安装程序。
 - **从源码运行**：见下文。
 
 第一次打开会弹出主窗口：在「宠物」页挑一只（图库直接来自 codex-pets.net，点「下载」即可），或者粘贴宠物页面的地址。
@@ -84,7 +83,7 @@ npm run fetch-pet        # 从 codex-pets.net 下载默认宠物 deepseek-chan
 npm run install-hooks    # 把 hooks 写进 ~/.claude/settings.json
 ```
 
-之后新开的 Claude Code 会话会自动把她拉起来，也可以手动 `npm start`。打包用 `npm run dist`，安装程序和便携版都输出在 `dist/`。从源码运行时，她的设置、下载的宠物和缓存都放在项目里的 `data/` 文件夹（不进仓库），不碰系统目录；第一次运行时会把 `%APPDATA%\wakuwaku` 里原有的设置和宠物复制过来。
+之后新开的 Claude Code 会话会自动把她拉起来，也可以手动 `npm start`。打包用 `npm run dist`，便携版输出在 `dist/`。从源码运行时，她的设置、下载的宠物和缓存都放在项目里的 `data/` 文件夹（不进仓库），不碰系统目录；第一次运行时会把 `%APPDATA%\wakuwaku` 里原有的设置和宠物复制过来。
 
 如果 `npm install` 之后 `node_modules/electron/dist` 是空的，补跑一次 `node node_modules/electron/install.js`。
 
@@ -123,8 +122,8 @@ npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan
 
 1. 如果打开过**开机自动启动**，先在主窗口里取消。
 2. 用插件连接的：在 Claude Code 里 `/plugin uninstall wakuwaku@wakuwaku`，再 `/plugin marketplace remove wakuwaku`。写入 settings.json 的：在主窗口「Claude Code」页点「移除」（命令行：`npm run uninstall-hooks`），只会删掉本项目加的条目，你自己的 hooks 不受影响，第一次修改前的原文件备份在 `~/.claude/settings.json.wakuwaku.bak`。
-3. 退出她，然后卸载程序或删除项目文件夹。安装版的卸载程序会自动做第 1、2 步。
-4. （可选）删除她的设置和下载的宠物。安装版：Windows 上是 `%APPDATA%\wakuwaku`，macOS 是 `~/Library/Application Support/wakuwaku`，Linux 是 `~/.config/wakuwaku`；便携版：exe 旁边的 `wakuwaku-data`；从源码运行：项目里的 `data/`。
+3. 退出她，然后删掉便携版 exe 或项目文件夹。
+4. 删除她的设置和下载的宠物：便携版是 exe 旁边的 `wakuwaku-data`，从源码运行是项目里的 `data/`。她不往别处写东西。
 
 > 从源码运行时，一定要先移除 hooks 再删文件夹：hooks 里记的是程序的路径。移动了文件夹的话，设置里会显示「指向了别的位置」，点「修复」就行。
 
@@ -156,6 +155,6 @@ npm run smoke     # 端到端：用独立端口和配置目录启动真实窗口
 ## 许可与致谢
 
 - 代码以 [MIT 许可](LICENSE) 发布。
-- 宠物精灵图来自 [codex-pets.net](https://codex-pets.net)，版权归各自作者所有，**不包含在本仓库和安装包里**，由用户在设置里或用 `npm run fetch-pet` 下载到本地。
+- 宠物精灵图来自 [codex-pets.net](https://codex-pets.net)，版权归各自作者所有，**不包含在本仓库和便携版里**，由用户在设置里或用 `npm run fetch-pet` 下载到本地。
 - 默认宠物 [大肥鱼/Deepseek Chan](https://codex-pets.net/#/pets/deepseek-chan) 的作者是 Dullsaw。
 - 16 个注视方向的映射规则（从正上方开始顺时针，每 22.5° 一档）与 codex-pets.net 保持一致。

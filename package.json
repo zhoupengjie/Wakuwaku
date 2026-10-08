@@ -51,20 +51,12 @@
     ],
     "win": {
       "target": [
-        "nsis",
         "portable"
       ],
       "icon": "build/icon.png"
     },
     "portable": {
       "artifactName": "Wakuwaku-${version}-portable.exe"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "include": "build/installer.nsh",
-      "shortcutName": "Wakuwaku"
     },
     "mac": {
       "target": [

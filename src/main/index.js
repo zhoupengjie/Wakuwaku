@@ -1,18 +1,16 @@
 // wakuwaku: a transparent, frameless, always-on-top desktop pet that shows
 // what Claude Code is doing. Claude Code's hooks report to it over a local port.
 //
-// One program, three jobs, by its arguments:
+// One program, two jobs, by its arguments:
 //   --wakuwaku-ensure-running  (the SessionStart hook) start the pet if it is not up, then leave
-//   --wakuwaku-cleanup         (the uninstaller) remove the hooks and start at login, then leave
-//   anything else                 be the pet
+//   anything else              be the pet
 const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
 
-// Where her settings, downloaded pets and caches live. Run from source or as
-// the portable build, nothing goes outside her own folder; installed, they go
-// where installed apps keep theirs. Tests bring their own (its own settings
-// and single-instance lock).
+// Where her settings, downloaded pets and caches live: in her own folder,
+// never in the system's. Tests bring their own (its own settings and
+// single-instance lock).
 const APP_DATA = path.join(app.getPath('appData'), 'wakuwaku')
 const userData = dataFolder()
 if (userData === APP_DATA) moveOldFolder(path.join(app.getPath('appData'), 'claude-pets'), userData)
@@ -26,8 +24,6 @@ const PORT = Number(process.env.WAKUWAKU_PORT || 47213)
 // The old flag too: settings.json hooks from before the rename still use it.
 if (process.argv.includes(launch.ENSURE_FLAG) || process.argv.includes(launch.LEGACY_ENSURE_FLAG)) {
   launch.ensureRunning(PORT)
-} else if (process.argv.includes(launch.CLEANUP_FLAG)) {
-  app.whenReady().then(() => launch.cleanup())
 } else {
   require('./app').start({ port: PORT })
 }
@@ -36,8 +32,11 @@ function dataFolder() {
   if (process.env.WAKUWAKU_USER_DATA) return process.env.WAKUWAKU_USER_DATA
   // From source: data/ in the project (not in git).
   if (!app.isPackaged) return path.join(app.getAppPath(), 'data')
-  // The portable build runs from a temporary copy; this is where its .exe is.
+  // Built: beside the .exe. The portable build runs from a temporary copy;
+  // PORTABLE_EXECUTABLE_DIR is where the .exe itself is.
   if (process.env.PORTABLE_EXECUTABLE_DIR) return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'wakuwaku-data')
+  if (process.platform === 'win32') return path.join(path.dirname(process.execPath), 'wakuwaku-data')
+  // A macOS app or a Linux AppImage cannot write beside itself.
   return APP_DATA
 }
 

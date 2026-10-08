@@ -406,11 +406,48 @@ function createPetWindow(ctx) {
     pointer.reset()
   }
 
+  // --- Presses on her, from the button itself --------------------------------------
+  //
+  // After she has been in the island and out again, Windows can eat the
+  // button-down on her window (the page sees only the button-up) until a menu
+  // has been up. So while the pointer is over her, main watches the button
+  // too, and starts and ends the drag itself; the page's own mousedown still
+  // works as well, whichever comes first.
+  let pressTimer
+  let wasDown = false
+
+  function watchPresses(isOver) {
+    clearInterval(pressTimer)
+    pressTimer = undefined
+    if (!isOver || isPrimaryDown() === null) return
+    wasDown = isPrimaryDown()
+    pressTimer = setInterval(() => {
+      const isDown = isPrimaryDown()
+      if (isDown && !wasDown && !drag && alive(win)) {
+        debugLog('pet', 'press seen from the button')
+        const { x, y } = win.getBounds()
+        const cursor = screen.getCursorScreenPoint()
+        follow({ dx: cursor.x - x, dy: cursor.y - y }, { carried: false })
+      } else if (!isDown && wasDown && drag && !drag.carried) {
+        debugLog('pet', 'release seen from the button')
+        letGo()
+      }
+      wasDown = isDown
+      // Let go of her, and the pointer gone: nothing to watch.
+      if (!isDown && !drag && pointerGone) watchPresses(false)
+    }, 16)
+  }
+
+  // The pointer left her (the page said so); the watch ends once the button is up.
+  let pointerGone = false
+
   // --- From her page ---------------------------------------------------------------
 
   ipcMain.on('pet:hover', (e, isOver) => {
     if (!mine(e)) return
     pointer.setOver(isOver)
+    pointerGone = !isOver
+    if (isOver && !pressTimer) watchPresses(true)
     // The pointer on her: you have seen what she had to say.
     if (isOver) ctx.pet.seen()
   })
@@ -425,6 +462,8 @@ function createPetWindow(ctx) {
   ipcMain.on('pet:drag-start', e => {
     debugLog('pet', 'drag-start from', mine(e) ? 'pet page' : 'another page')
     if (!mine(e)) return
+    // Already started from the button: the same press.
+    if (drag && !drag.carried) return
     const { x, y } = win.getBounds()
     const cursor = screen.getCursorScreenPoint()
     follow({ dx: cursor.x - x, dy: cursor.y - y }, { carried: false })

@@ -5,7 +5,7 @@
 ```
 src/
   main/                 主进程
-    index.js            入口：按参数决定这次是当宠物、做启动检查（--wakuwaku-ensure-running）还是卸载清理（--wakuwaku-cleanup）
+    index.js            入口：按参数决定这次是当宠物，还是做启动检查（--wakuwaku-ensure-running）；决定数据目录
     app.js              组装下面各块，持有它们共享的东西（设置、语言、状态、请求队列、显示与隐藏）；她在哪（宠物 / 岛里 / 出门）、设置补丁的校验、通知、hook 入口
     pet-window.js       她在桌面上的窗口：尺寸和位置、她的眼睛、拖动和被"携带"、走动
     island-window.js    灵动岛的窗口：挂在顶部正中，按页面的要求扩大；伸手够她、把她吸回去
@@ -32,7 +32,7 @@ integrations/claude-code/  Claude Code 插件 wakuwaku（由 build-plugin 生成
 .claude-plugin/         插件市场入口 marketplace.json（位置是 Claude Code 规定的）
 scripts/                fetch-pet.js、install-hooks.js（从源码运行时用）、build-plugin.js、make-icons.js
 test/                   node:test 单元测试；e2e/smoke.js 是端到端测试（npm run smoke）
-build/                  打包资源：图标、installer.nsh（卸载时运行清理）
+build/                  打包资源：图标（只打便携版，没有安装程序）
 pets/                   从源码运行时下载的宠物（不进仓库）
 art/                    美术和调查资料，只在本地（只有 art/README.md 进仓库）
 ```
@@ -49,7 +49,7 @@ art/                    美术和调查资料，只在本地（只有 art/README
 
 `hooks.status()`（`agents/claude-code/hooks.js`）判断我们的条目处于什么状态：`ok`、`httpOnly`（没有启动命令）、`missing`、`partial`（缺事件）、`stale`（端口不对、指向另一份程序，或者是早期的 node 版本）。主窗口据此显示「安装 / 重新安装 / 修复 / 移除」。识别"是我们的"靠 URL 里的 `from=wakuwaku`、参数里的 `--wakuwaku-ensure-running`，以及早期版本的 `claude-hook.js`。
 
-**数据放在哪**（`src/main/index.js` 的 `dataFolder()`）：测试用 `WAKUWAKU_USER_DATA`；从源码运行放在项目的 `data/`（gitignore）；便携版放在 exe 旁边的 `wakuwaku-data/`（electron-builder 的 portable 目标会设 `PORTABLE_EXECUTABLE_DIR`）；只有安装版用 `%APPDATA%\wakuwaku`。源码和便携版第一次运行时，从 `%APPDATA%\wakuwaku` 复制 `config.json` 和 `pets/`。这样从源码调试时不会碰到 MSIX 打包应用（比如 Windows 上的 Claude 桌面版）对 AppData 写入的重定向：它的子进程写进 AppData 的东西，外面的程序看不到。数据目录里放一个 `debug.on` 文件，就会打开 `debug.log`（只写日志，不开调试接口）。
+**数据放在哪**（`src/main/index.js` 的 `dataFolder()`）：测试用 `WAKUWAKU_USER_DATA`；从源码运行放在项目的 `data/`（gitignore）；便携版放在 exe 旁边的 `wakuwaku-data/`（便携版其实是解压到临时目录里跑的，electron-builder 会用 `PORTABLE_EXECUTABLE_DIR` / `PORTABLE_EXECUTABLE_FILE` 告诉它 exe 本身在哪；hooks 命令和开机启动也指向 `PORTABLE_EXECUTABLE_FILE`，不指向临时目录）；打包后的 macOS / Linux 写不进程序旁边，才用系统的应用数据目录。源码和便携版第一次运行时，从 `%APPDATA%\wakuwaku` 复制 `config.json` 和 `pets/`。这样从源码调试时不会碰到 MSIX 打包应用（比如 Windows 上的 Claude 桌面版）对 AppData 写入的重定向：它的子进程写进 AppData 的东西，外面的程序看不到。数据目录里放一个 `debug.on` 文件，就会打开 `debug.log`（只写日志，不开调试接口）。
 
 改名前（claude-pets）写进 settings.json 的条目（`from=claude-pets`、`--claude-pets-ensure-running`）仍算"我们的"：状态显示为 `stale`，可以修复或移除；旧的启动参数照样能用。旧的设置目录 `%APPDATA%\claude-pets` 在第一次启动时整个搬到 `wakuwaku`，搬不动（旧程序还开着）就只复制 `config.json` 和 `pets/`。
 

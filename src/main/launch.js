@@ -1,5 +1,5 @@
 // How this copy of the app starts, for the SessionStart hook and start at
-// login, and the two jobs it can be started for instead of being the pet.
+// login, and the job it can be started for instead of being the pet.
 const { spawn } = require('child_process')
 const fs = require('fs')
 const http = require('http')
@@ -9,12 +9,13 @@ const { app } = require('electron')
 
 const hooksConfig = require('../agents/claude-code/hooks')
 
-const CLEANUP_FLAG = '--wakuwaku-cleanup'
-
-// This copy, as a command and arguments: the installed app on its own, or
-// Electron running the source folder.
+// This copy, as a command and arguments: the built app on its own, or
+// Electron running the source folder. The portable build runs from a
+// temporary copy that changes every time; PORTABLE_EXECUTABLE_FILE is the
+// .exe itself, which stays.
 function launchSpec() {
-  return app.isPackaged ? { command: process.execPath, args: [] } : { command: process.execPath, args: [app.getAppPath()] }
+  if (!app.isPackaged) return { command: process.execPath, args: [app.getAppPath()] }
+  return { command: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath, args: [] }
 }
 
 function claudeSettingsFile() {
@@ -100,25 +101,9 @@ async function ensureRunning(port) {
   app.exit(0)
 }
 
-// Started by the uninstaller: take back what the app added outside itself
-// (its hooks, start at login), then leave.
-function cleanup() {
-  try {
-    const file = claudeSettingsFile()
-    if (fs.existsSync(file)) {
-      const settings = JSON.parse(fs.readFileSync(file, 'utf8'))
-      fs.writeFileSync(file, `${JSON.stringify(hooksConfig.uninstall(settings), null, 2)}\n`)
-    }
-  } catch {}
-  try {
-    app.setLoginItemSettings({ ...launchSpecForLogin(), openAtLogin: false })
-  } catch {}
-  app.exit(0)
-}
-
 function launchSpecForLogin() {
   const { command, args } = launchSpec()
   return { path: command, args }
 }
 
-module.exports = { CLEANUP_FLAG, ENSURE_FLAG: hooksConfig.ENSURE_FLAG, LEGACY_ENSURE_FLAG: hooksConfig.LEGACY_ENSURE_FLAG, launchSpec, launchSpecForLogin, claudeSettingsFile, isUp, ensureRunning, cleanup }
+module.exports = { ENSURE_FLAG: hooksConfig.ENSURE_FLAG, LEGACY_ENSURE_FLAG: hooksConfig.LEGACY_ENSURE_FLAG, launchSpec, launchSpecForLogin, claudeSettingsFile, isUp, ensureRunning }

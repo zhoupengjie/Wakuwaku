@@ -46,10 +46,160 @@ body {
 
 /* One 192x208 cell of the 1536x2288 sheet, scaled. */
 #pet {
+  transform: translateX(var(--shift, 0px));
   width: calc(192px * var(--scale));
   height: calc(208px * var(--scale));
   background-image: var(--sprite);
   background-repeat: no-repeat;
   background-size: calc(1536px * var(--scale)) calc(2288px * var(--scale));
   cursor: grab;
+}
+
+/* The prompt panel: fixed size text, whatever the pet's scale. */
+#panel {
+  flex: none;
+  width: 300px;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 2px solid var(--accent);
+  background: rgba(255, 255, 255, 0.97);
+  color: #1f2430;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+#panel[hidden],
+.asking #bubble {
+  display: none;
+}
+
+#panel .head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+#panel .title {
+  font-weight: 700;
+}
+
+#panel .chip,
+#panel .more {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #eef0f4;
+  color: #5a6170;
+}
+
+#panel .code {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  max-height: 96px;
+  overflow: auto;
+  border-radius: 6px;
+  background: #f3f4f7;
+  font-family: Consolas, 'Cascadia Mono', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+#panel .code.plan {
+  max-height: 140px;
+  font-family: inherit;
+}
+
+#panel .text {
+  margin-bottom: 8px;
+}
+
+#panel .row {
+  display: flex;
+  gap: 6px;
+}
+
+#panel .options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+#panel .btn {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid #c9ceda;
+  border-radius: 7px;
+  background: #fff;
+  color: #1f2430;
+  font: inherit;
+  cursor: pointer;
+}
+
+#panel .btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#panel .btn.primary {
+  border-color: #17a058;
+  background: #17c964;
+  color: #fff;
+}
+
+#panel .btn.always {
+  border-color: #3b5bdb;
+  background: #4d6bfe;
+  color: #fff;
+}
+
+#panel .btn.danger {
+  border-color: #f31260;
+  color: #c40d4d;
+}
+
+#panel .btn.option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+#panel .btn.option.picked {
+  border-color: #4d6bfe;
+  background: #eef2ff;
+}
+
+#panel .btn.option .desc {
+  font-size: 11px;
+  color: #5a6170;
+}
+
+#panel .note {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #5a6170;
+  overflow-wrap: anywhere;
+}
+
+#panel .foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+#panel .btn.ghost {
+  flex: none;
+  border: none;
+  padding: 2px 0;
+  background: none;
+  color: #5a6170;
+  font-size: 12px;
+  text-decoration: underline;
 }

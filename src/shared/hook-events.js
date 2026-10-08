@@ -6,6 +6,8 @@
 //   matcher  the tool events take one
 //   via      'http': Claude Code POSTs the event to the window, no process;
 //            'command': runs hooks/claude-hook.js, in the background
+//   timeout  seconds Claude Code waits for the answer (default 2); a prompt
+//            waits for the person to answer it on the pet
 const EVENTS = {
   SessionStart: { matcher: false, via: 'command' },
   SessionEnd: { matcher: false, via: 'http' },
@@ -13,7 +15,7 @@ const EVENTS = {
   PreToolUse: { matcher: true, via: 'http' },
   PostToolUse: { matcher: true, via: 'http' },
   PostToolUseFailure: { matcher: true, via: 'http' },
-  PermissionRequest: { matcher: true, via: 'http' },
+  PermissionRequest: { matcher: true, via: 'http', timeout: 300 },
   Elicitation: { matcher: false, via: 'http' },
   TaskCompleted: { matcher: false, via: 'http' },
   Stop: { matcher: false, via: 'http' },
@@ -47,7 +49,7 @@ function toMessage(e) {
       // An interrupt is the person stopping it, not the tool failing.
       return e.is_interrupt ? null : { mood: 'working', detail: e.tool_name, react: 'failed', say: `${e.tool_name} 失败了` }
     case 'PermissionRequest':
-      return { mood: 'waiting', detail: `${e.tool_name} 需要你批准` }
+      return { mood: 'waiting', detail: ASKS_PERSON[e.tool_name] || `${e.tool_name} 需要你批准` }
     case 'Elicitation':
       return { mood: 'waiting', detail: `${e.mcp_server_name} 需要你填写` }
     case 'TaskCompleted':

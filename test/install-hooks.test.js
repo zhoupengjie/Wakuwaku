@@ -52,6 +52,7 @@ test('install adds one entry per event, HTTP except SessionStart, and can run tw
     assert.equal(gotMatcher, matcher ? '*' : undefined, event)
     if (via === 'http') {
       assert.equal(hook.type, 'http', event)
+      assert.equal(hook.timeout, event === 'PermissionRequest' ? 300 : 2, event)
       assert.match(hook.url, /^http:\/\/127\.0\.0\.1:\d+\/hook\?from=claude-pets$/, event)
     } else {
       assert.equal(hook.type, 'command', event)

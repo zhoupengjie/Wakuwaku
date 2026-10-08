@@ -78,3 +78,62 @@ test('/state, /health and unknown routes', async t => {
   // Debug routes are closed unless asked for.
   assert.equal((await post(`${url}/debug/look`, '{"dx":1,"dy":1}')).status, 404)
 })
+
+test('a prompt holds the hook request until it is answered', async t => {
+  const hooks = []
+  let answer
+  const server = serve({
+    port: 0,
+    getState: () => ({}),
+    setState: () => false,
+    onHook: event => {
+      hooks.push(event)
+      return event.hook_event_name === 'PermissionRequest' ? new Promise(resolve => (answer = resolve)) : undefined
+    },
+    snapshot: async () => Buffer.alloc(0),
+    onTaken: () => {},
+  })
+  await once(server, 'listening')
+  t.after(() => server.close())
+  const url = `http://127.0.0.1:${server.address().port}/hook`
+
+  let settled = false
+  const pending = post(url, JSON.stringify({ hook_event_name: 'PermissionRequest', tool_name: 'Bash' })).then(r => {
+    settled = true
+    return r
+  })
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(settled, false)
+  // Other events still answer at once meanwhile.
+  assert.deepEqual(await post(url, '{"hook_event_name":"PreToolUse"}'), { status: 200, body: '{}' })
+
+  const output = { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }
+  answer(output)
+  assert.deepEqual(await pending, { status: 200, body: JSON.stringify(output) })
+})
+
+test('Claude Code hanging up tells onHook to forget the prompt', async t => {
+  let hungUp
+  const server = serve({
+    port: 0,
+    getState: () => ({}),
+    setState: () => false,
+    onHook: (event, signal) =>
+      new Promise(() => {
+        signal.addEventListener('abort', () => (hungUp = true))
+      }),
+    snapshot: async () => Buffer.alloc(0),
+    onTaken: () => {},
+  })
+  await once(server, 'listening')
+  t.after(() => server.close())
+
+  const http = require('node:http')
+  const req = http.request(`http://127.0.0.1:${server.address().port}/hook`, { method: 'POST' })
+  req.on('error', () => {})
+  req.end('{"hook_event_name":"PermissionRequest","tool_name":"Bash"}')
+  await new Promise(resolve => setTimeout(resolve, 100))
+  req.destroy()
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(hungUp, true)
+})

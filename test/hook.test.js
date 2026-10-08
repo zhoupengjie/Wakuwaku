@@ -25,6 +25,7 @@ test('each hook event becomes the right message', () => {
     ],
     [{ hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', is_interrupt: true }, null],
     [{ hook_event_name: 'PermissionRequest', tool_name: 'Bash' }, { mood: 'waiting', detail: 'Bash 需要你批准' }],
+    [{ hook_event_name: 'PermissionRequest', tool_name: 'AskUserQuestion' }, { mood: 'waiting', detail: '有问题问你' }],
     [{ hook_event_name: 'Elicitation', mcp_server_name: 'github' }, { mood: 'waiting', detail: 'github 需要你填写' }],
     [{ hook_event_name: 'TaskCompleted', task_subject: '写测试' }, { react: 'jump', say: '完成：写测试' }],
     [{ hook_event_name: 'Stop' }, { mood: 'done' }],

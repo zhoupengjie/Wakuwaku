@@ -26,9 +26,10 @@ const PORT = Number(process.env.CLAUDE_PETS_PORT || 47213)
 const HOOK = path.join(__dirname, '..', 'hooks', 'claude-hook.js').replaceAll('\\', '/')
 const URL = `http://127.0.0.1:${PORT}/hook?from=claude-pets`
 
-const ENTRY = {
-  http: { type: 'http', url: URL, timeout: 2 },
-  command: { type: 'command', command: `node "${HOOK}"`, async: true, timeout: 10 },
+function entry(via, timeout) {
+  return via === 'http'
+    ? { type: 'http', url: URL, timeout: timeout ?? 2 }
+    : { type: 'command', command: `node "${HOOK}"`, async: true, timeout: 10 }
 }
 
 function isOurs(hook) {
@@ -68,8 +69,8 @@ const hooks = settings.hooks && typeof settings.hooks === 'object' ? settings.ho
 strip(hooks)
 
 if (!isUninstall) {
-  for (const [event, { matcher, via }] of Object.entries(EVENTS)) {
-    const group = { hooks: [ENTRY[isHttpOnly ? 'http' : via]] }
+  for (const [event, { matcher, via, timeout }] of Object.entries(EVENTS)) {
+    const group = { hooks: [entry(isHttpOnly ? 'http' : via, timeout)] }
     hooks[event] = [...(hooks[event] || []), matcher ? { matcher: '*', ...group } : group]
   }
 }

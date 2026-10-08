@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Draws the app and tray icons with ImageMagick: a round face, two black
 // capsule eyes, no mouth, a pastel colour per mood. Our own drawing; the
-// outputs are committed, so building the app does not need this.
+// outputs (src-tauri/icons) are committed, so building needs no ImageMagick.
 //
 //   node scripts/make-icons.js      (needs `magick` on PATH)
 const { execFileSync } = require('child_process')
@@ -62,18 +62,19 @@ function face(s, { face: color, rim, eyes, badge }) {
 }
 
 // Each command in its own push/pop, so a translate or stroke never leaks.
-function render(size, mood, out) {
+// 8-bit RGBA: Tauri's PNG decoder takes no 16-bit images. `extra` goes before
+// the output (the .ico's sizes).
+function render(size, mood, out, extra = []) {
   const args = ['-size', `${size}x${size}`, 'xc:none']
   for (const cmd of face(size, MOODS[mood])) args.push('-draw', `push graphic-context ${cmd} pop graphic-context`)
   fs.mkdirSync(path.dirname(out), { recursive: true })
-  execFileSync('magick', [...args, out])
+  execFileSync('magick', [...args, '-depth', '8', ...extra, out.endsWith('.png') ? `PNG32:${out}` : out])
 }
 
-for (const mood of Object.keys(MOODS)) {
-  render(16, mood, path.join(ROOT, 'src', 'assets', 'tray', `${mood}.png`))
-  render(32, mood, path.join(ROOT, 'src', 'assets', 'tray', `${mood}@2x.png`))
-  render(64, mood, path.join(ROOT, 'src', 'assets', 'faces', `${mood}.png`))
-}
-render(512, 'idle', path.join(ROOT, 'build', 'icon.png'))
-render(256, 'idle', path.join(ROOT, 'src', 'assets', 'icon.png'))
+const ICONS = path.join(ROOT, 'src-tauri', 'icons')
+// The tray's faces, one per mood (32 px: sharp at 200%, scaled down at 100%).
+for (const mood of Object.keys(MOODS)) render(32, mood, path.join(ICONS, 'tray', `${mood}.png`))
+// The app: the window icon, the notifications' icon, and the .exe's.
+render(256, 'idle', path.join(ICONS, 'icon.png'))
+render(512, 'idle', path.join(ICONS, 'icon.ico'), ['-define', 'icon:auto-resize=256,64,48,32,16'])
 console.log('icons written')

@@ -1,0 +1,132 @@
+// The local HTTP port the Claude Code hooks report to.
+//
+//   GET  /health       { ok, app, runtime, state }; with WAKUWAKU_DEBUG=1, the windows and settings too
+//   POST /hook         a Claude Code hook event; answers {}, or for a prompt the person's answer
+//   POST /state        a message (state.rs)
+//   POST /come-home    started again while running: back into sight
+//   POST /debug/eval   { page, code }: run code in her page or the island's (WAKUWAKU_DEBUG=1 only)
+//   POST /debug/walk   { dx, ms }: take a walk now (WAKUWAKU_DEBUG=1 only)
+use std::io::Read;
+use std::sync::Arc;
+
+use serde_json::{json, Value};
+use tauri::Manager;
+use tiny_http::{Header, Request, Response, Server};
+
+use crate::{events, island, now_ms, pet, Responder, Shared};
+
+// Hook events carry whole files (an Edit's PostToolUse has the file before
+// the edit), so this is generous.
+const MAX_BODY: u64 = 16 * 1024 * 1024;
+
+pub fn serve(sh: Arc<Shared>, server: Server) {
+    let is_debug = std::env::var("WAKUWAKU_DEBUG").as_deref() == Ok("1");
+    std::thread::spawn(move || {
+        for req in server.incoming_requests() {
+            handle(&sh, req, is_debug);
+        }
+    });
+}
+
+fn reply(req: Request, code: u16, body: Value) {
+    let header = Header::from_bytes("content-type", "application/json").expect("a valid header");
+    let _ = req.respond(Response::from_string(body.to_string()).with_status_code(code).with_header(header));
+}
+
+fn read_json(req: &mut Request) -> Option<Value> {
+    let mut bytes = Vec::new();
+    req.as_reader().take(MAX_BODY).read_to_end(&mut bytes).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool) {
+    let path = req.url().split('?').next().unwrap_or("").to_string();
+    let method = req.method().as_str().to_string();
+    match (method.as_str(), path.as_str()) {
+        ("POST", "/hook") => {
+            let Some(event) = read_json(&mut req) else { return reply(req, 200, json!({})) };
+            if let Some(msg) = events::to_message(&event) {
+                sh.apply(&msg);
+            }
+            // A prompt holds the answer until the person picks on the pet, the
+            // terminal settles it, or time runs out; out of sight, it is the
+            // terminal's at once.
+            if event["hook_event_name"] == "PermissionRequest" && sh.is_visible() {
+                let respond: Responder = Box::new(move |out: Option<Value>| match out {
+                    Some(out) => reply(req, 200, if out.is_object() { out } else { json!({}) }),
+                    None => drop(req),
+                });
+                let wait = sh.setting("promptWaitSec").as_u64().unwrap_or(290) * 1000;
+                let added = sh.asks.lock().unwrap().add(event, respond, now_ms(), wait);
+                match added {
+                    Ok(id) => {
+                        sh.log(&format!("prompt {id} waits on the person"));
+                        sh.push_asks();
+                    }
+                    Err(respond) => respond(Some(json!({}))),
+                }
+                return;
+            }
+            if sh.asks.lock().unwrap().seen(&event) {
+                sh.push_asks();
+            }
+            reply(req, 200, json!({}))
+        }
+        // Started again while she runs: she comes back into sight.
+        ("POST", "/come-home") => {
+            crate::come_home(sh);
+            reply(req, 200, json!({ "ok": true }))
+        }
+        ("GET", "/health") => {
+            let mut body = json!({ "ok": true, "app": "wakuwaku", "runtime": "tauri", "state": sh.pet.lock().unwrap().get(now_ms()) });
+            if is_debug {
+                body["window"] = pet::where_(sh);
+                body["island"] = island::where_(sh);
+                body["settings"] = Value::Object(sh.settings.lock().unwrap().clone());
+            }
+            reply(req, 200, body)
+        }
+        ("POST", "/state") => match read_json(&mut req) {
+            Some(msg) if sh.apply(&msg) => reply(req, 200, json!({ "ok": true })),
+            Some(_) => reply(req, 400, json!({ "error": "nothing to do" })),
+            None => reply(req, 400, json!({ "error": "bad json" })),
+        },
+        ("POST", "/debug/eval") if is_debug => {
+            let Some(body) = read_json(&mut req) else { return reply(req, 400, json!({ "error": "bad json" })) };
+            let page = body["page"].as_str().unwrap_or("pet");
+            let code = body["code"].as_str().unwrap_or("null");
+            match evaluate(sh, page, code) {
+                Some(value) => reply(req, 200, json!({ "result": value })),
+                None => reply(req, 504, json!({ "error": "no answer" })),
+            }
+        }
+        ("POST", "/debug/walk") if is_debug => {
+            let Some(body) = read_json(&mut req) else { return reply(req, 400, json!({ "error": "bad json" })) };
+            let (dx, ms) = (body["dx"].as_f64().unwrap_or(0.0), body["ms"].as_f64().unwrap_or(500.0));
+            // Walks block; this one answers when it is over.
+            let sh = sh.clone();
+            std::thread::spawn(move || {
+                let arrived = pet::walk(&sh, dx, ms);
+                reply(req, 200, json!({ "ok": true, "arrived": arrived }));
+            });
+        }
+        _ => reply(req, 404, json!({ "error": "not found" })),
+    }
+}
+
+// Run code in a page ("pet" or "island") and wait for what it gives back.
+fn evaluate(sh: &Shared, page: &str, code: &str) -> Option<Value> {
+    let win = sh.app.get_webview_window(page)?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let id = {
+        let mut evals = sh.evals.lock().unwrap();
+        evals.0 += 1;
+        let id = evals.0;
+        evals.1.insert(id, tx);
+        id
+    };
+    win.eval(format!("window.__wkEval({id}, () => ({code}))")).ok()?;
+    let answer = rx.recv_timeout(std::time::Duration::from_secs(3)).ok();
+    sh.evals.lock().unwrap().1.remove(&id);
+    answer
+}

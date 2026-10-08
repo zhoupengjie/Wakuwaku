@@ -59,6 +59,11 @@
   // self (one sheet cell, halved) standing in the open one.
   const HEAD = 24
   const HEAD_SCALE = 0.21
+  // Her portrait in the settings' head.
+  const SET_HEAD = 32
+  const SET_HEAD_SCALE = 0.28
+  // The settings' width.
+  const SETTINGS_W = 520
   const BODY_SCALE = 0.5
   const BODY_W = Math.round(CELL_W * BODY_SCALE)
   const BODY_H = Math.round(CELL_H * BODY_SCALE)
@@ -109,11 +114,9 @@
   // the drop pinches off she is carrying: her window has her, this page only
   // waits for the button to be let go.
   let pull = null
-  // When she was last clicked in the island: a second click soon after is a
-  // double-click (her press is held for pulling, so the page's own dblclick
-  // cannot be relied on there).
-  let lastTap = 0
-  const DOUBLE_MS = 500
+  // When the last pull ended: the click the browser sends after it (the press
+  // on her, the release on the island) is not a click on the island.
+  let pulledAt = 0
   let dropTimer
   // Reaching for her (her middle on the screen, close), or taking her in.
   let isReaching = false
@@ -121,10 +124,14 @@
   let retractTimer
 
   const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
-  const isOn = () => ROLE === 'island' && config.display === 'island'
+  // Risen only for the settings (she is the pet on her own): it goes once they close.
+  let islandTemp = false
+  const isOn = () => ROLE === 'island' && (config.display === 'island' || islandTemp)
   // In her seat: there is a pet to show, and she is not out on the desktop.
   const isHome = () => !!spriteUrl && config.out !== true
   const isAsking = () => isOn() && !panel.hidden
+  // The settings open in the island (settings.js).
+  const isSetting = () => isOn() && !!window.Settings?.isOpen()
   const isNudging = () => !!nudge && Date.now() < nudge.until
 
   function clock(ms) {
@@ -188,16 +195,22 @@
 
   // --- Her, in the island -----------------------------------------------------------
 
-  // Her shape for the island's: a round portrait ringed in the mood's colour,
-  // or her whole self standing at the left. Both are the same sheet, cropped
-  // and scaled, so one springs into the other.
+  // Her shape for the island's: a round portrait ringed in the mood's colour
+  // (small in the compact island, a little bigger in the settings' head), or
+  // her whole self standing at the left. All the same sheet, cropped and
+  // scaled, so one springs into another.
   function placeHer({ height }) {
     if (!isHome()) return
     const s = her.style
-    if (view === 'compact') {
-      Object.assign(s, { left: '6px', top: '6px', width: `${HEAD}px`, height: `${HEAD}px`, borderRadius: `${HEAD / 2}px` })
+    const portrait = (px, scale, left, top) => {
+      Object.assign(s, { left: `${left}px`, top: `${top}px`, width: `${px}px`, height: `${px}px`, borderRadius: `${px / 2}px` })
       s.setProperty('--ring', COLOR[now.mood])
-      herSheet.style.transform = `translate(${-(CELL_W * HEAD_SCALE - HEAD) / 2}px, -2px) scale(${HEAD_SCALE})`
+      herSheet.style.transform = `translate(${-(CELL_W * scale - px) / 2}px, -2px) scale(${scale})`
+    }
+    if (view === 'compact') {
+      portrait(HEAD, HEAD_SCALE, 6, 6)
+    } else if (view === 'settings') {
+      portrait(SET_HEAD, SET_HEAD_SCALE, 16, 13)
     } else {
       const top = height - BODY_H - (view === 'ask' ? 10 : 6)
       Object.assign(s, { left: '12px', top: `${top}px`, width: `${BODY_W}px`, height: `${BODY_H}px`, borderRadius: '0px' })
@@ -208,7 +221,7 @@
   // Still in the portrait (her mood's first frame); playing once she stands.
   function animateHer() {
     if (!isHome()) return
-    const name = view === 'compact' ? null : view === 'ask' ? 'waiting' : isNudging() ? nudge.clip : MOOD_CLIP[now.mood]
+    const name = view === 'compact' || view === 'settings' ? null : view === 'ask' ? 'waiting' : isNudging() ? nudge.clip : MOOD_CLIP[now.mood]
     if (name && name === herClip) return
     clearTimeout(herTimer)
     herClip = name
@@ -256,6 +269,7 @@
 
   function sizeOf(name) {
     const withHer = isHome()
+    if (name === 'settings') return { width: SETTINGS_W, height: window.Settings.layer.offsetHeight }
     if (name === 'ask') {
       return {
         width: panel.offsetWidth + 28 + (withHer ? 108 : 0),
@@ -276,10 +290,11 @@
     if (!isOn() || (pull?.started && !pull.carrying) || isAbsorbing) return
     // A prompt answered: the island closes rather than lingering open.
     if (view === 'ask' && !isAsking()) nudge = null
-    view = isAsking() ? 'ask' : isHover || isNudging() ? 'expanded' : 'compact'
+    view = isSetting() ? 'settings' : isAsking() ? 'ask' : isHover || isNudging() ? 'expanded' : 'compact'
     island.dataset.view = view
+    seatPanel()
     body.classList.toggle('has-her', isHome())
-    body.classList.toggle('compact-her', view === 'compact')
+    body.classList.toggle('compact-her', view === 'compact' || view === 'settings')
     if (spriteUrl) herSheet.style.backgroundImage = `url("${spriteUrl}")`
     fillCompact()
     fillExpanded()
@@ -329,7 +344,7 @@
 
   function pullDown(e) {
     console.log('pointerdown on her in the island, button', e.button)
-    if (e.button !== 0 || !isHome() || view === 'ask' || isAbsorbing) return
+    if (e.button !== 0 || !isHome() || view === 'ask' || isSetting() || isAbsorbing) return
     // No mouse events follow, so the island does not take this for a click.
     e.preventDefault()
     pull = { x0: e.clientX, y0: e.clientY, started: false, broken: false, at: null, carrying: false }
@@ -347,6 +362,7 @@
   }
 
   function pullMove(e) {
+    if (pull?.started) pulledAt = Date.now()
     if (!pull || pull.carrying) return
     if (!pull.started) {
       if (Math.hypot(e.clientX - pull.x0, e.clientY - pull.y0) < 5) return
@@ -451,12 +467,11 @@
     const done = pull
     pull = null
     if (!done.started) {
-      // A double-click on her: the main window, as on the island. One click does nothing.
-      const isDouble = Date.now() - lastTap < DOUBLE_MS
-      lastTap = isDouble ? 0 : Date.now()
-      if (isDouble) window.pet.openSettings()
+      // A click on her, not a pull: the settings, as anywhere on the island.
+      if (view !== 'ask') window.pet.openSettings()
       return
     }
+    pulledAt = Date.now()
     if (done.carrying) {
       // Let go: she lands there, or comes home if she was let go by the island.
       window.pet.dropHer()
@@ -580,10 +595,17 @@
 
   // --- On and off ---------------------------------------------------------------
 
-  // The prompt panel lives in the island while it is on, above the pet otherwise.
+  // The prompt panel lives in the island while it is on (a banner in the
+  // settings while they are open), above the pet otherwise.
+  function seatPanel() {
+    if (!isOn()) return
+    const seat = isSetting() ? window.Settings.askSlot : island
+    if (panel.parentElement !== seat) seat.append(panel)
+  }
+
   function place() {
     body.classList.toggle('island', isOn())
-    if (isOn() && panel.parentElement !== island) island.append(panel)
+    seatPanel()
     if (!isOn() && panel.parentElement !== stage) stage.prepend(panel)
     if (!isOn()) {
       clearInterval(clockTimer)
@@ -607,6 +629,7 @@
     config = data.config || {}
     spriteUrl = data.sprite
     second = data.second || null
+    islandTemp = data.islandTemp === true
     place()
     // Something new that wants you, or is finished: the island opens for a moment.
     if (isOn() && before !== now.mood && NUDGE_CLIP[now.mood]) nudgeFor(NUDGE_CLIP[now.mood], null)
@@ -638,13 +661,17 @@
         update()
       }, HOVER_CLOSE_MS)
     })
-    // A double-click opens the main window (one click does nothing: hovering
-    // already opens the island); the prompt's own buttons and she are not the island.
-    target.addEventListener('dblclick', e => {
-      if (!panel.contains(e.target) && !her.contains(e.target)) window.pet.openSettings()
+    // One click opens the settings (no double-click to wait for), except on a
+    // prompt and its buttons, in the settings themselves, or on her (her
+    // press may be a pull; pullUp decides).
+    target.addEventListener('click', e => {
+      // A click in the settings (✕, the head) may just have closed them: not a click to open.
+      if (isSetting() || window.Settings?.layer?.contains(e.target) || Date.now() - pulledAt < 500) return
+      if (view === 'ask' || panel.contains(e.target) || her.contains(e.target)) return
+      window.pet.openSettings()
     })
     target.addEventListener('contextmenu', e => {
-      if (panel.contains(e.target) && e.target.matches('input')) return
+      if (e.target.matches('input')) return
       e.preventDefault()
       window.pet.menu()
     })

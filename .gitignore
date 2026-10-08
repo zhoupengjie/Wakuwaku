@@ -1,12 +1,18 @@
+# Rust build output, and the schemas tauri-build generates
+src-tauri/target/
+src-tauri/gen/
+
+# Her settings, pets and logs when run from source (see src-tauri/src/data.rs).
+data/
+
+# Downloaded pets are their authors' work
+pets/*
+!pets/.gitkeep
+
+# Left from the Electron build, if still around locally
 node_modules/
 dist/
 out/
-# Her settings, pets and caches when run from source (see src/main/index.js).
-data/
-
-# Downloaded pets are their authors' work: npm run fetch-pet
-pets/*
-!pets/.gitkeep
 
 *.log
 .DS_Store

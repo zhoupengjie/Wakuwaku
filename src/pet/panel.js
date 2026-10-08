@@ -243,10 +243,12 @@
     })
   }
 
-  // Which page holds the panel: the island's in island mode, hers otherwise.
+  // Which page holds the panel: the island's in island mode, or while the
+  // settings are open in it (a banner there); hers otherwise.
   const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
   let display = 'pet'
-  const holdsPanel = () => (ROLE === 'island') === (display === 'island')
+  let settingsOpen = false
+  const holdsPanel = () => (ROLE === 'island') === (display === 'island' || settingsOpen)
 
   function render(armMs = ARM_MS) {
     const ask = holdsPanel() ? asks[0] : null
@@ -314,6 +316,7 @@
   window.pet.onUpdate(data => {
     const wasHolding = holdsPanel()
     display = data.config?.display || 'pet'
+    settingsOpen = data.settingsOpen === true
     if ((data.lang && data.lang !== lang) || wasHolding !== holdsPanel()) {
       lang = data.lang || lang
       render(0)

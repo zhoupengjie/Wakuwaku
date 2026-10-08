@@ -4,10 +4,11 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' file:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      content="default-src 'self'; img-src 'self' http://asset.localhost asset: https://codex-pets.net; connect-src ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'"
     />
     <title>wakuwaku</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="settings.css" />
   </head>
   <body>
     <div id="stage">
@@ -21,6 +22,7 @@
           <div id="island-compact"></div>
           <div id="island-expanded"></div>
           <div id="island-her"><div class="sheet"></div></div>
+          <div id="island-settings" tabindex="-1"></div>
         </div>
       </div>
     </div>
@@ -32,10 +34,12 @@
         <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" />
       </filter>
     </svg>
+    <script src="bridge.js"></script>
     <script src="../shared/i18n.js"></script>
     <script src="sprite.js"></script>
     <script src="pet.js"></script>
     <script src="island.js"></script>
+    <script src="settings.js"></script>
     <script src="panel.js"></script>
   </body>
 </html>

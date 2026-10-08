@@ -1,0 +1,635 @@
+/* The settings, grown out of the island (settings.js). The island's own
+   greys and its one spring; switches green when on; every button a pill. */
+
+#island-settings {
+  --g1: #1c1c1e;
+  --g2: #2c2c2e;
+  --g3: #3a3a3c;
+  --g4: #8e8e93;
+  --g5: #a1a1a6;
+  --fg: #f5f5f7;
+  --spring: cubic-bezier(0.3, 1.45, 0.5, 1);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 520px;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fg);
+  outline: none;
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+[data-view='settings'] #island-settings {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.24s ease 0.16s;
+}
+
+/* In the settings the island is a panel, not a button. */
+#island[data-view='settings'] {
+  cursor: default;
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+#island[data-view='settings'] #island-her {
+  cursor: default;
+}
+
+#island-settings button {
+  font: inherit;
+}
+
+#island-settings .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+#island-settings .ellip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#island-settings .mono {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+}
+
+#island-settings .clock {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+#island-settings .dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* The head: her portrait sits in its left (island.js puts her there). */
+.s-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding-left: 46px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.s-head .t {
+  font-weight: 650;
+}
+
+.s-head .s {
+  color: var(--g5);
+  font-size: 12px;
+}
+
+.s-head .clock {
+  font-size: 15px;
+}
+
+.s-head .x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--g2);
+  color: var(--g5);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.s-head .x:hover {
+  background: var(--g3);
+  color: var(--fg);
+}
+
+.s-tabs {
+  position: relative;
+  display: flex;
+  padding: 3px;
+  margin-bottom: 10px;
+  border-radius: 16px;
+  background: var(--g1);
+}
+
+.s-tabs .ind {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 5);
+  border-radius: 13px;
+  background: var(--g3);
+  transition: transform 0.56s var(--spring);
+}
+
+.s-tabs button {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  padding: 6px 0;
+  border: 0;
+  border-radius: 13px;
+  background: none;
+  color: var(--g4);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.s-tabs button:hover {
+  color: var(--g5);
+}
+
+.s-tabs button.on {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* A prompt waiting while they are open: a dot on "now", a banner below the tabs. */
+.s-tabs .n {
+  position: absolute;
+  top: 5px;
+  right: calc(50% - 22px);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffb340;
+}
+
+.s-ask {
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: var(--g1);
+  box-shadow: inset 0 0 0 1px rgba(255, 179, 64, 0.4);
+}
+
+.s-ask:empty,
+.s-ask:has(> #panel[hidden]) {
+  display: none;
+}
+
+.island .s-ask #panel {
+  position: static;
+  width: auto;
+  opacity: 1;
+}
+
+.s-body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin-right: -6px;
+  padding-right: 6px;
+}
+
+.s-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.s-body::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--g3);
+}
+
+.s-body > * {
+  animation: s-rise 0.32s var(--spring) both;
+}
+
+@keyframes s-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.s-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 6px 0;
+  color: var(--g4);
+  font-size: 11.5px;
+}
+
+#island-settings .sec {
+  margin: 12px 8px 6px;
+  color: var(--g4);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+#island-settings .sec:first-child {
+  margin-top: 2px;
+}
+
+#island-settings .row-sec {
+  display: flex;
+  align-items: center;
+}
+
+#island-settings .grp {
+  overflow: hidden;
+  border-radius: 18px;
+  background: var(--g1);
+}
+
+#island-settings .r {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  box-sizing: border-box;
+  padding: 10px 14px;
+}
+
+#island-settings .r + .r {
+  border-top: 1px solid #262628;
+}
+
+#island-settings .d {
+  color: var(--g4);
+  font-size: 12px;
+}
+
+#island-settings .proj {
+  flex: none;
+  width: 96px;
+}
+
+#island-settings .in-use {
+  flex: none;
+  color: #34d27b;
+}
+
+#island-settings .note {
+  padding: 8px 14px 10px;
+  color: var(--g4);
+  font-size: 12px;
+}
+
+#island-settings .note.err {
+  color: #ff6b7a;
+}
+
+#island-settings .welcome {
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: rgba(94, 155, 255, 0.14);
+  color: #cfe0ff;
+}
+
+#island-settings .link {
+  flex: none;
+  color: #5e9bff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#island-settings .links {
+  padding: 10px 8px 2px;
+}
+
+#island-settings .sw {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--g3);
+  cursor: pointer;
+  transition: background 0.25s;
+}
+
+#island-settings .sw::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.56s var(--spring);
+}
+
+#island-settings .sw.on {
+  background: #34d27b;
+}
+
+#island-settings .sw.on::after {
+  left: 18px;
+}
+
+#island-settings .sw:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#island-settings .seg {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 14px;
+  background: var(--g2);
+  font-size: 12px;
+}
+
+#island-settings .seg span {
+  padding: 3px 11px;
+  border-radius: 12px;
+  color: var(--g5);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.25s,
+    color 0.25s;
+}
+
+#island-settings .seg span.on {
+  background: var(--g3);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+#island-settings .pbtn {
+  flex: none;
+  height: 28px;
+  padding: 0 14px;
+  border: 1px solid var(--g3);
+  border-radius: 14px;
+  background: var(--g2);
+  color: var(--fg);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#island-settings .pbtn:hover {
+  filter: brightness(1.15);
+}
+
+#island-settings .pbtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#island-settings .pbtn.al {
+  border-color: #5e9bff;
+  background: #5e9bff;
+  color: #04122b;
+}
+
+#island-settings .pbtn.no {
+  color: #ff6b7a;
+}
+
+#island-settings .pbtn.sm {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+#island-settings .pbtn.wide {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+
+#island-settings .in {
+  flex: 1;
+  height: 30px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid var(--g3);
+  border-radius: 15px;
+  outline: none;
+  background: #000;
+  color: var(--fg);
+  font: inherit;
+  user-select: text;
+}
+
+#island-settings .in:focus {
+  border-color: #5e9bff;
+}
+
+#island-settings .cmd {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #000;
+  color: #e5e5ea;
+  font-size: 12px;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+#island-settings .ic {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The quick switches. */
+#island-settings .tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+#island-settings .tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px 8px;
+  border-radius: 18px;
+  background: var(--g1);
+  color: var(--g5);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+#island-settings .tile .c {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--g2);
+  color: var(--fg);
+  transition:
+    background 0.25s,
+    color 0.25s,
+    transform 0.3s var(--spring);
+}
+
+#island-settings .tile:active .c {
+  transform: scale(0.9);
+}
+
+#island-settings .tile.on .c {
+  background: var(--fg);
+  color: #000;
+}
+
+/* Pet or island: two pictures to pick from. */
+#island-settings .modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+#island-settings .mode {
+  padding: 8px;
+  border-radius: 18px;
+  background: var(--g1);
+  box-shadow: inset 0 0 0 1.5px transparent;
+  cursor: pointer;
+  transition: box-shadow 0.25s;
+}
+
+#island-settings .mode.on {
+  box-shadow: inset 0 0 0 1.5px var(--fg);
+}
+
+#island-settings .mode .pv {
+  position: relative;
+  overflow: hidden;
+  height: 58px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: linear-gradient(140deg, #3b4a66, #6f5b70 60%, #8a6a58);
+}
+
+#island-settings .mode .pv i {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 60px;
+  height: 14px;
+  border-radius: 7px;
+  background: #000;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+  transform: translateX(-50%);
+}
+
+#island-settings .mode .pv .thumb {
+  position: absolute;
+  right: 10px;
+  bottom: -4px;
+}
+
+#island-settings .mode .l {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+#island-settings .mode .rd {
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--g3);
+  border-radius: 50%;
+  transition: border 0.25s var(--spring);
+}
+
+#island-settings .mode.on .rd {
+  border: 4px solid var(--fg);
+}
+
+/* A pet, playing her idle row. */
+#island-settings .thumb {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+}
+
+#island-settings .thumb .sheet {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 192px;
+  height: 208px;
+  background-repeat: no-repeat;
+  transform-origin: 0 0;
+}
+
+#island-settings .petrow .thumb {
+  border-radius: 12px;
+  background: var(--g2);
+}
+
+/* The gallery: three across. */
+#island-settings .cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+#island-settings .card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 18px;
+  background: var(--g1);
+}
+
+#island-settings .card .pv {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 92px;
+  margin-bottom: 4px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--g2);
+}
+
+#island-settings .card .pv img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+#island-settings .card .nm {
+  max-width: 100%;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+#island-settings .card .d {
+  max-width: 100%;
+  margin-bottom: 4px;
+}

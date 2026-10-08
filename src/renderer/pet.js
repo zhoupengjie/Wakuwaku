@@ -26,11 +26,18 @@ const LOOK_FAR = 900
 
 const sprite = document.getElementById('pet')
 const bubble = document.getElementById('bubble')
+const capsule = document.getElementById('capsule')
+const capsuleFace = document.getElementById('capsule-face')
+const capsuleText = document.getElementById('capsule-text')
 
 let lang = 'en'
 let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0 }
 let config = { scale: 0.55, bubble: true, walk: true, look: true, sound: false, dnd: false }
 let spriteUrl = null
+// 2: the 11-row sheet; 1: the older 9-row one, without the look-around rows.
+let spriteVersion = 2
+
+const isCapsule = () => config.display === 'capsule'
 
 let reaction = null // { clip, times, say, start }
 let dragged = null // { dir, at }
@@ -101,7 +108,10 @@ function frame() {
 
   if (walking) return drawLoop(walking.dir > 0 ? 'running-right' : 'running-left', at)
 
-  if (looking && now.mood === 'idle' && at < looking.until) {
+  // The capsule shows a still face; nothing to animate.
+  if (isCapsule()) return 60 * 60 * 1000
+
+  if (looking && spriteVersion === 2 && now.mood === 'idle' && at < looking.until) {
     loop = { clip: '', start: 0 }
     drawCell(looking.row, looking.frame)
     return looking.until - at
@@ -148,9 +158,12 @@ function render() {
   root.setProperty('--scale', config.scale)
   root.setProperty('--accent', COLOR[now.mood])
   root.setProperty('--sprite', spriteUrl ? `url("${spriteUrl}")` : 'none')
+  root.setProperty('--sheet-h', `${spriteVersion === 2 ? 2288 : 1872}px`)
   drawn = ''
 
   clearInterval(clockTimer)
+  document.body.classList.toggle('capsule', isCapsule())
+  if (isCapsule()) return renderCapsule()
 
   // No sprite yet: say how to get one, and keep a box to right-click.
   if (!spriteUrl) {
@@ -174,6 +187,26 @@ function render() {
   }
 }
 
+// --- The capsule: a still face and one line --------------------------------------
+
+// The face in the capsule: the first frame of her mood's row, head only.
+function renderCapsule() {
+  capsule.style.setProperty('--accent', COLOR[now.mood])
+  if (spriteUrl) {
+    const { row } = CLIPS[MOOD_CLIP[now.mood]]
+    capsuleFace.classList.remove('empty')
+    capsuleFace.style.backgroundPosition = `-14px ${-(row * CELL_H * 0.36) - 4}px`
+  } else {
+    capsuleFace.classList.add('empty')
+  }
+  const line = () => (spriteUrl ? (reaction?.say ? say(lang, reaction.say) : words().replace('\n', ' · ')) : t(lang, 'say.noSprite'))
+  capsuleText.textContent = line()
+  capsule.title = words()
+  if (now.since && (now.mood === 'working' || now.mood === 'waiting')) {
+    clockTimer = setInterval(() => (capsuleText.textContent = line()), 1000)
+  }
+}
+
 // --- Idle life: walk a little, glance around ---------------------------------------
 
 let idleTimer
@@ -181,7 +214,7 @@ let glanceTimer
 
 function scheduleIdle() {
   clearTimeout(idleTimer)
-  if (now.mood !== 'idle') return
+  if (now.mood !== 'idle' || isCapsule()) return
   idleTimer = setTimeout(idleAct, 12000 + Math.random() * 18000)
 }
 
@@ -209,7 +242,7 @@ async function idleAct() {
 
 // Look at a few random directions in turn, then back to idle.
 function glance(times) {
-  if (times <= 0 || now.mood !== 'idle') return
+  if (times <= 0 || now.mood !== 'idle' || spriteVersion !== 2) return
   const index = Math.floor(Math.random() * 16)
   const { row, frame: cell } = lookCell(Math.sin((index * Math.PI) / 8), -Math.cos((index * Math.PI) / 8))
   looking = { row, frame: cell, until: performance.now() + 700 }
@@ -261,6 +294,7 @@ window.pet.onUpdate(data => {
   lang = data.lang || lang
   config = data.config || config
   spriteUrl = data.sprite
+  spriteVersion = data.spriteVersion === 1 ? 1 : 2
 
   if (now.mood !== 'idle') {
     stopIdle()
@@ -285,7 +319,7 @@ window.pet.onAlert(({ mood }) => chime(mood))
 
 // Eyes on the cursor while it moves near enough.
 window.pet.onCursor(({ dx, dy }) => {
-  if (!config.look || now.mood !== 'idle' || reaction || walking || dragged) return
+  if (!config.look || isCapsule() || spriteVersion !== 2 || now.mood !== 'idle' || reaction || walking || dragged) return
   const distance = Math.hypot(dx, dy)
   if (distance < LOOK_NEAR || distance > LOOK_FAR) return
   clearTimeout(glanceTimer)
@@ -308,20 +342,23 @@ window.pet.onDragEnd(() => {
 
 // --- Pointer: hover turns click-through off, press drags --------------------------------
 
-sprite.addEventListener('mouseenter', () => window.pet.hover(true))
-sprite.addEventListener('mouseleave', () => window.pet.hover(false))
-sprite.addEventListener('mousedown', e => {
-  if (e.button === 0) {
-    stopIdle()
-    window.pet.dragStart()
-  }
-})
+for (const target of [sprite, capsule]) {
+  target.addEventListener('mouseenter', () => window.pet.hover(true))
+  target.addEventListener('mouseleave', () => window.pet.hover(false))
+  target.addEventListener('mousedown', e => {
+    if (e.button === 0) {
+      stopIdle()
+      window.pet.dragStart()
+    }
+  })
+  target.addEventListener('contextmenu', e => {
+    e.preventDefault()
+    window.pet.menu()
+  })
+}
+
 window.addEventListener('mouseup', e => {
   if (e.button === 0) window.pet.dragEnd()
-})
-sprite.addEventListener('contextmenu', e => {
-  e.preventDefault()
-  window.pet.menu()
 })
 // No sprite yet: a double-click opens the settings to get one.
 sprite.addEventListener('dblclick', () => {

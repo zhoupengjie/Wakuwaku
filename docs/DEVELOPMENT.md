@@ -15,20 +15,28 @@ src/
   main/pets.js          已下载的宠物：<userData>/pets 和源码里的 pets/
   preload/index.js      给宠物页面的 window.pet
   renderer/             宠物页面：pet.js（动画、气泡、空闲行为）、panel.js（确认面板）、sprite.js（图集布局、16 方向）
-  settings/             设置窗口：settings.js、preload.js、style.css
+  settings/             主窗口（现在 / 宠物 / 外观 / 提醒 / Claude Code / 关于）：settings.js、preload.js、style.css
+  assets/               图标：icon.png、tray/<心情>.png（托盘随心情变脸）、faces/<心情>.png；由 npm run icons 生成
   shared/hook-events.js hook 事件 → 消息；每个事件怎么安装
   shared/hooks-config.js  settings.json 里我们那几条的添加、移除和状态检查
   shared/ask.js         PermissionRequest → 面板内容；你的选择 → 回给 Claude Code 的 JSON
   shared/i18n.js        中英文文字
   shared/pet-fetch.js   从 codex-pets.net 下载宠物
-scripts/                fetch-pet.js、install-hooks.js（从源码运行时用）、smoke.js（端到端测试）
+scripts/                fetch-pet.js、install-hooks.js（从源码运行时用）、build-plugin.js、make-icons.js、smoke.js（端到端测试）
+plugin/                 Claude Code 插件 desk-pet（由 build-plugin 生成）
 test/                   node:test 单元测试
 build/                  打包资源：图标、installer.nsh（卸载时运行清理）
 ```
 
+## 插件
+
+`plugin/` 是 Claude Code 插件（名字 `desk-pet`：第三方插件名不能以 `claude-` 开头），仓库根目录的 `.claude-plugin/marketplace.json` 让整个仓库成为插件市场。两者都由 `npm run build-plugin` 从 `hooks-config.pluginHooks()` 生成，单元测试会检查仓库里的文件和代码一致。插件只有 HTTP hook（插件不知道程序装在哪，也没法不依赖 Node 跑命令），所以靠开机自动启动。实测（临时的 `CLAUDE_CONFIG_DIR`）：安装后 HTTP hook 正常送达；卸载并移除市场后，`settings.json` 只剩空的 `enabledPlugins` 和 `extraKnownMarketplaces`。
+
+主窗口读 `enabledPlugins["desk-pet@desk-pet"]` 判断插件是否启用（只读），连接方式分 `plugin` / `hooks` / `both`（事件会重复）/ `none`。
+
 ## hook 怎么送到宠物
 
-所有事件都是 HTTP hook（`type: "http"`，POST 到 `/hook?from=claude-pets`），不开进程；`/hook` 一般立刻回 `{}`，只有 `PermissionRequest` 会挂起，等面板上的回答。`SessionStart` 另外有一条后台命令（`async: true`）：用参数列表直接运行程序本身加 `--claude-pets-ensure-running`，它检查端口，没人应答就以独立进程启动一份宠物，然后马上退出。参数列表写法不经过 shell，路径里有空格也不用加引号，也不需要 Node。
+除 `SessionStart` 外的事件都是 HTTP hook（`type: "http"`，POST 到 `/hook?from=claude-pets`），不开进程；`/hook` 一般立刻回 `{}`，只有 `PermissionRequest` 会挂起，等面板上的回答。**Claude Code 不对 `SessionStart` 运行 HTTP hook**（源码里会跳过：`HTTP hooks are not supported for SessionStart`），所以它只有一条后台命令（`async: true`）：用参数列表直接运行程序本身加 `--claude-pets-ensure-running`，它从 stdin 读到事件，端口有人应答就把事件转过去（打招呼、登记会话），没人应答就以独立进程启动一份宠物，然后马上退出。注意：Electron 主进程在 Windows 上 `process.stdin` 读不到管道数据，要用 `fs.createReadStream(null, { fd: 0 })`。参数列表写法不经过 shell，路径里有空格也不用加引号，也不需要 Node。
 
 `hooks-config.status()` 判断我们的条目处于什么状态：`ok`、`httpOnly`（没有启动命令）、`missing`、`partial`（缺事件）、`stale`（端口不对、指向另一份程序，或者是早期的 node 版本）。设置窗口据此显示「安装 / 重新安装 / 修复 / 移除」。识别"是我们的"靠 URL 里的 `from=claude-pets`、参数里的 `--claude-pets-ensure-running`，以及早期版本的 `claude-hook.js`。
 
@@ -128,3 +136,7 @@ Codex pet v2 图集为 1536×2288，8 列 × 11 行，每格 192×208。
 - **PowerShell 里 `Measure` 是 `Measure-Object` 的别名**，同名函数会被别名盖住（写测量脚本时踩到）。
 - **Electron 二进制没下载**：补跑 `node node_modules/electron/install.js`。
 - **Node 24 的 `node --test`** 不接受目录参数，要用 `"test/*.test.js"`。
+- **主窗口的 CSP 不允许 style 属性**：`setAttribute('style', …)` 会被拦，要用 `element.style.cssText`（CSSOM）。
+- **单实例锁的交接**：刚退出的旧进程可能还占着锁，这时启动的新进程拿不到锁就会退出。现在拿不到锁时先看端口：有宠物应答就退出，没有就每 250ms 重试，最多 6 秒。
+- **被挡住的窗口不重绘**：截图（`capturePage`）拿到的可能是旧画面，冒烟测试截主窗口前先把它调到前面。
+- **v1 宠物**：1536×1872、9 行，没有第 9、10 行的注视动作；页面按 `spriteVersion` 跳过注视，背景图高度也跟着变。

@@ -2,12 +2,16 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file:; style-src 'self'; script-src 'self'" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' file: https://codex-pets.net; style-src 'self'; script-src 'self'"
+    />
     <title>Claude Pets</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main id="app"></main>
+    <div id="peek" aria-hidden="true"></div>
+    <div id="app"></div>
     <script src="../shared/i18n.js"></script>
     <script src="settings.js"></script>
   </body>

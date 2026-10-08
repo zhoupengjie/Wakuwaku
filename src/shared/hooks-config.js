@@ -45,20 +45,37 @@ function strip(hooks) {
   return out
 }
 
-// What we add, event by event: [{ matcher?, hooks: [...] }].
+// The events that get an HTTP hook: all but SessionStart, which Claude Code
+// runs no HTTP hook for (it skips them). SessionStart gets the starter
+// command instead, which also passes the event on to the pet.
+const HTTP_EVENTS = Object.keys(EVENTS).filter(name => name !== 'SessionStart')
+
+function httpGroups(port) {
+  const out = {}
+  for (const event of HTTP_EVENTS) {
+    const { matcher, timeout } = EVENTS[event]
+    const hooks = [{ type: 'http', url: hookUrl(port), timeout: timeout ?? 2 }]
+    out[event] = [matcher ? { matcher: '*', hooks } : { hooks }]
+  }
+  return out
+}
+
+// What we add to settings.json, event by event: [{ matcher?, hooks: [...] }].
 //   port     the window's port
 //   launch   { command, args }: starts the app; omitted with httpOnly
 //   httpOnly no command at all: nothing starts the window for you
 function entries({ port, launch, httpOnly = false }) {
-  const out = {}
-  for (const [event, { matcher, timeout }] of Object.entries(EVENTS)) {
-    const hooks = [{ type: 'http', url: hookUrl(port), timeout: timeout ?? 2 }]
-    if (event === 'SessionStart' && !httpOnly) {
-      hooks.push({ type: 'command', command: launch.command, args: [...launch.args, ENSURE_FLAG], async: true, timeout: 15 })
-    }
-    out[event] = [matcher ? { matcher: '*', hooks } : { hooks }]
+  const out = httpGroups(port)
+  if (!httpOnly) {
+    out.SessionStart = [{ hooks: [{ type: 'command', command: launch.command, args: [...launch.args, ENSURE_FLAG], async: true, timeout: 15 }] }]
   }
   return out
+}
+
+// The hooks the Claude Code plugin carries: HTTP only (a plugin cannot know
+// where the app is, so it cannot start her).
+function pluginHooks({ port }) {
+  return httpGroups(port)
 }
 
 // settings with our entries (re)placed. Returns a new object.
@@ -79,7 +96,7 @@ function uninstall(settings) {
   return out
 }
 
-// How our entries stand against what this copy of the app would install:
+// How our entries in settings.json stand against what this copy would install:
 //   'missing'   none
 //   'ok'        all there, starting this copy
 //   'httpOnly'  all there, nothing starts the window
@@ -98,14 +115,23 @@ function status(settings, { port, launch }) {
   if (!present.length) return 'missing'
 
   const wantUrl = hookUrl(port)
-  const isOld = names.some(name => (found[name] || []).some(h => h.type !== 'http' && !(Array.isArray(h.args) && h.args.includes(ENSURE_FLAG))))
+  const isOld =
+    names.some(name => (found[name] || []).some(h => h.type !== 'http' && !(Array.isArray(h.args) && h.args.includes(ENSURE_FLAG)))) ||
+    (found.SessionStart || []).some(h => h.type === 'http')
   const isOtherPort = present.some(name => found[name].some(h => h.type === 'http' && h.url !== wantUrl))
   const starters = (found.SessionStart || []).filter(h => h.type === 'command')
   const want = [launch.command, ...launch.args, ENSURE_FLAG].map(samePath)
   const isOtherCopy = starters.some(h => JSON.stringify([h.command, ...(h.args || [])].map(samePath)) !== JSON.stringify(want))
   if (isOld || isOtherPort || isOtherCopy) return 'stale'
-  if (present.length < names.length) return 'partial'
+  if (HTTP_EVENTS.some(name => !found[name])) return 'partial'
   return starters.length ? 'ok' : 'httpOnly'
 }
 
-module.exports = { ENSURE_FLAG, hookUrl, isOurs, install, uninstall, status }
+// Whether the desk-pet plugin is turned on in these settings.
+const PLUGIN_ID = 'desk-pet@desk-pet'
+
+function isPluginEnabled(settings) {
+  return settings?.enabledPlugins?.[PLUGIN_ID] === true
+}
+
+module.exports = { ENSURE_FLAG, PLUGIN_ID, HTTP_EVENTS, hookUrl, isOurs, install, uninstall, status, pluginHooks, isPluginEnabled }

@@ -52,7 +52,7 @@ body {
   height: calc(208px * var(--scale));
   background-image: var(--sprite);
   background-repeat: no-repeat;
-  background-size: calc(1536px * var(--scale)) calc(2288px * var(--scale));
+  background-size: calc(1536px * var(--scale)) calc(var(--sheet-h, 2288px) * var(--scale));
   cursor: grab;
 }
 
@@ -246,4 +246,59 @@ body {
   margin: -4px 0 8px;
   font-size: 12px;
   color: #5a6170;
+}
+
+/* Capsule mode: a pill instead of the pet. */
+#capsule {
+  display: none;
+}
+
+.capsule #pet,
+.capsule #bubble {
+  display: none;
+}
+
+.capsule #capsule {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 330px;
+  height: 52px;
+  margin-bottom: 6px;
+  padding: 0 16px 0 6px;
+  border-radius: 26px;
+  border: 2px solid var(--accent);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  color: #1f2430;
+  font-size: 13px;
+  cursor: grab;
+}
+
+/* Her head, from the first frame of her mood's row. */
+#capsule-face {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #e7f0fb;
+  background-image: var(--sprite);
+  background-repeat: no-repeat;
+  background-size: calc(1536px * 0.36) calc(var(--sheet-h, 2288px) * 0.36);
+}
+
+#capsule-face.empty {
+  background-image: url('../assets/faces/idle.png');
+  background-size: cover;
+  background-position: center;
+}
+
+#capsule-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

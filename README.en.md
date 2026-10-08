@@ -10,6 +10,8 @@ She uses the v2 sprite format from the [Codex Pets](https://codex-pets.net) comm
 
 Each v2 pet has 11 animations, and every one of them has a job:
 
+Both v2 pets (11 animations) and older v1 pets (9, without looking around; she just looks ahead when idle) work.
+
 | Animation | When | From which hook |
 | --- | --- | --- |
 | Idle | Nothing going on (a blink, then a few still seconds) | After you've seen an ending (mouse over her); `SessionEnd` |
@@ -45,12 +47,25 @@ Each v2 pet has 11 animations, and every one of them has a job:
 
 ## Install
 
-### With the installer (Windows)
+### 1. Get the pet
 
-Run `Claude Pets Setup <version>.exe` (for now you build it yourself: `npm run dist`, see below). The settings open on first launch:
+- **Installer (Windows)**: run `Claude Pets Setup <version>.exe` (for now you build it yourself: `npm run dist`, see below).
+- **From source**: see below.
 
-1. Under Pets, paste a pet page URL from codex-pets.net and click Download.
-2. Under Claude Code, click Install to add the hooks.
+The main window opens on first launch: pick a pet on the Pets tab (the gallery comes straight from codex-pets.net; click Download), or paste a pet page URL.
+
+### 2. Connect Claude Code (the plugin is recommended)
+
+In Claude Code, enter (the Claude Code tab of the main window has copy buttons):
+
+```
+/plugin marketplace add zhoupengjie/claude-pets
+/plugin install desk-pet@desk-pet
+```
+
+Claude Code installs and removes the plugin itself, and **we don't touch your settings file** (Claude Code notes it in its own `enabledPlugins` and takes it out on uninstall). A plugin can't start the pet, so turn on Start at login in the main window.
+
+If you'd rather not use a plugin, Advanced on the Claude Code tab writes the hooks into `~/.claude/settings.json` (backed up first; removing takes out only our entries). In return, new sessions start the pet. With both on, the main window warns that events arrive twice and offers to remove the old hooks.
 
 ### From source
 
@@ -72,8 +87,9 @@ If `node_modules/electron/dist` is empty after `npm install`, run `node node_mod
 
 - **Drag** her anywhere; she runs the way you drag, and remembers the spot.
 - **Click** her: she jumps.
-- **Right-click** her (or the tray icon): switch pets, size, bubble, walking, follow the mouse, back to the corner, do not disturb, settings, quit. Left-click the tray icon to show or hide her.
-- **Settings**: download and pick pets, look, alerts (how long endings stay, notifications, sound), how long the prompt panel waits, do not disturb and hiding during full screen, language (中文 / English / system), hooks status and repair, start at login.
+- **Right-click** her (or the tray icon): switch pets, size, bubble, walking, follow the mouse, capsule mode, back to the corner, do not disturb, main window, quit. Left-click the tray icon to show or hide her. The tray face changes with her mood: idle, working, waiting, done, review, error.
+- **Capsule mode**: if the whole pet is too much, she becomes a small pill at the screen edge with her face, status and time; prompt panels still pop up above it. Click the capsule to open the main window.
+- **Main window**: Now lists every session (project, status, time) and any prompt waiting on you, to answer right there; Pets manages and downloads pets, with the codex-pets.net gallery; Look and Alerts hold the settings; Claude Code is how she's connected; About. Your current pet peeks in from the bottom left.
 - Clicks pass through her transparent parts to whatever is underneath.
 - **Lost her?** Start the app again (`npm start` or the Start menu) and she comes back to the bottom right. She also checks every 2 s and walks back if she ends up off screen.
 
@@ -99,8 +115,8 @@ While she's closed, Claude Code works as usual: the events sent to her are refus
 
 ### Uninstall
 
-1. If you turned on **Start at login**, turn it off in settings.
-2. In settings, click Remove next to the hooks (`npm run uninstall-hooks` from source). Only this project's entries go; your own hooks stay. The file as it was before the first change is at `~/.claude/settings.json.claude-pets.bak`.
+1. If you turned on **Start at login**, turn it off in the main window.
+2. With the plugin: in Claude Code, `/plugin uninstall desk-pet@desk-pet`, then `/plugin marketplace remove desk-pet`. With hooks in settings.json: click Remove on the Claude Code tab (`npm run uninstall-hooks` from source); only this project's entries go, your own hooks stay, and the file as it was before the first change is at `~/.claude/settings.json.claude-pets.bak`.
 3. Quit her, then uninstall the app or delete the folder. The installer's uninstaller does steps 1 and 2 for you.
 4. (Optional) Delete her settings and downloaded pets: `%APPDATA%\claude-pets` on Windows, `~/Library/Application Support/claude-pets` on macOS, `~/.config/claude-pets` on Linux.
 
@@ -114,7 +130,7 @@ Claude Code ──HTTP hooks──▶ the pet (127.0.0.1:47213/hook)
 ```
 
 - Every event is a Claude Code **HTTP hook** sent straight to her, so a tool call starts no process (about 0.3 ms here). She answers `{}` at once, meaning no decision; only a prompt waits until you answer on the panel.
-- `SessionStart` also runs a background command: the app itself, checking she's up and starting her if not. No Node needed. She runs on her own, so closing a session leaves her be.
+- Claude Code runs no HTTP hook for `SessionStart`. The settings.json way gives it a background command instead: the app itself, which passes the event on if she's up (a hello) or starts her if not. No Node needed. The plugin has no such command; she starts at login.
 - At rest she takes about 1% of one core (measured on Windows 11) and about 180 MB of memory, mostly Electron itself.
 
 | Variable | Does |

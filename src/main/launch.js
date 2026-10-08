@@ -32,12 +32,65 @@ function isUp(port) {
   })
 }
 
+// The hook's event on stdin, or null (none within ms, or not JSON). Read from
+// fd 0 directly: in Electron's main process on Windows, process.stdin ends at
+// once without the data.
+function readEvent(ms) {
+  return new Promise(resolve => {
+    let data = ''
+    let isDone = false
+    const done = () => {
+      if (isDone) return
+      isDone = true
+      clearTimeout(timer)
+      try {
+        resolve(JSON.parse(data))
+      } catch {
+        resolve(null)
+      }
+    }
+    const timer = setTimeout(done, ms)
+    try {
+      const input = fs.createReadStream(null, { fd: 0, encoding: 'utf8' })
+      input.on('data', chunk => {
+        data += chunk
+        if (data.length > 1e6) done()
+      })
+      input.on('end', done)
+      input.on('error', done)
+    } catch {
+      done()
+    }
+  })
+}
+
+// Pass the event on, as an HTTP hook would (Claude Code runs none for SessionStart).
+function forward(port, event) {
+  return new Promise(resolve => {
+    const body = Buffer.from(JSON.stringify(event))
+    const req = http.request(
+      { host: '127.0.0.1', port, path: '/hook?from=claude-pets', method: 'POST', timeout: 800, headers: { 'content-type': 'application/json', 'content-length': body.length } },
+      res => {
+        res.resume()
+        res.on('end', resolve)
+      },
+    )
+    req.on('timeout', () => req.destroy())
+    req.on('error', resolve)
+    req.end(body)
+  })
+}
+
 // Started by the SessionStart hook: if no pet answers on the port, start a
-// normal copy, detached so it outlives the hook and the session; then leave.
-// Quick and quiet, whatever happens.
+// normal copy, detached so it outlives the hook and the session (she greets
+// on her own); if one does, hand her the event. Then leave. Quick and quiet,
+// whatever happens.
 async function ensureRunning(port) {
   try {
-    if (!(await isUp(port))) {
+    const [event, up] = await Promise.all([readEvent(1000), isUp(port)])
+    if (up) {
+      if (event) await forward(port, event)
+    } else {
       const { command, args } = launchSpec()
       spawn(command, args, { detached: true, stdio: 'ignore', env: process.env }).unref()
     }

@@ -12,7 +12,9 @@
     "install-hooks": "node scripts/install-hooks.js",
     "uninstall-hooks": "node scripts/install-hooks.js --uninstall",
     "dist": "electron-builder",
-    "dist:dir": "electron-builder --dir"
+    "dist:dir": "electron-builder --dir",
+    "build-plugin": "node scripts/build-plugin.js",
+    "icons": "node scripts/make-icons.js"
   },
   "engines": {
     "node": ">=18"

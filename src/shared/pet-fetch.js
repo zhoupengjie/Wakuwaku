@@ -9,8 +9,9 @@ const path = require('path')
 const SITE = 'https://codex-pets.net'
 const ID = /^[a-z0-9][a-z0-9-]*$/i
 
-// The layout src/renderer/pet.js plays: 8 x 11 cells of 192 x 208.
-const ATLAS = '1536x2288'
+// The layouts src/renderer/pet.js plays: 8 columns of 192 x 208 cells, 11
+// rows (v2) or 9 (v1, without the look-around rows).
+const ATLASES = ['1536x2288', '1536x1872']
 
 class PetError extends Error {
   constructor(code, vars = {}) {
@@ -97,7 +98,7 @@ async function downloadPet(ref, dir, { fetch = globalThis.fetch } = {}) {
     name: pet.displayName,
     author: pet.ownerName,
     dir: out,
-    warning: atlas && atlas !== ATLAS ? { code: 'atlas', vars: { id, atlas, want: ATLAS } } : undefined,
+    warning: atlas && !ATLASES.includes(atlas) ? { code: 'atlas', vars: { id, atlas, want: ATLASES.join(' / ') } } : undefined,
   }
 }
 
@@ -110,7 +111,7 @@ const WORDS = {
     notFound: 'codex-pets.net 上没有这只宠物：{id}',
     http: '{status}：{url}',
     sheetElsewhere: '图集不在 codex-pets.net 上，不下载：{url}',
-    atlas: '注意：{id} 的图集是 {atlas}，不是 v2 的 {want}，动画可能对不上。',
+    atlas: '注意：{id} 的图集是 {atlas}，不是常见的 {want}，动画可能对不上。',
   },
   en: {
     unreadable: "Can't read this URL or id: {ref}",
@@ -119,7 +120,7 @@ const WORDS = {
     notFound: 'No such pet on codex-pets.net: {id}',
     http: '{status}: {url}',
     sheetElsewhere: 'The sprite sheet is not on codex-pets.net, not downloading: {url}',
-    atlas: 'Note: {id} has a {atlas} sheet, not the v2 {want}; the animation may be off.',
+    atlas: 'Note: {id} has a {atlas} sheet, not the usual {want}; the animation may be off.',
   },
 }
 

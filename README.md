@@ -10,6 +10,8 @@
 
 网站上每只 v2 宠物有 11 组动作，这里每一组都有用处：
 
+支持网站上的 v2 宠物（11 组动作）和旧的 v1 宠物（9 组，没有注视动作，这时她空闲时只看前方）。
+
 | 动作 | 什么时候 | 来自哪个 hook |
 | --- | --- | --- |
 | Idle | 空闲（眨一轮眼，停几秒） | 做完、出错后你看过她（鼠标经过）；`SessionEnd` |
@@ -45,12 +47,25 @@
 
 ## 安装
 
-### 用安装程序（Windows）
+### 1. 装上宠物
 
-运行 `Claude Pets Setup <版本>.exe`（目前需要自己打包，见下面"从源码运行"里的 `npm run dist`）。第一次打开会弹出设置窗口：
+- **安装程序（Windows）**：运行 `Claude Pets Setup <版本>.exe`（目前需要自己打包，见下面"从源码运行"里的 `npm run dist`）。
+- **从源码运行**：见下文。
 
-1. 在「宠物」里粘贴 codex-pets.net 上宠物页面的地址，点「下载」。
-2. 在「Claude Code」里点「安装」，把 hooks 装进 Claude Code。
+第一次打开会弹出主窗口：在「宠物」页挑一只（图库直接来自 codex-pets.net，点「下载」即可），或者粘贴宠物页面的地址。
+
+### 2. 连上 Claude Code（推荐用插件）
+
+在 Claude Code 里依次输入（主窗口「Claude Code」页有复制按钮）：
+
+```
+/plugin marketplace add zhoupengjie/claude-pets
+/plugin install desk-pet@desk-pet
+```
+
+插件由 Claude Code 自己安装和卸载，**我们不改你的设置文件**（Claude Code 会在它自己的 `enabledPlugins` 里记一笔，卸载时去掉）。插件没法自动启动宠物，所以建议在主窗口里打开「开机自动启动」。
+
+不想用插件的话，主窗口「Claude Code」页的「高级」里可以直接写入 `~/.claude/settings.json`（会先备份，卸载时只删我们加的条目）。这种方式的好处是新会话开始时能自动把宠物拉起来。两种都装了，主窗口会提示事件重复，并给一个「移除旧 hooks」的按钮。
 
 ### 从源码运行
 
@@ -72,8 +87,9 @@ npm run install-hooks    # 把 hooks 写进 ~/.claude/settings.json
 
 - **拖动**：按住她拖到任意位置，她会朝拖动方向跑，位置会记住。
 - **单击**：跳一下。
-- **右键**（或右键任务栏托盘图标）：切换宠物、调大小、开关气泡、走动、眼睛跟着鼠标、回到右下角、勿扰、设置、退出。左键托盘图标可以显示或隐藏她。
-- **设置窗口**：宠物下载与切换、外观、提醒（做完后停留多久、系统通知、提示音）、确认面板最多等多久、勿扰与全屏时自动隐藏、语言（中文 / English / 跟随系统）、hooks 安装状态与修复、开机自动启动。
+- **右键**（或右键任务栏托盘图标）：切换宠物、调大小、开关气泡、走动、眼睛跟着鼠标、胶囊模式、回到右下角、勿扰、主窗口、退出。左键托盘图标可以显示或隐藏她。托盘图标会随状态变脸：空闲、干活、等你、做完、改好了、出错各一种。
+- **胶囊模式**：嫌整只宠物太大，可以换成屏幕边上一颗小药丸，显示她的头像、状态和用时；确认面板照样会在上面弹出。单击胶囊打开主窗口。
+- **主窗口**：「现在」列出所有会话（项目、状态、用时）和等你确认的请求，可以直接点；「宠物」管理和下载宠物，带 codex-pets.net 图库；「外观」「提醒」是各种设置；「Claude Code」是连接方式；「关于」。你当前的宠物会从左下角探出头。
 - 透明区域会点击穿透，不挡你操作下面的窗口。
 - **找不到她了**：再运行一次（`npm start` 或开始菜单），她会回到右下角；窗口每 2 秒也会自查一次，跑出屏幕就自己回来。
 
@@ -99,8 +115,8 @@ npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan
 
 ### 卸载
 
-1. 如果打开过**开机自动启动**，先在设置里取消。
-2. 在设置里点「移除」hooks（命令行：`npm run uninstall-hooks`）。只会删掉本项目加的条目，你自己的 hooks 不受影响。第一次修改前的原文件备份在 `~/.claude/settings.json.claude-pets.bak`。
+1. 如果打开过**开机自动启动**，先在主窗口里取消。
+2. 用插件连接的：在 Claude Code 里 `/plugin uninstall desk-pet@desk-pet`，再 `/plugin marketplace remove desk-pet`。写入 settings.json 的：在主窗口「Claude Code」页点「移除」（命令行：`npm run uninstall-hooks`），只会删掉本项目加的条目，你自己的 hooks 不受影响，第一次修改前的原文件备份在 `~/.claude/settings.json.claude-pets.bak`。
 3. 退出她，然后卸载程序或删除项目文件夹。安装版的卸载程序会自动做第 1、2 步。
 4. （可选）删除她的设置和下载的宠物：Windows 上是 `%APPDATA%\claude-pets`，macOS 是 `~/Library/Application Support/claude-pets`，Linux 是 `~/.config/claude-pets`。
 
@@ -114,7 +130,7 @@ Claude Code ──HTTP hooks──▶ 宠物窗口 (127.0.0.1:47213/hook)
 ```
 
 - 所有事件都用 Claude Code 的 **HTTP hook** 直接发给她，调用工具时不启动任何进程（本机实测每次约 0.3ms）。她立刻回 `{}`，表示不做任何决定；只有确认请求会等你在面板上点了再回。
-- `SessionStart` 另外带一条后台命令：直接运行程序本身来检查她在不在，不在就启动，不需要 Node。她是独立进程，关掉会话她也还在。
+- Claude Code 不对 `SessionStart` 运行 HTTP hook。写入 settings.json 的方式给它配了一条后台命令：直接运行程序本身，她在就把事件转给她（打招呼），不在就启动她，不需要 Node。插件方式没有这条命令，靠开机自动启动。
 - 空闲时约占单核 1% 的 CPU（Windows 11 实测），内存约 180MB（大部分是 Electron 本身）。
 
 | 环境变量 | 作用 |

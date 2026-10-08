@@ -8,6 +8,8 @@ const DEFAULTS = {
   lang: 'auto',
   pet: 'deepseek-chan',
   scale: 0.55,
+  // 'pet' (the whole pet) or 'capsule' (a small pill).
+  display: 'pet',
   bubble: true,
   walk: true,
   look: true,

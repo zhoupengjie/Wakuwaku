@@ -38,7 +38,14 @@ function list() {
       try {
         meta = JSON.parse(fs.readFileSync(path.join(dir, id, 'pet.json'), 'utf8'))
       } catch {}
-      seen.set(id, { id, name: meta.displayName || id, author: meta.author || '', source: meta.source || '' })
+      seen.set(id, {
+        id,
+        name: meta.displayName || id,
+        author: meta.author || '',
+        source: meta.source || '',
+        url: pathToFileURL(path.join(dir, id, 'spritesheet.webp')).href,
+        version: meta.spriteVersionNumber === 2 ? 2 : 1,
+      })
     }
   }
   return [...seen.values()]
@@ -50,10 +57,16 @@ function spriteUrl(id) {
   return folder ? pathToFileURL(path.join(folder, 'spritesheet.webp')).href : null
 }
 
+// The pet as the page draws it: { url, version }, or null. Version 1 sheets
+// (1536x1872) have 9 rows, without the two look-around rows.
+function sprite(id) {
+  return list().find(p => p.id === id) || null
+}
+
 // The spritesheet's path, or null.
 function spritePath(id) {
   const folder = folderOf(id)
   return folder ? path.join(folder, 'spritesheet.webp') : null
 }
 
-module.exports = { list, spriteUrl, spritePath, userDir }
+module.exports = { list, sprite, spriteUrl, spritePath, userDir }

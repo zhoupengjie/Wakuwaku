@@ -44,6 +44,7 @@ test('install keeps other hooks, even ones in the same event; uninstall restores
   const installed = hooksConfig.install(mine, { port, launch: here })
   assert.equal(installed.hooks.PreToolUse.length, 2)
   assert.equal(Object.keys(installed.hooks).length, Object.keys(EVENTS).length)
+  assert.ok(installed.hooks.SessionStart[0].hooks.every(x => x.type === 'command'))
   assert.deepEqual(hooksConfig.uninstall(installed), mine)
   // Twice is the same as once.
   assert.deepEqual(hooksConfig.install(installed, { port, launch: here }), installed)
@@ -54,4 +55,38 @@ test('only our entries are ours', () => {
   assert.equal(hooksConfig.isOurs({ type: 'http', url: 'http://127.0.0.1:47213/hook?from=claude-pets' }), true)
   assert.equal(hooksConfig.isOurs({ type: 'command', command: 'x.exe', args: [hooksConfig.ENSURE_FLAG] }), true)
   assert.equal(hooksConfig.isOurs({ type: 'command', command: 'node "D:/x/hooks/claude-hook.js"' }), true)
+})
+
+test('an HTTP hook on SessionStart (which Claude Code skips) counts as an old install', () => {
+  const settings = hooksConfig.install({}, { port, launch: here })
+  settings.hooks.SessionStart[0].hooks.unshift({ type: 'http', url: hooksConfig.hookUrl(port), timeout: 2 })
+  assert.equal(hooksConfig.status(settings, { port, launch: here }), 'stale')
+})
+
+test('the plugin carries an HTTP hook for every event but SessionStart', () => {
+  const hooks = hooksConfig.pluginHooks({ port })
+  assert.deepEqual(Object.keys(hooks).sort(), [...hooksConfig.HTTP_EVENTS].sort())
+  assert.ok(!('SessionStart' in hooks))
+  for (const groups of Object.values(hooks)) assert.ok(groups.every(g => g.hooks.every(x => x.type === 'http' && x.url === hooksConfig.hookUrl(port))))
+})
+
+test('the plugin in the repo is what the code would build', () => {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  const root = path.join(__dirname, '..')
+  const { plugin, marketplace, PLUGIN_NAME, MARKETPLACE_NAME } = require('../scripts/build-plugin')
+  const read = p => JSON.parse(fs.readFileSync(path.join(root, p), 'utf8'))
+  assert.deepEqual(read('plugin/hooks/hooks.json'), { hooks: hooksConfig.pluginHooks({ port: 47213 }) }, 'run npm run build-plugin')
+  assert.deepEqual(read('plugin/.claude-plugin/plugin.json'), plugin(), 'run npm run build-plugin')
+  assert.deepEqual(read('.claude-plugin/marketplace.json'), marketplace(), 'run npm run build-plugin')
+  // Third-party plugin names may not start with "claude-".
+  assert.ok(!/^claude-/.test(PLUGIN_NAME) && !/^claude-/.test(MARKETPLACE_NAME))
+  assert.equal(hooksConfig.PLUGIN_ID, `${PLUGIN_NAME}@${MARKETPLACE_NAME}`)
+})
+
+test('the plugin counts as on only when enabled', () => {
+  assert.equal(hooksConfig.isPluginEnabled({ enabledPlugins: { 'desk-pet@desk-pet': true } }), true)
+  assert.equal(hooksConfig.isPluginEnabled({ enabledPlugins: { 'desk-pet@desk-pet': false } }), false)
+  assert.equal(hooksConfig.isPluginEnabled({}), false)
+  assert.equal(hooksConfig.isPluginEnabled(null), false)
 })

@@ -203,3 +203,18 @@ test('texts are cut and must be strings or translation keys', t => {
   a({ mood: 'working', detail: { key: 'detail.needsApproval', vars: { tool: { nested: 1 }, ok: 'Bash' } } })
   assert.deepEqual(pet.get().detail, { key: 'detail.needsApproval', vars: { ok: 'Bash' } })
 })
+
+test('the session list puts the one that wants you first, and leaves out the anonymous idle', t => {
+  t.after(() => mock.timers.reset())
+  const { pet, a } = setup()
+  pet.apply({ mood: 'idle' })
+  a({ mood: 'working' }, 'A', 'alpha')
+  mock.timers.tick(10)
+  a({ mood: 'done' }, 'B', 'beta')
+  mock.timers.tick(10)
+  a({ mood: 'waiting' }, 'C', 'gamma')
+  assert.deepEqual(
+    pet.list().map(s => `${s.project}:${s.mood}`),
+    ['gamma:waiting', 'beta:done', 'alpha:working'],
+  )
+})

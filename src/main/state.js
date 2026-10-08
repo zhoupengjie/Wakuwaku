@@ -165,7 +165,15 @@ function createPet({ onChange, onReact, onAlert = () => {}, hold = () => 'seen',
     }
   }
 
-  return { apply, seen, checkStale, get }
+  // Every session, the one that most wants you first, for the main window.
+  function list() {
+    return [...sessions.values()]
+      .filter(s => s.id || s.mood !== 'idle')
+      .sort((a, b) => PRIORITY[b.mood] - PRIORITY[a.mood] || b.at - a.at)
+      .map(({ id, project, mood, detail, at, since, took }) => ({ id, project, mood, detail, at, since, took }))
+  }
+
+  return { apply, seen, checkStale, get, list }
 }
 
 module.exports = { createPet, MOODS, REACTS, STALE_MS, FORGET_MS }

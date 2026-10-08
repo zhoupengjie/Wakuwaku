@@ -2,7 +2,7 @@
 // report to. Started by ./index.js.
 const fs = require('fs')
 const path = require('path')
-const { app, BrowserWindow, ipcMain, Menu, Notification, Tray, nativeImage, screen, shell } = require('electron')
+const { app, BrowserWindow, clipboard, ipcMain, Menu, Notification, Tray, nativeImage, screen, shell } = require('electron')
 
 const config = require('./config')
 const pets = require('./pets')
@@ -18,10 +18,13 @@ const petFetch = require('../shared/pet-fetch')
 
 const IS_DEBUG = process.env.CLAUDE_PETS_DEBUG === '1'
 const ICON = path.join(__dirname, '..', 'assets', 'icon.png')
+const TRAY_ICON = mood => path.join(__dirname, '..', 'assets', 'tray', `${mood}.png`)
 
-// Window size at scale 1: room for the bubble above a 192x208 cell.
+// Window size at scale 1: room for the bubble above a 192x208 cell. The
+// capsule is a fixed-size pill.
 const BASE_W = 300
 const BASE_H = 320
+const CAPSULE = { width: 340, height: 64 }
 const CELL_H = 208
 const SCALES = { small: 0.4, medium: 0.55, large: 0.75 }
 // The cursor further than this from her face does not catch her eye.
@@ -63,6 +66,7 @@ const pet = createPet({
   onChange: () => {
     send()
     refreshTray()
+    pushHome()
   },
   onReact: reaction => alive(win)?.webContents.send('pet:react', reaction),
   onAlert: alert,
@@ -73,7 +77,10 @@ setInterval(() => pet.checkStale(), 60 * 1000)
 
 // Prompts waiting on the person; the page shows the first.
 const asks = createAsks({
-  onChange: list => alive(win)?.webContents.send('pet:asks', list),
+  onChange: list => {
+    alive(win)?.webContents.send('pet:asks', list)
+    pushHome()
+  },
   timeoutMs: () => settings.promptWaitSec * 1000,
   lang,
 })
@@ -109,8 +116,9 @@ function watchFullscreen() {
 
 // --- Window -----------------------------------------------------------------
 
-// The window without a prompt: the bubble and the pet.
+// The window without a prompt: the bubble and the pet, or the capsule.
 function baseSize() {
+  if (settings.display === 'capsule') return { ...CAPSULE }
   return { width: Math.round(BASE_W * settings.scale), height: Math.round(BASE_H * settings.scale) }
 }
 
@@ -266,7 +274,14 @@ function createWindow() {
 }
 
 function send() {
-  alive(win)?.webContents.send('pet:update', { ...pet.get(), config: settings, lang: lang(), sprite: pets.spriteUrl(settings.pet) })
+  const s = pets.sprite(settings.pet)
+  alive(win)?.webContents.send('pet:update', {
+    ...pet.get(),
+    config: settings,
+    lang: lang(),
+    sprite: s && s.url,
+    spriteVersion: s ? s.version : 2,
+  })
 }
 
 // --- Alerts: a sound in the page, a system notification --------------------
@@ -347,7 +362,7 @@ function pollCursor() {
   setMouseMode(drag || isOverPet ? 'catch' : near ? 'forward' : 'pass')
 
   // Her eyes follow only while idle, with no panel up.
-  const canLook = settings.look && !drag && !panel && pet.get().mood === 'idle'
+  const canLook = settings.look && settings.display !== 'capsule' && !drag && !panel && pet.get().mood === 'idle'
   if (cursor.x === lastCursor.x && cursor.y === lastCursor.y) return scheduleCursor(near ? 80 : 200)
   lastCursor = cursor
   if (canLook) {
@@ -375,10 +390,17 @@ function change(patch) {
   alive(settingsWin)?.webContents.send('settings:changed', snapshot())
 }
 
+// A new size (or display mode) keeps the pet's spot: her bottom centre.
+function resize(patch) {
+  const before = win.getBounds()
+  const old = size()
+  change(patch)
+  const now = size()
+  remember(moveTo(before.x + (old.width - now.width) / 2, before.y + old.height - now.height))
+}
+
 function rescale(scale) {
-  const { x, y } = win.getBounds()
-  change({ scale })
-  remember(moveTo(x, y))
+  resize({ scale })
 }
 
 // What a settings patch may hold, checked: anything else is dropped.
@@ -393,6 +415,7 @@ const CHECKS = {
   dnd: v => typeof v === 'boolean',
   hideInFullscreen: v => typeof v === 'boolean',
   onboarded: v => typeof v === 'boolean',
+  display: v => v === 'pet' || v === 'capsule',
   hold: v => v === 'seen' || [8, 30, 120].includes(v),
   promptWaitSec: v => [30, 60, 120, 290].includes(v),
   notify: v => v && typeof v === 'object' && ['waiting', 'done', 'error'].every(k => typeof v[k] === 'boolean'),
@@ -403,10 +426,14 @@ function applyPatch(patch) {
   for (const [key, value] of Object.entries(patch || {})) {
     if (CHECKS[key]?.(value)) ok[key] = value
   }
-  if ('scale' in ok) {
-    rescale(ok.scale)
-    delete ok.scale
+  const sizing = {}
+  for (const key of ['scale', 'display']) {
+    if (key in ok) {
+      sizing[key] = ok[key]
+      delete ok[key]
+    }
   }
+  if (Object.keys(sizing).length) resize(sizing)
   if (Object.keys(ok).length) change(ok)
   return snapshot()
 }
@@ -437,6 +464,23 @@ function hooksStatus() {
   }
 }
 
+function isPluginEnabled() {
+  try {
+    return hooksConfig.isPluginEnabled(readClaudeSettings())
+  } catch {
+    return false
+  }
+}
+
+// How Claude Code reaches her: 'plugin', 'hooks' (written into settings.json),
+// 'both' (every event twice), or 'none'.
+function connection() {
+  const plugin = isPluginEnabled()
+  const hooks = hooksStatus()
+  const isHooks = hooks !== 'missing' && hooks !== 'unreadable'
+  return plugin && isHooks ? 'both' : plugin ? 'plugin' : isHooks ? 'hooks' : 'none'
+}
+
 // Change Claude Code's settings.json, backed up once beside itself.
 function writeHooks(action) {
   const file = launch.claudeSettingsFile()
@@ -451,11 +495,19 @@ function writeHooks(action) {
   fs.writeFileSync(file, `${JSON.stringify(after, null, 2)}\n`)
 }
 
+const PLUGIN_COMMANDS = ['/plugin marketplace add zhoupengjie/claude-pets', `/plugin install ${hooksConfig.PLUGIN_ID}`]
+
 function snapshot() {
   return {
     settings,
     lang: lang(),
     pets: pets.list(),
+    now: pet.get(),
+    sessions: pet.list(),
+    asks: asks.views(),
+    isVisible: isVisible(),
+    connection: connection(),
+    pluginCommands: PLUGIN_COMMANDS,
     hooks: hooksStatus(),
     settingsFile: launch.claudeSettingsFile(),
     loginAtStart: isOpenAtLogin(),
@@ -466,6 +518,16 @@ function snapshot() {
   }
 }
 
+// The main window follows what happens, a few times a second at most.
+let homeTimer
+function pushHome() {
+  if (!alive(settingsWin) || homeTimer) return
+  homeTimer = setTimeout(() => {
+    homeTimer = undefined
+    alive(settingsWin)?.webContents.send('settings:changed', snapshot())
+  }, 250)
+}
+
 function openSettings() {
   if (settingsWin && !settingsWin.isDestroyed()) {
     settingsWin.show()
@@ -473,12 +535,12 @@ function openSettings() {
     return
   }
   settingsWin = new BrowserWindow({
-    width: 580,
-    height: 760,
-    minWidth: 460,
+    width: 860,
+    height: 640,
+    minWidth: 640,
     minHeight: 480,
     show: false,
-    title: T('settings.title'),
+    title: 'Claude Pets',
     icon: ICON,
     autoHideMenuBar: true,
     webPreferences: {
@@ -523,7 +585,43 @@ ipcMain.handle('settings:fetch', async (_, ref) => {
     return { ok: false, error: petFetch.describe(lang(), err), snapshot: snapshot() }
   }
 })
-ipcMain.handle('settings:open-site', () => shell.openExternal(petFetch.SITE))
+// Only these two places, whatever the page asks.
+ipcMain.handle('settings:open-site', (_, where) => shell.openExternal(where === 'repo' ? 'https://github.com/zhoupengjie/claude-pets' : petFetch.SITE))
+ipcMain.handle('settings:copy', (_, text) => {
+  clipboard.writeText(String(text ?? ''))
+  return true
+})
+ipcMain.handle('settings:answer', (_, id, choice) => asks.answer(id, choice))
+ipcMain.handle('settings:dismiss', (_, id) => asks.dismiss(id))
+ipcMain.handle('settings:show-pet', (_, on) => {
+  isUserHidden = on !== true
+  applyVisibility()
+  return snapshot()
+})
+
+// A page of codex-pets.net's gallery, fetched here. Only what the gallery
+// shows is passed on, and only pictures from the site itself.
+ipcMain.handle('settings:gallery', async (_, { page = 1, sort = 'popular' } = {}) => {
+  try {
+    const url = `${petFetch.SITE}/api/pets?page=${Math.max(1, Number(page) || 1)}&pageSize=12&sort=${sort === 'newest' ? 'newest' : 'popular'}`
+    const res = await fetch(url, { headers: { 'user-agent': 'claude-pets' } })
+    if (!res.ok) throw new Error(String(res.status))
+    const body = await res.json()
+    const items = (body.pets || [])
+      .filter(p => typeof p.id === 'string' && /^[a-z0-9][a-z0-9-]*$/i.test(p.id))
+      .map(p => ({
+        id: p.id,
+        name: String(p.displayName || p.id),
+        author: String(p.ownerName || ''),
+        likes: Number(p.likeCount) || 0,
+        version: p.spriteVersionNumber === 2 ? 2 : 1,
+        preview: typeof p.previewUrl === 'string' && p.previewUrl.startsWith(`${petFetch.SITE}/`) ? p.previewUrl : '',
+      }))
+    return { ok: true, items, page: body.page, totalPages: body.totalPages }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) }
+  }
+})
 
 // --- Menus and tray ------------------------------------------------------------
 
@@ -558,6 +656,7 @@ function menuItems({ isTray }) {
     { label: T('menu.bubble'), type: 'checkbox', checked: settings.bubble, click: item => change({ bubble: item.checked }) },
     { label: T('menu.walk'), type: 'checkbox', checked: settings.walk, click: item => change({ walk: item.checked }) },
     { label: T('menu.look'), type: 'checkbox', checked: settings.look, click: item => change({ look: item.checked }) },
+    { label: T('menu.capsule'), type: 'checkbox', checked: settings.display === 'capsule', click: item => resize({ display: item.checked ? 'capsule' : 'pet' }) },
     { label: T('menu.home'), click: comeHome },
     { type: 'separator' },
     { label: T('menu.dnd'), type: 'checkbox', checked: settings.dnd, click: item => change({ dnd: item.checked }) },
@@ -574,7 +673,8 @@ function statusText() {
 
 function createTray() {
   try {
-    tray = new Tray(nativeImage.createFromPath(ICON).resize({ width: 32, height: 32 }))
+    tray = new Tray(nativeImage.createFromPath(TRAY_ICON('idle')))
+    trayMood = 'idle'
   } catch {
     tray = null
     return
@@ -594,9 +694,18 @@ function createTray() {
   refreshTray()
 }
 
+let trayMood = ''
 function refreshTray() {
   if (!tray || !settings) return
   tray.setToolTip(T('tray.tooltip', { status: settings.dnd ? T('menu.dnd') : statusText() }))
+  // The tray face shows her mood.
+  const mood = pet.get().mood
+  if (mood !== trayMood) {
+    trayMood = mood
+    try {
+      tray.setImage(nativeImage.createFromPath(TRAY_ICON(mood)))
+    } catch {}
+  }
 }
 
 // --- Pointer, dragging, walking, the prompt panel ---------------------------------
@@ -647,7 +756,10 @@ ipcMain.on('pet:drag-end', () => {
   parked = null
   remember(moveTo(x, y))
   win.webContents.send('pet:drag-end')
-  if (wasClick) pet.apply({ react: 'jump' })
+  if (wasClick) {
+    if (settings.display === 'capsule') openSettings()
+    else pet.apply({ react: 'jump' })
+  }
 })
 
 ipcMain.on('pet:menu', () => Menu.buildFromTemplate(menuItems({ isTray: false })).popup({ window: win }))
@@ -708,10 +820,23 @@ function where() {
   return { bounds, size: settings && size(), workArea: area, shift, isVisible: isVisible() }
 }
 
-function start(options) {
+// One pet at a time. When another copy holds the lock: if it answers on the
+// port it is the pet (and has heard from us, see second-instance); if not, it
+// is one on its way out (just quit, still letting go), so wait a little.
+async function takeLock() {
+  if (app.requestSingleInstanceLock()) return true
+  for (let i = 0; i < 24; i++) {
+    if (await launch.isUp(port)) return false
+    await new Promise(resolve => setTimeout(resolve, 250))
+    if (app.requestSingleInstanceLock()) return true
+  }
+  return false
+}
+
+async function start(options) {
   port = options.port
 
-  if (!app.requestSingleInstanceLock()) {
+  if (!(await takeLock())) {
     app.quit()
     return
   }
@@ -803,8 +928,8 @@ function start(options) {
     watchFullscreen()
     scheduleCursor()
 
-    // Nothing to show yet, or never set up: open the settings to begin.
-    if (!pets.list().length || (!settings.onboarded && hooksStatus() === 'missing')) openSettings()
+    // Nothing to show yet, or never set up: open the main window to begin.
+    if (!pets.list().length || (!settings.onboarded && connection() === 'none')) openSettings()
   })
 
   app.on('window-all-closed', () => app.quit())

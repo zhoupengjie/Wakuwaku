@@ -533,7 +533,7 @@
           TABS.map(name => el('button', { class: name === tab ? 'on' : '', 'data-tab': name, onclick: () => go(name) }, T(`home.tab${name[0].toUpperCase()}${name.slice(1)}`))),
         ),
       ),
-      welcome,
+      ...(welcome ? [welcome] : []),
       ...pages[tab](),
     )
     window.scrollTo(0, scrollY)

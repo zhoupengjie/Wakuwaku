@@ -54,7 +54,25 @@ async function look(dx, dy) {
   await fetch(`${URL}/debug/look`, { method: 'POST', body: JSON.stringify({ dx, dy }) })
 }
 
+async function walkBy(dx, ms) {
+  await fetch(`${URL}/debug/walk`, { method: 'POST', body: JSON.stringify({ dx, ms }) })
+}
+
 let failures = 0
+function report(step, ok, info) {
+  if (!ok) failures += 1
+  console.log(`${ok ? '✔' : '✘'} ${step}${info ? `: ${info}` : ''}`)
+}
+
+// The window is its own size (a pixel or two of rounding aside) and wholly
+// on its display's work area.
+function checkWindow(step, now, start) {
+  const { bounds: b, size, workArea: a } = now
+  const isSize = Math.abs(b.width - start.bounds.width) <= 2 && Math.abs(b.height - start.bounds.height) <= 2
+  const isInside = b.x >= a.x && b.y >= a.y && b.x + size.width <= a.x + a.width && b.y + size.height <= a.y + a.height
+  report(step, isSize && isInside, `${b.width}x${b.height} @ ${b.x},${b.y}（开始时 ${start.bounds.width}x${start.bounds.height}）`)
+}
+
 async function expect(step, want) {
   const { mood: got, detail } = await mood()
   const ok = got === want.mood && (want.detail === undefined || detail === want.detail)
@@ -70,8 +88,9 @@ async function main() {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-pets-smoke-'))
 
   const electron = require(path.join(ROOT, 'node_modules', 'electron'))
+  const appEnv = { ...process.env, CLAUDE_PETS_PORT: String(PORT), CLAUDE_PETS_USER_DATA: profile, CLAUDE_PETS_DEBUG: '1' }
   const app = spawn(electron, [ROOT], {
-    env: { ...process.env, CLAUDE_PETS_PORT: String(PORT), CLAUDE_PETS_USER_DATA: profile, CLAUDE_PETS_DEBUG: '1' },
+    env: appEnv,
     stdio: 'ignore',
   })
 
@@ -133,6 +152,26 @@ async function main() {
     await hook({ hook_event_name: 'SessionEnd', reason: 'exit' })
     await sleep(300)
     await expect('SessionEnd', { mood: 'idle' })
+
+    // Walking: the window keeps its size and stays on screen. (On Windows at
+    // 125% it used to grow a pixel per step and carry the pet off the screen.)
+    const start = (await mood()).window
+    for (let i = 0; i < 8; i++) await walkBy(i % 2 ? -300 : 300, 300)
+    await walkBy(-5000, 300)
+    checkWindow('来回走 8 趟、再往左走到底', (await mood()).window, start)
+    await walkBy(5000, 300)
+    checkWindow('往右走到底', (await mood()).window, start)
+
+    // Started again: she comes home to the bottom right.
+    await walkBy(-5000, 200)
+    const again = spawn(electron, [ROOT], { env: appEnv, stdio: 'ignore' })
+    await new Promise(resolve => again.on('exit', resolve))
+    await sleep(500)
+    const home = (await mood()).window
+    const isHome =
+      home.bounds.x + home.size.width >= home.workArea.x + home.workArea.width - 30 &&
+      home.bounds.y + home.size.height >= home.workArea.y + home.workArea.height - 30
+    report('再启动一次，回到右下角', isHome, JSON.stringify(home.bounds))
 
     // Eyes on the cursor: up, right, down, left of her face.
     const looks = { up: [0, -200], right: [200, 0], down: [0, 200], left: [-200, 0] }

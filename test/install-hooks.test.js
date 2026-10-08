@@ -62,6 +62,18 @@ test('install adds one entry per event, HTTP except SessionStart, and can run tw
   assert.ok(fs.existsSync(`${file}.claude-pets.bak`))
 })
 
+test('--http-only makes SessionStart an HTTP hook too, and switching back works', t => {
+  const file = tempSettings(t)
+
+  const all = ours(run(file, '--http-only'))
+  assert.equal(all.length, Object.keys(EVENTS).length)
+  assert.ok(all.every(([, , hook]) => hook.type === 'http'))
+
+  const mixed = ours(run(file))
+  assert.equal(mixed.length, Object.keys(EVENTS).length)
+  assert.equal(mixed.find(([e]) => e === 'SessionStart')[2].type, 'command')
+})
+
 test('install replaces the command hooks an older version added', t => {
   const old = { type: 'command', command: 'node "D:/somewhere/hooks/claude-hook.js"', timeout: 5 }
   const file = tempSettings(t, {

@@ -3,11 +3,15 @@
 //
 //   npm run install-hooks              add (again: replaces the old entries)
 //   npm run uninstall-hooks            remove
+//   ... -- --http-only                 SessionStart too: no process at all, but
+//                                      nothing starts the window for you (use
+//                                      its 开机自动启动, or npm start)
 //   ... -- --settings <path>           another settings file (default ~/.claude/settings.json)
 //
 // Most events are HTTP hooks: Claude Code POSTs them to the window itself, so
 // a tool call starts no process. SessionStart runs hooks/claude-hook.js in the
-// background, to start the window when it is not up.
+// background (async: the session does not wait on it), to start the window
+// when it is not up, which no HTTP hook can do.
 //
 // Only our entries are touched (an HTTP hook to ...?from=claude-pets, or a
 // command running claude-hook.js, as older versions installed); the file is
@@ -33,6 +37,7 @@ function isOurs(hook) {
 
 const args = process.argv.slice(2)
 const isUninstall = args.includes('--uninstall')
+const isHttpOnly = args.includes('--http-only')
 const at = args.indexOf('--settings')
 const file = at >= 0 ? path.resolve(args[at + 1]) : path.join(os.homedir(), '.claude', 'settings.json')
 
@@ -64,7 +69,7 @@ strip(hooks)
 
 if (!isUninstall) {
   for (const [event, { matcher, via }] of Object.entries(EVENTS)) {
-    const group = { hooks: [ENTRY[via]] }
+    const group = { hooks: [ENTRY[isHttpOnly ? 'http' : via]] }
     hooks[event] = [...(hooks[event] || []), matcher ? { matcher: '*', ...group } : group]
   }
 }
@@ -85,11 +90,15 @@ if (isUninstall) {
 } else {
   const by = via =>
     Object.entries(EVENTS)
-      .filter(([, e]) => e.via === via)
+      .filter(([, e]) => (isHttpOnly ? 'http' : e.via) === via)
       .map(([name]) => name)
       .join('、')
   console.log(`已写入 ${file}：`)
   console.log(`  HTTP（不开进程）→ ${URL}：${by('http')}`)
-  console.log(`  后台命令 → node "${HOOK}"：${by('command')}`)
+  if (isHttpOnly) {
+    console.log('  全部走 HTTP：窗口不会再被自动启动，请在宠物右键菜单里打开「开机自动启动」，或者手动 npm start。')
+  } else {
+    console.log(`  后台命令（async，不阻塞）→ node "${HOOK}"：${by('command')}`)
+  }
   console.log('新开的 Claude Code 会话生效。')
 }

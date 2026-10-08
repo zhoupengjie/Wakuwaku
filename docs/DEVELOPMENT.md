@@ -64,6 +64,7 @@ out/                  冒烟测试截图（gitignore）
 | `POST /state` | 一条消息 |
 | `GET /snapshot` | 当前窗口截图（PNG） |
 | `POST /debug/look` | `{ dx, dy }`：假装鼠标在宠物脸旁边这个位置。只在 `CLAUDE_PETS_DEBUG=1` 时开放 |
+| `POST /debug/walk` | `{ dx, ms }`：马上走一段。只在 `CLAUDE_PETS_DEBUG=1` 时开放；这个模式下 `/health` 还会带上窗口的位置、尺寸和所在显示器的工作区 |
 
 手动测试：
 
@@ -80,7 +81,7 @@ curl http://127.0.0.1:47213/snapshot -o snap.png
 | `CLAUDE_PETS_PORT` | 端口 |
 | `CLAUDE_PETS_AUTOSTART=0` | hook 不自动启动窗口 |
 | `CLAUDE_PETS_USER_DATA` | 换一个配置目录（也就换了单实例锁），冒烟测试用它和你正在用的窗口互不干扰 |
-| `CLAUDE_PETS_DEBUG=1` | 开放 `/debug/look` |
+| `CLAUDE_PETS_DEBUG=1` | 开放 `/debug/look`、`/debug/walk` |
 
 ## 精灵图
 
@@ -110,6 +111,7 @@ Codex pet v2 图集为 1536×2288，8 列 × 11 行，每格 192×208。
 - **preload 全局重名**：preload 通过 `contextBridge` 暴露了 `window.pet`，页面里再声明 `const pet` 会报重复声明错误，导致整个脚本不执行。
 - **动画停住**：窗口不抢焦点、又是半透明，Chromium 会节流它，动画会停。必须设 `backgroundThrottling: false`。
 - **中文乱码**：POST body 要先把 Buffer 拼完整再解码 UTF-8，否则跨数据块的多字节字符会被切坏。
+- **宠物走出屏幕**：Windows 在 125% 这类非整数缩放下，对透明无边框窗口调用 `setPosition`，每调用一次宽度会多 1px（本机实测 300 次后从 168 变成 468）。闲置走动每 16ms 调一次，窗口越来越宽，而宠物画在窗口底部正中，看起来就像她自己走出了屏幕；位置限制又是按代码以为的尺寸算的，所以也拖不回来。现在所有移动都经过 `moveTo()`，用 `setBounds` 并显式传入宽高；另外 `keepOnScreen()` 每 2 秒、以及显示器变化时检查一次，尺寸不对或者出了屏幕就拉回来。`npm run smoke` 里有这条回归测试（来回走 8 趟、走到左右两边尽头，检查尺寸和位置；把 `moveTo` 换回 `setPosition`，这个测试就会失败）。
 - **拖动不跟手**：拖动是在主进程里轮询鼠标位置来移动窗口，不依赖页面的 mousemove，所以快速甩动也不会丢。
 - **点击穿透**：透明区域的穿透靠 `setIgnoreMouseEvents(true, { forward: true })`；鼠标进入宠物时由页面通知主进程关掉穿透。
 - **压缩时被打回空闲**：自动压缩上下文会触发 `SessionStart`（`source: compact`），必须忽略，否则干活到一半会变回空闲。

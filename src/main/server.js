@@ -5,6 +5,7 @@
 //   POST /state        a message (src/main/state.js): { mood, detail, event, react, say }
 //   GET  /snapshot     the window as a PNG (debugging)
 //   POST /debug/look   { dx, dy }: look as if the cursor were there (CLAUDE_PETS_DEBUG=1 only)
+//   POST /debug/walk   { dx, ms }: take a walk now (CLAUDE_PETS_DEBUG=1 only)
 const http = require('http')
 
 const MAX_BODY = 4096
@@ -34,7 +35,7 @@ function readJson(req) {
   })
 }
 
-function serve({ port, getState, setState, onHook, snapshot, lookAt, onTaken }) {
+function serve({ port, getState, setState, onHook, snapshot, lookAt, walkBy, onTaken }) {
   const server = http.createServer(async (req, res) => {
     const reply = (code, body) => {
       res.writeHead(code, { 'content-type': 'application/json' })
@@ -70,6 +71,15 @@ function serve({ port, getState, setState, onHook, snapshot, lookAt, onTaken }) 
     if (req.method === 'POST' && req.url === '/state') {
       try {
         return setState(await readJson(req)) ? reply(200, { ok: true }) : reply(400, { error: 'nothing to do' })
+      } catch {
+        return reply(400, { error: 'bad json' })
+      }
+    }
+
+    if (req.method === 'POST' && req.url === '/debug/walk' && walkBy) {
+      try {
+        const { dx, ms } = await readJson(req)
+        return reply(200, { ok: true, arrived: await walkBy({ dx: Number(dx), ms: Number(ms) }) })
       } catch {
         return reply(400, { error: 'bad json' })
       }

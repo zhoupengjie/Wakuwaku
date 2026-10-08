@@ -469,7 +469,7 @@
   function aboutPage() {
     return [
       card(
-        'Claude Pets',
+        'Wakuwaku',
         el('p', {}, T('settings.version', { version: snap.version })),
         el('p', { class: 'muted' }, T('home.credits')),
         el('p', {}, el('a', { href: '#', onclick: e => (e.preventDefault(), api.open('repo')) }, T('home.repo'))),
@@ -525,7 +525,7 @@
         'header',
         {},
         el('img', { class: 'logo', src: `../assets/faces/${snap.now.mood}.png`, alt: '' }),
-        el('span', { class: 'name' }, 'Claude Pets'),
+        el('span', { class: 'name' }, 'Wakuwaku'),
         el('span', { class: 'version' }, snap.version),
         el(
           'nav',

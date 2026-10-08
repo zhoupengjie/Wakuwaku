@@ -16,7 +16,7 @@ const hooksConfig = require('../shared/hooks-config')
 const i18n = require('../shared/i18n')
 const petFetch = require('../shared/pet-fetch')
 
-const IS_DEBUG = process.env.CLAUDE_PETS_DEBUG === '1'
+const IS_DEBUG = process.env.WAKUWAKU_DEBUG === '1'
 const ICON = path.join(__dirname, '..', 'assets', 'icon.png')
 const TRAY_ICON = mood => path.join(__dirname, '..', 'assets', 'tray', `${mood}.png`)
 
@@ -293,7 +293,7 @@ function alert({ project, mood }) {
   const group = mood === 'waiting' ? 'waiting' : mood === 'error' ? 'error' : 'done'
   if (!settings.notify[group] || !Notification.isSupported()) return
   const note = new Notification({
-    title: 'Claude Pets',
+    title: 'Wakuwaku',
     body: T(`notify.${mood}`, { project: project ? T('notify.project', { project }) : '' }),
     icon: ICON,
     silent: true,
@@ -489,13 +489,13 @@ function writeHooks(action) {
     action === 'remove'
       ? hooksConfig.uninstall(before)
       : hooksConfig.install(before, { port, launch: launch.launchSpec(), httpOnly: action === 'install-http' })
-  const backup = `${file}.claude-pets.bak`
+  const backup = `${file}.wakuwaku.bak`
   if (fs.existsSync(file) && !fs.existsSync(backup)) fs.copyFileSync(file, backup)
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, `${JSON.stringify(after, null, 2)}\n`)
 }
 
-const PLUGIN_COMMANDS = ['/plugin marketplace add zhoupengjie/claude-pets', `/plugin install ${hooksConfig.PLUGIN_ID}`]
+const PLUGIN_COMMANDS = ['/plugin marketplace add zhoupengjie/wakuwaku', `/plugin install ${hooksConfig.PLUGIN_ID}`]
 
 function snapshot() {
   return {
@@ -540,7 +540,7 @@ function openSettings() {
     minWidth: 640,
     minHeight: 480,
     show: false,
-    title: 'Claude Pets',
+    title: 'Wakuwaku',
     icon: ICON,
     autoHideMenuBar: true,
     webPreferences: {
@@ -586,7 +586,7 @@ ipcMain.handle('settings:fetch', async (_, ref) => {
   }
 })
 // Only these two places, whatever the page asks.
-ipcMain.handle('settings:open-site', (_, where) => shell.openExternal(where === 'repo' ? 'https://github.com/zhoupengjie/claude-pets' : petFetch.SITE))
+ipcMain.handle('settings:open-site', (_, where) => shell.openExternal(where === 'repo' ? 'https://github.com/zhoupengjie/wakuwaku' : petFetch.SITE))
 ipcMain.handle('settings:copy', (_, text) => {
   clipboard.writeText(String(text ?? ''))
   return true
@@ -604,7 +604,7 @@ ipcMain.handle('settings:show-pet', (_, on) => {
 ipcMain.handle('settings:gallery', async (_, { page = 1, sort = 'popular' } = {}) => {
   try {
     const url = `${petFetch.SITE}/api/pets?page=${Math.max(1, Number(page) || 1)}&pageSize=12&sort=${sort === 'newest' ? 'newest' : 'popular'}`
-    const res = await fetch(url, { headers: { 'user-agent': 'claude-pets' } })
+    const res = await fetch(url, { headers: { 'user-agent': 'wakuwaku' } })
     if (!res.ok) throw new Error(String(res.status))
     const body = await res.json()
     const items = (body.pets || [])
@@ -840,7 +840,7 @@ async function start(options) {
     app.quit()
     return
   }
-  app.setAppUserModelId('com.zhoupengjie.claude-pets')
+  app.setAppUserModelId('com.zhoupengjie.wakuwaku')
 
   // Started again (npm start, the Start menu) while running: the way to find
   // a pet that is out of sight. Bring her home.

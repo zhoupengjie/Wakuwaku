@@ -13,7 +13,7 @@ const SCRIPT = path.join(__dirname, '..', 'scripts', 'install-hooks.js')
 const ROOT = path.join(__dirname, '..')
 
 function tempSettings(t, content) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-pets-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wakuwaku-'))
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
   const file = path.join(dir, 'settings.json')
   if (content) fs.writeFileSync(file, JSON.stringify(content))
@@ -53,7 +53,7 @@ test('the script installs an HTTP hook per event, plus the starter, and can run 
     const http = entries.filter(([e, , h]) => e === event && h.type === 'http')
     assert.equal(http.length, 1, event)
     assert.equal(http[0][1], matcher ? '*' : undefined, event)
-    assert.equal(http[0][2].url, 'http://127.0.0.1:47213/hook?from=claude-pets', event)
+    assert.equal(http[0][2].url, 'http://127.0.0.1:47213/hook?from=wakuwaku', event)
     assert.equal(http[0][2].timeout, timeout ?? 2, event)
   }
 
@@ -64,7 +64,7 @@ test('the script installs an HTTP hook per event, plus the starter, and can run 
   assert.equal(starter[2].command, launch.command)
   assert.deepEqual(starter[2].args, [ROOT, hooksConfig.ENSURE_FLAG])
   assert.equal(hooksConfig.status(settings, { port: 47213, launch }), 'ok')
-  assert.ok(fs.existsSync(`${file}.claude-pets.bak`))
+  assert.ok(fs.existsSync(`${file}.wakuwaku.bak`))
 })
 
 test('--http-only leaves out the starter', t => {
@@ -77,7 +77,7 @@ test('--http-only leaves out the starter', t => {
 
 test('install replaces what older versions added', t => {
   const old = { type: 'command', command: 'node "D:/somewhere/hooks/claude-hook.js"', timeout: 5 }
-  const oldHttp = { type: 'http', url: 'http://127.0.0.1:47213/hook?from=claude-pets', timeout: 2 }
+  const oldHttp = { type: 'http', url: 'http://127.0.0.1:47213/hook?from=wakuwaku', timeout: 2 }
   const file = tempSettings(t, { hooks: { SessionStart: [{ hooks: [old] }], Stop: [{ hooks: [oldHttp] }] } })
 
   assert.equal(hooksConfig.status(JSON.parse(fs.readFileSync(file, 'utf8')), { port: 47213, launch }), 'stale')

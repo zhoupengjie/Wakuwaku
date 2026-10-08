@@ -1,5 +1,5 @@
 {
-  "name": "claude-pets",
+  "name": "wakuwaku",
   "version": "0.1.0",
   "private": true,
   "description": "A floating desktop pet that shows what Claude Code is doing, using Codex pet sprites",
@@ -28,14 +28,14 @@
   },
   "license": "MIT",
   "author": "Pengjie Zhou",
-  "homepage": "https://github.com/zhoupengjie/claude-pets",
+  "homepage": "https://github.com/zhoupengjie/wakuwaku",
   "repository": {
     "type": "git",
-    "url": "https://github.com/zhoupengjie/claude-pets.git"
+    "url": "https://github.com/zhoupengjie/wakuwaku.git"
   },
   "build": {
-    "appId": "com.zhoupengjie.claude-pets",
-    "productName": "Claude Pets",
+    "appId": "com.zhoupengjie.wakuwaku",
+    "productName": "Wakuwaku",
     "copyright": "Copyright © 2026 Pengjie Zhou",
     "directories": {
       "output": "dist",
@@ -60,7 +60,7 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "include": "build/installer.nsh",
-      "shortcutName": "Claude Pets"
+      "shortcutName": "Wakuwaku"
     },
     "mac": {
       "target": [

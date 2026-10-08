@@ -6,7 +6,7 @@ const { viewOf, replyFor, summarize } = require('../src/shared/ask')
 const BASH = {
   hook_event_name: 'PermissionRequest',
   session_id: 's1',
-  cwd: 'D:/work/claude-pets',
+  cwd: 'D:/work/wakuwaku',
   tool_name: 'Bash',
   tool_input: { command: 'npm test', description: 'Run tests' },
   permission_suggestions: [
@@ -40,7 +40,7 @@ test('a permission prompt shows the command, the project and the always-allow ru
   const view = viewOf(BASH)
   assert.equal(view.kind, 'permission')
   assert.equal(view.summary, 'npm test')
-  assert.equal(view.project, 'claude-pets')
+  assert.equal(view.project, 'wakuwaku')
   assert.deepEqual(view.always, { rules: ['Bash(npm test:*)'], dirs: [], modes: [], where: ['localSettings'] })
 })
 

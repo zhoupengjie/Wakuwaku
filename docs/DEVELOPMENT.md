@@ -4,7 +4,7 @@
 
 ```
 src/
-  main/index.js         入口：按参数决定这次是当宠物、做启动检查（--claude-pets-ensure-running）还是卸载清理（--claude-pets-cleanup）
+  main/index.js         入口：按参数决定这次是当宠物、做启动检查（--wakuwaku-ensure-running）还是卸载清理（--wakuwaku-cleanup）
   main/app.js           宠物本体：窗口、托盘、设置窗口、通知、勿扰与全屏、鼠标、拖动、走动、本地端口
   main/state.js         状态机：按会话记 mood，挑最需要你的那个显示；Review 还是挥手、做完后等你看到、用时、提醒
   main/asks.js          等你确认的请求：排队、超时、发现终端已经答过就收起
@@ -23,29 +23,31 @@ src/
   shared/i18n.js        中英文文字
   shared/pet-fetch.js   从 codex-pets.net 下载宠物
 scripts/                fetch-pet.js、install-hooks.js（从源码运行时用）、build-plugin.js、make-icons.js、smoke.js（端到端测试）
-plugin/                 Claude Code 插件 desk-pet（由 build-plugin 生成）
+plugin/                 Claude Code 插件 wakuwaku（由 build-plugin 生成）
 test/                   node:test 单元测试
 build/                  打包资源：图标、installer.nsh（卸载时运行清理）
 ```
 
 ## 插件
 
-`plugin/` 是 Claude Code 插件（名字 `desk-pet`：第三方插件名不能以 `claude-` 开头），仓库根目录的 `.claude-plugin/marketplace.json` 让整个仓库成为插件市场。两者都由 `npm run build-plugin` 从 `hooks-config.pluginHooks()` 生成，单元测试会检查仓库里的文件和代码一致。插件只有 HTTP hook（插件不知道程序装在哪，也没法不依赖 Node 跑命令），所以靠开机自动启动。实测（临时的 `CLAUDE_CONFIG_DIR`）：安装后 HTTP hook 正常送达；卸载并移除市场后，`settings.json` 只剩空的 `enabledPlugins` 和 `extraKnownMarketplaces`。
+`plugin/` 是 Claude Code 插件（名字 `wakuwaku`），仓库根目录的 `.claude-plugin/marketplace.json` 让整个仓库成为插件市场。两者都由 `npm run build-plugin` 从 `hooks-config.pluginHooks()` 生成，单元测试会检查仓库里的文件和代码一致。插件只有 HTTP hook（插件不知道程序装在哪，也没法不依赖 Node 跑命令），所以靠开机自动启动。实测（临时的 `CLAUDE_CONFIG_DIR`）：安装后 HTTP hook 正常送达；卸载并移除市场后，`settings.json` 只剩空的 `enabledPlugins` 和 `extraKnownMarketplaces`。
 
-主窗口读 `enabledPlugins["desk-pet@desk-pet"]` 判断插件是否启用（只读），连接方式分 `plugin` / `hooks` / `both`（事件会重复）/ `none`。
+主窗口读 `enabledPlugins["wakuwaku@wakuwaku"]` 判断插件是否启用（只读），连接方式分 `plugin` / `hooks` / `both`（事件会重复）/ `none`。
 
 ## hook 怎么送到宠物
 
-除 `SessionStart` 外的事件都是 HTTP hook（`type: "http"`，POST 到 `/hook?from=claude-pets`），不开进程；`/hook` 一般立刻回 `{}`，只有 `PermissionRequest` 会挂起，等面板上的回答。**Claude Code 不对 `SessionStart` 运行 HTTP hook**（源码里会跳过：`HTTP hooks are not supported for SessionStart`），所以它只有一条后台命令（`async: true`）：用参数列表直接运行程序本身加 `--claude-pets-ensure-running`，它从 stdin 读到事件，端口有人应答就把事件转过去（打招呼、登记会话），没人应答就以独立进程启动一份宠物，然后马上退出。注意：Electron 主进程在 Windows 上 `process.stdin` 读不到管道数据，要用 `fs.createReadStream(null, { fd: 0 })`。参数列表写法不经过 shell，路径里有空格也不用加引号，也不需要 Node。
+除 `SessionStart` 外的事件都是 HTTP hook（`type: "http"`，POST 到 `/hook?from=wakuwaku`），不开进程；`/hook` 一般立刻回 `{}`，只有 `PermissionRequest` 会挂起，等面板上的回答。**Claude Code 不对 `SessionStart` 运行 HTTP hook**（源码里会跳过：`HTTP hooks are not supported for SessionStart`），所以它只有一条后台命令（`async: true`）：用参数列表直接运行程序本身加 `--wakuwaku-ensure-running`，它从 stdin 读到事件，端口有人应答就把事件转过去（打招呼、登记会话），没人应答就以独立进程启动一份宠物，然后马上退出。注意：Electron 主进程在 Windows 上 `process.stdin` 读不到管道数据，要用 `fs.createReadStream(null, { fd: 0 })`。参数列表写法不经过 shell，路径里有空格也不用加引号，也不需要 Node。
 
-`hooks-config.status()` 判断我们的条目处于什么状态：`ok`、`httpOnly`（没有启动命令）、`missing`、`partial`（缺事件）、`stale`（端口不对、指向另一份程序，或者是早期的 node 版本）。设置窗口据此显示「安装 / 重新安装 / 修复 / 移除」。识别"是我们的"靠 URL 里的 `from=claude-pets`、参数里的 `--claude-pets-ensure-running`，以及早期版本的 `claude-hook.js`。
+`hooks-config.status()` 判断我们的条目处于什么状态：`ok`、`httpOnly`（没有启动命令）、`missing`、`partial`（缺事件）、`stale`（端口不对、指向另一份程序，或者是早期的 node 版本）。设置窗口据此显示「安装 / 重新安装 / 修复 / 移除」。识别"是我们的"靠 URL 里的 `from=wakuwaku`、参数里的 `--wakuwaku-ensure-running`，以及早期版本的 `claude-hook.js`。
+
+改名前（claude-pets）写进 settings.json 的条目（`from=claude-pets`、`--claude-pets-ensure-running`）仍算"我们的"：状态显示为 `stale`，可以修复或移除；旧的启动参数照样能用。旧的设置目录 `%APPDATA%\claude-pets` 在第一次启动时整个搬到 `wakuwaku`，搬不动（旧程序还开着）就只复制 `config.json` 和 `pets/`。
 
 ## 消息
 
 hook 事件在宠物里换算成消息（`src/shared/hook-events.js`），`/state` 也收这个格式：
 
 ```json
-{ "session": "…", "project": "claude-pets", "mood": "working", "detail": "Bash", "event": "tool-done", "react": "failed", "say": { "key": "say.toolFailed", "vars": { "tool": "Bash" } } }
+{ "session": "…", "project": "wakuwaku", "mood": "working", "detail": "Bash", "event": "tool-done", "react": "failed", "say": { "key": "say.toolFailed", "vars": { "tool": "Bash" } } }
 ```
 
 | 字段 | 取值 |
@@ -62,18 +64,18 @@ hook 事件在宠物里换算成消息（`src/shared/hook-events.js`），`/stat
 
 | 请求 | 说明 |
 | --- | --- |
-| `GET /health` | `{ ok, app: "claude-pets", state }` |
+| `GET /health` | `{ ok, app: "wakuwaku", state }` |
 | `POST /hook` | Claude Code 的 hook 事件；一般立刻回 `{}`，`PermissionRequest` 等面板上的回答 |
 | `POST /state` | 一条消息 |
 | `GET /snapshot` | 宠物窗口截图；`?page=settings` 截设置窗口 |
-| `POST /debug/look`、`/debug/walk`、`/debug/click`、`/debug/eval`、`/debug/settings`、`/debug/fullscreen` | 测试用，只在 `CLAUDE_PETS_DEBUG=1` 时开放；这时 `/health` 还会带上窗口位置、等待中的请求和设置 |
+| `POST /debug/look`、`/debug/walk`、`/debug/click`、`/debug/eval`、`/debug/settings`、`/debug/fullscreen` | 测试用，只在 `WAKUWAKU_DEBUG=1` 时开放；这时 `/health` 还会带上窗口位置、等待中的请求和设置 |
 
 | 环境变量 | 作用 |
 | --- | --- |
-| `CLAUDE_PETS_PORT` | 端口 |
-| `CLAUDE_PETS_USER_DATA` | 换一个配置目录（也就换了单实例锁），测试用它和你正在用的宠物互不干扰 |
+| `WAKUWAKU_PORT` | 端口 |
+| `WAKUWAKU_USER_DATA` | 换一个配置目录（也就换了单实例锁），测试用它和你正在用的宠物互不干扰 |
 | `CLAUDE_CONFIG_DIR` | Claude Code 的配置目录（测试里指向临时目录，不碰你的真实设置） |
-| `CLAUDE_PETS_DEBUG=1` | 开放调试接口 |
+| `WAKUWAKU_DEBUG=1` | 开放调试接口 |
 
 ## 在宠物上确认
 

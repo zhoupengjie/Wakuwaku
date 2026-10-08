@@ -56,7 +56,7 @@ function parsePetRef(input) {
 // Downloads the pet into <dir>/<id>/. Resolves { id, name, author, dir, warning? }.
 async function downloadPet(ref, dir, { fetch = globalThis.fetch } = {}) {
   const id = parsePetRef(ref)
-  const headers = { 'user-agent': 'claude-pets' }
+  const headers = { 'user-agent': 'wakuwaku' }
 
   const res = await fetch(`${SITE}/api/pets/${id}`, { headers })
   if (res.status === 404) throw new PetError('notFound', { id })

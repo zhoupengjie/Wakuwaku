@@ -1,4 +1,4 @@
-// The claude-pets entries in Claude Code's settings.json: add, remove, check.
+// The wakuwaku entries in Claude Code's settings.json: add, remove, check.
 // Pure functions over the parsed settings, for scripts/install-hooks.js and
 // the settings window.
 //
@@ -9,8 +9,11 @@
 // no Node is needed and no path is ever quoted.
 const { EVENTS } = require('./hook-events')
 
-const ENSURE_FLAG = '--claude-pets-ensure-running'
-const URL_MARK = 'from=claude-pets'
+const ENSURE_FLAG = '--wakuwaku-ensure-running'
+const URL_MARK = 'from=wakuwaku'
+// What the app wrote before it was called Wakuwaku (claude-pets).
+const LEGACY_ENSURE_FLAG = '--claude-pets-ensure-running'
+const LEGACY_URL_MARK = 'from=claude-pets'
 
 // A path as Windows compares them: one slash, any case.
 function samePath(p) {
@@ -22,11 +25,11 @@ function hookUrl(port) {
   return `http://127.0.0.1:${port}/hook?${URL_MARK}`
 }
 
-// Ours: what this version installs, and what older ones did (a command
-// running hooks/claude-hook.js).
+// Ours: what this version installs, and what older ones did (the claude-pets
+// names, or a command running hooks/claude-hook.js).
 function isOurs(hook) {
   const text = [hook?.url, hook?.command, ...(Array.isArray(hook?.args) ? hook.args : [])].map(String).join(' ')
-  return text.includes(URL_MARK) || text.includes(ENSURE_FLAG) || text.includes('claude-hook.js')
+  return [URL_MARK, ENSURE_FLAG, LEGACY_URL_MARK, LEGACY_ENSURE_FLAG, 'claude-hook.js'].some(mark => text.includes(mark))
 }
 
 // Drop our entries from every event, and events left empty. Returns a copy.
@@ -127,11 +130,11 @@ function status(settings, { port, launch }) {
   return starters.length ? 'ok' : 'httpOnly'
 }
 
-// Whether the desk-pet plugin is turned on in these settings.
-const PLUGIN_ID = 'desk-pet@desk-pet'
+// Whether the wakuwaku plugin is turned on in these settings.
+const PLUGIN_ID = 'wakuwaku@wakuwaku'
 
 function isPluginEnabled(settings) {
   return settings?.enabledPlugins?.[PLUGIN_ID] === true
 }
 
-module.exports = { ENSURE_FLAG, PLUGIN_ID, HTTP_EVENTS, hookUrl, isOurs, install, uninstall, status, pluginHooks, isPluginEnabled }
+module.exports = { ENSURE_FLAG, LEGACY_ENSURE_FLAG, PLUGIN_ID, HTTP_EVENTS, hookUrl, isOurs, install, uninstall, status, pluginHooks, isPluginEnabled }

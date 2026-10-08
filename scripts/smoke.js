@@ -26,7 +26,7 @@ async function post(route, body) {
 }
 
 // An event as Claude Code's HTTP hook sends it; resolves to the hook output.
-const hook = event => post('/hook?from=claude-pets', event)
+const hook = event => post('/hook?from=wakuwaku', event)
 const state = async () => (await (await fetch(`${URL}/health`)).json()).state
 const click = async selector => (await post('/debug/click', { selector })).result
 const evaluate = async (page, code) => (await post('/debug/eval', { page, code })).result
@@ -114,15 +114,15 @@ async function main() {
   }
   fs.rmSync(OUT, { recursive: true, force: true })
   fs.mkdirSync(OUT, { recursive: true })
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-pets-smoke-'))
-  const claudeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-pets-smoke-claude-'))
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'wakuwaku-smoke-'))
+  const claudeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wakuwaku-smoke-claude-'))
   const claudeSettings = path.join(claudeDir, 'settings.json')
   const env = {
     ...process.env,
-    CLAUDE_PETS_PORT: String(PORT),
-    CLAUDE_PETS_USER_DATA: profile,
+    WAKUWAKU_PORT: String(PORT),
+    WAKUWAKU_USER_DATA: profile,
     CLAUDE_CONFIG_DIR: claudeDir,
-    CLAUDE_PETS_DEBUG: '1',
+    WAKUWAKU_DEBUG: '1',
   }
   // The test talks Chinese unless told otherwise.
   fs.writeFileSync(path.join(profile, 'config.json'), JSON.stringify({ lang: 'zh' }))
@@ -141,7 +141,7 @@ async function main() {
     await tab('claude')
     await sleep(200)
     await snap('02-home-claude', 'settings')
-    report('Claude Code 页：推荐插件，给出安装命令', (await read('[data-plugin]', 'dataset.plugin')) === 'off' && (await read('.steps code')) === '/plugin marketplace add zhoupengjie/claude-pets')
+    report('Claude Code 页：推荐插件，给出安装命令', (await read('[data-plugin]', 'dataset.plugin')) === 'off' && (await read('.steps code')) === '/plugin marketplace add zhoupengjie/wakuwaku')
     report('Claude Code 页：点「复制」', (await press('[data-action="copy-1"]')) === 'ok')
     await sleep(150)
     report('复制后按钮显示「已复制」', (await read('[data-action="copy-1"]')) === '已复制')

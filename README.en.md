@@ -1,6 +1,8 @@
-# claude-pets
+# Wakuwaku
 
 English · [中文](README.md)
+
+> The name is Anya's "waku waku" from SPY×FAMILY: excited, can't wait. Claude works, and she watches, all eager.
 
 A little pet that floats on your desktop and shows what Claude Code is doing: working, waiting for your approval, done with changes for you to review, done, or stuck on an error. When Claude needs your OK, you can answer right on the panel above her head.
 
@@ -49,7 +51,7 @@ Both v2 pets (11 animations) and older v1 pets (9, without looking around; she j
 
 ### 1. Get the pet
 
-- **Installer (Windows)**: run `Claude Pets Setup <version>.exe` (for now you build it yourself: `npm run dist`, see below).
+- **Installer (Windows)**: run `Wakuwaku Setup <version>.exe` (for now you build it yourself: `npm run dist`, see below).
 - **From source**: see below.
 
 The main window opens on first launch: pick a pet on the Pets tab (the gallery comes straight from codex-pets.net; click Download), or paste a pet page URL.
@@ -59,8 +61,8 @@ The main window opens on first launch: pick a pet on the Pets tab (the gallery c
 In Claude Code, enter (the Claude Code tab of the main window has copy buttons):
 
 ```
-/plugin marketplace add zhoupengjie/claude-pets
-/plugin install desk-pet@desk-pet
+/plugin marketplace add zhoupengjie/wakuwaku
+/plugin install wakuwaku@wakuwaku
 ```
 
 Claude Code installs and removes the plugin itself, and **we don't touch your settings file** (Claude Code notes it in its own `enabledPlugins` and takes it out on uninstall). A plugin can't start the pet, so turn on Start at login in the main window.
@@ -72,8 +74,8 @@ If you'd rather not use a plugin, Advanced on the Claude Code tab writes the hoo
 Needs Node.js 18+. Only tested on Windows 11 so far; macOS and Linux should work (on Linux, transparent windows need a compositor; full-screen detection is Windows only).
 
 ```bash
-git clone https://github.com/zhoupengjie/claude-pets.git
-cd claude-pets
+git clone https://github.com/zhoupengjie/wakuwaku.git
+cd wakuwaku
 npm install
 npm run fetch-pet        # downloads the default pet, deepseek-chan, from codex-pets.net
 npm run install-hooks    # adds the hooks to ~/.claude/settings.json
@@ -116,9 +118,9 @@ While she's closed, Claude Code works as usual: the events sent to her are refus
 ### Uninstall
 
 1. If you turned on **Start at login**, turn it off in the main window.
-2. With the plugin: in Claude Code, `/plugin uninstall desk-pet@desk-pet`, then `/plugin marketplace remove desk-pet`. With hooks in settings.json: click Remove on the Claude Code tab (`npm run uninstall-hooks` from source); only this project's entries go, your own hooks stay, and the file as it was before the first change is at `~/.claude/settings.json.claude-pets.bak`.
+2. With the plugin: in Claude Code, `/plugin uninstall wakuwaku@wakuwaku`, then `/plugin marketplace remove wakuwaku`. With hooks in settings.json: click Remove on the Claude Code tab (`npm run uninstall-hooks` from source); only this project's entries go, your own hooks stay, and the file as it was before the first change is at `~/.claude/settings.json.wakuwaku.bak`.
 3. Quit her, then uninstall the app or delete the folder. The installer's uninstaller does steps 1 and 2 for you.
-4. (Optional) Delete her settings and downloaded pets: `%APPDATA%\claude-pets` on Windows, `~/Library/Application Support/claude-pets` on macOS, `~/.config/claude-pets` on Linux.
+4. (Optional) Delete her settings and downloaded pets: `%APPDATA%\wakuwaku` on Windows, `~/Library/Application Support/wakuwaku` on macOS, `~/.config/wakuwaku` on Linux.
 
 > From source, remove the hooks before deleting the folder: they hold the program's path. If you moved the folder, settings will say the hooks point somewhere else; click Repair.
 
@@ -126,7 +128,7 @@ While she's closed, Claude Code works as usual: the events sent to her are refus
 
 ```
 Claude Code ──HTTP hooks──▶ the pet (127.0.0.1:47213/hook)
-            └─SessionStart─▶ the app itself --claude-pets-ensure-running (in the background; starts her if she's not up)
+            └─SessionStart─▶ the app itself --wakuwaku-ensure-running (in the background; starts her if she's not up)
 ```
 
 - Every event is a Claude Code **HTTP hook** sent straight to her, so a tool call starts no process (about 0.3 ms here). She answers `{}` at once, meaning no decision; only a prompt waits until you answer on the panel.
@@ -135,7 +137,7 @@ Claude Code ──HTTP hooks──▶ the pet (127.0.0.1:47213/hook)
 
 | Variable | Does |
 | --- | --- |
-| `CLAUDE_PETS_PORT` | Another port (default 47213); set it for both her and the hooks |
+| `WAKUWAKU_PORT` | Another port (default 47213); set it for both her and the hooks |
 | `CLAUDE_CONFIG_DIR` | Claude Code's config folder, when it isn't `~/.claude` |
 
 ## Tests

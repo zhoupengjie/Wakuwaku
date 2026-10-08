@@ -69,7 +69,7 @@
       'menu.hide': '隐藏宠物',
       'menu.settings': '打开主窗口…',
       'menu.quit': '退出',
-      'tray.tooltip': 'Claude Pets：{status}',
+      'tray.tooltip': 'Wakuwaku：{status}',
 
       // Notifications
       'notify.waiting': '{project}需要你确认',
@@ -79,7 +79,7 @@
       'notify.project': '{project}：',
 
       // Settings window
-      'settings.title': 'Claude Pets 设置',
+      'settings.title': 'Wakuwaku 设置',
       'settings.language': '语言',
       'settings.languageAuto': '跟随系统',
       'settings.pets': '宠物',
@@ -235,7 +235,7 @@
       'menu.hide': 'Hide pet',
       'menu.settings': 'Open main window…',
       'menu.quit': 'Quit',
-      'tray.tooltip': 'Claude Pets: {status}',
+      'tray.tooltip': 'Wakuwaku: {status}',
 
       'notify.waiting': '{project}needs your OK',
       'notify.done': '{project}is done',
@@ -243,7 +243,7 @@
       'notify.error': '{project}hit an error',
       'notify.project': '{project}: ',
 
-      'settings.title': 'Claude Pets Settings',
+      'settings.title': 'Wakuwaku Settings',
       'settings.language': 'Language',
       'settings.languageAuto': 'Same as system',
       'settings.pets': 'Pets',

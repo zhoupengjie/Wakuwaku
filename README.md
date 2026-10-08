@@ -1,6 +1,8 @@
-# claude-pets
+# Wakuwaku
 
 [English](README.en.md) · 中文
+
+> 名字来自《间谍过家家》里阿尼亚的口头禅"わくわく"（哇酷哇酷，好期待）：Claude 在干活，她在旁边满心期待地盯着。
 
 一只浮在桌面上的小宠物，实时显示 Claude Code 在干什么：干活、等你批准、改完了等你看、做完了，还是出错了。需要你确认的时候，可以直接在她头顶的面板上点。
 
@@ -49,7 +51,7 @@
 
 ### 1. 装上宠物
 
-- **安装程序（Windows）**：运行 `Claude Pets Setup <版本>.exe`（目前需要自己打包，见下面"从源码运行"里的 `npm run dist`）。
+- **安装程序（Windows）**：运行 `Wakuwaku Setup <版本>.exe`（目前需要自己打包，见下面"从源码运行"里的 `npm run dist`）。
 - **从源码运行**：见下文。
 
 第一次打开会弹出主窗口：在「宠物」页挑一只（图库直接来自 codex-pets.net，点「下载」即可），或者粘贴宠物页面的地址。
@@ -59,8 +61,8 @@
 在 Claude Code 里依次输入（主窗口「Claude Code」页有复制按钮）：
 
 ```
-/plugin marketplace add zhoupengjie/claude-pets
-/plugin install desk-pet@desk-pet
+/plugin marketplace add zhoupengjie/wakuwaku
+/plugin install wakuwaku@wakuwaku
 ```
 
 插件由 Claude Code 自己安装和卸载，**我们不改你的设置文件**（Claude Code 会在它自己的 `enabledPlugins` 里记一笔，卸载时去掉）。插件没法自动启动宠物，所以建议在主窗口里打开「开机自动启动」。
@@ -72,8 +74,8 @@
 需要 Node.js 18+。目前只在 Windows 11 上测试过；macOS / Linux 理论上也能跑（Linux 上透明窗口需要开启窗口合成器，全屏检测只支持 Windows）。
 
 ```bash
-git clone https://github.com/zhoupengjie/claude-pets.git
-cd claude-pets
+git clone https://github.com/zhoupengjie/wakuwaku.git
+cd wakuwaku
 npm install
 npm run fetch-pet        # 从 codex-pets.net 下载默认宠物 deepseek-chan
 npm run install-hooks    # 把 hooks 写进 ~/.claude/settings.json
@@ -116,9 +118,9 @@ npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan
 ### 卸载
 
 1. 如果打开过**开机自动启动**，先在主窗口里取消。
-2. 用插件连接的：在 Claude Code 里 `/plugin uninstall desk-pet@desk-pet`，再 `/plugin marketplace remove desk-pet`。写入 settings.json 的：在主窗口「Claude Code」页点「移除」（命令行：`npm run uninstall-hooks`），只会删掉本项目加的条目，你自己的 hooks 不受影响，第一次修改前的原文件备份在 `~/.claude/settings.json.claude-pets.bak`。
+2. 用插件连接的：在 Claude Code 里 `/plugin uninstall wakuwaku@wakuwaku`，再 `/plugin marketplace remove wakuwaku`。写入 settings.json 的：在主窗口「Claude Code」页点「移除」（命令行：`npm run uninstall-hooks`），只会删掉本项目加的条目，你自己的 hooks 不受影响，第一次修改前的原文件备份在 `~/.claude/settings.json.wakuwaku.bak`。
 3. 退出她，然后卸载程序或删除项目文件夹。安装版的卸载程序会自动做第 1、2 步。
-4. （可选）删除她的设置和下载的宠物：Windows 上是 `%APPDATA%\claude-pets`，macOS 是 `~/Library/Application Support/claude-pets`，Linux 是 `~/.config/claude-pets`。
+4. （可选）删除她的设置和下载的宠物：Windows 上是 `%APPDATA%\wakuwaku`，macOS 是 `~/Library/Application Support/wakuwaku`，Linux 是 `~/.config/wakuwaku`。
 
 > 从源码运行时，一定要先移除 hooks 再删文件夹：hooks 里记的是程序的路径。移动了文件夹的话，设置里会显示「指向了别的位置」，点「修复」就行。
 
@@ -126,7 +128,7 @@ npm run fetch-pet -- https://codex-pets.net/#/pets/deepseek-chan
 
 ```
 Claude Code ──HTTP hooks──▶ 宠物窗口 (127.0.0.1:47213/hook)
-            └─SessionStart─▶ 程序本身 --claude-pets-ensure-running（后台运行，她没开就启动）
+            └─SessionStart─▶ 程序本身 --wakuwaku-ensure-running（后台运行，她没开就启动）
 ```
 
 - 所有事件都用 Claude Code 的 **HTTP hook** 直接发给她，调用工具时不启动任何进程（本机实测每次约 0.3ms）。她立刻回 `{}`，表示不做任何决定；只有确认请求会等你在面板上点了再回。
@@ -135,7 +137,7 @@ Claude Code ──HTTP hooks──▶ 宠物窗口 (127.0.0.1:47213/hook)
 
 | 环境变量 | 作用 |
 | --- | --- |
-| `CLAUDE_PETS_PORT` | 换端口（默认 47213），她和 hooks 两边都要设 |
+| `WAKUWAKU_PORT` | 换端口（默认 47213），她和 hooks 两边都要设 |
 | `CLAUDE_CONFIG_DIR` | Claude Code 的配置目录不在 `~/.claude` 时 |
 
 ## 测试

@@ -9,7 +9,7 @@ const { app } = require('electron')
 
 const hooksConfig = require('../shared/hooks-config')
 
-const CLEANUP_FLAG = '--claude-pets-cleanup'
+const CLEANUP_FLAG = '--wakuwaku-cleanup'
 
 // This copy, as a command and arguments: the installed app on its own, or
 // Electron running the source folder.
@@ -69,7 +69,7 @@ function forward(port, event) {
   return new Promise(resolve => {
     const body = Buffer.from(JSON.stringify(event))
     const req = http.request(
-      { host: '127.0.0.1', port, path: '/hook?from=claude-pets', method: 'POST', timeout: 800, headers: { 'content-type': 'application/json', 'content-length': body.length } },
+      { host: '127.0.0.1', port, path: '/hook?from=wakuwaku', method: 'POST', timeout: 800, headers: { 'content-type': 'application/json', 'content-length': body.length } },
       res => {
         res.resume()
         res.on('end', resolve)
@@ -121,4 +121,4 @@ function launchSpecForLogin() {
   return { path: command, args }
 }
 
-module.exports = { CLEANUP_FLAG, ENSURE_FLAG: hooksConfig.ENSURE_FLAG, launchSpec, launchSpecForLogin, claudeSettingsFile, isUp, ensureRunning, cleanup }
+module.exports = { CLEANUP_FLAG, ENSURE_FLAG: hooksConfig.ENSURE_FLAG, LEGACY_ENSURE_FLAG: hooksConfig.LEGACY_ENSURE_FLAG, launchSpec, launchSpecForLogin, claudeSettingsFile, isUp, ensureRunning, cleanup }

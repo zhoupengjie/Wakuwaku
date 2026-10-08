@@ -14,8 +14,8 @@ const { pluginHooks } = require('../src/shared/hooks-config')
 const pkg = require('../package.json')
 
 // Third-party plugin names may not start with "claude-" (kept for Anthropic's own).
-const PLUGIN_NAME = 'desk-pet'
-const MARKETPLACE_NAME = 'desk-pet'
+const PLUGIN_NAME = 'wakuwaku'
+const MARKETPLACE_NAME = 'wakuwaku'
 
 const ROOT = path.join(__dirname, '..')
 const PLUGIN = path.join(ROOT, 'plugin')
@@ -29,7 +29,7 @@ function plugin() {
   return {
     name: PLUGIN_NAME,
     version: pkg.version,
-    description: 'Tells the Claude Pets desktop pet what Claude Code is doing, and lets you answer its prompts on her.',
+    description: 'Tells the Wakuwaku desktop pet what Claude Code is doing, and lets you answer its prompts on her.',
     author: { name: pkg.author },
     homepage: pkg.homepage,
     repository: pkg.repository.url,

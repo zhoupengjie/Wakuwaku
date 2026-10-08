@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "http://127.0.0.1:47213/hook?from=claude-pets",
+            "url": "http://127.0.0.1:47213/hook?from=wakuwaku",
             "timeout": 2
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "http://127.0.0.1:47213/hook?from=claude-pets",
+            "url": "http://127.0.0.1:47213/hook?from=wakuwaku",
             "timeout": 2
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "http://127.0.0.1:47213/hook?from=claude-pets",
+            "url": "http://127.0.0.1:47213/hook?from=wakuwaku",
             "timeout": 2
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "http://127.0.0.1:47213/hook?from=claude-pets",
+            "url": "http://127.0.0.1:47213/hook?from=wakuwaku",
             "timeout": 2
           }
         ]
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "http://127.0.0.1:47213/hook?from=claude-pets",
+            "url": "http://127.0.0.1:47213/hook?from=wakuwaku",
             "timeout": 2
           }
         ]
@@ -64,7 +64,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "http://127.0.0.1:47213/hook?from=claude-pets",
+            "url": "http://127.0.0.1:47213/hook?from=wakuwaku",
             "timeout": 300
           }
         ]
@@ -75,7 +75,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "http://127.0.0.1:47213/hook?from=claude-pets",
+            "url": "http://127.0.0.1:47213/hook?from=wakuwaku",
             "timeout": 2
           }
         ]
@@ -86,7 +86,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "http://127.0.0.1:47213/hook?from=claude-pets",
+            "url": "http://127.0.0.1:47213/hook?from=wakuwaku",
             "timeout": 2
           }
         ]
@@ -97,7 +97,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "http://127.0.0.1:47213/hook?from=claude-pets",
+            "url": "http://127.0.0.1:47213/hook?from=wakuwaku",
             "timeout": 2
           }
         ]
@@ -108,7 +108,7 @@
         "hooks": [
           {
             "type": "http",
-            "url": "http://127.0.0.1:47213/hook?from=claude-pets",
+            "url": "http://127.0.0.1:47213/hook?from=wakuwaku",
             "timeout": 2
           }
         ]

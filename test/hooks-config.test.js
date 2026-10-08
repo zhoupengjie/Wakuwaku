@@ -4,7 +4,7 @@ const { test } = require('node:test')
 const hooksConfig = require('../src/shared/hooks-config')
 const { EVENTS } = require('../src/shared/hook-events')
 
-const here = { command: 'C:\\Apps\\Claude Pets\\Claude Pets.exe', args: [] }
+const here = { command: 'C:\\Apps\\Wakuwaku\\Wakuwaku.exe', args: [] }
 const port = 47213
 
 test('status tells installed, missing, http-only, partial and stale apart', () => {
@@ -21,7 +21,7 @@ test('status tells installed, missing, http-only, partial and stale apart', () =
   assert.equal(hooksConfig.status(partial, { port, launch: here }), 'partial')
 
   // Moved: the starter runs another copy.
-  const moved = hooksConfig.install({}, { port, launch: { command: 'D:\\old\\Claude Pets.exe', args: [] } })
+  const moved = hooksConfig.install({}, { port, launch: { command: 'D:\\old\\Wakuwaku.exe', args: [] } })
   assert.equal(hooksConfig.status(moved, { port, launch: here }), 'stale')
   // Another port.
   assert.equal(hooksConfig.status(hooksConfig.install({}, { port: 1234, launch: here }), { port, launch: here }), 'stale')
@@ -29,7 +29,7 @@ test('status tells installed, missing, http-only, partial and stale apart', () =
 
 test('the same copy is recognised whatever the slashes and case', () => {
   if (process.platform !== 'win32') return
-  const settings = hooksConfig.install({}, { port, launch: { command: 'c:/apps/claude pets/claude pets.exe', args: [] } })
+  const settings = hooksConfig.install({}, { port, launch: { command: 'c:/apps/wakuwaku/wakuwaku.exe', args: [] } })
   assert.equal(hooksConfig.status(settings, { port, launch: here }), 'ok')
 })
 
@@ -52,9 +52,23 @@ test('install keeps other hooks, even ones in the same event; uninstall restores
 
 test('only our entries are ours', () => {
   assert.equal(hooksConfig.isOurs({ type: 'command', command: 'echo mine' }), false)
-  assert.equal(hooksConfig.isOurs({ type: 'http', url: 'http://127.0.0.1:47213/hook?from=claude-pets' }), true)
+  assert.equal(hooksConfig.isOurs({ type: 'http', url: 'http://127.0.0.1:47213/hook?from=wakuwaku' }), true)
   assert.equal(hooksConfig.isOurs({ type: 'command', command: 'x.exe', args: [hooksConfig.ENSURE_FLAG] }), true)
   assert.equal(hooksConfig.isOurs({ type: 'command', command: 'node "D:/x/hooks/claude-hook.js"' }), true)
+})
+
+test('hooks from before the rename (claude-pets) are ours, need a repair, and go on uninstall', () => {
+  const old = {
+    hooks: {
+      Stop: [{ hooks: [{ type: 'http', url: 'http://127.0.0.1:47213/hook?from=claude-pets', timeout: 2 }] }],
+      SessionStart: [{ hooks: [{ type: 'command', command: here.command, args: ['--claude-pets-ensure-running'], async: true }] }],
+    },
+  }
+  assert.equal(hooksConfig.status(old, { port, launch: here }), 'stale')
+  assert.deepEqual(hooksConfig.uninstall(old), {})
+  const fixed = hooksConfig.install(old, { port, launch: here })
+  assert.equal(hooksConfig.status(fixed, { port, launch: here }), 'ok')
+  assert.ok(!JSON.stringify(fixed).includes('claude-pets'))
 })
 
 test('an HTTP hook on SessionStart (which Claude Code skips) counts as an old install', () => {
@@ -85,8 +99,8 @@ test('the plugin in the repo is what the code would build', () => {
 })
 
 test('the plugin counts as on only when enabled', () => {
-  assert.equal(hooksConfig.isPluginEnabled({ enabledPlugins: { 'desk-pet@desk-pet': true } }), true)
-  assert.equal(hooksConfig.isPluginEnabled({ enabledPlugins: { 'desk-pet@desk-pet': false } }), false)
+  assert.equal(hooksConfig.isPluginEnabled({ enabledPlugins: { 'wakuwaku@wakuwaku': true } }), true)
+  assert.equal(hooksConfig.isPluginEnabled({ enabledPlugins: { 'wakuwaku@wakuwaku': false } }), false)
   assert.equal(hooksConfig.isPluginEnabled({}), false)
   assert.equal(hooksConfig.isPluginEnabled(null), false)
 })

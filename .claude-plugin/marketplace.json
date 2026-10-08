@@ -1,14 +1,14 @@
 {
-  "name": "desk-pet",
+  "name": "wakuwaku",
   "owner": {
     "name": "Pengjie Zhou"
   },
   "description": "A desktop pet for Claude Code: her hooks.",
   "plugins": [
     {
-      "name": "desk-pet",
+      "name": "wakuwaku",
       "source": "./plugin",
-      "description": "Tells the Claude Pets desktop pet what Claude Code is doing, and lets you answer its prompts on her."
+      "description": "Tells the Wakuwaku desktop pet what Claude Code is doing, and lets you answer its prompts on her."
     }
   ]
 }

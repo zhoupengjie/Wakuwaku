@@ -3,7 +3,7 @@ const { test } = require('node:test')
 
 const { toMessage, EVENTS } = require('../src/shared/hook-events')
 
-const base = { session_id: 's1', cwd: 'D:/work/claude-pets' }
+const base = { session_id: 's1', cwd: 'D:/work/wakuwaku' }
 
 test('each hook event becomes the right message, with its session and project', () => {
   const cases = [
@@ -29,7 +29,7 @@ test('each hook event becomes the right message, with its session and project', 
   ]
 
   for (const [event, message] of cases) {
-    assert.deepEqual(toMessage({ ...base, ...event }), { ...message, session: 's1', project: 'claude-pets' }, JSON.stringify(event))
+    assert.deepEqual(toMessage({ ...base, ...event }), { ...message, session: 's1', project: 'wakuwaku' }, JSON.stringify(event))
   }
 })
 

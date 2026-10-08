@@ -1,11 +1,11 @@
 {
-  "name": "desk-pet",
+  "name": "wakuwaku",
   "version": "0.1.0",
-  "description": "Tells the Claude Pets desktop pet what Claude Code is doing, and lets you answer its prompts on her.",
+  "description": "Tells the Wakuwaku desktop pet what Claude Code is doing, and lets you answer its prompts on her.",
   "author": {
     "name": "Pengjie Zhou"
   },
-  "homepage": "https://github.com/zhoupengjie/claude-pets",
-  "repository": "https://github.com/zhoupengjie/claude-pets.git",
+  "homepage": "https://github.com/zhoupengjie/wakuwaku",
+  "repository": "https://github.com/zhoupengjie/wakuwaku.git",
   "license": "MIT"
 }

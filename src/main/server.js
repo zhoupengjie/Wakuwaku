@@ -5,12 +5,12 @@
 //                      or for a prompt, the person's answer on the pet
 //   POST /state        a message (src/main/state.js): { mood, detail, event, react, say }
 //   GET  /snapshot     the window as a PNG (debugging); ?page=settings for that one
-//   POST /debug/look   { dx, dy }: look as if the cursor were there (CLAUDE_PETS_DEBUG=1 only)
-//   POST /debug/walk   { dx, ms }: take a walk now (CLAUDE_PETS_DEBUG=1 only)
-//   POST /debug/click  { selector }: click that element in the page (CLAUDE_PETS_DEBUG=1 only)
-//   POST /debug/eval   { page, code }: run code in the pet or settings page (CLAUDE_PETS_DEBUG=1 only)
-//   POST /debug/settings  "open", or a settings patch (CLAUDE_PETS_DEBUG=1 only)
-//   POST /debug/fullscreen  true / false: as if another app went full screen (CLAUDE_PETS_DEBUG=1 only)
+//   POST /debug/look   { dx, dy }: look as if the cursor were there (WAKUWAKU_DEBUG=1 only)
+//   POST /debug/walk   { dx, ms }: take a walk now (WAKUWAKU_DEBUG=1 only)
+//   POST /debug/click  { selector }: click that element in the page (WAKUWAKU_DEBUG=1 only)
+//   POST /debug/eval   { page, code }: run code in the pet or settings page (WAKUWAKU_DEBUG=1 only)
+//   POST /debug/settings  "open", or a settings patch (WAKUWAKU_DEBUG=1 only)
+//   POST /debug/fullscreen  true / false: as if another app went full screen (WAKUWAKU_DEBUG=1 only)
 const http = require('http')
 
 const MAX_BODY = 4096
@@ -75,7 +75,7 @@ function serve({ port, getState, setState, onHook, snapshot, lookAt, walkBy, cli
     }
 
     if (req.method === 'GET' && req.url === '/health') {
-      return reply(200, { ok: true, app: 'claude-pets', state: getState() })
+      return reply(200, { ok: true, app: 'wakuwaku', state: getState() })
     }
 
     if (route === 'GET /snapshot') {

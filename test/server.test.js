@@ -30,7 +30,7 @@ test('an HTTP hook gets {} back at once, and the event reaches the pet', async t
   const { url, hooks } = await start(t)
   const event = { hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'ls' } }
 
-  const res = await post(`${url}/hook?from=claude-pets`, JSON.stringify(event))
+  const res = await post(`${url}/hook?from=wakuwaku`, JSON.stringify(event))
   assert.deepEqual(res, { status: 200, body: '{}' })
   assert.deepEqual(hooks, [event])
   assert.deepEqual(toMessage(hooks[0]), { mood: 'waiting', detail: { key: 'detail.needsApproval', vars: { tool: 'Bash' } } })
@@ -73,7 +73,7 @@ test('/state, /health and unknown routes', async t => {
   assert.deepEqual(states, [{ mood: 'working' }])
 
   const health = await (await fetch(`${url}/health`)).json()
-  assert.equal(health.app, 'claude-pets')
+  assert.equal(health.app, 'wakuwaku')
   assert.equal((await fetch(`${url}/nope`)).status, 404)
   // Debug routes are closed unless asked for.
   assert.equal((await post(`${url}/debug/look`, '{"dx":1,"dy":1}')).status, 404)

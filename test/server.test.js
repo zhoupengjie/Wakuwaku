@@ -3,7 +3,7 @@ const { once } = require('node:events')
 const { test } = require('node:test')
 
 const { serve } = require('../src/main/server')
-const { toMessage } = require('../src/shared/hook-events')
+const { toMessage } = require('../src/agents/claude-code/events')
 
 async function start(t) {
   const hooks = []

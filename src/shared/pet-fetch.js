@@ -9,7 +9,7 @@ const path = require('path')
 const SITE = 'https://codex-pets.net'
 const ID = /^[a-z0-9][a-z0-9-]*$/i
 
-// The layouts src/renderer/pet.js plays: 8 columns of 192 x 208 cells, 11
+// The layouts src/pet/pet.js plays: 8 columns of 192 x 208 cells, 11
 // rows (v2) or 9 (v1, without the look-around rows).
 const ATLASES = ['1536x2288', '1536x1872']
 

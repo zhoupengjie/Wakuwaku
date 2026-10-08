@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test \"test/*.test.js\"",
-    "smoke": "node scripts/smoke.js",
+    "smoke": "node test/e2e/smoke.js",
     "fetch-pet": "node scripts/fetch-pet.js",
     "install-hooks": "node scripts/install-hooks.js",
     "uninstall-hooks": "node scripts/install-hooks.js --uninstall",

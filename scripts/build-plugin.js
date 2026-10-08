@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Writes the Claude Code plugin in plugin/ from src/shared/hooks-config.js, so
+// Writes the Claude Code plugin in integrations/claude-code/ from
+// src/agents/claude-code/hooks.js, so
 // its hooks always match what the app expects. `npm test` checks they agree.
 //
 //   npm run build-plugin
@@ -10,7 +11,7 @@
 const fs = require('fs')
 const path = require('path')
 
-const { pluginHooks } = require('../src/shared/hooks-config')
+const { pluginHooks } = require('../src/agents/claude-code/hooks')
 const pkg = require('../package.json')
 
 // Third-party plugin names may not start with "claude-" (kept for Anthropic's own).
@@ -18,7 +19,7 @@ const PLUGIN_NAME = 'wakuwaku'
 const MARKETPLACE_NAME = 'wakuwaku'
 
 const ROOT = path.join(__dirname, '..')
-const PLUGIN = path.join(ROOT, 'plugin')
+const PLUGIN = path.join(ROOT, 'integrations', 'claude-code')
 
 function write(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
@@ -42,7 +43,7 @@ function marketplace() {
     name: MARKETPLACE_NAME,
     owner: { name: pkg.author },
     description: 'A desktop pet for Claude Code: her hooks.',
-    plugins: [{ name: PLUGIN_NAME, source: './plugin', description: plugin().description }],
+    plugins: [{ name: PLUGIN_NAME, source: './integrations/claude-code', description: plugin().description }],
   }
 }
 
@@ -54,7 +55,7 @@ function build() {
 
 if (require.main === module) {
   build()
-  console.log(`plugin/ and .claude-plugin/marketplace.json written (${pkg.version}).`)
+  console.log(`integrations/claude-code/ and .claude-plugin/marketplace.json written (${pkg.version}).`)
 }
 
 module.exports = { plugin, marketplace, PLUGIN_NAME, MARKETPLACE_NAME }

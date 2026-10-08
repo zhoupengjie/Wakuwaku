@@ -11,8 +11,8 @@ const { createFullscreenWatch } = require('./fullscreen')
 const { createAsks } = require('./asks')
 const { serve } = require('./server')
 const { createPet } = require('./state')
-const { toMessage } = require('../shared/hook-events')
-const hooksConfig = require('../shared/hooks-config')
+const { toMessage } = require('../agents/claude-code/events')
+const hooksConfig = require('../agents/claude-code/hooks')
 const i18n = require('../shared/i18n')
 const petFetch = require('../shared/pet-fetch')
 
@@ -265,7 +265,7 @@ function createWindow() {
     focusable: false,
     backgroundColor: '#00000000',
     webPreferences: {
-      preload: path.join(__dirname, '..', 'preload', 'index.js'),
+      preload: path.join(__dirname, '..', 'pet', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       // An unfocused, half-transparent window still has to animate.
@@ -297,7 +297,7 @@ function createWindow() {
     win = null
     app.quit()
   })
-  win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'))
+  win.loadFile(path.join(__dirname, '..', 'pet', 'index.html'))
 }
 
 function send() {
@@ -583,7 +583,7 @@ function openSettings() {
     icon: ICON,
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(__dirname, '..', 'settings', 'preload.js'),
+      preload: path.join(__dirname, '..', 'home', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -591,7 +591,7 @@ function openSettings() {
   settingsWin.removeMenu()
   settingsWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   settingsWin.webContents.on('will-navigate', e => e.preventDefault())
-  settingsWin.loadFile(path.join(__dirname, '..', 'settings', 'index.html'))
+  settingsWin.loadFile(path.join(__dirname, '..', 'home', 'index.html'))
   settingsWin.once('ready-to-show', () => settingsWin.show())
   settingsWin.on('closed', () => {
     settingsWin = null

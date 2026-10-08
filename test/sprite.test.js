@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
 
-const { CLIPS, MOOD_CLIP, REACTIONS, lookCell } = require('../src/renderer/sprite')
+const { CLIPS, MOOD_CLIP, REACTIONS, lookCell } = require('../src/pet/sprite')
 
 // The 11 states codex-pets.net shows for a v2 pet, by row.
 const SITE_ROWS = {

@@ -5,9 +5,9 @@ const os = require('node:os')
 const path = require('node:path')
 const { test } = require('node:test')
 
-const { EVENTS } = require('../src/shared/hook-events')
-const { HTTP_EVENTS } = require('../src/shared/hooks-config')
-const hooksConfig = require('../src/shared/hooks-config')
+const { EVENTS } = require('../src/agents/claude-code/events')
+const { HTTP_EVENTS } = require('../src/agents/claude-code/hooks')
+const hooksConfig = require('../src/agents/claude-code/hooks')
 
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'install-hooks.js')
 const ROOT = path.join(__dirname, '..')

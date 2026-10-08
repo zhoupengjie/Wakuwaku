@@ -1,5 +1,5 @@
 // What the pet is doing, from the messages the hooks bring (see
-// src/shared/hook-events.js). A message is
+// src/agents/claude-code/events.js). A message is
 //   { session?, project?, mood?, detail?, event?, react?, say? }
 //   mood     idle | working | waiting | done | review | error
 //   detail   a tool name, or { key, vars } to translate

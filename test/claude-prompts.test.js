@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
 
-const { viewOf, replyFor, summarize } = require('../src/shared/ask')
+const { viewOf, replyFor, summarize } = require('../src/agents/claude-code/prompts')
 
 const BASH = {
   hook_event_name: 'PermissionRequest',

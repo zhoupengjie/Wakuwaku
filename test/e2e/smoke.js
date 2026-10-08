@@ -9,10 +9,10 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
-const { render, t } = require('../src/shared/i18n')
-const { ENSURE_FLAG, PLUGIN_ID } = require('../src/shared/hooks-config')
+const { render, t } = require('../../src/shared/i18n')
+const { ENSURE_FLAG, PLUGIN_ID } = require('../../src/agents/claude-code/hooks')
 
-const ROOT = path.join(__dirname, '..')
+const ROOT = path.join(__dirname, '..', '..')
 const OUT = path.join(ROOT, 'out', 'smoke')
 const PORT = 47299
 const URL = `http://127.0.0.1:${PORT}`

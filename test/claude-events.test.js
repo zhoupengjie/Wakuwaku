@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
 
-const { toMessage, EVENTS } = require('../src/shared/hook-events')
+const { toMessage, EVENTS } = require('../src/agents/claude-code/events')
 
 const base = { session_id: 's1', cwd: 'D:/work/wakuwaku' }
 

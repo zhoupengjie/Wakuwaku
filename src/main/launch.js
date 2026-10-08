@@ -7,7 +7,7 @@ const os = require('os')
 const path = require('path')
 const { app } = require('electron')
 
-const hooksConfig = require('../shared/hooks-config')
+const hooksConfig = require('../agents/claude-code/hooks')
 
 const CLEANUP_FLAG = '--wakuwaku-cleanup'
 

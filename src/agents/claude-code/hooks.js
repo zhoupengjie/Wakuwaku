@@ -7,7 +7,7 @@
 // starts the window when it is not up, which no HTTP hook can do. That command
 // is the app itself with ENSURE_FLAG, given as an argument list (no shell), so
 // no Node is needed and no path is ever quoted.
-const { EVENTS } = require('./hook-events')
+const { EVENTS } = require('./events')
 
 const ENSURE_FLAG = '--wakuwaku-ensure-running'
 const URL_MARK = 'from=wakuwaku'

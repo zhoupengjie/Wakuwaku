@@ -5,7 +5,7 @@
 // answer comes first, so answering here never blocks the terminal.
 const path = require('path')
 
-const { t } = require('./i18n')
+const { t } = require('../../shared/i18n')
 
 const MAX_SUMMARY = 400
 const MAX_ANSWER = 2000

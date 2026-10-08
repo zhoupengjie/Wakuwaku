@@ -8,14 +8,14 @@
 //                                      (use its start-at-login, or npm start)
 //   ... -- --settings <path>           another settings file (default ~/.claude/settings.json)
 //
-// See src/shared/hooks-config.js for what goes in. Only our entries are
+// See src/agents/claude-code/hooks.js for what goes in. Only our entries are
 // touched; the file is backed up next to itself before the first change.
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
 const { detectLang } = require('../src/shared/i18n')
-const hooksConfig = require('../src/shared/hooks-config')
+const hooksConfig = require('../src/agents/claude-code/hooks')
 
 const ROOT = path.join(__dirname, '..')
 const PORT = Number(process.env.WAKUWAKU_PORT || 47213)

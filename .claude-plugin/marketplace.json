@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "wakuwaku",
-      "source": "./plugin",
+      "source": "./integrations/claude-code",
       "description": "Tells the Wakuwaku desktop pet what Claude Code is doing, and lets you answer its prompts on her."
     }
   ]

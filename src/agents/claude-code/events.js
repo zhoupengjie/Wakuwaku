@@ -1,5 +1,5 @@
 // Claude Code hook events → pet messages (see src/main/state.js), and how
-// each event is installed (src/shared/hooks-config.js).
+// each event is installed (src/agents/claude-code/hooks.js).
 //
 // Texts are { key, vars } for src/shared/i18n.js, so the pet says them in the
 // language she is set to. Each message names its session and project, so

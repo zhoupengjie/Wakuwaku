@@ -1,8 +1,8 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
 
-const hooksConfig = require('../src/shared/hooks-config')
-const { EVENTS } = require('../src/shared/hook-events')
+const hooksConfig = require('../src/agents/claude-code/hooks')
+const { EVENTS } = require('../src/agents/claude-code/events')
 
 const here = { command: 'C:\\Apps\\Wakuwaku\\Wakuwaku.exe', args: [] }
 const port = 47213
@@ -90,8 +90,8 @@ test('the plugin in the repo is what the code would build', () => {
   const root = path.join(__dirname, '..')
   const { plugin, marketplace, PLUGIN_NAME, MARKETPLACE_NAME } = require('../scripts/build-plugin')
   const read = p => JSON.parse(fs.readFileSync(path.join(root, p), 'utf8'))
-  assert.deepEqual(read('plugin/hooks/hooks.json'), { hooks: hooksConfig.pluginHooks({ port: 47213 }) }, 'run npm run build-plugin')
-  assert.deepEqual(read('plugin/.claude-plugin/plugin.json'), plugin(), 'run npm run build-plugin')
+  assert.deepEqual(read('integrations/claude-code/hooks/hooks.json'), { hooks: hooksConfig.pluginHooks({ port: 47213 }) }, 'run npm run build-plugin')
+  assert.deepEqual(read('integrations/claude-code/.claude-plugin/plugin.json'), plugin(), 'run npm run build-plugin')
   assert.deepEqual(read('.claude-plugin/marketplace.json'), marketplace(), 'run npm run build-plugin')
   // Third-party plugin names may not start with "claude-".
   assert.ok(!/^claude-/.test(PLUGIN_NAME) && !/^claude-/.test(MARKETPLACE_NAME))

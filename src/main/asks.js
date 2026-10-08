@@ -5,7 +5,7 @@
 // answer, so an ask also goes away (answered {}, no decision) once the session
 // shows the dialog is gone: the same tool call finishing, the turn ending, or a
 // newer prompt from the same agent. And before Claude Code's own timeout.
-const { viewOf, replyFor } = require('../shared/ask')
+const { viewOf, replyFor } = require('../agents/claude-code/prompts')
 
 // The longest a prompt can wait: under the 300 s timeout the PermissionRequest
 // hook is installed with. The settings can make it shorter.

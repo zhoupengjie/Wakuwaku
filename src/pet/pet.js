@@ -326,6 +326,8 @@ window.pet.onDragEnd(() => {
 sprite.addEventListener('mouseenter', () => window.pet.hover(true))
 sprite.addEventListener('mouseleave', () => window.pet.hover(false))
 sprite.addEventListener('mousedown', e => {
+  // Into the debug log (when on): which window a press reaches.
+  console.log('mousedown on her, button', e.button)
   if (e.button === 0) {
     stopIdle()
     window.pet.dragStart()
@@ -337,6 +339,7 @@ sprite.addEventListener('contextmenu', e => {
 })
 
 window.addEventListener('mouseup', e => {
+  console.log('mouseup, button', e.button)
   if (e.button === 0) window.pet.dragEnd()
 })
 // No sprite yet: a double-click opens the settings to get one.

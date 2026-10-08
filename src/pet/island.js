@@ -323,6 +323,7 @@
   // --- Pulling her out: the drop --------------------------------------------------
 
   function pullDown(e) {
+    console.log('pointerdown on her in the island, button', e.button)
     if (e.button !== 0 || !isHome() || view === 'ask' || isAbsorbing) return
     // No mouse events follow, so the island does not take this for a click.
     e.preventDefault()
@@ -631,6 +632,7 @@
     })
     // A click opens the main window; the prompt's own buttons and she are not clicks on the island.
     target.addEventListener('mousedown', e => {
+      console.log('mousedown on the island, button', e.button)
       if (e.button === 0 && !panel.contains(e.target) && !her.contains(e.target)) window.pet.dragStart()
     })
     target.addEventListener('contextmenu', e => {

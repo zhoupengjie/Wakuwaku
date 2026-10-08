@@ -13,6 +13,8 @@ const SM_SWAPBUTTON = 23
 
 let getState
 let isSwapped = () => false
+let getCapture = () => null
+let releaseCapture = () => false
 
 function load() {
   if (getState !== undefined) return getState
@@ -24,6 +26,8 @@ function load() {
     getState = user32.func('short __stdcall GetAsyncKeyState(int key)')
     const metrics = user32.func('int __stdcall GetSystemMetrics(int index)')
     isSwapped = () => metrics(SM_SWAPBUTTON) !== 0
+    getCapture = user32.func('void* __stdcall GetCapture()')
+    releaseCapture = user32.func('bool __stdcall ReleaseCapture()')
   } catch {
     getState = null
   }
@@ -41,4 +45,20 @@ function isPrimaryDown() {
   }
 }
 
-module.exports = { isPrimaryDown }
+// Whichever of this thread's windows holds the mouse, let go of it. The
+// button went down on the island's window and came up elsewhere; Windows can
+// leave that window holding the mouse, and every click, on her too, goes to
+// it until something (a menu) takes it away. Returns whether one held it.
+function releaseMouse() {
+  if (!load()) return false
+  try {
+    const held = getCapture()
+    if (!held) return false
+    releaseCapture()
+    return true
+  } catch {
+    return false
+  }
+}
+
+module.exports = { isPrimaryDown, releaseMouse }

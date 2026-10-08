@@ -13,9 +13,10 @@ const { debugLog } = require('./debug-log')
 const NEAR_PX = 24
 
 // getWin: the window (or null); isShown: whether it is up; isHeld: a drag in
-// progress (the window keeps the pointer); onPoll(cursor, near): anything
-// else to do with the cursor, returning a delay in ms to poll again sooner.
-function createClickThrough({ name = '', getWin, isShown, isHeld = () => false, onPoll = () => undefined }) {
+// progress (the window keeps the pointer); isPassive: the window takes no
+// mouse at all for now; onPoll(cursor, near): anything else to do with the
+// cursor, returning a delay in ms to poll again sooner.
+function createClickThrough({ name = '', getWin, isShown, isHeld = () => false, isPassive = () => false, onPoll = () => undefined }) {
   let isOver = false
   let mode = ''
   let timer
@@ -46,6 +47,10 @@ function createClickThrough({ name = '', getWin, isShown, isHeld = () => false, 
       setMode('pass')
       return schedule(500)
     }
+    if (isPassive()) {
+      setMode('pass')
+      return schedule(50)
+    }
     const cursor = screen.getCursorScreenPoint()
     const near = isWithin(cursor, NEAR_PX)
     // Over something of ours, yet outside the window: the page missed the
@@ -65,13 +70,14 @@ function createClickThrough({ name = '', getWin, isShown, isHeld = () => false, 
     setOver(over) {
       isOver = over === true
       debugLog(name, 'over', isOver)
+      if (isPassive()) return
       if (!isHeld()) setMode(isOver ? 'catch' : 'forward')
     },
     // Forget the pointer was over anything (the window moved from under it).
     reset() {
       isOver = false
       mode = ''
-      setMode('forward')
+      setMode(isPassive() ? 'pass' : 'forward')
     },
   }
 }

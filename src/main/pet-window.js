@@ -9,7 +9,7 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron')
 const config = require('./config')
 const { createClickThrough } = require('./click-through')
 const { debugLog } = require('./debug-log')
-const { isPrimaryDown } = require('./mouse-button')
+const { isPrimaryDown, releaseMouse } = require('./mouse-button')
 
 // Window size at scale 1: room for the bubble above a 192x208 cell.
 const BASE_W = 300
@@ -53,7 +53,10 @@ function createPetWindow(ctx) {
     name: 'pet',
     getWin: () => alive(win),
     isShown,
-    isHeld: () => !!drag,
+    isHeld: () => !!drag && !drag.carried,
+    // Carried, the button is the island's: she takes no mouse at all, so she
+    // never sees half of a press.
+    isPassive: () => !!drag?.carried,
     onPoll: lookAt,
   })
 
@@ -356,7 +359,16 @@ function createPetWindow(ctx) {
     drag = undefined
     parked = null
     win.webContents.send('pet:drag-end')
-    if (carried) ctx.island.endHold()
+    if (carried) {
+      ctx.island.endHold()
+      // Nothing of ours may keep holding the mouse, and her page starts
+      // with the button up, so the next press on her is a press.
+      debugLog('pet', 'mouse was held by a window:', releaseMouse())
+      const cursor = screen.getCursorScreenPoint()
+      const b = win.getBounds()
+      win.webContents.sendInputEvent({ type: 'mouseUp', x: cursor.x - b.x, y: cursor.y - b.y, button: 'left', clickCount: 1 })
+      pointer.schedule()
+    }
     if (isIslandMode() && moved) {
       if (ctx.island.reach(herPoint(), { final: true }) === 'snap') return ctx.absorb(herPoint())
       ctx.island.reach(null)
@@ -379,8 +391,8 @@ function createPetWindow(ctx) {
     moveTo(x, y, { isFree: true })
     ctx.change({ out: true })
     win.moveTop()
-    pointer.reset()
     follow({ dx: cursor.x - x, dy: cursor.y - y }, { carried: true })
+    pointer.reset()
   }
 
   // Gone into the island at once, before the island's animation starts.

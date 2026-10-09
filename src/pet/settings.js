@@ -5,7 +5,7 @@
 //   pets      the pets downloaded, a download by link or id, the gallery
 //   look      pet or island, size, bubble, strolls, eyes, language
 //   alerts    how long endings stay, notifications, sound, prompts, quiet
-//   connect   how Claude Code reaches her, start at login, the hooks, about
+//   connect   how Claude Code and Codex reach her, start at login, the hooks, about
 //
 // What they show comes from main as a snapshot, again whenever it changes;
 // what they change goes back as a patch, checked there. island.js decides the
@@ -146,6 +146,7 @@
           .map(x => {
             const name = Status.nameOf(x, detailed)
             const what = [
+              x.agent === 'codex' ? 'Codex' : '',
               Status.status(lang, x, { detailed, withClock: false }),
               detailed && x.name && x.project !== name ? x.project : '',
               detailed && Status.isEnding(x) ? x.reply : '',
@@ -175,7 +176,7 @@
     const installed = snap.pets.length
       ? snap.pets
           .map(
-            p => `<div class="r petrow">${thumb(52, p.url, p.version)}<div class="grow"><div>${esc(p.name)}</div><div class="d">${esc(p.author)}${p.version === 1 ? ` · ${esc(T('home.v1'))}` : ''}</div></div>
+            p => `<div class="r petrow">${thumb(52, p.url, p.version)}<div class="grow"><div>${esc(p.name)}</div><div class="d">${esc([p.author, p.codex ? T('s.fromCodex') : '', p.version === 1 ? T('home.v1') : ''].filter(Boolean).join(' · '))}</div></div>
             ${p.id === current ? `<span class="d in-use">${esc(T('home.inUse'))}</span>` : `<button class="pbtn" data-use="${esc(p.id)}">${esc(T('home.use'))}</button>`}</div>`,
           )
           .join('')
@@ -253,7 +254,28 @@
         : snap.hooks === 'unreadable'
           ? ''
           : `<button class="pbtn" data-hooks="install">${esc(T(snap.hooks === 'ok' || snap.hooks === 'httpOnly' ? 'settings.reinstall' : 'settings.repair'))}</button><button class="pbtn no" data-hooks="remove">${esc(T('settings.remove'))}</button>`
-    return `${sec(T('s.status'))}<div class="grp"><div class="r"><span class="dot" style="background:${isOk ? COLOR.done : snap.connection === 'both' ? COLOR.waiting : COLOR.idle}"></span><div class="grow">${esc(T(conn))}</div><span class="d">${esc(T('s.sessionsOnline', { n: sessions }))}</span></div></div>
+    // Codex: hooks in its hooks.json, which it runs only once trusted (/hooks):
+    // until an event came, they may be waiting for that.
+    const codex = snap.codex || {}
+    const codexIn = ['ok', 'stale', 'partial'].includes(codex.hooks)
+    const codexConn = codex.hooks === 'ok' && codex.seen ? 's.codexConnOk' : codex.hooks === 'ok' ? 's.codexConnTrust' : codexIn ? 's.codexConnRepair' : 's.codexConnNone'
+    const codexColor = codexConn === 's.codexConnOk' ? COLOR.done : codexIn ? COLOR.waiting : COLOR.idle
+    const codexWord = {
+      ok: 'settings.hooksOk',
+      missing: 'settings.hooksMissing',
+      stale: 'settings.hooksStale',
+      partial: 'settings.hooksPartial',
+      unreadable: 's.codexUnreadable',
+      absent: 's.codexAbsent',
+    }[codex.hooks]
+    const codexButtons =
+      codex.hooks === 'missing'
+        ? `<button class="pbtn" data-codex="install">${esc(T('settings.install'))}</button>`
+        : codexIn
+          ? `<button class="pbtn" data-codex="install">${esc(T(codex.hooks === 'ok' ? 'settings.reinstall' : 'settings.repair'))}</button><button class="pbtn no" data-codex="remove">${esc(T('settings.remove'))}</button>`
+          : ''
+    return `${sec(T('s.status'))}<div class="grp"><div class="r"><span class="dot" style="background:${isOk ? COLOR.done : snap.connection === 'both' ? COLOR.waiting : COLOR.idle}"></span><div class="grow">${esc(T(conn))}</div><span class="d">${esc(T('s.sessionsOnline', { n: sessions }))}</span></div>
+        <div class="r"><span class="dot" style="background:${codexColor}"></span><div class="grow">${esc(T(codexConn))}</div></div></div>
       ${sec(T('home.plugin'))}<div class="grp"><div class="note">${esc(T('home.pluginWhy'))}</div>
         ${snap.pluginCommands.map(c => `<div class="r"><span class="cmd mono">${esc(c)}</span><button class="pbtn" data-copy="${esc(c)}">${esc(T('home.copy'))}</button></div>`).join('')}
       </div>
@@ -263,6 +285,12 @@
       ${sec(T('home.advanced'))}<div class="grp">
         <div class="note">${esc(T('home.advancedWhy'))}</div>
         <div class="r"><div class="grow"><div>${esc(T('settings.hooks'))}: ${esc(T(hooksWord))}</div><div class="d mono ellip">${esc(snap.settingsFile)}</div></div>${hooksButtons}</div>
+      </div>
+      ${sec(T('s.codex'))}<div class="grp">
+        <div class="note">${esc(T('s.codexWhy'))}</div>
+        <div class="r"><div class="grow"><div>${esc(T('settings.hooks'))}: ${esc(T(codexWord))}</div><div class="d mono ellip">${esc(codex.file)}</div></div>${codexButtons}</div>
+        ${codexIn && !codex.seen ? `<div class="note">${esc(T('s.codexTrust'))}</div>` : ''}
+        ${codex.hooks !== 'absent' && !codex.async ? `<div class="note">${esc(T('s.codexOld', { version: codex.version }))}</div>` : ''}
       </div>
       ${sec(T('settings.about'))}<div class="grp">
         <div class="r"><div class="grow">${esc(T('s.version', { version: snap.version }))}</div><span class="link" data-site="repo">${esc(T('home.repo'))} ›</span></div>
@@ -495,6 +523,14 @@
     const hooks = at('[data-hooks]')
     if (hooks) {
       return window.pet.settings.hooks(hooks.dataset.hooks).then(got => {
+        snap = got.snapshot
+        draw()
+        relayout()
+      })
+    }
+    const codexHooks = at('[data-codex]')
+    if (codexHooks) {
+      return window.pet.settings.codexHooks(codexHooks.dataset.codex).then(got => {
         snap = got.snapshot
         draw()
         relayout()

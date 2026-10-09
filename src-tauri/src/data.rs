@@ -119,15 +119,24 @@ pub struct PetInfo {
     pub author: String,
     pub sheet: PathBuf,
     pub version: u8,
+    // One of the pets Codex has (its desktop app keeps them in the same format).
+    pub from_codex: bool,
 }
 
-// Downloaded pets: <her folder>/pets, then the project's pets/ (from source).
+// The pets Codex has: only read, never written.
+pub fn codex_pets() -> PathBuf {
+    crate::connection::codex_home().join("pets")
+}
+
+// Downloaded pets: <her folder>/pets, then the project's pets/ (from source),
+// then Codex's.
 pub fn pet_dirs(dir: &Path) -> Vec<PathBuf> {
-    vec![dir.join("pets"), in_tree(1, "pets")]
+    vec![dir.join("pets"), in_tree(1, "pets"), codex_pets()]
 }
 
 pub fn pets(dir: &Path) -> Vec<PetInfo> {
     let mut found: Vec<PetInfo> = Vec::new();
+    let codex = codex_pets();
     for root in pet_dirs(dir) {
         let Ok(entries) = fs::read_dir(&root) else { continue };
         let mut ids: Vec<String> = entries
@@ -151,6 +160,7 @@ pub fn pets(dir: &Path) -> Vec<PetInfo> {
                 version: if meta.get("spriteVersionNumber").and_then(Value::as_u64) == Some(2) { 2 } else { 1 },
                 id,
                 sheet,
+                from_codex: root == codex,
             });
         }
     }

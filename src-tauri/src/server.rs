@@ -1,7 +1,8 @@
-// The local HTTP port the Claude Code hooks report to.
+// The local HTTP port the Claude Code and Codex hooks report to.
 //
 //   GET  /health       { ok, app, runtime, state }; with WAKUWAKU_DEBUG=1, the windows and settings too
 //   POST /hook         a Claude Code hook event; answers {}, or for a prompt the person's answer
+//                      ?agent=codex: a Codex one, handed on by this program (main.rs codex_hook)
 //   POST /state        a message (state.rs)
 //   POST /come-home    started again while running: back into sight
 //   POST /debug/eval   { page, code }: run code in her page or the island's (WAKUWAKU_DEBUG=1 only)
@@ -13,11 +14,19 @@ use serde_json::{json, Value};
 use tauri::Manager;
 use tiny_http::{Header, Request, Response, Server};
 
-use crate::{events, island, now_ms, pet, Responder, Shared};
+use crate::{events, events_codex, island, now_ms, pet, Responder, Shared};
 
 // Hook events carry whole files (an Edit's PostToolUse has the file before
 // the edit), so this is generous.
 const MAX_BODY: u64 = 16 * 1024 * 1024;
+// Codex waits on a prompt's hook before it shows its own dialog: the panel
+// holds one this long at most.
+const CODEX_ASK_MS: u64 = 60 * 1000;
+
+// Whether the request comes from Codex's hook (?agent=codex).
+fn is_from_codex(url: &str) -> bool {
+    url.split_once('?').is_some_and(|(_, query)| query.split('&').any(|p| p == "agent=codex"))
+}
 
 pub fn serve(sh: Arc<Shared>, server: Server) {
     let is_debug = std::env::var("WAKUWAKU_DEBUG").as_deref() == Ok("1");
@@ -44,8 +53,15 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool) {
     let method = req.method().as_str().to_string();
     match (method.as_str(), path.as_str()) {
         ("POST", "/hook") => {
-            let Some(event) = read_json(&mut req) else { return reply(req, 200, json!({})) };
-            if let Some(msg) = events::to_message(&event) {
+            let Some(mut event) = read_json(&mut req) else { return reply(req, 200, json!({})) };
+            // Codex's events, tagged for the prompts (asks.rs) and read their own way.
+            let is_codex = is_from_codex(req.url());
+            if let (true, Some(fields)) = (is_codex, event.as_object_mut()) {
+                fields.insert("agent".into(), json!("codex"));
+                sh.codex_seen.store(now_ms(), std::sync::atomic::Ordering::SeqCst);
+            }
+            let msg = if is_codex { events_codex::to_message(&event) } else { events::to_message(&event) };
+            if let Some(msg) = msg {
                 sh.apply(&msg);
             }
             // A prompt holds the answer until the person picks on the pet, the
@@ -56,7 +72,10 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool) {
                     Some(out) => reply(req, 200, if out.is_object() { out } else { json!({}) }),
                     None => drop(req),
                 });
-                let wait = sh.setting("promptWaitSec").as_u64().unwrap_or(290) * 1000;
+                let mut wait = sh.setting("promptWaitSec").as_u64().unwrap_or(290) * 1000;
+                if is_codex {
+                    wait = wait.min(CODEX_ASK_MS);
+                }
                 let added = sh.asks.lock().unwrap().add(event, respond, now_ms(), wait);
                 match added {
                     Ok(id) => {
@@ -129,4 +148,18 @@ fn evaluate(sh: &Shared, page: &str, code: &str) -> Option<Value> {
     let answer = rx.recv_timeout(std::time::Duration::from_secs(3)).ok();
     sh.evals.lock().unwrap().1.remove(&id);
     answer
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codex_hooks_say_where_they_come_from() {
+        assert!(is_from_codex("/hook?from=wakuwaku&agent=codex"));
+        assert!(is_from_codex("/hook?agent=codex"));
+        assert!(!is_from_codex("/hook?from=wakuwaku"));
+        assert!(!is_from_codex("/hook?agent=codexx"));
+        assert!(!is_from_codex("/hook"));
+    }
 }

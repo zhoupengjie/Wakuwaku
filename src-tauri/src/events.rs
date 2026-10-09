@@ -38,7 +38,7 @@ fn clip(text: &str, max: usize) -> String {
 }
 
 // The last part of a path, either slash.
-fn base(path: &str) -> &str {
+pub(crate) fn base(path: &str) -> &str {
     path.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(path)
 }
 
@@ -57,12 +57,12 @@ fn host(url: &str) -> &str {
     rest.split(['/', '?', '#']).next().unwrap_or(rest)
 }
 
-fn step(key: &str, vars: Value) -> Value {
+pub(crate) fn step(key: &str, vars: Value) -> Value {
     json!({ "key": key, "vars": vars })
 }
 
 // What a tool is doing, in plain words.
-fn step_of(tool: &str, input: &Value) -> Value {
+pub(crate) fn step_of(tool: &str, input: &Value) -> Value {
     let i = |key: &str| s(input, key);
     match tool {
         "Bash" | "PowerShell" => {
@@ -125,14 +125,14 @@ fn todo_of(tool: &str, input: &Value) -> Option<Value> {
 
 // The person's words as the name of what they asked for: the first line, or
 // nothing for a few words that only carry on ("ok", "继续").
-fn task_of(prompt: &str) -> Option<String> {
+pub(crate) fn task_of(prompt: &str) -> Option<String> {
     let line = prompt.lines().map(str::trim).find(|l| !l.is_empty())?;
     (line.chars().count() >= 4 && !line.starts_with('<')).then(|| clip(line, 80))
 }
 
 // How a turn ended, from Claude's last message: its first lines, without the
 // marks of markdown, up to the end of a sentence (or about 40 characters).
-fn reply_of(message: &str) -> Option<String> {
+pub(crate) fn reply_of(message: &str) -> Option<String> {
     let mut out = String::new();
     let mut after_heading = false;
     for line in message.lines() {
@@ -211,7 +211,7 @@ pub fn transcript_title(path: &str) -> Option<String> {
 // The project a folder belongs to: the repository's own folder, so a session
 // in a git worktree (.claude/worktrees/<name>, or anywhere) still says whose;
 // outside git, the folder itself. Remembered per folder.
-fn project_of(cwd: &str) -> String {
+pub(crate) fn project_of(cwd: &str) -> String {
     static KNOWN: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
     if let Some(name) = KNOWN.lock().unwrap().as_ref().and_then(|m| m.get(cwd)) {
         return name.clone();

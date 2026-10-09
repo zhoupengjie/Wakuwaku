@@ -1,6 +1,8 @@
 // The prompt panel above the pet: permission prompts, plan approvals and
 // questions from Claude Code, answered with a click (or typed). The first
 // waiting one is shown; the terminal can still answer it, whichever comes first.
+// Codex's permission prompts too (allow or deny): Codex shows its own dialog
+// only once the panel hands it over.
 //
 // Everything shown comes from the tool call, so it is set as text, never HTML.
 ;(function () {
@@ -86,6 +88,7 @@
       'div',
       { class: 'head' },
       el('span', { class: 'title' }, title),
+      ask.from === 'codex' ? el('span', { class: 'chip' }, 'Codex') : null,
       ask.project ? el('span', { class: 'chip' }, ask.project) : null,
     )
   }

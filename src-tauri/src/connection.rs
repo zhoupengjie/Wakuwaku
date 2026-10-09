@@ -1,17 +1,22 @@
-// How Claude Code reaches her: the plugin, or hooks written into its
-// settings.json. Read on demand (the person may change either at any time),
-// and written only when they ask, from the settings.
+// How Claude Code and Codex reach her: the plugin, or hooks written into
+// Claude Code's settings.json; hooks written into Codex's hooks.json. Read on
+// demand (the person may change any of them at any time), and written only
+// when they ask, from the settings.
 //
-// Every event is an HTTP hook: Claude Code POSTs it to her port, no process at
-// all. SessionStart also gets a command, run in the background (async), that
-// starts her when she is not up, which no HTTP hook can do. That command is
-// this program with ENSURE_FLAG, given as an argument list (no shell).
+// Every Claude Code event is an HTTP hook: Claude Code POSTs it to her port,
+// no process at all. SessionStart also gets a command, run in the background
+// (async), that starts her when she is not up, which no HTTP hook can do.
+// That command is this program with ENSURE_FLAG, given as an argument list
+// (no shell). Codex runs only commands: see "Codex" below.
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
 pub const ENSURE_FLAG: &str = "--wakuwaku-ensure-running";
+pub const CODEX_FLAG: &str = "--wakuwaku-codex-hook";
 const URL_MARK: &str = "from=wakuwaku";
 // What the app wrote before it was called Wakuwaku (claude-pets).
 pub const LEGACY_ENSURE_FLAG: &str = "--claude-pets-ensure-running";
@@ -42,13 +47,31 @@ pub fn claude_settings_file() -> PathBuf {
     dir.join("settings.json")
 }
 
-// Claude Code's settings: {} when there are none, Err when unreadable.
-fn read_settings() -> Result<Value, String> {
-    match fs::read_to_string(claude_settings_file()) {
+// A JSON settings file: {} when there is none, Err when unreadable.
+fn read_json(file: &Path) -> Result<Value, String> {
+    match fs::read_to_string(file) {
         Ok(text) => serde_json::from_str(&text).map_err(|e| e.to_string()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
         Err(e) => Err(e.to_string()),
     }
+}
+
+// Claude Code's settings.
+fn read_settings() -> Result<Value, String> {
+    read_json(&claude_settings_file())
+}
+
+// Write a settings file, backed up once beside itself.
+fn write_json(file: &Path, value: &Value) -> Result<(), String> {
+    let backup = PathBuf::from(format!("{}.wakuwaku.bak", file.display()));
+    if file.exists() && !backup.exists() {
+        fs::copy(file, &backup).map_err(|e| e.to_string())?;
+    }
+    if let Some(dir) = file.parent() {
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let text = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
+    fs::write(file, format!("{text}\n")).map_err(|e| e.to_string())
 }
 
 // This program, as the hook command starts it.
@@ -72,7 +95,25 @@ fn is_ours(hook: &Value) -> bool {
         text.push(' ');
         text.push_str(&arg.to_string());
     }
-    [URL_MARK, ENSURE_FLAG, LEGACY_URL_MARK, LEGACY_ENSURE_FLAG, "claude-hook.js"].iter().any(|m| text.contains(m))
+    [URL_MARK, ENSURE_FLAG, CODEX_FLAG, LEGACY_URL_MARK, LEGACY_ENSURE_FLAG, "claude-hook.js"].iter().any(|m| text.contains(m))
+}
+
+// Our hooks, event by event.
+fn ours_by_event(settings: &Value) -> Map<String, Value> {
+    let mut found = Map::new();
+    for (event, groups) in settings.get("hooks").and_then(Value::as_object).into_iter().flatten() {
+        let ours: Vec<Value> = groups
+            .as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|g| g.get("hooks").and_then(Value::as_array).cloned().unwrap_or_default())
+            .filter(is_ours)
+            .collect();
+        if !ours.is_empty() {
+            found.insert(event.clone(), Value::Array(ours));
+        }
+    }
+    found
 }
 
 // Our entries dropped from every event, and events left empty.
@@ -152,19 +193,7 @@ pub fn uninstall(settings: &Value) -> Value {
 //   missing / ok / httpOnly (nothing starts her) / stale (another port or
 //   copy, or an old version) / partial (some events lack them).
 pub fn status_of(settings: &Value, port: u16) -> &'static str {
-    let mut found: Map<String, Value> = Map::new();
-    for (event, groups) in settings.get("hooks").and_then(Value::as_object).into_iter().flatten() {
-        let ours: Vec<Value> = groups
-            .as_array()
-            .into_iter()
-            .flatten()
-            .flat_map(|g| g.get("hooks").and_then(Value::as_array).cloned().unwrap_or_default())
-            .filter(is_ours)
-            .collect();
-        if !ours.is_empty() {
-            found.insert(event.clone(), Value::Array(ours));
-        }
-    }
+    let found = ours_by_event(settings);
     if !EVENTS.iter().any(|(name, ..)| found.contains_key(*name)) {
         return "missing";
     }
@@ -216,7 +245,6 @@ pub fn connection(port: u16) -> &'static str {
 // Change Claude Code's settings.json, backed up once beside itself.
 // action: install, install-http, remove.
 pub fn write_hooks(action: &str, port: u16) -> Result<(), String> {
-    let file = claude_settings_file();
     let before = read_settings()?;
     let after = match action {
         "remove" => uninstall(&before),
@@ -224,16 +252,228 @@ pub fn write_hooks(action: &str, port: u16) -> Result<(), String> {
         "install-http" => install(&before, port, true),
         _ => return Err(format!("unknown action {action}")),
     };
-    let backup = PathBuf::from(format!("{}.wakuwaku.bak", file.display()));
-    if file.exists() && !backup.exists() {
-        fs::copy(&file, &backup).map_err(|e| e.to_string())?;
-    }
-    if let Some(dir) = file.parent() {
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    let text = serde_json::to_string_pretty(&after).map_err(|e| e.to_string())?;
-    fs::write(&file, format!("{text}\n")).map_err(|e| e.to_string())
+    write_json(&claude_settings_file(), &after)
 }
+
+
+// --- Codex: hooks in ~/.codex/hooks.json ---------------------------------------------
+//
+// Codex runs hooks only as commands, through the session's shell (on Windows
+// `pwsh -NoProfile -Command`, about 0.3 s to start): this program with
+// CODEX_FLAG, which hands the event to her port and prints her answer to a
+// prompt (main.rs). So few hooks make Codex wait: the turn starting and
+// ending, a prompt, an edit (apply_patch) or a question, the session. Each
+// tool call's step comes from hooks run in the background (async), which
+// Codex has from 0.148 on; older ones skip async hooks with a warning, so
+// those are left out for them.
+//
+// Codex runs a hook only once the person trusts it (/hooks in Codex), and
+// again after it changes, such as this program moving: we never trust them
+// on their behalf.
+
+pub const CODEX_PROMPT_TIMEOUT: u64 = 300;
+// A version: major, minor, patch.
+pub type Version = (u64, u64, u64);
+// The first Codex that runs async hooks.
+const CODEX_ASYNC_SINCE: Version = (0, 148, 0);
+
+// One hook we add: its event, the tools it is for (a regex, None for all),
+// how long it may run (s), and whether in the background.
+struct CodexHook {
+    event: &'static str,
+    matcher: Option<&'static str>,
+    timeout: u64,
+    is_async: bool,
+}
+
+// A prompt waits for the person; Codex gives Interrupt and SessionEnd 3 s at most.
+const CODEX_HOOKS: [CodexHook; 10] = [
+    CodexHook { event: "SessionStart", matcher: None, timeout: 10, is_async: false },
+    CodexHook { event: "UserPromptSubmit", matcher: None, timeout: 10, is_async: false },
+    CodexHook { event: "PreToolUse", matcher: Some("^request_user_input$"), timeout: 10, is_async: false },
+    CodexHook { event: "PostToolUse", matcher: Some("^(apply_patch|request_user_input)$"), timeout: 10, is_async: false },
+    CodexHook { event: "PermissionRequest", matcher: None, timeout: CODEX_PROMPT_TIMEOUT, is_async: false },
+    CodexHook { event: "Stop", matcher: None, timeout: 10, is_async: false },
+    CodexHook { event: "Interrupt", matcher: None, timeout: 3, is_async: false },
+    CodexHook { event: "SessionEnd", matcher: None, timeout: 3, is_async: false },
+    // Every step, in the background.
+    CodexHook { event: "PreToolUse", matcher: None, timeout: 10, is_async: true },
+    CodexHook { event: "PostToolUse", matcher: None, timeout: 10, is_async: true },
+];
+
+fn codex_hooks_for(with_async: bool) -> impl Iterator<Item = &'static CodexHook> {
+    CODEX_HOOKS.iter().filter(move |h| with_async || !h.is_async)
+}
+
+pub fn codex_home() -> PathBuf {
+    std::env::var_os("CODEX_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).unwrap_or_default()).join(".codex"))
+}
+
+pub fn codex_hooks_file() -> PathBuf {
+    codex_home().join("hooks.json")
+}
+
+// "codex-cli 0.146.1" (or 0.149.0-alpha.1) → (0, 146, 1).
+fn parse_version(text: &str) -> Option<Version> {
+    text.split_whitespace().find_map(|word| {
+        let mut parts = word.split('.').map(|p| p.chars().take_while(char::is_ascii_digit).collect::<String>().parse::<u64>().ok());
+        Some((parts.next()??, parts.next()??, parts.next()??))
+    })
+}
+
+fn ask_codex_version() -> Option<Version> {
+    let mut command = std::process::Command::new("codex");
+    command.arg("--version").stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NO_WINDOW
+        command.creation_flags(0x0800_0000);
+    }
+    parse_version(&String::from_utf8_lossy(&command.output().ok()?.stdout))
+}
+
+// Codex's version, None when there is no `codex` to ask (the desktop app
+// alone). Asked at most once a minute.
+pub fn codex_version() -> Option<Version> {
+    static KNOWN: Mutex<Option<(Instant, Option<Version>)>> = Mutex::new(None);
+    let mut known = KNOWN.lock().unwrap();
+    match *known {
+        Some((at, version)) if at.elapsed() < Duration::from_secs(60) => version,
+        _ => {
+            let version = ask_codex_version();
+            *known = Some((Instant::now(), version));
+            version
+        }
+    }
+}
+
+// Whether Codex runs async hooks; one we cannot ask is taken as a current one.
+pub fn codex_runs_async() -> bool {
+    codex_version().is_none_or(|v| v >= CODEX_ASYNC_SINCE)
+}
+
+// The command line Codex's shell runs: the bare path when it needs no
+// quoting (any shell takes it), else quoted for PowerShell (& '...') on
+// Windows or for a POSIX shell.
+pub fn codex_command(exe: &str) -> String {
+    let is_plain = !exe.is_empty() && exe.chars().all(|c| c.is_ascii_alphanumeric() || "\\/:._-".contains(c));
+    if is_plain {
+        return format!("{exe} {CODEX_FLAG}");
+    }
+    if cfg!(windows) {
+        format!("& '{}' {CODEX_FLAG}", exe.replace('\'', "''"))
+    } else {
+        format!("'{}' {CODEX_FLAG}", exe.replace('\'', r"'\''"))
+    }
+}
+
+// What we add, event by event; `waiting` is what Codex shows while a prompt waits on her.
+fn codex_entries(command: &str, waiting: &str, with_async: bool) -> Map<String, Value> {
+    let mut out = Map::new();
+    for want in codex_hooks_for(with_async) {
+        let mut hook = json!({ "type": "command", "command": command, "timeout": want.timeout });
+        if want.is_async {
+            hook["async"] = json!(true);
+        }
+        if want.event == "PermissionRequest" {
+            hook["statusMessage"] = json!(waiting);
+        }
+        let mut group = json!({ "hooks": [hook] });
+        if let Some(matcher) = want.matcher {
+            group["matcher"] = json!(matcher);
+        }
+        let groups = out.entry(want.event).or_insert_with(|| json!([]));
+        if let Value::Array(groups) = groups {
+            groups.push(group);
+        }
+    }
+    out
+}
+
+pub fn codex_install(file: &Value, command: &str, waiting: &str, with_async: bool) -> Value {
+    let mut hooks = strip(file.get("hooks"));
+    for (event, groups) in codex_entries(command, waiting, with_async) {
+        let mut all = hooks.get(&event).and_then(Value::as_array).cloned().unwrap_or_default();
+        all.extend(groups.as_array().cloned().unwrap_or_default());
+        hooks.insert(event, Value::Array(all));
+    }
+    let mut out = file.as_object().cloned().unwrap_or_default();
+    out.insert("hooks".into(), Value::Object(hooks));
+    Value::Object(out)
+}
+
+// Our hooks in a hooks.json: (event, matcher, hook).
+fn codex_ours(file: &Value) -> Vec<(String, Option<String>, Value)> {
+    let mut ours = Vec::new();
+    for (event, groups) in file.get("hooks").and_then(Value::as_object).into_iter().flatten() {
+        for group in groups.as_array().into_iter().flatten() {
+            let matcher = group.get("matcher").and_then(Value::as_str).map(str::to_string);
+            for hook in group.get("hooks").and_then(Value::as_array).into_iter().flatten().filter(|h| is_ours(h)) {
+                ours.push((event.clone(), matcher.clone(), hook.clone()));
+            }
+        }
+    }
+    ours
+}
+
+fn is_codex_hook(found: &(String, Option<String>, Value), want: &CodexHook, command: &str) -> bool {
+    let (event, matcher, hook) = found;
+    event == want.event
+        && matcher.as_deref() == want.matcher
+        && hook["type"] == "command"
+        && hook["command"] == command
+        && hook["timeout"].as_u64() == Some(want.timeout)
+        && hook.get("async").and_then(Value::as_bool).unwrap_or(false) == want.is_async
+}
+
+// How our entries stand against what this copy would install: missing / ok /
+// stale (another copy of the program, or another version's hooks) / partial
+// (some lack, such as the background ones after Codex was updated).
+pub fn codex_status_of(file: &Value, command: &str, with_async: bool) -> &'static str {
+    let ours = codex_ours(file);
+    if ours.is_empty() {
+        return "missing";
+    }
+    if !ours.iter().all(|found| CODEX_HOOKS.iter().any(|want| is_codex_hook(found, want, command))) {
+        return "stale";
+    }
+    if codex_hooks_for(with_async).any(|want| !ours.iter().any(|found| is_codex_hook(found, want, command))) {
+        return "partial";
+    }
+    "ok"
+}
+
+// absent (no Codex here), unreadable, or how our entries stand.
+pub fn codex_hooks_status() -> &'static str {
+    if !codex_home().is_dir() {
+        return "absent";
+    }
+    match read_json(&codex_hooks_file()) {
+        Ok(file) => codex_status_of(&file, &codex_command(&launch_command()), codex_runs_async()),
+        Err(_) => "unreadable",
+    }
+}
+
+pub fn is_codex_connected() -> bool {
+    matches!(codex_hooks_status(), "ok" | "stale" | "partial")
+}
+
+// Change Codex's hooks.json, backed up once beside itself. action: install, remove.
+pub fn write_codex_hooks(action: &str, waiting: &str) -> Result<(), String> {
+    let file = codex_hooks_file();
+    let before = read_json(&file)?;
+    let after = match action {
+        "remove" if !file.exists() => return Ok(()),
+        "remove" => uninstall(&before),
+        "install" => codex_install(&before, &codex_command(&launch_command()), waiting, codex_runs_async()),
+        _ => return Err(format!("unknown action {action}")),
+    };
+    write_json(&file, &after)
+}
+
 
 // --- Start at login: this program, from where it is now -------------------------------
 
@@ -313,5 +553,68 @@ mod tests {
         let mut with = install(&json!({}), 47213, false);
         with["hooks"].as_object_mut().unwrap().remove("Elicitation");
         assert_eq!(status_of(&with, 47213), "partial");
+    }
+
+    #[test]
+    fn codex_hooks_install_status_and_uninstall() {
+        let cmd = codex_command(r"D:\pet\wakuwaku.exe");
+        assert_eq!(cmd, r"D:\pet\wakuwaku.exe --wakuwaku-codex-hook");
+        let mine = json!({ "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "notify-me" }] }] }, "other": 1 });
+        assert_eq!(codex_status_of(&mine, &cmd, true), "missing");
+
+        let with = codex_install(&mine, &cmd, "waiting", true);
+        assert_eq!(codex_status_of(&with, &cmd, true), "ok");
+        assert_eq!(with["hooks"]["Stop"].as_array().unwrap().len(), 2);
+        let ask = &with["hooks"]["PermissionRequest"][0]["hooks"][0];
+        assert_eq!((ask["timeout"].as_u64(), ask.get("async"), ask["statusMessage"].as_str()), (Some(300), None, Some("waiting")));
+        // A question waits in the foreground; every step in the background.
+        let pre = with["hooks"]["PreToolUse"].as_array().unwrap();
+        assert_eq!((pre[0]["matcher"].as_str(), pre[0]["hooks"][0].get("async")), (Some("^request_user_input$"), None));
+        assert_eq!((pre[1].get("matcher"), &pre[1]["hooks"][0]["async"]), (None, &json!(true)));
+        assert_eq!(with["hooks"]["PostToolUse"][0]["matcher"], "^(apply_patch|request_user_input)$");
+        // Another copy of the program: a repair.
+        assert_eq!(codex_status_of(&with, &codex_command(r"E:\elsewhere\wakuwaku.exe"), true), "stale");
+
+        let again = codex_install(&with, &cmd, "waiting", true);
+        assert_eq!(again["hooks"]["Stop"].as_array().unwrap().len(), 2);
+        assert_eq!(again["hooks"]["PreToolUse"].as_array().unwrap().len(), 2);
+        let mut part = again.clone();
+        part["hooks"].as_object_mut().unwrap().remove("Interrupt");
+        assert_eq!(codex_status_of(&part, &cmd, true), "partial");
+
+        assert_eq!(uninstall(&with), mine);
+        assert_eq!(uninstall(&codex_install(&json!({}), &cmd, "w", true)), json!({}));
+    }
+
+    #[test]
+    fn an_older_codex_gets_no_background_hooks() {
+        let cmd = codex_command(r"D:\pet\wakuwaku.exe");
+        let old = codex_install(&json!({}), &cmd, "w", false);
+        let all: Vec<&Value> = old["hooks"].as_object().unwrap().values().flat_map(|g| g.as_array().unwrap()).collect();
+        assert_eq!(all.len(), 8);
+        assert!(all.iter().all(|g| g["hooks"][0].get("async").is_none()));
+        assert_eq!(codex_status_of(&old, &cmd, false), "ok");
+        // Codex updated since: the background ones are missing.
+        assert_eq!(codex_status_of(&old, &cmd, true), "partial");
+        // Installed for a newer Codex, read for an older one: still ours, nothing stale.
+        assert_eq!(codex_status_of(&codex_install(&json!({}), &cmd, "w", true), &cmd, false), "ok");
+    }
+
+    #[test]
+    fn codex_versions() {
+        assert_eq!(parse_version("codex-cli 0.146.1\n"), Some((0, 146, 1)));
+        assert_eq!(parse_version("codex-cli 0.149.0-alpha.1"), Some((0, 149, 0)));
+        assert_eq!(parse_version("nothing here"), None);
+        assert!((0, 146, 1) < CODEX_ASYNC_SINCE && (0, 148, 0) >= CODEX_ASYNC_SINCE && (1, 0, 0) >= CODEX_ASYNC_SINCE);
+    }
+
+    #[test]
+    fn codex_commands_quote_what_needs_it() {
+        if cfg!(windows) {
+            assert_eq!(codex_command(r"C:\Program Files\Waku\wakuwaku.exe"), r"& 'C:\Program Files\Waku\wakuwaku.exe' --wakuwaku-codex-hook");
+            assert_eq!(codex_command(r"D:\宠物\it's.exe"), r"& 'D:\宠物\it''s.exe' --wakuwaku-codex-hook");
+        } else {
+            assert_eq!(codex_command("/opt/my pets/wakuwaku"), "'/opt/my pets/wakuwaku' --wakuwaku-codex-hook");
+        }
     }
 }

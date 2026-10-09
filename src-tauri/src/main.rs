@@ -12,12 +12,13 @@
 //   settings.rs    what the settings show and change
 //   pointer.rs     click-through, for both windows; screen.rs the work areas
 //   asks.rs        prompts answered on her or the island
-//   connection.rs  the plugin, hooks in settings.json, start at login
+//   connection.rs  the plugin, hooks in settings.json and Codex's hooks.json, start at login
 //   fetch.rs       pets from codex-pets.net
 //   fullscreen.rs, focus.rs, notify.rs   bits of Windows
 //   tray.rs        the tray icon and the menu
 //   server.rs      the port the hooks report to
-//   state.rs       per-session moods; events.rs hook events into messages
+//   state.rs       per-session moods; events.rs (Claude Code) and
+//                  events_codex.rs (Codex) hook events into messages
 //   data.rs        her folder, settings and pets
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -25,6 +26,7 @@ mod asks;
 mod connection;
 mod data;
 mod events;
+mod events_codex;
 mod fetch;
 mod focus;
 mod fullscreen;
@@ -74,6 +76,9 @@ pub struct Shared {
     pub hidden: AtomicBool,
     by_fullscreen: AtomicBool,
     greeted: AtomicBool,
+    // When the last Codex event came (ms), 0 never: Codex runs its hooks
+    // only once the person trusts them.
+    pub codex_seen: std::sync::atomic::AtomicU64,
     is_logging: bool,
     // Our windows' handles: never counted as another app full screen.
     own: Mutex<Vec<isize>>,
@@ -246,7 +251,7 @@ impl Shared {
         if self.greeted.swap(true, Ordering::SeqCst) {
             return;
         }
-        let is_stale = connection::hooks_status(self.port) == "stale";
+        let is_stale = connection::hooks_status(self.port) == "stale" || connection::codex_hooks_status() == "stale";
         self.apply(&json!({ "react": "wave", "say": { "key": if is_stale { "say.hooksStale" } else { "say.arrived" } } }));
     }
 
@@ -539,16 +544,107 @@ async fn pet_log(app: AppHandle, window: WebviewWindow, line: String) {
 
 // --- Started by the SessionStart hook ----------------------------------------------------
 
-// If no pet answers on the port, start one, detached so it outlives the hook
-// and the session (she greets on her own); if one does, hand her the event.
-// Then leave, quick and quiet, whatever happens.
-fn ensure_running(port: u16) {
+// The event a hook gives on stdin, if it comes soon.
+fn read_event() -> Option<Value> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let mut text = String::new();
         let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut text);
         let _ = tx.send(text);
     });
+    rx.recv_timeout(Duration::from_millis(1000)).ok().and_then(|text| serde_json::from_str(&text).ok())
+}
+
+// Start her, detached so she outlives the hook and the session (she greets on
+// her own). On Windows she inherits no handle at all: a hook's process holds
+// the ones its agent left inheritable, its output pipes among them, and
+// whoever reads those to the end (Codex, or what runs Codex) would wait on
+// her for good. std's Command always lets a child inherit, so CreateProcessW.
+#[cfg(windows)]
+fn start_detached() {
+    use std::os::windows::ffi::OsStrExt;
+
+    #[repr(C)]
+    struct StartupInfo {
+        cb: u32,
+        reserved: *mut u16,
+        desktop: *mut u16,
+        title: *mut u16,
+        x: u32,
+        y: u32,
+        x_size: u32,
+        y_size: u32,
+        x_chars: u32,
+        y_chars: u32,
+        fill: u32,
+        flags: u32,
+        show: u16,
+        reserved2_len: u16,
+        reserved2: *mut u8,
+        stdin: isize,
+        stdout: isize,
+        stderr: isize,
+    }
+    #[repr(C)]
+    struct ProcessInfo {
+        process: isize,
+        thread: isize,
+        process_id: u32,
+        thread_id: u32,
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        #[allow(clippy::too_many_arguments)]
+        fn CreateProcessW(
+            app: *const u16,
+            command_line: *mut u16,
+            process_attrs: *const u8,
+            thread_attrs: *const u8,
+            inherit_handles: i32,
+            flags: u32,
+            env: *const u8,
+            dir: *const u16,
+            startup: *const StartupInfo,
+            info: *mut ProcessInfo,
+        ) -> i32;
+        fn CloseHandle(handle: isize) -> i32;
+    }
+
+    let Ok(exe) = std::env::current_exe() else { return };
+    let wide = |s: &std::ffi::OsStr| s.encode_wide().chain(Some(0)).collect::<Vec<u16>>();
+    let app = wide(exe.as_os_str());
+    let mut command_line = wide(std::ffi::OsStr::new(&format!("\"{}\"", exe.display())));
+    // Her own folder, not the hook's (the project's): she would hold on to it.
+    let dir = exe.parent().map(|d| wide(d.as_os_str()));
+    // SAFETY: plain Win32 structs, zero is a valid start for both.
+    let mut startup: StartupInfo = unsafe { std::mem::zeroed() };
+    startup.cb = std::mem::size_of::<StartupInfo>() as u32;
+    let mut info: ProcessInfo = unsafe { std::mem::zeroed() };
+    // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP; no handles inherited (0).
+    let flags = 0x0000_0008 | 0x0000_0200;
+    let null = std::ptr::null();
+    // SAFETY: every pointer is valid for the call or null where Win32 allows it.
+    let dir = dir.as_ref().map_or(std::ptr::null(), |d| d.as_ptr());
+    let ok = unsafe { CreateProcessW(app.as_ptr(), command_line.as_mut_ptr(), null, null, 0, flags, null, dir, &startup, &mut info) };
+    if ok != 0 {
+        unsafe {
+            CloseHandle(info.thread);
+            CloseHandle(info.process);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn start_detached() {
+    let Ok(exe) = std::env::current_exe() else { return };
+    let mut command = std::process::Command::new(exe);
+    command.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    let _ = command.spawn();
+}
+
+// If no pet answers on the port, start one; if one does, hand her the event.
+// Then leave, quick and quiet, whatever happens.
+fn ensure_running(port: u16) {
     let agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_millis(800))).build().new_agent();
     let up = agent
         .get(&format!("http://127.0.0.1:{port}/health"))
@@ -556,21 +652,42 @@ fn ensure_running(port: u16) {
         .ok()
         .and_then(|mut res| res.body_mut().read_to_string().ok())
         .is_some_and(|body| body.contains("wakuwaku"));
-    let event: Option<Value> = rx.recv_timeout(Duration::from_millis(1000)).ok().and_then(|text| serde_json::from_str(&text).ok());
+    let event = read_event();
     if up {
         if let Some(event) = event {
             let _ = agent.post(&format!("http://127.0.0.1:{port}/hook?from=wakuwaku")).send_json(&event);
         }
-    } else if let Ok(exe) = std::env::current_exe() {
-        let mut command = std::process::Command::new(exe);
-        command.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-            command.creation_flags(0x0000_0008 | 0x0000_0200);
+    } else {
+        start_detached();
+    }
+}
+
+// --- Run by Codex's hooks -----------------------------------------------------------------
+
+// Codex runs its hooks as commands: this program with CODEX_FLAG, for every
+// event. Hand her the event, and print her answer to a prompt, the decision
+// Codex reads; nothing else, since Codex takes what a hook prints as words
+// for the model. SessionStart starts her when she is not up. Whatever
+// happens, leave with 0, so Codex never shows a failed hook.
+fn codex_hook(port: u16) {
+    let Some(event) = read_event() else { return };
+    let name = event["hook_event_name"].as_str().unwrap_or("").to_string();
+    let is_prompt = name == "PermissionRequest";
+    // A prompt waits for the person, just under the hook's own timeout.
+    let wait = if is_prompt { Duration::from_secs(connection::CODEX_PROMPT_TIMEOUT - 5) } else { Duration::from_secs(3) };
+    let agent = ureq::Agent::config_builder().timeout_global(Some(wait)).build().new_agent();
+    match agent.post(&format!("http://127.0.0.1:{port}/hook?from=wakuwaku&agent=codex")).send_json(&event) {
+        Ok(mut res) if is_prompt => {
+            let body = res.body_mut().read_to_string().unwrap_or_default();
+            if serde_json::from_str::<Value>(&body).is_ok_and(|v| v.get("hookSpecificOutput").is_some()) {
+                let mut out = std::io::stdout();
+                let _ = out.write_all(body.as_bytes());
+                let _ = out.flush();
+            }
         }
-        let _ = command.spawn();
+        Ok(_) | Err(ureq::Error::StatusCode(_)) => {}
+        Err(_) if name == "SessionStart" => start_detached(),
+        Err(_) => {}
     }
 }
 
@@ -578,6 +695,9 @@ fn main() {
     let port: u16 = std::env::var("WAKUWAKU_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(47213);
     if std::env::args().any(|a| a == connection::ENSURE_FLAG || a == connection::LEGACY_ENSURE_FLAG) {
         return ensure_running(port);
+    }
+    if std::env::args().any(|a| a == connection::CODEX_FLAG) {
+        return codex_hook(port);
     }
 
     let dir = data::folder();
@@ -620,6 +740,7 @@ fn main() {
             settings::settings_show_pet,
             settings::settings_login,
             settings::settings_hooks,
+            settings::settings_codex_hooks,
             settings::settings_fetch,
             settings::settings_gallery,
             settings::settings_open_site,
@@ -634,7 +755,10 @@ fn main() {
                 settings.insert("pet".into(), json!(found[0].id));
             }
             for folder in data::pet_dirs(&dir) {
-                let _ = std::fs::create_dir_all(&folder);
+                // Codex's pets are only read, never made a folder for.
+                if folder != data::codex_pets() {
+                    let _ = std::fs::create_dir_all(&folder);
+                }
                 let _ = app.asset_protocol_scope().allow_directory(&folder, true);
             }
             notify::register(&dir);
@@ -653,6 +777,7 @@ fn main() {
                 hidden: AtomicBool::new(false),
                 by_fullscreen: AtomicBool::new(false),
                 greeted: AtomicBool::new(false),
+                codex_seen: std::sync::atomic::AtomicU64::new(0),
                 own: Mutex::new(Vec::new()),
                 prev_focus: Mutex::new(0),
                 push_pending: AtomicBool::new(false),
@@ -735,8 +860,8 @@ fn main() {
                     }
                 });
             }
-            // Never set up: the settings, where Claude Code gets connected.
-            if !sh.flag("onboarded") && connection::connection(port) == "none" {
+            // Never set up: the settings, where Claude Code or Codex gets connected.
+            if !sh.flag("onboarded") && connection::connection(port) == "none" && !connection::is_codex_connected() {
                 island::open_settings(&sh, Some("connect"));
             }
             Ok(())

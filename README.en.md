@@ -4,7 +4,7 @@ English · [中文](README.md)
 
 > The name is Anya's "waku waku" from SPY×FAMILY: excited, can't wait. Claude works, and she watches, all eager.
 
-A little pet that floats on your desktop and shows what Claude Code is doing: working, waiting for your approval, done with changes for you to review, done, or stuck on an error. When Claude needs your OK, you can answer right on the panel above her head.
+A little pet that floats on your desktop and shows what Claude Code is doing: working, waiting for your approval, done with changes for you to review, done, or stuck on an error. When Claude needs your OK, you can answer right on the panel above her head. She can watch [Codex](#3-connect-codex-optional) too.
 
 She uses the v2 sprite format from the [Codex Pets](https://codex-pets.net) community, so any v2 pet on that site works. The default is [Claude小姐](https://codex-pets.net/#/pets/claude-chan), downloaded from the site on first run.
 
@@ -47,6 +47,7 @@ Both v2 pets (11 animations) and older v1 pets (9, without looking around; she j
   - After you answer in the terminal, the panel closes on that session's next event, so it can linger for a moment. Clicking it then does nothing.
   - Non-interactive runs such as `claude -p` wait for the hook before deciding, so with nobody clicking they wait until the panel gives up.
   - MCP forms (Elicitation) are announced, not filled in.
+- Codex's permission prompts come to the panel too, with **Allow** / **Deny** only (Codex takes no rules from a hook). Codex shows its own dialog only once the panel lets go, so the panel waits 1 minute at most; to answer in the terminal, click Handle in terminal.
 
 ## Install
 
@@ -71,6 +72,24 @@ In Claude Code, enter (the Connect page of the settings has copy buttons):
 Claude Code installs and removes the plugin itself, and **we don't touch your settings file** (Claude Code notes it in its own `enabledPlugins` and takes it out on uninstall). A plugin can't start the pet, so turn on Start at login on the Connect page.
 
 If you'd rather not use a plugin, Advanced on the Connect page writes the hooks into `~/.claude/settings.json` (backed up first; removing takes out only our entries). In return, new sessions start the pet. With both on, the Connect page warns that events arrive twice.
+
+### 3. Connect Codex (optional)
+
+Click Install in the Codex part of the Connect page. It writes `~/.codex/hooks.json` (backed up first; removing takes out only our entries). Then **enter `/hooks` in Codex and trust Wakuwaku's hooks**: Codex runs only hooks you trusted, and the Connect page reminds you until the first event arrives. If the app moves, click Repair and trust them again.
+
+How it differs from Claude Code:
+
+| | Claude Code | Codex |
+| --- | --- | --- |
+| Working, waiting, done, review | ✓ | ✓ (a turn that ran `apply_patch` ends in review) |
+| Errors | ✓ | No (Codex sends no event when a request fails; she goes back to idle after 15 minutes) |
+| A jump when a to-do item is done | ✓ | No |
+| Answer on the panel | Allow / Always allow / Deny, questions, plans | Allow / Deny |
+| New sessions start the pet | With the settings.json way | Yes |
+
+Codex hooks can only be commands: `wakuwaku.exe --wakuwaku-codex-hook` runs once and hands the event to her. On Windows Codex runs hooks in PowerShell, about 0.3 s to start each time, so Codex waits for it only when a turn starts and ends, on an edit (`apply_patch`), on a prompt, and when a session starts and ends; each step's tool is reported in the background. Background hooks need Codex 0.148 or later; an older one gets only the essential hooks, and the bubble doesn't name each tool.
+
+The pets in Codex's desktop app (`~/.codex/pets`) use the same format, so they show up on the Pets page, marked From Codex.
 
 ### From source
 
@@ -113,7 +132,7 @@ While she's closed, Claude Code works as usual: the events sent to her are refus
 ### Uninstall
 
 1. If you turned on **Start at login**, turn it off on the Connect page.
-2. With the plugin: in Claude Code, `/plugin uninstall wakuwaku@wakuwaku`, then `/plugin marketplace remove wakuwaku`. With hooks in settings.json: click Remove on the Connect page; only this project's entries go, your own hooks stay, and the file as it was before the first change is at `~/.claude/settings.json.wakuwaku.bak`.
+2. With the plugin: in Claude Code, `/plugin uninstall wakuwaku@wakuwaku`, then `/plugin marketplace remove wakuwaku`. With hooks in settings.json: click Remove on the Connect page; only this project's entries go, your own hooks stay, and the file as it was before the first change is at `~/.claude/settings.json.wakuwaku.bak`. With Codex: click Remove in its part of the Connect page; the backup is `~/.codex/hooks.json.wakuwaku.bak`.
 3. Quit her, then delete the exe or the project folder. Notifications register her name in `HKCU\Software\Classes\AppUserModelId\com.zhoupengjie.wakuwaku`; delete that key too.
 4. Delete her settings and downloaded pets: the `wakuwaku-data` folder beside the exe, or the project's `data/` when run from source.
 
@@ -124,6 +143,7 @@ While she's closed, Claude Code works as usual: the events sent to her are refus
 ```
 Claude Code ──HTTP hooks──▶ the pet (127.0.0.1:47213/hook)
             └─SessionStart─▶ the app itself --wakuwaku-ensure-running (in the background; starts her if she's not up)
+Codex ──command hooks──▶ the app itself --wakuwaku-codex-hook ──▶ the pet (/hook?agent=codex)
 ```
 
 - Every event is a Claude Code **HTTP hook** sent straight to her, so a tool call starts no process (about 0.3 ms here). She answers `{}` at once, meaning no decision; only a prompt waits until you answer on the panel.
@@ -134,6 +154,7 @@ Claude Code ──HTTP hooks──▶ the pet (127.0.0.1:47213/hook)
 | --- | --- |
 | `WAKUWAKU_PORT` | Another port (default 47213); set it for both her and the hooks |
 | `CLAUDE_CONFIG_DIR` | Claude Code's config folder, when it isn't `~/.claude` |
+| `CODEX_HOME` | Codex's config folder, when it isn't `~/.codex` |
 
 ## Tests
 

@@ -1,11 +1,15 @@
-// What the pet is doing, from the messages the hooks bring (events.rs).
-// A message is
+// What the pet is doing, from the messages the hooks bring (events.rs,
+// events_codex.rs). A message is
 //   { session?, project?, mood?, detail?, event?, react?, say?,
-//     title?, task?, step?, toolId?, todo?, file?, reply?, error? }
+//     title?, task?, step?, toolId?, todo?, file?, reply?, error?, agent?, turn? }
 //   mood     idle | working | waiting | done | review | error
 //   detail   a tool name, or { key, vars } to translate
-//   event    turn-start | tool-start | tool-done | tool-failed | session-end
+//   event    turn-start | tool-start | tool-done | tool-failed | turn-end | session-end
 //   react    wave | jump | failed: played once over the mood, `say` in the bubble
+//   agent    "codex", or none for Claude Code
+//   turn     the turn it belongs to (Codex): some of its hooks run in the
+//            background, so one can come after its turn ended (turn-end), and
+//            changes nothing then
 //   title    the session's name; task   the person's words for the work
 //   step     what a starting tool does, { key, vars }; toolId pairs it with its end
 //   todo     { set: [{ text, active, status }] }, { add: { text, active } }
@@ -22,7 +26,10 @@ use serde_json::{json, Map, Value};
 
 const MOODS: [&str; 6] = ["idle", "working", "waiting", "done", "review", "error"];
 const REACTS: [&str; 3] = ["wave", "jump", "failed"];
-const EDIT_TOOLS: [&str; 4] = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
+// apply_patch: every edit Codex makes.
+const EDIT_TOOLS: [&str; 5] = ["Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch"];
+// The turns remembered as ended, per session.
+const ENDED_TURNS: usize = 4;
 
 // A session that died mid-turn never says idle: give up on it after this.
 pub const STALE_MS: u64 = 15 * 60 * 1000;
@@ -103,6 +110,10 @@ struct Session {
     files: Vec<String>,
     reply: String,
     error: Value,
+    agent: String,
+    // The turn under way, and the last few that ended (Codex).
+    turn: String,
+    ended_turns: Vec<String>,
 }
 
 impl Session {
@@ -126,6 +137,9 @@ impl Session {
             files: Vec::new(),
             reply: String::new(),
             error: Value::Null,
+            agent: String::new(),
+            turn: String::new(),
+            ended_turns: Vec::new(),
         }
     }
 
@@ -230,6 +244,7 @@ fn view(s: &Session) -> Value {
     json!({
         "id": s.id,
         "project": s.project,
+        "agent": s.agent,
         "mood": s.mood,
         "detail": s.detail,
         "at": s.at,
@@ -289,6 +304,8 @@ impl Pet {
             let project = str_field(msg, "project", 200);
             let detail = text(msg.get("detail"), 80);
             let event = msg.get("event").and_then(Value::as_str).unwrap_or("");
+            let agent = str_field(msg, "agent", 20);
+            let turn = str_field(msg, "turn", 100);
 
             if event == "session-end" {
                 self.sessions.remove(&id);
@@ -297,13 +314,36 @@ impl Pet {
                 if !project.is_empty() {
                     s.project = project;
                 }
+                if !agent.is_empty() {
+                    s.agent = agent;
+                }
+                let is_edit = event == "tool-done" && detail.as_str().is_some_and(|d| EDIT_TOOLS.contains(&d));
+                // Late, from a turn already over: only an edit counts, making its done a review.
+                if !turn.is_empty() && s.ended_turns.contains(&turn) {
+                    if is_edit && s.mood == "done" {
+                        s.mood = "review".into();
+                        out.changed = true;
+                    }
+                    return Some(out);
+                }
                 for (key, field) in [("title", &mut s.title), ("task", &mut s.task)] {
                     let value = str_field(msg, key, 80);
                     if !value.is_empty() {
                         *field = value;
                     }
                 }
-                if event == "turn-start" {
+                if !turn.is_empty() && event == "turn-end" {
+                    s.ended_turns.push(turn.clone());
+                    if s.ended_turns.len() > ENDED_TURNS {
+                        s.ended_turns.remove(0);
+                    }
+                }
+                // A turn starting anew (Codex may report a step of it first).
+                let is_new_turn = turn.is_empty() || turn != s.turn;
+                if !turn.is_empty() {
+                    s.turn = turn;
+                }
+                if event == "turn-start" && is_new_turn {
                     s.has_edited = false;
                     s.since = None;
                     s.running.clear();
@@ -338,7 +378,7 @@ impl Pet {
                     }
                     _ => {}
                 }
-                if event == "tool-done" && detail.as_str().is_some_and(|d| EDIT_TOOLS.contains(&d)) {
+                if is_edit {
                     s.has_edited = true;
                 }
                 let file = str_field(msg, "file", 400);
@@ -588,5 +628,53 @@ mod tests {
     fn texts_may_hold_one_text_inside() {
         let nested = json!({ "key": "detail.approve", "vars": { "what": { "key": "step.command", "vars": { "what": "git push", "deeper": { "key": "x" } } } } });
         assert_eq!(text(Some(&nested), 80), json!({ "key": "detail.approve", "vars": { "what": { "key": "step.command", "vars": { "what": "git push" } } } }));
+    }
+
+    // A Codex message: session c, turn t.
+    fn codex(turn: &str, more: Value) -> Value {
+        let mut m = json!({ "session": "c", "agent": "codex", "turn": turn });
+        for (k, v) in more.as_object().unwrap() {
+            m[k] = v.clone();
+        }
+        m
+    }
+
+    #[test]
+    fn a_codex_turn_with_a_patch_ends_in_review() {
+        let mut pet = Pet::default();
+        pet.apply(&codex("t1", json!({ "mood": "working", "event": "turn-start" })), 1, Hold::Seen);
+        pet.apply(&codex("t1", json!({ "mood": "working", "detail": "apply_patch", "event": "tool-done" })), 2, Hold::Seen);
+        pet.apply(&codex("t1", json!({ "mood": "done", "event": "turn-end" })), 3, Hold::Seen);
+        assert_eq!(pet.get(4)["mood"], "review");
+        assert_eq!(pet.get(4)["agent"], "codex");
+        assert_eq!(pet.list()[0]["agent"], "codex");
+    }
+
+    #[test]
+    fn late_codex_events_change_nothing_but_a_late_edit() {
+        let mut pet = Pet::default();
+        // The turn's own start comes after one of its steps: it still counts the edit.
+        pet.apply(&codex("t1", json!({ "mood": "working", "detail": "apply_patch", "event": "tool-done" })), 1, Hold::Seen);
+        pet.apply(&codex("t1", json!({ "mood": "working", "event": "turn-start" })), 2, Hold::Seen);
+        pet.apply(&codex("t1", json!({ "mood": "done", "event": "turn-end" })), 3, Hold::Seen);
+        assert_eq!(pet.get(4)["mood"], "review");
+
+        // A step after its turn ended: she stays done, not back at work.
+        pet.apply(&codex("t2", json!({ "mood": "working", "event": "turn-start" })), 10, Hold::Seen);
+        pet.apply(&codex("t2", json!({ "mood": "done", "event": "turn-end" })), 11, Hold::Seen);
+        pet.apply(&codex("t2", json!({ "mood": "working", "detail": "Bash", "event": "tool-start", "step": { "key": "step.command", "vars": { "what": "ls" } } })), 12, Hold::Seen);
+        assert_eq!(pet.get(13)["mood"], "done");
+        // A late edit makes that done a review.
+        pet.apply(&codex("t2", json!({ "mood": "working", "detail": "apply_patch", "event": "tool-done" })), 14, Hold::Seen);
+        assert_eq!(pet.get(15)["mood"], "review");
+
+        // Interrupted: back to rest, and its stragglers too.
+        pet.apply(&codex("t3", json!({ "mood": "working", "event": "turn-start" })), 20, Hold::Seen);
+        pet.apply(&codex("t3", json!({ "mood": "idle", "event": "turn-end" })), 21, Hold::Seen);
+        pet.apply(&codex("t3", json!({ "mood": "working", "detail": "Bash" })), 22, Hold::Seen);
+        assert_eq!(pet.get(23)["mood"], "idle");
+        // The next turn works as ever.
+        pet.apply(&codex("t4", json!({ "mood": "working", "event": "turn-start" })), 30, Hold::Seen);
+        assert_eq!(pet.get(31)["mood"], "working");
     }
 }

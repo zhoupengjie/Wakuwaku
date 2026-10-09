@@ -35,6 +35,7 @@ pub fn t(lang: &str, key: &str) -> String {
         "menu.settings" => if zh { "设置…" } else { "Settings…" },
         "menu.quit" => if zh { "退出" } else { "Quit" },
         "deny.message" => if zh { "用户在桌宠上拒绝了。" } else { "The user denied this on the desktop pet." },
+        "codex.waiting" => if zh { "等你在 Wakuwaku 上确认…" } else { "Waiting for your answer on Wakuwaku…" },
         "notify.waiting" => if zh { "{project}需要你确认" } else { "{project}needs your OK" },
         "notify.done" => if zh { "{project}做完了" } else { "{project}is done" },
         "notify.review" => if zh { "{project}改好了，等你看看" } else { "{project}has changes for you to review" },

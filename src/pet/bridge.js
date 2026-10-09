@@ -73,6 +73,7 @@
       showPet: on => invoke('settings_show_pet', { on: on === true }),
       login: on => invoke('settings_login', { on: on === true }),
       hooks: action => invoke('settings_hooks', { action }),
+      codexHooks: action => invoke('settings_codex_hooks', { action }),
       fetch: reference => invoke('settings_fetch', { reference: String(reference || '') }),
       gallery: (page, sort) => invoke('settings_gallery', { page, sort }),
       openSite: place => invoke('settings_open_site', { place }),

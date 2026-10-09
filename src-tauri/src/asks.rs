@@ -8,6 +8,10 @@
 // session shows the dialog is gone: the same tool call finishing, the turn
 // ending, or a newer prompt from the same agent. And before Claude Code's own
 // timeout.
+//
+// Codex's prompts come the same way (events_codex.rs), but Codex shows its
+// own dialog only once the hook has answered with no decision, and takes
+// only allow or deny: no rules to add, so never "always".
 use std::path::Path;
 
 use serde_json::{json, Map, Value};
@@ -32,10 +36,25 @@ fn s<'a>(v: &'a Value, key: &str) -> &'a str {
     v.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
+// A patch (Codex's apply_patch) as the files it changes, one a line.
+fn patch_files(patch: &str) -> Option<String> {
+    let files: Vec<&str> = patch
+        .lines()
+        .filter_map(|line| line.strip_prefix("*** "))
+        .filter(|line| ["Add File: ", "Update File: ", "Delete File: "].iter().any(|p| line.starts_with(p)))
+        .collect();
+    (!files.is_empty()).then(|| files.join("\n"))
+}
+
 // What a tool call does, in one short text.
 pub fn summarize(tool: &str, input: &Value) -> String {
+    if tool == "apply_patch" {
+        if let Some(files) = input.get("command").and_then(Value::as_str).and_then(patch_files) {
+            return clip(&files, MAX_SUMMARY);
+        }
+    }
     let field = match tool {
-        "Bash" | "PowerShell" => Some("command"),
+        "Bash" | "PowerShell" | "apply_patch" => Some("command"),
         "Edit" | "MultiEdit" | "Write" | "Read" | "NotebookEdit" => {
             Some(if input.get("file_path").is_some() { "file_path" } else { "notebook_path" })
         }
@@ -157,7 +176,8 @@ pub fn view_of(e: &Value) -> Option<Value> {
     let input = input_of(e);
     let cwd = s(e, "cwd");
     let project = if cwd.is_empty() { String::new() } else { Path::new(cwd).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() };
-    let mut view = json!({ "session": s(e, "session_id"), "agent": s(e, "agent_id"), "project": project, "tool": tool });
+    // agent: the subagent asking (Claude Code); from: "codex", or "" for Claude Code.
+    let mut view = json!({ "session": s(e, "session_id"), "agent": s(e, "agent_id"), "from": s(e, "agent"), "project": project, "tool": tool });
 
     if tool == "AskUserQuestion" {
         let questions: Vec<Value> = input.get("questions").and_then(Value::as_array).cloned().unwrap_or_default();
@@ -279,8 +299,8 @@ impl<R: FnOnce(Option<Value>)> Default for Asks<R> {
     }
 }
 
-// Events that mean the session has moved past any dialog it showed.
-const MOVED_ON: [&str; 4] = ["UserPromptSubmit", "Stop", "StopFailure", "SessionEnd"];
+// Events that mean the session has moved past any dialog it showed (Interrupt: Codex's).
+const MOVED_ON: [&str; 5] = ["UserPromptSubmit", "Stop", "StopFailure", "SessionEnd", "Interrupt"];
 
 fn same_input(a: Option<&Value>, b: Option<&Value>) -> bool {
     let strip = |v: Option<&Value>| match v {
@@ -465,5 +485,40 @@ mod tests {
         assert!(asks.expire(1000));
         assert!(asks.is_empty());
         assert!(asks.add(json!({ "hook_event_name": "Stop" }), reply(&got), 0, 1000).is_err());
+    }
+
+    // As Codex sends it, tagged by the server.
+    fn codex_permission(tool: &str, command: &str) -> Value {
+        json!({
+            "hook_event_name": "PermissionRequest", "session_id": "c", "turn_id": "t", "cwd": "D:\\work\\pet", "agent": "codex",
+            "tool_name": tool, "tool_input": { "command": command, "description": null }
+        })
+    }
+
+    #[test]
+    fn a_codex_prompt_is_allow_or_deny() {
+        let e = codex_permission("Bash", "cargo test");
+        let view = view_of(&e).unwrap();
+        assert_eq!((view["kind"].as_str(), view["from"].as_str(), view["summary"].as_str()), (Some("permission"), Some("codex"), Some("cargo test")));
+        assert_eq!(view["always"], Value::Null);
+        // The same output Codex reads: hookSpecificOutput.decision.behavior.
+        let allow = reply_for(&e, &json!({ "action": "allow" }), "en").unwrap();
+        assert_eq!(allow, json!({ "hookSpecificOutput": { "hookEventName": "PermissionRequest", "decision": { "behavior": "allow" } } }));
+        assert_eq!(reply_for(&e, &json!({ "action": "deny" }), "en").unwrap()["hookSpecificOutput"]["decision"]["behavior"], "deny");
+        assert!(reply_for(&e, &json!({ "action": "always" }), "en").is_none());
+
+        let patch = "*** Begin Patch\n*** Add File: note.txt\n+x\n*** Update File: src/a.rs\n@@\n-a\n+b\n*** End Patch";
+        assert_eq!(view_of(&codex_permission("apply_patch", patch)).unwrap()["summary"], "Add File: note.txt\nUpdate File: src/a.rs");
+    }
+
+    #[test]
+    fn an_interrupt_closes_a_codex_prompt() {
+        let got = Rc::new(RefCell::new(Vec::new()));
+        let mut asks: Asks<Box<dyn FnOnce(Option<Value>)>> = Asks::default();
+        let sink = got.clone();
+        asks.add(codex_permission("Bash", "rm x"), Box::new(move |v| sink.borrow_mut().push(v)), 0, 1000).ok().unwrap();
+        assert!(!asks.seen(&json!({ "hook_event_name": "PreToolUse", "session_id": "c", "tool_name": "Bash" })));
+        assert!(asks.seen(&json!({ "hook_event_name": "Interrupt", "session_id": "c", "agent": "codex" })));
+        assert_eq!(got.borrow().as_slice(), &[Some(json!({}))]);
     }
 }

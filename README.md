@@ -4,7 +4,7 @@
 
 > 名字来自《间谍过家家》里阿尼亚的口头禅"わくわく"（哇酷哇酷，好期待）：Claude 在干活，她在旁边满心期待地盯着。
 
-一只浮在桌面上的小宠物，实时显示 Claude Code 在干什么：干活、等你批准、改完了等你看、做完了，还是出错了。需要你确认的时候，可以直接在她头顶的面板上点。
+一只浮在桌面上的小宠物，实时显示 Claude Code 在干什么：干活、等你批准、改完了等你看、做完了，还是出错了。需要你确认的时候，可以直接在她头顶的面板上点。也能连上 [Codex](#3-连上-codex可选)。
 
 形象用的是 [Codex Pets](https://codex-pets.net) 社区的 v2 精灵图格式，网站上任意一只 v2 宠物都能换上。默认是 [Claude 小姐](https://codex-pets.net/#/pets/claude-chan)，第一次打开时自动从网站下载。
 
@@ -47,6 +47,7 @@
   - 在终端答完后，要等这个会话的下一个事件，面板才会收起，所以可能多停留一会儿。这时再点面板，Claude 不会理会。
   - `claude -p` 这类非交互模式会先等 hook 回复再做决定，没人点的话最多会卡到面板等待时间结束。
   - MCP 弹出的表单（Elicitation）只做提醒。
+- Codex 的授权请求也会弹到面板上，但只有**允许** / **拒绝**（Codex 不接受 hook 加规则）。Codex 要等面板交出才会弹自己的确认框，所以面板最多等 1 分钟；想在终端里答，点「去终端处理」。
 
 ## 安装
 
@@ -71,6 +72,24 @@
 插件由 Claude Code 自己安装和卸载，**我们不改你的设置文件**（Claude Code 会在它自己的 `enabledPlugins` 里记一笔，卸载时去掉）。插件没法自动启动宠物，所以建议在设置的「连接」页打开「开机自动启动」。
 
 不想用插件的话，「连接」页的「高级」里可以直接写入 `~/.claude/settings.json`（会先备份，卸载时只删我们加的条目）。这种方式的好处是新会话开始时能自动把宠物拉起来。两种都装了，「连接」页会提示事件重复。
+
+### 3. 连上 Codex（可选）
+
+在「连接」页的 Codex 一栏点「安装」，会写入 `~/.codex/hooks.json`（会先备份，移除时只删我们加的条目）。然后**在 Codex 里输入 `/hooks`，信任 Wakuwaku 的 hook**：Codex 只运行信任过的 hook，收到第一个事件前「连接」页会一直提醒这一步。程序换了位置要点「修复」并重新信任。
+
+和 Claude Code 的区别：
+
+| | Claude Code | Codex |
+| --- | --- | --- |
+| 显示干活、等你、做完、改好了 | ✓ | ✓（`apply_patch` 改过文件就是"改好了"） |
+| 出错 | ✓ | 没有（Codex 出错时不发事件，她会在 15 分钟后自己回到空闲） |
+| 任务清单完成一项时跳一下 | ✓ | 没有 |
+| 在面板上确认 | 允许 / 以后都允许 / 拒绝，回答问题，批准计划 | 允许 / 拒绝 |
+| 新会话自动启动宠物 | settings.json 方式可以 | 可以 |
+
+Codex 的 hook 只能是命令：运行一次 `wakuwaku.exe --wakuwaku-codex-hook`，把事件转给她。Codex 在 Windows 上用 PowerShell 运行 hook，每次启动约 0.3 秒，所以只有一轮对话的开始和结束、改文件（`apply_patch`）、确认请求、会话开始和结束这几处让 Codex 等它；每一步用的工具放在后台报告。后台 hook 要 Codex 0.148 或更新的版本，旧版本只装必要的几个，气泡里不显示具体工具。
+
+Codex 桌面版里装过的宠物（`~/.codex/pets`）格式相同，会直接出现在「宠物」页里，标着「来自 Codex」。
 
 ### 从源码运行
 
@@ -113,7 +132,7 @@ cargo build --release     # target/release/wakuwaku.exe，单个文件
 ### 卸载
 
 1. 如果打开过**开机自动启动**，先在设置的「连接」页里关掉。
-2. 用插件连接的：在 Claude Code 里 `/plugin uninstall wakuwaku@wakuwaku`，再 `/plugin marketplace remove wakuwaku`。写入 settings.json 的：在「连接」页点「移除」，只会删掉本项目加的条目，你自己的 hooks 不受影响，第一次修改前的原文件备份在 `~/.claude/settings.json.wakuwaku.bak`。
+2. 用插件连接的：在 Claude Code 里 `/plugin uninstall wakuwaku@wakuwaku`，再 `/plugin marketplace remove wakuwaku`。写入 settings.json 的：在「连接」页点「移除」，只会删掉本项目加的条目，你自己的 hooks 不受影响，第一次修改前的原文件备份在 `~/.claude/settings.json.wakuwaku.bak`。连过 Codex 的：在 Codex 一栏点「移除」，备份在 `~/.codex/hooks.json.wakuwaku.bak`。
 3. 退出她，然后删掉 exe 或项目文件夹。系统通知用的应用登记在注册表 `HKCU\Software\Classes\AppUserModelId\com.zhoupengjie.wakuwaku`，可以一并删掉。
 4. 删除她的设置和下载的宠物：exe 旁边的 `wakuwaku-data`，从源码运行是项目里的 `data/`。
 
@@ -124,6 +143,7 @@ cargo build --release     # target/release/wakuwaku.exe，单个文件
 ```
 Claude Code ──HTTP hooks──▶ 宠物窗口 (127.0.0.1:47213/hook)
             └─SessionStart─▶ 程序本身 --wakuwaku-ensure-running（后台运行，她没开就启动）
+Codex ──命令 hooks──▶ 程序本身 --wakuwaku-codex-hook ──▶ 宠物窗口 (/hook?agent=codex)
 ```
 
 - 所有事件都用 Claude Code 的 **HTTP hook** 直接发给她，调用工具时不启动任何进程（本机实测每次约 0.3ms）。她立刻回 `{}`，表示不做任何决定；只有确认请求会等你在面板上点了再回。
@@ -134,6 +154,7 @@ Claude Code ──HTTP hooks──▶ 宠物窗口 (127.0.0.1:47213/hook)
 | --- | --- |
 | `WAKUWAKU_PORT` | 换端口（默认 47213），她和 hooks 两边都要设 |
 | `CLAUDE_CONFIG_DIR` | Claude Code 的配置目录不在 `~/.claude` 时 |
+| `CODEX_HOME` | Codex 的配置目录不在 `~/.codex` 时 |
 
 ## 测试
 

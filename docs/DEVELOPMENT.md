@@ -19,14 +19,14 @@ src/                      页面，Tauri 直接把整个文件夹打进 exe（ta
   shared/i18n.js          中英文（页面用；Rust 那边的几句在 src-tauri/src/i18n.rs）
 src-tauri/
   src/
-    main.rs               入口：--wakuwaku-ensure-running、单实例、各部分共享的 Shared、页面能调的命令
+    main.rs               入口：--wakuwaku-ensure-running、--wakuwaku-codex-hook、单实例、各部分共享的 Shared、页面能调的命令
     pet.rs                她的窗口：大小和位置、眼睛、拖动和被"携带"、走动、头顶的面板、飞回岛里
     island.rs             灵动岛的窗口：挂在顶部正中、按页面要求扩大、伸手够她、把她吸回去、为设置临时升起
     settings.rs           设置看到的快照、校验后的设置补丁、设置的各个命令
     pointer.rs            两个窗口共用的点击穿透
     screen.rs             各个显示器的工作区
     asks.rs               确认请求：显示什么、每个选择回给 Claude Code 什么、排队和超时
-    connection.rs         插件、settings.json 里的 hooks（安装 / 移除 / 状态）、开机自启
+    connection.rs         插件、settings.json 里的 hooks、Codex 的 hooks.json（安装 / 移除 / 状态）、开机自启
     fetch.rs              codex-pets.net：解析地址、下载宠物、图库
     fullscreen.rs         别的程序是否全屏（user32）
     focus.rs              前台窗口：设置拿走键盘前记下，收起时还回去
@@ -34,8 +34,9 @@ src-tauri/
     tray.rs               托盘图标（随心情变脸）和菜单
     server.rs             127.0.0.1:47213 上的 HTTP 接口
     state.rs              状态机：按会话记 mood、名字、在跑的工具、任务清单、改过的文件、结果，挑最需要你的那个显示
-    events.rs             hook 事件 → 消息；会话名（session_title 或会话记录）、项目名（git 仓库名）
-    data.rs               数据目录、设置读写、已下载的宠物
+    events.rs             Claude Code 的 hook 事件 → 消息；会话名（session_title 或会话记录）、项目名（git 仓库名）
+    events_codex.rs       Codex 的 hook 事件 → 消息（步骤、任务、回复、项目名的说法用 events.rs 的）
+    data.rs               数据目录、设置读写、已下载的宠物和 Codex 的宠物
   icons/                  exe、窗口、托盘和通知的图标（npm 不需要：scripts/make-icons.js 用 ImageMagick 画）
   capabilities/           页面能用的 Tauri 权限：两个窗口都要列进去
 integrations/claude-code/ Claude Code 插件 wakuwaku（只有 HTTP hooks）
@@ -67,6 +68,7 @@ cd .. && node --test "test/*.test.js"   # 页面的单元测试
 | `WAKUWAKU_PORT` | 端口（默认 47213） |
 | `WAKUWAKU_USER_DATA` | 换一个数据目录 |
 | `CLAUDE_CONFIG_DIR` | Claude Code 的配置目录（测试里指向临时目录，不碰真实设置） |
+| `CODEX_HOME` | Codex 的配置目录（`hooks.json`、`pets/`），默认 `~/.codex` |
 | `WAKUWAKU_DEBUG=1` | `/health` 带上两个窗口和设置，开放 `/debug/eval`、`/debug/walk` |
 
 ## 插件
@@ -83,9 +85,28 @@ cd .. && node --test "test/*.test.js"   # 页面的单元测试
 
 单实例：谁占着端口谁是宠物。再启动一份时端口被占，这份会 POST `/come-home`（让她重新出现、回到右下角）然后退出。
 
+## Codex
+
+Codex（CLI 0.114 起）的 hooks 和 Claude Code 很像，但**只有 command 类型，没有 HTTP**，所以每个事件都运行一次程序本身加 `--wakuwaku-codex-hook`（`main.rs` 的 `codex_hook()`）：从 stdin 读事件，POST 到 `/hook?from=wakuwaku&agent=codex`；只有 `PermissionRequest` 会把她的回答（`hookSpecificOutput`）打印到 stdout 给 Codex，别的事件什么都不打印（Codex 会把 hook 打印的纯文本当成给模型的话）。连不上她时，`SessionStart` 会以独立进程启动她。不管怎样都以 0 退出，Codex 不会显示 hook 失败。
+
+`connection.rs` 的 Codex 部分写 `~/.codex/hooks.json`（支持 `CODEX_HOME`；不碰 `config.toml`），备份到 `hooks.json.wakuwaku.bak`。2026-10 在 Codex CLI 0.146.1 / Windows 11 上实测：
+
+- **Codex 用会话的 shell 运行 hook 命令，Windows 上是 PowerShell 7**（源码里的默认 `cmd /C` 只在没配置 shell 时用）。`"带空格的路径" 参数` 在 PowerShell 里是语法错误，要写 `& '路径' 参数`；路径不需要引号时直接写裸路径（`codex_command()`）。
+- Codex 跑 hook 用的是 `pwsh -NoProfile -Command`（`derive_exec_args`，不走 profile），实测启动约 0.28 秒；PowerShell 5.1 约 0.18 秒，cmd 约 0.02 秒，转发本身约 0.03 秒。hook 的 shell 跟着 Codex 会话的 shell 走，没法单独换。
+- 所以 Codex 要等的（同步）hook 只装必要的几个（`connection.rs` 的 `CODEX_HOOKS`）：`SessionStart`、`UserPromptSubmit`、`Stop`、`Interrupt`、`SessionEnd`、`PermissionRequest`，`PostToolUse` 只对 `apply_patch|request_user_input`，`PreToolUse` 只对 `request_user_input`（matcher 是正则）。每一步的工具名靠两条不带 matcher 的 `async: true` 的 `PreToolUse` / `PostToolUse`。
+- **async hook 从 Codex 0.148 开始才有**；0.146.1 实测会跳过它们（`skipping async hook …: async hooks are not supported yet`），而且是整条跳过，不会改成同步运行。所以安装时用 `codex --version` 判断（缓存一分钟），旧版本不装那两条；之后 Codex 升级了，状态会变成 `partial`，点「修复」补上。问不到版本（只有桌面版）时当作新版本。
+- 后台运行的 hook 可能乱序到达：每个事件都带 `turn_id`，`state.rs` 记住最近结束的几个回合（`Stop` / `Interrupt` 的消息带 `event: "turn-end"`），之后到达的同一回合的事件不再改状态，只有迟到的 `apply_patch` 会把「做完」改成「改好了」。新版本上 `apply_patch` 的 `PostToolUse` 会同步、后台各来一次，重复无害。
+- 事件字段：`session_id`、`turn_id`、`cwd`、`hook_event_name`、`model`、`permission_mode`；shell 工具叫 `Bash`，改文件都是 `apply_patch`，两者的 `tool_input` 都只有 `command`（补丁全文）。失败的工具调用没有 `PostToolUse`；请求失败（比如模型不可用）连 `Stop` 都没有，所以 Codex 会话不会显示出错，干活状态靠 15 分钟的超时收尾。
+- Codex 只运行**信任过**的 hook（按 hash 记在 `config.toml`），新装或改动后要在 Codex 里 `/hooks` 信任。我们不替用户信任。设置里能看出的只有"装了"和"收到过 Codex 的事件"（`Shared.codex_seen`），连接页据此提示去信任。
+- `PermissionRequest` 在 Codex 弹自己的确认框**之前**同步运行，hook 不回答 Codex 就不弹框。所以 Codex 的确认在面板上最多等 60 秒（`server.rs` 的 `CODEX_ASK_MS`），"去终端处理"或超时回 `{}` 后 Codex 才弹框。Codex 只接受 allow / deny，不接受 `updatedPermissions` / `updatedInput`，所以没有"以后都允许"（事件里也没有 `permission_suggestions`）。`hookSpecificOutput.decision` 的格式和 Claude Code 相同。
+- `codex exec` 会把确认策略强制设成 never，测不到 `PermissionRequest`；测这一条要用交互式的 Codex。
+- 测试运行 Codex 时用便宜的模型：`codex exec --ephemeral --skip-git-repo-check -m gpt-5.6-luna -c model_reasoning_effort='"low"' --dangerously-bypass-hook-trust -c 'hooks.Stop=[...]' "…" < /dev/null`（`-c hooks.*` 只对这一次生效，不改用户的配置；不重定向 stdin 会一直等输入）。
+
+Codex 桌面版的宠物在 `~/.codex/pets/<id>/`（`pet.json` + `spritesheet.webp`，格式和 codex-pets.net 下载的一样），`data.rs` 把它排在自己的宠物之后一起读，只读不写，也不替它建文件夹。
+
 ## 消息
 
-hook 事件在 `events.rs` 换算成消息，`/state` 也收这个格式：
+hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，`/state` 也收这个格式：
 
 ```json
 { "session": "…", "project": "wakuwaku", "mood": "working", "detail": "Bash", "event": "tool-start", "toolId": "toolu_…", "step": { "key": "step.run", "vars": { "what": "Run the tests" } } }
@@ -96,17 +117,18 @@ hook 事件在 `events.rs` 换算成消息，`/state` 也收这个格式：
 | `session` / `project` | 会话 id、项目文件夹名；每个会话单独记状态 |
 | `mood` | `idle` / `working` / `waiting` / `done` / `review` / `error` |
 | `detail` | 工具名，或 `{ key, vars }`（按当前语言显示；vars 里可以再套一层 `{ key, vars }`，比如「要批准：$ git push」） |
-| `event` | `turn-start` / `tool-start` / `tool-done` / `tool-failed` / `session-end` |
+| `event` | `turn-start` / `tool-start` / `tool-done` / `tool-failed` / `turn-end`（Codex 的回合结束）/ `session-end` |
 | `react` / `say` | `wave` / `jump` / `failed`，在当前 mood 上播一次，期间气泡显示 `say` |
 | `title` / `task` | 会话名；你发的第一句话（只认 `source` 是用户的，少于 4 个字的「继续」「好的」不算）。有 title 就用 title |
 | `step` / `toolId` | 工具在做什么（`step.*`，`events.rs` 的 `step_of`）；`toolId` 把开始和结束配成对，子 agent 的工具也能对上 |
 | `todo` | 任务清单的变化：TodoWrite 给 `{ set }`，TaskCreate / TaskUpdate 给 `{ add }` / `{ update }` |
 | `file` | 刚改过的文件（这一轮改了几个文件） |
 | `reply` / `error` | Stop / StopFailure 的 `last_assistant_message` 摘前一两句；StopFailure 的 `error`（`error.*`）或 `error_details` |
+| `agent` / `turn` | Codex 的消息带 `agent: "codex"` 和回合 id（见上面的 Codex 一节） |
 
 **会话名**：hook 自带的 `session_title`（只有 UserPromptSubmit、SessionStart 带，而且只是自定义标题：`/rename` 或桌面版起的名字）；没有时，在一轮开始和结束时读 `transcript_path` 末尾 256 KB 里最后一条 `custom-title`，没有再用 `ai-title`。**项目名**：从 `cwd` 往上找 `.git`，是目录就取它所在文件夹的名字；是文件（worktree）就按里面的 `gitdir: <仓库>/.git/worktrees/<名字>` 取仓库名；不在 git 里就用 `cwd` 的文件夹名。按 `cwd` 缓存。
 
-页面拿到的每个会话（`state.rs` 的 `view`）还有 `name`、`step`（只在干活时有，没有在跑的工具就是「思考中」）、`stepSince`、`todo`（`{ done, total, active }`）、`files`、`reply`（只在结束时有）、`error`。`payload` 里的 `list` 是所有会话，展开的岛用它列出别的会话。设置里的「显示具体内容」（`details`）关掉时，页面只显示项目、状态和工具名，和以前一样。
+页面拿到的每个会话（`state.rs` 的 `view`）还有 `name`、`step`（只在干活时有，没有在跑的工具就是「思考中」）、`stepSince`、`todo`（`{ done, total, active }`）、`files`、`reply`（只在结束时有）、`error`、`agent`。`payload` 里的 `list` 是所有会话，展开的岛用它列出别的会话。设置里的「显示具体内容」（`details`）关掉时，页面只显示项目、状态和工具名，和以前一样。
 
 显示哪个会话：等你确认 > 出错 > 改好了 > 做完 > 干活 > 空闲，同级取最新。做完、改好、出错默认一直保持，直到鼠标经过她（或离开灵动岛）；设置里可以改成 8 / 30 / 120 秒。干活和等你超过 15 分钟没有新事件就当作结束；做完的状态 2 小时没人看就回空闲，空闲会话 2 小时后被忘掉。
 
@@ -115,7 +137,7 @@ hook 事件在 `events.rs` 换算成消息，`/state` 也收这个格式：
 | 请求 | 说明 |
 | --- | --- |
 | `GET /health` | `{ ok, app: "wakuwaku", runtime: "tauri", state }`；调试模式下还有 `window`、`island`、`settings` |
-| `POST /hook` | Claude Code 的 hook 事件；一般立刻回 `{}`，`PermissionRequest` 等面板上的回答。正文上限 16 MB（Edit 的 PostToolUse 带着改之前的整个文件） |
+| `POST /hook` | Claude Code 的 hook 事件；一般立刻回 `{}`，`PermissionRequest` 等面板上的回答。正文上限 16 MB（Edit 的 PostToolUse 带着改之前的整个文件）。带 `?agent=codex` 的是 Codex 的事件（由 `--wakuwaku-codex-hook` 转来） |
 | `POST /state` | 一条消息 |
 | `POST /come-home` | 再次启动时用：她重新出现 |
 | `POST /debug/eval` | `{ page: "pet" \| "island", code }`：在页面里运行一段表达式，返回结果（可以是 Promise） |
@@ -133,7 +155,7 @@ hook 事件在 `events.rs` 换算成消息，`/state` 也收这个格式：
 | 回答问题 | `{ behavior: "allow", updatedInput: { ...tool_input, answers } }`；选项、自己输入的文字、数字题都按题目文字作键 |
 | 去终端处理 / 超时 / 终端已答 / 勿扰 / 全屏 | `{}` |
 
-面板什么时候收起：同一个调用的 `PostToolUse` / `PostToolUseFailure` 到达（比较输入时忽略 `answers`）；同一个会话的 `UserPromptSubmit`、`Stop`、`StopFailure`、`SessionEnd`；同一个 agent 又来了新请求；等待时间到。
+面板什么时候收起：同一个调用的 `PostToolUse` / `PostToolUseFailure` 到达（比较输入时忽略 `answers`）；同一个会话的 `UserPromptSubmit`、`Stop`、`StopFailure`、`SessionEnd`、`Interrupt`（Codex）；同一个 agent 又来了新请求；等待时间到。
 
 面板在哪：灵动岛模式在岛里（岛的 `ask` 形状）；设置开着时是设置里的横幅（`panel.js` 的 `holdsPanel()` 看 `settingsOpen`）；只有宠物时在她头顶，她的窗口向上、向两侧长大，她本人不动（`pet.rs` 的 `set_panel`，挡在屏幕边上时用 `pet:shift` 把她挪回原位）。
 

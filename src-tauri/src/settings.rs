@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, WebviewWindow};
 
-use crate::{connection, data, fetch, fullscreen, island, now_ms, pet, set_display, set_out, shared, Shared};
+use crate::{connection, data, fetch, fullscreen, i18n, island, now_ms, pet, set_display, set_out, shared, Shared};
 
 const REPO: &str = "https://github.com/zhoupengjie/wakuwaku";
 
@@ -14,7 +14,7 @@ const REPO: &str = "https://github.com/zhoupengjie/wakuwaku";
 pub fn snapshot(sh: &Shared) -> Value {
     let pets: Vec<Value> = data::pets(&sh.dir)
         .iter()
-        .map(|p| json!({ "id": p.id, "name": p.name, "author": p.author, "url": data::asset_url(&p.sheet), "version": p.version }))
+        .map(|p| json!({ "id": p.id, "name": p.name, "author": p.author, "url": data::asset_url(&p.sheet), "version": p.version, "codex": p.from_codex }))
         .collect();
     let (now, sessions) = {
         let pet = sh.pet.lock().unwrap();
@@ -33,6 +33,15 @@ pub fn snapshot(sh: &Shared) -> Value {
         "pluginCommands": connection::PLUGIN_COMMANDS,
         "hooks": connection::hooks_status(sh.port),
         "settingsFile": connection::claude_settings_file().to_string_lossy(),
+        // Codex's hooks.json, whether any Codex event came (they run once
+        // trusted), and its version: one before 0.148 gets no background hooks.
+        "codex": {
+            "hooks": connection::codex_hooks_status(),
+            "file": connection::codex_hooks_file().to_string_lossy(),
+            "seen": sh.codex_seen.load(Ordering::SeqCst) > 0,
+            "version": connection::codex_version().map(|(a, b, c)| format!("{a}.{b}.{c}")),
+            "async": connection::codex_runs_async(),
+        },
         "loginAtStart": connection::is_open_at_login(),
         "version": sh.app.package_info().version.to_string(),
         "fullscreenAvailable": fullscreen::AVAILABLE,
@@ -136,6 +145,16 @@ pub async fn settings_login(app: AppHandle, on: bool) -> Value {
 pub async fn settings_hooks(app: AppHandle, action: String) -> Value {
     let sh = shared(&app);
     match connection::write_hooks(&action, sh.port) {
+        Ok(()) => json!({ "ok": true, "snapshot": snapshot(&sh) }),
+        Err(error) => json!({ "ok": false, "error": error, "snapshot": snapshot(&sh) }),
+    }
+}
+
+// install, remove: Codex's hooks.json.
+#[tauri::command]
+pub async fn settings_codex_hooks(app: AppHandle, action: String) -> Value {
+    let sh = shared(&app);
+    match connection::write_codex_hooks(&action, &i18n::t(sh.lang(), "codex.waiting")) {
         Ok(()) => json!({ "ok": true, "snapshot": snapshot(&sh) }),
         Err(error) => json!({ "ok": false, "error": error, "snapshot": snapshot(&sh) }),
     }

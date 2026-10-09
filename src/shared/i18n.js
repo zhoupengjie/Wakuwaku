@@ -141,7 +141,7 @@
       'settings.sound': '提示音',
       'settings.prompts': '确认面板',
       'settings.promptWait': '面板最多等',
-      'settings.promptWaitNote': '时间到了就交给终端处理，终端的确认框一直都在。',
+      'settings.promptWaitNote': '时间到了就交给终端处理。Claude Code 的确认框一直都在；Codex 要等面板交出才弹自己的确认框，所以 Codex 的请求最多等 1 分钟。',
       'settings.seconds': '{n} 秒',
       'settings.minutes': '{n} 分钟',
       'settings.quiet': '勿扰',
@@ -254,6 +254,20 @@
       's.version': 'Wakuwaku {version}',
       's.welcome': '欢迎！先连接 Claude Code，她就能开始陪你干活了。',
       's.noPetYet': '还没有宠物：在「宠物」页下载一只',
+
+      // Codex (the Connect page, the pets it has)
+      's.codex': 'Codex',
+      's.codexWhy':
+        '写入 ~/.codex/hooks.json（先备份，移除时只删我们加的条目）。Codex 只能用命令做 hook：一轮对话的开始和结束、改文件、确认时，Codex 会等本程序运行一次（约 0.3 秒）；每一步用的工具在后台报告。新会话开始时还能自动启动宠物。',
+      's.codexTrust': '还没收到 Codex 的事件：在 Codex 里输入 /hooks，信任 Wakuwaku 的 hook。程序换了位置要重新信任。',
+      's.codexConnOk': '已连接 Codex',
+      's.codexConnTrust': 'Codex 的 hooks 已装好，等你在 Codex 的 /hooks 里信任',
+      's.codexConnRepair': 'Codex 的 hooks 需要修复',
+      's.codexConnNone': '还没连接 Codex',
+      's.codexAbsent': '没找到 Codex（~/.codex）',
+      's.codexUnreadable': '读不了 hooks.json',
+      's.fromCodex': '来自 Codex',
+      's.codexOld': '你的 Codex（{version}）还不能在后台运行 hook，所以只装了必要的几个：气泡里不显示每一步用的工具。升级到 0.148 或更新的版本后点「修复」。',
     },
 
     en: {
@@ -388,7 +402,8 @@
       'settings.sound': 'Sound',
       'settings.prompts': 'Prompt panel',
       'settings.promptWait': 'Panel waits up to',
-      'settings.promptWaitNote': 'Then the terminal takes over. Its dialog is there the whole time.',
+      'settings.promptWaitNote':
+        "Then the terminal takes over. Claude Code's dialog is there the whole time; Codex shows its own only once the panel lets go, so a Codex prompt waits 1 minute at most.",
       'settings.seconds': '{n} seconds',
       'settings.minutes': '{n} minutes',
       'settings.quiet': 'Quiet',
@@ -500,6 +515,20 @@
       's.version': 'Wakuwaku {version}',
       's.welcome': 'Welcome! Connect Claude Code and she can start keeping you company.',
       's.noPetYet': 'No pet yet: get one on the Pets page',
+
+      's.codex': 'Codex',
+      's.codexWhy':
+        "Writes ~/.codex/hooks.json (backed up first; removing takes out only our entries). Codex's hooks can only be commands: when a turn starts and ends, on an edit and on a prompt, Codex waits for this app to run once (about 0.3 s); each step's tool is reported in the background. New sessions also start the pet.",
+      's.codexTrust': "No Codex event yet: in Codex, enter /hooks and trust Wakuwaku's hooks. Moving the app means trusting them again.",
+      's.codexConnOk': 'Connected to Codex',
+      's.codexConnTrust': "Codex's hooks are in; trust them in Codex's /hooks",
+      's.codexConnRepair': "Codex's hooks need a repair",
+      's.codexConnNone': 'Not connected to Codex yet',
+      's.codexAbsent': 'No Codex found (~/.codex)',
+      's.codexUnreadable': "Can't read hooks.json",
+      's.fromCodex': 'From Codex',
+      's.codexOld':
+        "Your Codex ({version}) can't run hooks in the background yet, so only the essential ones are in: the bubble won't show each step's tool. After updating to 0.148 or later, click Repair.",
     },
   }
 

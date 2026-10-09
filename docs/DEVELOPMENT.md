@@ -36,6 +36,7 @@ src-tauri/
     widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、CPU · 内存、网速、电池），什么时候冒头
     tokens.rs             今天的 token：读 Claude Code 和 Codex 自己的会话记录
     scripts.rs            她替你在后台跑的插件：示例脚本的开关、参数、启动、重启、停下
+    mail.rs               邮件：找服务器（像 Thunderbird 那样）、IMAP、每个邮箱一个线程盯着收件箱、密码存进凭据管理器
     notify.rs             系统通知（登记 AppUserModelId 后发 toast）
     tray.rs               托盘图标（随心情变脸）和菜单
     server.rs             127.0.0.1:47213 上的 HTTP 接口
@@ -222,6 +223,19 @@ examples/widgets 里的天气、股票、番茄钟、倒计时、久坐提醒、
 **邮件**：IMAP（`mail-imap.ps1`）、Microsoft Graph（`mail-microsoft.ps1`）、Thunderbird 扩展，都只往 `/widget` 发文字，账号和密码不经过宠物。找 IMAP 服务器照 Thunderbird 的顺序：内置的几家 → ISPDB（`autoconfig.thunderbird.net/v1.1/<域名>`）→ MX 记录所属域名的 ISPDB → `imap.<域名>:993`。网易的服务器要先收到 ID 命令（RFC 2971）才肯打开收件箱，登录前后各发一次。授权码和 Graph 的 refresh token 用 DPAPI（`ConvertFrom-SecureString`）加密存在 `%LOCALAPPDATA%\wakuwaku\secrets`。测试时 `mail-imap.ps1 -NoTls -Server 127.0.0.1` 配一个本地的假 IMAP 服务器，`mail-microsoft.ps1 -LoginBase/-GraphBase` 指向本地的假登录和 Graph。**注意 PowerShell 变量名不分大小写**：脚本里的 `$server` 和参数 `-Server` 是同一个变量。
 
 **以后的两层**：插件文件夹里的脚本由宠物定时运行（像 xbar），以及插件自己画的界面（要关进碰不到 IPC 的沙盒，否则能替你点"允许"）。
+
+## 邮件（mail.rs）
+
+设置里的「邮件」页，照 Thunderbird 添加账户的样子：填邮箱地址和密码，点「继续」去找服务器；找到了显示一行设置和来源，可以「手动配置」；没找到直接给收信服务器、端口、加密、用户名几个框。点「完成」先真的登录一次，能登录才保存。只收信，不发信。
+
+- **找服务器**（`discover`），和 Thunderbird 的顺序一样：邮箱域名自己的 `autoconfig.<域名>/mail/config-v1.1.xml`、`<域名>/.well-known/autoconfig/…`，Thunderbird 的数据库 ISPDB（`autoconfig.thunderbird.net/v1.1/<域名>`），再查域名的 MX 记录（Windows 的 `DnsQuery_W`），拿 MX 主机所属的域名（`base_domain`：`mx1.qq.com` 是 qq.com，`a3011.mx.srv.dfn.de` 是 dfn.de）再问 ISPDB，最后猜 `imap.<域名>`、`mail.<域名>`、`<域名>`（993 上能 TLS 握手并收到 IMAP 问候，或者 143 上有 STARTTLS）。配置里只取 IMAP、能用密码登录的那一个；全都只能 OAuth（Outlook、Hotmail）时告诉页面 `oauth`，还不支持。用户名里的 `%EMAILADDRESS%` 等照填。实测：QQ、163、Gmail、iCloud、GMX 在 ISPDB 里；托管在 Google 上的公司域名经 MX 找到 imap.gmail.com；交大猜中 imap.sjtu.edu.cn；TU Dresden 找不到，手动填 `msx.tu-dresden.de`。
+- **IMAP**（`Conn`）自己写的，只做盯收件箱要的几条：连上（993 直接 TLS，或者 143 上 STARTTLS，TLS 用系统的 native-tls，认系统证书），`CAPABILITY`；登录时服务器提供 `AUTH=PLAIN` 就用 `AUTHENTICATE PLAIN`（base64，什么字符的密码都行，有 `SASL-IR` 一步发完），否则 `LOGIN`，ASCII 放引号里，别的用字面量（`{n}`，等服务器说 `+` 再发）；服务器支持 `ID` 就报名字（网易不报不让开文件夹）；`EXAMINE INBOX`（只读）；`UID SEARCH UNSEEN` 数未读；最新一封未读 `UID FETCH <uid> (BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])`（PEEK 不会标成已读），用 mail-parser 读出发件人和主题（编码字、GBK 等字符集都认，要开 `full_encoding`）。回复里的字面量照读（`response`）。
+- **盯着**（`watch_inbox`）：每个开着的邮箱一个线程，登录后先数一次，然后服务器支持 `IDLE` 就等它推（9 分钟没动静就 `DONE` 再来一轮），不支持就每分钟 `NOOP` 后再数。比上次见过的最新未读更新的一封是新邮件：插件冒头说「新邮件 · 发件人：主题」（`nudge_widget`，和脚本插件一样受「插件可以叫开灵动岛」管）。断了重连，接连失败等 15 秒、30 秒……最多 5 分钟；密码不对等 5 分钟（免得把账号锁了）；连续失败两次插件显示「收不到信」。关掉、删除、改了设置（`sync` 比较账户）时停下：把 socket 关掉，线程马上醒来退出，插件一起去掉。
+- **插件**：`inbox-<id>`，她自己的（`put_owned`，不过期，脚本不能用这个 id），私密（`private`）：标题是「发件人：主题」，数值是「3 封未读」/「没有未读」（`{ key, vars }`，按页面语言显示）。插件页上它们写着「邮件 · 在「邮件」页设置」，开关只管岛上显不显示。
+- **存哪**：账户在设置的 `mail` 里（`[{ id, address, host, port, security, username, on }]`，只能通过 `mail_save` / `mail_remove` / `mail_switch` 改，设置补丁里的 `mail` 不收）；密码在 Windows 凭据管理器，名字是 `Wakuwaku mail <id>`（`CredWriteW`），删除邮箱时一起删。
+- **测试**：单元测试读 ISPDB 配置、MX 域名、字面量、GBK 主题、凭据管理器写读删。整体用一个假 IMAP 服务器（像网易：不报 ID 不让开文件夹，有 IDLE，可选只支持 LOGIN 或支持 AUTHENTICATE PLAIN），改它的收件箱文件就会推 `EXISTS`。
+
+页面上「以后」一块是占位：邮件列表、写信回信、交给 agent 总结和建议回复，都还没做。
 
 ## 点击穿透
 

@@ -88,6 +88,8 @@ fn defaults() -> Map<String, Value> {
         "widgetNudge": true,
         // The plugins she runs (scripts.rs): { id: { on, <Param>: value } }.
         "plugins": {},
+        // Mail accounts (mail.rs); their passwords are in the Credential Manager.
+        "mail": [],
         "walk": true,
         "look": true,
         "hold": "seen",

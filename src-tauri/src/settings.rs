@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, WebviewWindow};
 
-use crate::{connection, data, fetch, fullscreen, i18n, island, now_ms, pet, scripts, set_display, set_out, shared, Shared};
+use crate::{connection, data, fetch, fullscreen, i18n, island, mail, now_ms, pet, scripts, set_display, set_out, shared, Shared};
 
 const REPO: &str = "https://github.com/zhoupengjie/wakuwaku";
 
@@ -48,6 +48,8 @@ pub fn snapshot(sh: &Shared) -> Value {
         "widgets": sh.widgets_view(),
         // The plugins she runs, and where waku is for the terminal.
         "plugins": scripts::view(sh),
+        // The mail accounts, each with how its watch is going.
+        "mail": mail::view(sh),
         "waku": scripts::waku_path(sh).to_string_lossy(),
         "port": sh.port,
     })

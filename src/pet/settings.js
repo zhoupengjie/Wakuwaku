@@ -6,6 +6,7 @@
 //   look      her home (corner, island, bar), size, bubble, strolls, eyes, language
 //   alerts    how long endings stay, notifications, sound, prompts, quiet
 //   widgets   plugins: the built-in ones, those she runs for you (a switch, their settings folded under), their order, turns, nudges, waku, and how to write one
+//   mail      mail accounts, and setting one up as Thunderbird does: an address and a password, the server found or typed
 //   connect   how Claude Code and Codex reach her, start at login, the hooks, about
 //
 // What they show comes from main as a snapshot, again whenever it changes;
@@ -28,8 +29,8 @@
 
   // The island's colours (on black), the same as island.js.
   const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
-  const TABS = ['now', 'pets', 'look', 'alerts', 'widgets', 'connect']
-  const TAB_KEY = { now: 's.tabNow', pets: 's.tabPets', look: 's.tabLook', alerts: 's.tabAlerts', widgets: 's.tabWidgets', connect: 's.tabConnect' }
+  const TABS = ['now', 'pets', 'look', 'alerts', 'widgets', 'mail', 'connect']
+  const TAB_KEY = { now: 's.tabNow', pets: 's.tabPets', look: 's.tabLook', alerts: 's.tabAlerts', widgets: 's.tabWidgets', mail: 's.tabMail', connect: 's.tabConnect' }
   const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
   const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
   const HOMES = ['corner', 'island', 'bar']
@@ -62,6 +63,13 @@
   // typed in them and not yet kept ("weather.City": "上海").
   let openPlugin = ''
   const drafts = {}
+  // The mail account being set up or changed, as Thunderbird's dialog has
+  // it: the address and password; then (step found) the server looked up,
+  // or (step manual) the server's fields; busy while looking or signing in;
+  // what came of the last try. Null while none is.
+  let mailForm = null
+  // An account's delete asked once: asked again, it goes.
+  let mailDelete = ''
 
   const T = (key, vars) => t(lang, key, vars)
   const esc = value =>
@@ -312,7 +320,7 @@
         const { label, value } = Widgets.words(lang, w, s.details !== false)
         // A built-in one says what it shows; on, with nothing read, says so.
         const builtIn = w.builtIn && [T('w.builtIn'), T(`w.about.${w.id}`), w.on && w.value == null ? T(w.id === 'battery' ? 'w.noBattery' : 'w.unread') : ''].filter(Boolean).join(' · ')
-        const from = builtIn || [T('w.script', { time: left(w.leftMs || 0) }), w.private ? T('w.private') : ''].filter(Boolean).join(' · ')
+        const from = builtIn || (w.from === 'mail' ? T('w.fromMail') : [T('w.script', { time: left(w.leftMs || 0) }), w.private ? T('w.private') : ''].filter(Boolean).join(' · '))
         return `<div class="r"><span class="wi" style="color:${esc(w.color || COLOR.idle)}">${Widgets.icon(w.icon)}</span><div class="grow"><div class="ellip">${esc(label)}<span class="d"> ${esc(value)}</span></div><div class="d">${esc(from)}</div></div>${up}${sw('w:' + w.id, w.on)}</div>`
       })
       .join('')
@@ -330,6 +338,75 @@
       ${sec(T('w.write'))}<div class="grp"><div class="note">${esc(T('w.writeNote'))}</div>
         <div class="r"><span class="cmd mono">${esc(example)}</span><button class="pbtn" data-copy="${esc(example)}">${esc(T('home.copy'))}</button></div>
       </div>`
+  }
+
+  // What went wrong with a mail account, in words.
+  function mailError(err, server) {
+    const kind = err?.kind || 'other'
+    const where = server ? `${server.host}:${server.port}` : ''
+    // The server's own words, where they say why.
+    const detail = err?.text && ['login', 'refused', 'other'].includes(kind) ? (lang === 'zh' ? '：' : ': ') + err.text : ''
+    return T(`mail.err.${kind}`, { where }) + detail
+  }
+
+  // An account's line: how its inbox is, or why it is not.
+  function mailNote(a) {
+    if (!a.on) return { text: T('mail.off') }
+    const st = a.status || {}
+    if (st.state === 'ok') return { text: st.unread ? T('mail.unread', { n: st.unread }) : T('mail.none') }
+    if (st.state === 'error') return { text: mailError(st.error, a), bad: true }
+    return { text: T('mail.connecting') }
+  }
+
+  // Setting an account up: the address and the password, then the server
+  // found (a line, and a way to change it) or its fields to fill in.
+  function mailFormHTML() {
+    const f = mailForm
+    const field = (key, label, attrs = '') =>
+      `<label class="fr"><span class="fl">${esc(label)}</span><input class="in" data-mf="${key}" value="${esc(f[key] ?? '')}" spellcheck="false" ${attrs}></label>`
+    const securities = [['ssl', 'SSL/TLS'], ['starttls', 'STARTTLS'], ['plain', T('mail.plain')]]
+    const head = [
+      field('address', T('mail.address'), `placeholder="you@example.com" autocomplete="off"${f.id ? ' disabled' : ''}`),
+      field('password', T('mail.password'), `type="password" autocomplete="off" placeholder="${esc(f.id ? T('mail.passwordKeep') : '')}"`),
+      `<div class="note">${esc(T('mail.passwordNote'))}</div>`,
+    ].join('')
+    const found =
+      f.step === 'found'
+        ? `<div class="r"><div class="grow"><div class="ellip">IMAP · ${esc(f.host)}:${esc(f.port)} · ${esc(securities.find(s => s[0] === f.security)?.[1] || '')}</div><div class="d">${esc(T(`mail.source.${f.source}`))}</div></div><button class="pbtn sm" data-mail-manual>${esc(T('mail.manual'))}</button></div>`
+        : ''
+    const manual =
+      f.step === 'manual'
+        ? [
+            f.notFound ? `<div class="note">${esc(T(f.oauth ? 'mail.oauth' : 'mail.notFound'))}</div>` : '',
+            field('host', T('mail.host'), 'placeholder="imap.example.com"'),
+            field('port', T('mail.port'), 'inputmode="numeric" placeholder="993"'),
+            `<div class="fr"><span class="fl">${esc(T('mail.security'))}</span>${seg('mf.security', securities, f.security)}</div>`,
+            field('username', T('mail.username'), `placeholder="${esc(f.address || 'you@example.com')}"`),
+          ].join('')
+        : ''
+    const busy = f.busy ? `<div class="note">${esc(T(f.busy === 'find' ? 'mail.finding' : 'mail.signingIn'))}</div>` : ''
+    const result = f.result ? `<div class="note${f.result.bad ? ' err' : ''}">${esc(f.result.text)}</div>` : ''
+    const go = f.step === 'start' ? `<button class="pbtn al" data-mail-find ${f.busy ? 'disabled' : ''}>${esc(T('mail.continue'))}</button>` : `<button class="pbtn al" data-mail-save ${f.busy ? 'disabled' : ''}>${esc(T('mail.done'))}</button>`
+    const again = f.step === 'manual' && !f.id ? `<button class="pbtn" data-mail-find ${f.busy ? 'disabled' : ''}>${esc(T('mail.findAgain'))}</button>` : ''
+    const remove = f.id ? `<button class="pbtn" data-mail-remove="${esc(f.id)}">${esc(T(mailDelete === f.id ? 'mail.removeSure' : 'mail.remove'))}</button>` : ''
+    return `${sec(T(f.id ? 'mail.change' : 'mail.add'))}<div class="grp mail-form">${head}${found}${manual}${busy}${result}
+      <div class="r">${remove}<span class="grow"></span><button class="pbtn" data-mail-cancel>${esc(T('mail.cancel'))}</button>${again}${go}</div></div>`
+  }
+
+  // Mail: each account with its inbox and its switch, setting one up, and
+  // what may come later.
+  function pageMail() {
+    const accounts = snap.mail || []
+    const rows = accounts
+      .map(a => {
+        const note = mailNote(a)
+        return `<div class="r"><span class="wi" style="color:${a.on ? '#5e9bff' : COLOR.idle}">${Widgets.icon('mail')}</span><div class="grow"><div class="ellip">${esc(a.address)}</div><div class="d${note.bad ? ' bad' : ''}">${esc(note.text)}</div></div><button class="pbtn sm" data-mail-edit="${esc(a.id)}">${esc(T('pl.settings'))}</button>${sw('mail:' + a.id, a.on)}</div>`
+      })
+      .join('')
+    const add = mailForm ? '' : `<div class="r"><button class="pbtn wide" data-mail-add>${esc(T('mail.add'))}</button></div>`
+    return `${sec(T('mail.section'))}<div class="grp"><div class="note">${esc(T('mail.note'))}</div>${rows}${add}</div>
+      ${mailForm ? mailFormHTML() : ''}
+      ${sec(T('mail.later'))}<div class="grp later"><div class="note">${esc(T('mail.laterNote'))}</div></div>`
   }
 
   function pageConnect() {
@@ -406,7 +483,7 @@
       </div>`
   }
 
-  const PAGES = { now: pageNow, pets: pagePets, look: pageLook, alerts: pageAlerts, widgets: pageWidgets, connect: pageConnect }
+  const PAGES = { now: pageNow, pets: pagePets, look: pageLook, alerts: pageAlerts, widgets: pageWidgets, mail: pageMail, connect: pageConnect }
 
   // --- Drawing --------------------------------------------------------------------------------
 
@@ -437,7 +514,7 @@
   // caret back.
   function drawBody(reset) {
     const box = body.contains(document.activeElement) && document.activeElement.matches('input') ? document.activeElement : null
-    const which = box && (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : null)
+    const which = box && (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : box.dataset.mf ? `[data-mf="${box.dataset.mf}"]` : null)
     const caret = which ? box.selectionStart : null
     const changed = setHTML(body, PAGES[tab]())
     if (reset) body.scrollTop = 0
@@ -591,6 +668,9 @@
     const s = snap?.settings
     if (!s) return
 
+    // Mail: an account set up, changed, kept, removed; its server looked
+    // up, or typed in.
+    if (handleMail(at)) return
     const toggle = at('[data-sw]')
     if (toggle && !toggle.disabled) {
       const key = toggle.dataset.sw
@@ -690,7 +770,124 @@
     if (site) return window.pet.settings.openSite(site.dataset.site)
   })
 
+  // A mail account's setup: what was clicked, if it was its. True when it was.
+  function handleMail(at) {
+    const turned = at('[data-sw^="mail:"]')
+    if (turned) {
+      const a = (snap.mail || []).find(x => x.id === turned.dataset.sw.slice(5))
+      if (a) window.pet.mail.switch(a.id, !a.on).then(got => ((snap = got), draw()))
+      return true
+    }
+    if (at('[data-mail-add]')) {
+      mailForm = { id: '', address: '', password: '', host: '', port: 993, security: 'ssl', username: '', step: 'start', busy: '', result: null }
+      mailDelete = ''
+      redrawMail('[data-mf="address"]')
+      return true
+    }
+    const change = at('[data-mail-edit]')
+    if (change) {
+      const a = (snap.mail || []).find(x => x.id === change.dataset.mailEdit)
+      if (a) mailForm = { id: a.id, address: a.address, password: '', host: a.host, port: a.port, security: a.security, username: a.username, step: 'manual', busy: '', result: null }
+      mailDelete = ''
+      redrawMail('[data-mf="password"]')
+      return true
+    }
+    if (at('[data-mail-cancel]')) {
+      mailForm = null
+      redrawMail()
+      return true
+    }
+    if (at('[data-mail-manual]')) {
+      mailForm.step = 'manual'
+      redrawMail('[data-mf="host"]')
+      return true
+    }
+    if (at('[data-mail-find]')) {
+      findServer()
+      return true
+    }
+    if (at('[data-mail-save]')) {
+      saveAccount()
+      return true
+    }
+    const remove = at('[data-mail-remove]')
+    if (remove) {
+      const id = remove.dataset.mailRemove
+      if (mailDelete !== id) {
+        mailDelete = id
+        draw()
+        return true
+      }
+      mailDelete = ''
+      mailForm = null
+      window.pet.mail.remove(id).then(got => ((snap = got), draw(), relayout()))
+      return true
+    }
+    const security = at('[data-seg="mf.security"] > span')
+    if (security && mailForm) {
+      mailForm.security = security.dataset.value
+      // The usual port for the way, if the port was the other way's.
+      const usual = { ssl: 993, starttls: 143, plain: 143 }
+      if (['993', '143', ''].includes(String(mailForm.port))) mailForm.port = usual[mailForm.security]
+      draw()
+      return true
+    }
+    return false
+  }
+
+  function redrawMail(focus) {
+    draw()
+    relayout()
+    if (focus) requestAnimationFrame(() => body.querySelector(focus)?.focus())
+  }
+
+  // The server for the address, looked up as Thunderbird does; filled in
+  // when found, else the fields to fill.
+  async function findServer() {
+    const f = mailForm
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.address.trim())) {
+      f.result = { bad: true, text: T('mail.badAddress') }
+      return redrawMail('[data-mf="address"]')
+    }
+    f.busy = 'find'
+    f.result = null
+    redrawMail()
+    const got = await window.pet.mail.discover(f.address.trim())
+    if (mailForm !== f) return
+    f.busy = ''
+    if (got.ok && got.found) {
+      Object.assign(f, got.server, { step: 'found', source: got.source, notFound: false, oauth: false })
+    } else {
+      Object.assign(f, { step: 'manual', notFound: true, oauth: !!got.oauth, username: f.username || f.address.trim() })
+    }
+    redrawMail(f.step === 'manual' ? '[data-mf="host"]' : null)
+  }
+
+  // Signed in once, then kept; or what went wrong.
+  async function saveAccount() {
+    const f = mailForm
+    if (!f.id && !f.password) {
+      f.result = { bad: true, text: T('mail.err.password') }
+      return redrawMail('[data-mf="password"]')
+    }
+    f.busy = 'save'
+    f.result = null
+    redrawMail()
+    const account = { id: f.id, address: f.address.trim(), host: String(f.host).trim(), port: Number(f.port), security: f.security, username: String(f.username || f.address).trim() }
+    const got = await window.pet.mail.save(account, f.password)
+    if (mailForm !== f) return
+    f.busy = ''
+    if (got.ok) {
+      mailForm = null
+      snap = got.snapshot
+    } else {
+      f.result = { bad: true, text: mailError(got.error, account) }
+    }
+    redrawMail()
+  }
+
   layer.addEventListener('input', e => {
+    if (e.target.dataset.mf && mailForm) mailForm[e.target.dataset.mf] = e.target.value
     if (e.target.id === 's-ref') typedRef = e.target.value
     if (e.target.dataset.field) drafts[e.target.dataset.field] = e.target.value
   })
@@ -723,6 +920,7 @@
     if (e.target.matches?.('input, textarea')) {
       if (e.key === 'Enter' && e.target.id === 's-ref') layer.querySelector('[data-fetch]')?.click()
       if (e.key === 'Enter' && e.target.dataset.field) e.target.blur()
+      if (e.key === 'Enter' && e.target.dataset.mf) layer.querySelector('[data-mail-find]:not([disabled]), [data-mail-save]:not([disabled])')?.click()
       return
     }
     const i = TABS.indexOf(tab)

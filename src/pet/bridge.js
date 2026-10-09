@@ -82,6 +82,14 @@
       gallery: (page, sort) => invoke('settings_gallery', { page, sort }),
       openSite: place => invoke('settings_open_site', { place }),
     },
+    // Mail accounts (mail.rs): the server for an address, an account kept
+    // once it signs in, one removed, one on or off.
+    mail: {
+      discover: address => invoke('mail_discover', { address: String(address || '') }),
+      save: (account, password) => invoke('mail_save', { account, password: String(password || '') }),
+      remove: id => invoke('mail_remove', { id: String(id) }),
+      switch: (id, on) => invoke('mail_switch', { id: String(id), on: on === true }),
+    },
   }
 
   // --- Mouse moves while clicks pass through ------------------------------------

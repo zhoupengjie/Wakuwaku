@@ -40,6 +40,7 @@ mod fullscreen;
 mod i18n;
 mod island;
 mod jump;
+mod mail;
 mod notify;
 mod pet;
 mod pointer;
@@ -87,6 +88,8 @@ pub struct Shared {
     pub today: Mutex<widgets::Today>,
     // The plugins she runs for you (scripts.rs).
     pub scripts: Mutex<scripts::Runner>,
+    // The mail accounts being watched (mail.rs).
+    pub mail: Mutex<mail::Runner>,
     screens: Mutex<screen::Screens>,
     // Out of sight: hidden from the tray, or another app is full screen.
     pub hidden: AtomicBool,
@@ -286,7 +289,7 @@ impl Shared {
 
     // The island opens for a widget, once: only in sight, when nudges are
     // allowed and the widget is on, and while no session needs you.
-    fn nudge_widget(&self, id: &str, words: &str) {
+    pub fn nudge_widget(&self, id: &str, words: &str) {
         if !self.is_visible() || self.setting("widgetNudge") == false || !self.is_widget_on(id) || self.pet.lock().unwrap().wants_you() {
             return;
         }
@@ -862,6 +865,10 @@ fn main() {
             settings::settings_fetch,
             settings::settings_gallery,
             settings::settings_open_site,
+            mail::mail_discover,
+            mail::mail_save,
+            mail::mail_remove,
+            mail::mail_switch,
         ])
         .on_menu_event(|app, event| tray::on_menu(&shared(app), event.id().as_ref()))
         .setup(move |app| {
@@ -894,6 +901,7 @@ fn main() {
                 asks: Mutex::new(asks::Asks::default()),
                 widgets: Mutex::new(widgets::Widgets::default()),
                 scripts: Mutex::new(scripts::Runner::default()),
+                mail: Mutex::new(mail::Runner::default()),
                 today: Mutex::new(today),
                 screens: Mutex::new(screen::read(app.handle())),
                 hidden: AtomicBool::new(false),
@@ -913,6 +921,8 @@ fn main() {
             island::apply_visibility(&sh);
             tray::create(&sh)?;
             server::serve(sh.clone(), listener);
+            // The mail accounts that are on, watched from the start.
+            mail::sync(&sh);
 
             // The mouse: click-through, her eyes, drags; for both windows.
             let pointer = sh.clone();
@@ -1051,6 +1061,7 @@ fn main() {
             if let tauri::RunEvent::Exit = event {
                 island::release_bar(&shared(app));
                 scripts::stop_all(&shared(app));
+                mail::stop_all(&shared(app));
             }
         });
 }

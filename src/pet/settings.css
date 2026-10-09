@@ -131,7 +131,7 @@
   top: 3px;
   bottom: 3px;
   left: 3px;
-  width: calc((100% - 6px) / 6);
+  width: calc((100% - 6px) / 7);
   border-radius: 13px;
   background: var(--g3);
   transition: transform 0.56s var(--spring);
@@ -474,6 +474,33 @@
 
 #island-settings .d.bad {
   color: #ffb340;
+}
+
+/* Setting a mail account up: label, box. */
+#island-settings .mail-form {
+  padding: 6px 14px 4px;
+}
+
+#island-settings .mail-form .r {
+  padding: 8px 0;
+  gap: 8px;
+}
+
+#island-settings .mail-form .note {
+  padding: 2px 0 6px 106px;
+}
+
+#island-settings .mail-form .fr .seg {
+  flex: none;
+}
+
+#island-settings .in:disabled {
+  opacity: 0.6;
+}
+
+/* What may come later: there, not yet usable. */
+#island-settings .grp.later {
+  opacity: 0.7;
 }
 
 #island-settings .cmd {

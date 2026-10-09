@@ -77,6 +77,7 @@ fn defaults() -> Map<String, Value> {
         "display": "pet",
         "out": false,
         "bubble": true,
+        "details": true,
         "walk": true,
         "look": true,
         "hold": "seen",

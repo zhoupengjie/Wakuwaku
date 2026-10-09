@@ -14,6 +14,7 @@ src/                      页面，Tauri 直接把整个文件夹打进 exe（ta
     settings.js           长在岛里的设置（五个页签）
     panel.js              确认面板：在岛里、在设置的横幅里，或在她头顶
     sprite.js             图集布局、16 个注视方向
+    status.js             把一个会话说成话：名字、当前这一步、任务清单进度、结果（气泡、岛、设置共用）
     style.css, settings.css
   shared/i18n.js          中英文（页面用；Rust 那边的几句在 src-tauri/src/i18n.rs）
 src-tauri/
@@ -32,8 +33,8 @@ src-tauri/
     notify.rs             系统通知（登记 AppUserModelId 后发 toast）
     tray.rs               托盘图标（随心情变脸）和菜单
     server.rs             127.0.0.1:47213 上的 HTTP 接口
-    state.rs              状态机：按会话记 mood，挑最需要你的那个显示
-    events.rs             hook 事件 → 消息
+    state.rs              状态机：按会话记 mood、名字、在跑的工具、任务清单、改过的文件、结果，挑最需要你的那个显示
+    events.rs             hook 事件 → 消息；会话名（session_title 或会话记录）、项目名（git 仓库名）
     data.rs               数据目录、设置读写、已下载的宠物
   icons/                  exe、窗口、托盘和通知的图标（npm 不需要：scripts/make-icons.js 用 ImageMagick 画）
   capabilities/           页面能用的 Tauri 权限：两个窗口都要列进去
@@ -87,16 +88,25 @@ cd .. && node --test "test/*.test.js"   # 页面的单元测试
 hook 事件在 `events.rs` 换算成消息，`/state` 也收这个格式：
 
 ```json
-{ "session": "…", "project": "wakuwaku", "mood": "working", "detail": "Bash", "event": "tool-done", "react": "failed", "say": { "key": "say.toolFailed", "vars": { "tool": "Bash" } } }
+{ "session": "…", "project": "wakuwaku", "mood": "working", "detail": "Bash", "event": "tool-start", "toolId": "toolu_…", "step": { "key": "step.run", "vars": { "what": "Run the tests" } } }
 ```
 
 | 字段 | 取值 |
 | --- | --- |
 | `session` / `project` | 会话 id、项目文件夹名；每个会话单独记状态 |
 | `mood` | `idle` / `working` / `waiting` / `done` / `review` / `error` |
-| `detail` | 工具名，或 `{ key, vars }`（按当前语言显示） |
-| `event` | `turn-start` / `tool-done` / `session-end` |
+| `detail` | 工具名，或 `{ key, vars }`（按当前语言显示；vars 里可以再套一层 `{ key, vars }`，比如「要批准：$ git push」） |
+| `event` | `turn-start` / `tool-start` / `tool-done` / `tool-failed` / `session-end` |
 | `react` / `say` | `wave` / `jump` / `failed`，在当前 mood 上播一次，期间气泡显示 `say` |
+| `title` / `task` | 会话名；你发的第一句话（只认 `source` 是用户的，少于 4 个字的「继续」「好的」不算）。有 title 就用 title |
+| `step` / `toolId` | 工具在做什么（`step.*`，`events.rs` 的 `step_of`）；`toolId` 把开始和结束配成对，子 agent 的工具也能对上 |
+| `todo` | 任务清单的变化：TodoWrite 给 `{ set }`，TaskCreate / TaskUpdate 给 `{ add }` / `{ update }` |
+| `file` | 刚改过的文件（这一轮改了几个文件） |
+| `reply` / `error` | Stop / StopFailure 的 `last_assistant_message` 摘前一两句；StopFailure 的 `error`（`error.*`）或 `error_details` |
+
+**会话名**：hook 自带的 `session_title`（只有 UserPromptSubmit、SessionStart 带，而且只是自定义标题：`/rename` 或桌面版起的名字）；没有时，在一轮开始和结束时读 `transcript_path` 末尾 256 KB 里最后一条 `custom-title`，没有再用 `ai-title`。**项目名**：从 `cwd` 往上找 `.git`，是目录就取它所在文件夹的名字；是文件（worktree）就按里面的 `gitdir: <仓库>/.git/worktrees/<名字>` 取仓库名；不在 git 里就用 `cwd` 的文件夹名。按 `cwd` 缓存。
+
+页面拿到的每个会话（`state.rs` 的 `view`）还有 `name`、`step`（只在干活时有，没有在跑的工具就是「思考中」）、`stepSince`、`todo`（`{ done, total, active }`）、`files`、`reply`（只在结束时有）、`error`。`payload` 里的 `list` 是所有会话，展开的岛用它列出别的会话。设置里的「显示具体内容」（`details`）关掉时，页面只显示项目、状态和工具名，和以前一样。
 
 显示哪个会话：等你确认 > 出错 > 改好了 > 做完 > 干活 > 空闲，同级取最新。做完、改好、出错默认一直保持，直到鼠标经过她（或离开灵动岛）；设置里可以改成 8 / 30 / 120 秒。干活和等你超过 15 分钟没有新事件就当作结束；做完的状态 2 小时没人看就回空闲，空闲会话 2 小时后被忘掉。
 

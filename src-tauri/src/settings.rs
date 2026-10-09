@@ -46,7 +46,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "lang" => matches!(v.as_str(), Some("auto" | "zh" | "en")),
         "pet" => v.as_str().is_some_and(|id| data::pets(&sh.dir).iter().any(|p| p.id == id)),
         "scale" => v.as_f64().is_some_and(|s| data::SCALES.iter().any(|(_, x)| (x - s).abs() < 1e-9)),
-        "bubble" | "walk" | "look" | "sound" | "dnd" | "hideInFullscreen" | "onboarded" | "out" => is_bool,
+        "bubble" | "details" | "walk" | "look" | "sound" | "dnd" | "hideInFullscreen" | "onboarded" | "out" => is_bool,
         "display" => matches!(v.as_str(), Some("pet" | "island")),
         "hold" => v.as_str() == Some("seen") || matches!(v.as_u64(), Some(8 | 30 | 120)),
         "promptWaitSec" => matches!(v.as_u64(), Some(30 | 60 | 120 | 290)),

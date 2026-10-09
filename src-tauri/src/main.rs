@@ -139,9 +139,9 @@ impl Shared {
 
     // Everything the pages draw from.
     pub fn payload(&self) -> Value {
-        let (mut now, second) = {
+        let (mut now, second, list) = {
             let pet = self.pet.lock().unwrap();
-            (pet.get(now_ms()), pet.second())
+            (pet.get(now_ms()), pet.second(), pet.list())
         };
         let settings = self.settings.lock().unwrap().clone();
         let id = settings.get("pet").and_then(Value::as_str).unwrap_or("");
@@ -157,6 +157,8 @@ impl Shared {
         now["spriteVersion"] = json!(sprite.map_or(2, |p| p.version));
         // The next session that wants something, for the island's second bubble.
         now["second"] = json!(second);
+        // Every session, the one shown first: the open island lists the others.
+        now["list"] = list;
         // The island risen only for the settings, and whether they are open:
         // then the island holds any prompt.
         now["islandTemp"] = json!(temp);

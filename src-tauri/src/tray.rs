@@ -126,7 +126,9 @@ pub fn refresh(sh: &Shared) {
     let now = sh.pet.lock().unwrap().get(now_ms());
     let mood = now["mood"].as_str().unwrap_or("idle").to_string();
     let lang = sh.lang();
-    let project = now["project"].as_str().unwrap_or("");
+    // Whose: the session's name, unless the specifics are kept off screen.
+    let name: String = now["name"].as_str().unwrap_or("").chars().take(40).collect();
+    let project = if name.is_empty() || sh.setting("details") == false { now["project"].as_str().unwrap_or("") } else { &name };
     let status = if sh.flag("dnd") {
         i18n::t(lang, "menu.dnd")
     } else if project.is_empty() {

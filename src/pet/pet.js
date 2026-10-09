@@ -28,8 +28,8 @@ const sprite = document.getElementById('pet')
 const bubble = document.getElementById('bubble')
 
 let lang = 'en'
-let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0 }
-let config = { scale: 0.55, bubble: true, walk: true, look: true, sound: false, dnd: false }
+let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
+let config = { scale: 0.55, bubble: true, details: true, walk: true, look: true, sound: false, dnd: false }
 let spriteUrl = null
 // 2: the 11-row sheet; 1: the older 9-row one, without the look-around rows.
 let spriteVersion = 2
@@ -131,29 +131,26 @@ function kick() {
 
 // --- Bubble -------------------------------------------------------------------
 
-function clock(ms) {
-  const s = Math.max(0, Math.floor(ms / 1000))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = String(s % 60).padStart(2, '0')
-  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
-}
-
-// The bubble's words: whose, what, for how long; and on a line of its own,
-// who else is busy (or '').
+// The bubble's words: where the session is and for how long; and on a line
+// of its own, another session that wants you, how this turn ended, or whose
+// this is (or '').
 function words() {
-  const parts = [t(lang, `mood.${now.mood}`)]
-  const detail = say(lang, now.detail)
-  if (detail) parts.push(detail)
-  if ((now.mood === 'working' || now.mood === 'waiting') && now.since) parts.push(clock(Date.now() - now.since))
-  if ((now.mood === 'done' || now.mood === 'review' || now.mood === 'error') && now.took) parts.push(t(lang, 'detail.took', { time: clock(now.took) }))
-  let main = parts.join(' · ')
-  // Several sessions: say whose this is, kept short so the status still shows.
-  if (now.project && now.sessions > 1) {
-    const project = now.project.length > 14 ? `${now.project.slice(0, 13)}…` : now.project
-    main = `${project}：${main}`
+  const detailed = config.details !== false
+  const time = Status.time(now)
+  const main = [Status.status(lang, now, { detailed }), time && (Status.isEnding(now) ? t(lang, 'detail.took', { time }) : time)].filter(Boolean).join(' · ')
+  const others = Status.othersOf(now.list, now).length || now.others || 0
+  const urgent = Status.urgentOf(now.list, now)
+  const name = Status.nameOf(now, detailed)
+  let more = ''
+  if (urgent) {
+    more = `${Status.nameOf(urgent, detailed)}：${Status.status(lang, urgent, { detailed, withClock: false })}`
+  } else if (detailed && Status.isEnding(now) && now.reply) {
+    more = now.reply
+  } else if (name && now.sessions > 1) {
+    more = [name, others > 0 ? t(lang, 'status.moreSessions', { n: others }) : ''].filter(Boolean).join(' · ')
+  } else if (others > 0) {
+    more = t(lang, 'detail.moreSessions', { n: others })
   }
-  const more = now.others > 0 ? t(lang, 'detail.moreSessions', { n: now.others }) : ''
   return { main, more }
 }
 
@@ -201,7 +198,7 @@ function render() {
   const { main, more } = words()
   sprite.title = [main, more].filter(Boolean).join('\n')
 
-  // The running clock in the bubble.
+  // The running clocks in the bubble: the turn's, and the step's.
   if (!reaction?.say && now.since && (now.mood === 'working' || now.mood === 'waiting')) {
     clockTimer = setInterval(() => fillBubble(words()), 1000)
   }

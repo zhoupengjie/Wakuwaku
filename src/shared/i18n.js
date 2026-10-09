@@ -31,6 +31,40 @@
       'island.review': '改好了',
       'island.error': '出错了',
 
+      // What a session is doing (events.rs step_of), how its turn ended (status.js)
+      'step.thinking': '思考中',
+      'step.thinkingFor': '思考了 {time}',
+      'step.for': '已跑 {time}',
+      'step.run': '{what}',
+      'step.command': '$ {what}',
+      'step.edit': '改 {file}',
+      'step.write': '写 {file}',
+      'step.read': '读 {file}',
+      'step.search': '搜 {what}',
+      'step.find': '找文件 {what}',
+      'step.fetch': '看网页 {what}',
+      'step.webSearch': '上网搜 {what}',
+      'step.agent': '子 agent：{what}',
+      'step.plan': '更新任务清单',
+      'step.skill': '用技能 {what}',
+      'step.mcp': '{server}：{tool}',
+      'step.tool': '{tool}',
+      'detail.approve': '要批准：{what}',
+      'status.reviewFile': '改好了 · 1 个文件',
+      'status.reviewFiles': '改好了 · {n} 个文件',
+      'status.error': '出错了：{why}',
+      'status.moreSessions': '还有 {n} 个',
+      'error.authentication_failed': '登录失效了',
+      'error.oauth_org_not_allowed': '组织不允许使用',
+      'error.account_on_hold': '账号被暂停了',
+      'error.billing_error': '额度或账单有问题',
+      'error.rate_limit': '用量到上限了',
+      'error.overloaded': '服务器太忙',
+      'error.invalid_request': '请求有问题',
+      'error.model_not_found': '找不到模型',
+      'error.server_error': '服务器出错',
+      'error.max_output_tokens': '回复太长被截断了',
+
       // The prompt panel
       'panel.needsApproval': '{tool} 需要你批准',
       'panel.allow': '允许',
@@ -201,6 +235,8 @@
       's.her': '她',
       's.bubble': '对话气泡',
       's.bubbleNote': '状态变化时冒一句话',
+      's.details': '显示具体内容',
+      's.detailsNote': '会话名、命令、文件和 Claude 的回复；共享屏幕时可以关掉',
       's.walk': '闲逛',
       's.walkNote': '空闲时在屏幕底边走来走去',
       's.look': '目光跟随鼠标',
@@ -246,6 +282,39 @@
       'island.done': 'Done',
       'island.review': 'Review',
       'island.error': 'Error',
+
+      'step.thinking': 'Thinking',
+      'step.thinkingFor': 'Thinking for {time}',
+      'step.for': 'for {time}',
+      'step.run': '{what}',
+      'step.command': '$ {what}',
+      'step.edit': 'Editing {file}',
+      'step.write': 'Writing {file}',
+      'step.read': 'Reading {file}',
+      'step.search': 'Searching {what}',
+      'step.find': 'Finding {what}',
+      'step.fetch': 'Reading {what}',
+      'step.webSearch': 'Searching the web for {what}',
+      'step.agent': 'Agent: {what}',
+      'step.plan': 'Updating the to-do list',
+      'step.skill': 'Using {what}',
+      'step.mcp': '{server}: {tool}',
+      'step.tool': '{tool}',
+      'detail.approve': 'Needs your OK: {what}',
+      'status.reviewFile': 'Changed 1 file',
+      'status.reviewFiles': 'Changed {n} files',
+      'status.error': 'Error: {why}',
+      'status.moreSessions': '{n} more',
+      'error.authentication_failed': 'Signed out',
+      'error.oauth_org_not_allowed': 'Not allowed for this organization',
+      'error.account_on_hold': 'Account on hold',
+      'error.billing_error': 'A billing problem',
+      'error.rate_limit': 'Usage limit reached',
+      'error.overloaded': 'Servers overloaded',
+      'error.invalid_request': 'Invalid request',
+      'error.model_not_found': 'Model not found',
+      'error.server_error': 'Server error',
+      'error.max_output_tokens': 'Reply cut off: too long',
 
       'panel.needsApproval': '{tool} needs your approval',
       'panel.allow': 'Allow',
@@ -412,6 +481,8 @@
       's.her': 'Her',
       's.bubble': 'Speech bubble',
       's.bubbleNote': 'A line when something changes',
+      's.details': 'Show the specifics',
+      's.detailsNote': "Session names, commands, files and Claude's replies; turn off when sharing your screen",
       's.walk': 'Stroll',
       's.walkNote': 'Walks along the bottom of the screen when idle',
       's.look': 'Eyes follow the mouse',
@@ -447,11 +518,14 @@
     return text.replace(/\{(\w+)\}/g, (all, name) => (vars && vars[name] !== undefined ? String(vars[name]) : all))
   }
 
-  // A text the pet shows: a plain string, or { key, vars } to translate.
+  // A text the pet shows: a plain string, or { key, vars } to translate,
+  // whose vars may be texts of the same kind.
   function render(lang, text) {
     if (!text) return ''
     if (typeof text === 'string') return text
-    return t(lang, text.key, text.vars)
+    const vars = {}
+    for (const [name, value] of Object.entries(text.vars || {})) vars[name] = value && typeof value === 'object' ? render(lang, value) : value
+    return t(lang, text.key, vars)
   }
 
   const api = { STRINGS, LANGS, detectLang, t, render }

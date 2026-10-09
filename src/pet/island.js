@@ -1,12 +1,14 @@
 // The island: a black pill at the top of the screen, after the iPhone's
 // Dynamic Island, and her home. It springs between three shapes:
-//   compact   her round portrait, a few words and the clock
+//   compact   her round portrait, where the session is (or whose ending it
+//             is) and the clock
 //   expanded  hovered, or for a few seconds when something happens (a turn
 //             done, an error, she needs you): her whole self standing in it,
-//             playing that mood, beside what is going on
+//             playing that mood, beside the session's name, where it is, how
+//             its turn ended, and a line for each other session
 //   ask       a prompt from Claude, answered right in the island, her beside it
 // Other sessions busy too: a small "+N" by the clock, in the colour of the
-// next one that wants something.
+// next one that wants something. The words come from status.js.
 //
 // She is one element throughout: the portrait grows into her whole self and
 // shrinks back, so she is never in two places at once.
@@ -29,6 +31,7 @@
 ;(function () {
   const { t, render: say } = window.I18n
   const { CELL_W, CELL_H, CLIPS, MOOD_CLIP } = window.Sprite
+  const Status = window.Status
 
   // Brighter than the pet's colours: these sit on black.
   const COLOR = {
@@ -43,9 +46,11 @@
   // What she plays when the island opens by itself for each mood.
   const NUDGE_CLIP = { waiting: 'waiting', done: 'waving', review: 'review', error: 'failed' }
 
-  // How long the island stays open when something happens, and how long the
-  // pointer has to rest on it before it opens (so passing by does not).
+  // How long the island stays open when something happens (longer with
+  // Claude's words to read), and how long the pointer has to rest on it
+  // before it opens (so passing by does not).
   const NUDGE_MS = 3600
+  const NUDGE_READ_MS = 6500
   const HOVER_OPEN_MS = 140
   const HOVER_CLOSE_MS = 260
   // Matches the springs in style.css: the window waits this long to shrink.
@@ -68,6 +73,10 @@
   const BODY_W = Math.round(CELL_W * BODY_SCALE)
   const BODY_H = Math.round(CELL_H * BODY_SCALE)
   const OPEN_H = BODY_H + 12
+  // The open island's widest, with her and without; the other sessions it lists.
+  const OPEN_MAX_W = 480
+  const OPEN_BARE_MAX_W = 440
+  const OTHERS_SHOWN = 3
   // Pulling her out: the room the window takes for it, how far the drop
   // stretches before it pinches off, and the drop's size.
   const PULL_ROOM = { width: 760, height: 440 }
@@ -93,7 +102,7 @@
   const stage = document.getElementById('stage')
 
   let lang = 'en'
-  let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0 }
+  let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
   let config = {}
   let spriteUrl = null
   let second = null
@@ -133,21 +142,11 @@
   // The settings open in the island (settings.js).
   const isSetting = () => isOn() && !!window.Settings?.isOpen()
   const isNudging = () => !!nudge && Date.now() < nudge.until
-
-  function clock(ms) {
-    const s = Math.max(0, Math.floor(ms / 1000))
-    const h = Math.floor(s / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    const sec = String(s % 60).padStart(2, '0')
-    return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
-  }
+  // The specifics on screen (session names, commands, replies), unless turned off.
+  const isDetailed = () => config.details !== false
 
   // The clock: how long this turn has run, or how long the finished one took.
-  function time() {
-    if ((now.mood === 'working' || now.mood === 'waiting') && now.since) return clock(Date.now() - now.since)
-    if ((now.mood === 'done' || now.mood === 'review' || now.mood === 'error') && now.took) return clock(now.took)
-    return ''
-  }
+  const time = () => Status.time(now)
 
   function el(tag, cls, text) {
     const node = document.createElement(tag)
@@ -186,7 +185,7 @@
   // --- The shapes ---------------------------------------------------------------
 
   function fillCompact() {
-    const label = now.mood === 'idle' ? '' : [now.project, t(lang, `island.${now.mood}`)].filter(Boolean).join(' · ')
+    const label = Status.brief(lang, now, { detailed: isDetailed() })
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
     const more = now.others > 0 ? el('span', 'more', `+${now.others}`) : null
@@ -195,16 +194,53 @@
     compact.classList.toggle('bare', !label && !clockText.textContent && !more)
   }
 
+  // Whose it is (the session's name) with the clock, where it is, how the
+  // turn ended in Claude's words, the to-do list's progress, and a line for
+  // each other session. A hello (or something to fix) takes the name's place.
   function fillExpanded() {
-    const title = (isNudging() && nudge.text) || t(lang, `mood.${now.mood}`)
-    const sub = [now.project, say(lang, now.detail)].filter(Boolean).join(' · ')
-    const more = now.others > 0 ? t(lang, 'detail.moreSessions', { n: now.others }) : ''
-    const lines = el('span', 'lines')
-    lines.append(el('span', 'title', title))
-    if (sub || more) lines.append(el('span', 'sub', [sub, more].filter(Boolean).join(' · ')))
+    const detailed = isDetailed()
+    const name = Status.nameOf(now, detailed)
+    const title = (isNudging() && nudge.text) || (detailed && name) || t(lang, `mood.${now.mood}`)
+    const sub = detailed
+      ? [Status.status(lang, now), name !== now.project ? now.project : '']
+      : [now.project, say(lang, now.detail)]
+    const others = Status.othersOf(now.list, now)
+
+    const head = el('span', 'head')
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
-    expanded.replaceChildren(...(isHome() ? [] : [stillHer(48)]), lines, clockText)
+    head.append(el('span', 'title', title), clockText)
+    const lines = el('span', 'lines')
+    lines.append(head)
+    if (sub.some(Boolean)) lines.append(el('span', 'sub', sub.filter(Boolean).join(' · ')))
+    if (detailed && Status.isEnding(now) && now.reply) lines.append(el('span', 'reply', now.reply))
+    // How far down the to-do list, and the item it is on.
+    if (detailed && now.todo?.total) {
+      const progress = el('span', 'progress')
+      const bar = el('span', 'bar')
+      const fill = el('i')
+      fill.style.cssText = `width:${Math.round((100 * now.todo.done) / now.todo.total)}%;background:${COLOR[now.mood]}`
+      bar.append(fill)
+      progress.append(bar)
+      if (now.todo.active) progress.append(el('span', 'item', now.todo.active))
+      lines.append(progress)
+    }
+    if (others.length) {
+      const list = el('span', 'others')
+      for (const x of others.slice(0, OTHERS_SHOWN)) {
+        const row = el('span', 'other')
+        const dot = el('i', 'dot')
+        dot.style.background = COLOR[x.mood] || COLOR.idle
+        const what = detailed ? Status.status(lang, x, { withClock: false }) : t(lang, `island.${x.mood}`)
+        const when = el('span', 'when', Status.time(x))
+        when.style.color = COLOR[x.mood] || COLOR.idle
+        row.append(dot, el('span', 'who', Status.nameOf(x, detailed)), el('span', 'what', what), when)
+        list.append(row)
+      }
+      if (others.length > OTHERS_SHOWN) list.append(el('span', 'other rest', t(lang, 'status.moreSessions', { n: others.length - OTHERS_SHOWN })))
+      lines.append(list)
+    }
+    expanded.replaceChildren(...(isHome() ? [] : [stillHer(48)]), lines)
   }
 
   // --- Her, in the island -----------------------------------------------------------
@@ -291,9 +327,10 @@
       }
     }
     if (name === 'expanded') {
+      // As tall as what it says, never shorter than her.
       return withHer
-        ? { width: Math.min(440, Math.max(320, expanded.offsetWidth)), height: OPEN_H }
-        : { width: Math.min(400, Math.max(300, expanded.offsetWidth)), height: 84 }
+        ? { width: Math.min(OPEN_MAX_W, Math.max(320, expanded.offsetWidth)), height: Math.max(OPEN_H, expanded.offsetHeight) }
+        : { width: Math.min(OPEN_BARE_MAX_W, Math.max(300, expanded.offsetWidth)), height: Math.max(84, expanded.offsetHeight) }
     }
     return { width: Math.max(MIN_W, compact.offsetWidth), height: 36 }
   }
@@ -325,20 +362,19 @@
     if (grows) setTimeout(grow, 40)
     else grow()
 
-    if (time()) {
-      clockTimer = setInterval(() => {
-        for (const c of island.querySelectorAll('.clock')) c.textContent = time()
-      }, 1000)
-    }
+    // The clocks run: the turn's, the step's, the other sessions'. Their words
+    // may grow (a step timed once it has run a while), so the shape follows.
+    const isTimed = time() || now.stepSince || Status.othersOf(now.list, now).some(x => Status.time(x))
+    if (isTimed && (view === 'compact' || view === 'expanded')) clockTimer = setInterval(update, 1000)
   }
 
-  function nudgeFor(clip, text) {
-    nudge = { until: Date.now() + NUDGE_MS, clip, text }
+  function nudgeFor(clip, text, ms = NUDGE_MS) {
+    nudge = { until: Date.now() + ms, clip, text }
     clearTimeout(nudgeTimer)
     nudgeTimer = setTimeout(() => {
       nudge = null
       update()
-    }, NUDGE_MS)
+    }, ms)
     update()
   }
 
@@ -645,8 +681,10 @@
     second = data.second || null
     islandTemp = data.islandTemp === true
     place()
-    // Something new that wants you, or is finished: the island opens for a moment.
-    if (isOn() && before !== now.mood && NUDGE_CLIP[now.mood]) nudgeFor(NUDGE_CLIP[now.mood], null)
+    // Something new that wants you, or is finished: the island opens for a
+    // moment, a longer one with Claude's words to read.
+    const isReading = isDetailed() && Status.isEnding(now) && !!now.reply
+    if (isOn() && before !== now.mood && NUDGE_CLIP[now.mood]) nudgeFor(NUDGE_CLIP[now.mood], null, isReading ? NUDGE_READ_MS : NUDGE_MS)
     else update()
   })
 

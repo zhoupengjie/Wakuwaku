@@ -20,8 +20,9 @@
     return
   }
 
-  const { t, render: say } = window.I18n
+  const { t } = window.I18n
   const { CLIPS } = window.Sprite
+  const Status = window.Status
 
   // The island's colours (on black), the same as island.js.
   const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
@@ -138,11 +139,18 @@
   function pageNow() {
     const s = snap.settings
     const sessions = snap.sessions || []
+    // Each session: its name, and where it is (or how its turn ended).
+    const detailed = s.details !== false
     const list = sessions.length
       ? sessions
           .map(x => {
-            const detail = say(lang, x.detail) || T(`mood.${x.mood}`)
-            return `<div class="r"><span class="dot" style="background:${COLOR[x.mood] || COLOR.idle}"></span><b class="proj ellip">${esc(x.project || '—')}</b><span class="d grow ellip">${esc(detail)}</span>${clockTag(x)}</div>`
+            const name = Status.nameOf(x, detailed)
+            const what = [
+              Status.status(lang, x, { detailed, withClock: false }),
+              detailed && x.name && x.project !== name ? x.project : '',
+              detailed && Status.isEnding(x) ? x.reply : '',
+            ].filter(Boolean)
+            return `<div class="r"><span class="dot" style="background:${COLOR[x.mood] || COLOR.idle}"></span><div class="grow"><div class="ellip">${esc(name || '—')}</div><div class="d ellip" title="${esc(what.join('\n'))}">${esc(what.join(' · '))}</div></div>${clockTag(x)}</div>`
           })
           .join('')
       : `<div class="note">${esc(T('home.noSessions'))}</div>`
@@ -201,6 +209,7 @@
       ${sec(T('s.her'))}<div class="grp">
         ${row(esc(T('menu.size')), '', seg('scale', SIZES.map(([name, scale]) => [scale, T(`menu.${name}`)]), s.scale))}
         ${row(esc(T('s.bubble')), esc(T('s.bubbleNote')), sw('bubble', s.bubble))}
+        ${row(esc(T('s.details')), esc(T('s.detailsNote')), sw('details', s.details !== false))}
         ${row(esc(T('s.walk')), esc(T('s.walkNote')), sw('walk', s.walk))}
         ${row(esc(T('s.look')), '', sw('look', s.look))}
       </div>
@@ -270,7 +279,7 @@
     const pet = snap.pets.find(p => p.id === snap.settings.pet)
     const title = now.mood === 'idle' ? T('s.headIdle', { name: pet ? pet.name : 'Wakuwaku' }) : T(HEAD_KEY[now.mood])
     const asks = (snap.asks || []).length
-    const sub = [now.project, asks ? T('s.asksWaiting', { n: asks }) : ''].filter(Boolean).join(' · ')
+    const sub = [Status.nameOf(now, snap.settings.details !== false), asks ? T('s.asksWaiting', { n: asks }) : ''].filter(Boolean).join(' · ')
     setHTML(
       head,
       `<div class="grow ellip"><span class="t">${esc(title)}</span>${sub ? ` <span class="s">· ${esc(sub)}</span>` : ''}</div>${clockTag(now)}<button class="x" data-close title="${esc(T('s.close'))}">✕</button>`,

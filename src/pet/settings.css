@@ -266,11 +266,6 @@
   font-size: 12px;
 }
 
-#island-settings .proj {
-  flex: none;
-  width: 96px;
-}
-
 #island-settings .in-use {
   flex: none;
   color: #34d27b;

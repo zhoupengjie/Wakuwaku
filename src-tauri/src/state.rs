@@ -1,10 +1,17 @@
 // What the pet is doing, from the messages the hooks bring (events.rs).
 // A message is
-//   { session?, project?, mood?, detail?, event?, react?, say? }
+//   { session?, project?, mood?, detail?, event?, react?, say?,
+//     title?, task?, step?, toolId?, todo?, file?, reply?, error? }
 //   mood     idle | working | waiting | done | review | error
 //   detail   a tool name, or { key, vars } to translate
-//   event    turn-start | tool-done | session-end
+//   event    turn-start | tool-start | tool-done | tool-failed | session-end
 //   react    wave | jump | failed: played once over the mood, `say` in the bubble
+//   title    the session's name; task   the person's words for the work
+//   step     what a starting tool does, { key, vars }; toolId pairs it with its end
+//   todo     { set: [{ text, active, status }] }, { add: { text, active } }
+//            or { update: { id, status?, text?, active? } }
+//   file     a file just edited
+//   reply    how the turn ended, in Claude's words; error   why it failed
 //
 // Each session keeps its own mood; the pet shows the one that most wants you.
 // Instead of callbacks and timers, calls return what happened (Outcome) and
@@ -21,6 +28,10 @@ const EDIT_TOOLS: [&str; 4] = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 pub const STALE_MS: u64 = 15 * 60 * 1000;
 // An ending nobody came to see, or a session gone quiet, after this.
 pub const FORGET_MS: u64 = 2 * 60 * 60 * 1000;
+// Never more than this many of a list kept for a session.
+const MAX_KEPT: usize = 100;
+// How long a name goes into a notification.
+const WHOSE_MAX: usize = 30;
 
 fn priority(mood: &str) -> u8 {
     match mood {
@@ -50,8 +61,23 @@ pub struct Outcome {
     pub changed: bool,
     // { react, say } to play once.
     pub react: Option<Value>,
-    // Moods just arrived that want a chime (and a notification): (mood, project).
+    // Moods just arrived that want a chime (and a notification): (mood,
+    // whose: the session's name, or its project).
     pub alerts: Vec<(String, String)>,
+}
+
+// A tool running now, and what it does.
+struct Running {
+    id: String,
+    step: Value,
+    since: u64,
+}
+
+struct Todo {
+    id: String,
+    text: String,
+    active: String,
+    status: String,
 }
 
 struct Session {
@@ -64,14 +90,66 @@ struct Session {
     took: Option<u64>,
     has_edited: bool,
     settle_at: Option<u64>,
+    title: String,
+    task: String,
+    // The tools running, the latest last (subagents run theirs inside one).
+    running: Vec<Running>,
+    // When the last tool ended, or the turn began: thinking since then.
+    thought_at: Option<u64>,
+    todos: Vec<Todo>,
+    // To-dos ever added one by one: Claude Code numbers them from 1.
+    added: u32,
+    // The files this turn edited.
+    files: Vec<String>,
+    reply: String,
+    error: Value,
+}
+
+impl Session {
+    fn new(id: String, now: u64) -> Self {
+        Session {
+            id,
+            project: String::new(),
+            mood: "idle".into(),
+            detail: Value::String(String::new()),
+            at: now,
+            since: None,
+            took: None,
+            has_edited: false,
+            settle_at: None,
+            title: String::new(),
+            task: String::new(),
+            running: Vec::new(),
+            thought_at: None,
+            todos: Vec::new(),
+            added: 0,
+            files: Vec::new(),
+            reply: String::new(),
+            error: Value::Null,
+        }
+    }
+
+    // What it is called: Claude Code's name for it, or the person's words.
+    fn name(&self) -> &str {
+        if self.title.is_empty() { &self.task } else { &self.title }
+    }
+
+    fn whose(&self) -> String {
+        clip(if self.name().is_empty() { &self.project } else { self.name() }, WHOSE_MAX)
+    }
 }
 
 fn clip(s: &str, max: usize) -> String {
     s.chars().take(max).collect()
 }
 
-// A text a message may carry: a string, or { key, vars } of strings.
+// A text a message may carry: a string, or { key, vars } whose vars are
+// strings, numbers, or (once) a text of the same kind.
 fn text(value: Option<&Value>, max: usize) -> Value {
+    text_in(value, max, true)
+}
+
+fn text_in(value: Option<&Value>, max: usize, may_nest: bool) -> Value {
     match value {
         Some(Value::String(s)) => Value::String(clip(s, max)),
         Some(Value::Object(o)) if o.get("key").is_some_and(Value::is_string) => {
@@ -81,6 +159,7 @@ fn text(value: Option<&Value>, max: usize) -> Value {
                     match v {
                         Value::String(s) => vars.insert(k.clone(), Value::String(clip(s, max))),
                         Value::Number(n) => vars.insert(k.clone(), Value::String(clip(&n.to_string(), max))),
+                        Value::Object(_) if may_nest => vars.insert(k.clone(), text_in(Some(v), max, false)),
                         _ => None,
                     };
                 }
@@ -93,6 +172,77 @@ fn text(value: Option<&Value>, max: usize) -> Value {
 
 fn str_field(msg: &Value, key: &str, max: usize) -> String {
     msg.get(key).and_then(Value::as_str).map(|s| clip(s, max)).unwrap_or_default()
+}
+
+// A change to the session's to-do list.
+fn apply_todo(s: &mut Session, todo: &Value) {
+    let item = |v: &Value, id: String| Todo {
+        id,
+        text: str_field(v, "text", 80),
+        active: str_field(v, "active", 80),
+        status: str_field(v, "status", 20),
+    };
+    if let Some(items) = todo.get("set").and_then(Value::as_array) {
+        s.todos = items.iter().take(MAX_KEPT).enumerate().map(|(n, v)| item(v, (n + 1).to_string())).collect();
+    } else if let Some(v) = todo.get("add") {
+        s.added += 1;
+        let mut t = item(v, s.added.to_string());
+        if t.status.is_empty() {
+            t.status = "pending".into();
+        }
+        if s.todos.len() < MAX_KEPT {
+            s.todos.push(t);
+        }
+    } else if let Some(v) = todo.get("update") {
+        let id = str_field(v, "id", 40);
+        let status = str_field(v, "status", 20);
+        if status == "deleted" {
+            s.todos.retain(|t| t.id != id);
+        } else if let Some(t) = s.todos.iter_mut().find(|t| t.id == id) {
+            for (key, field) in [("status", &mut t.status), ("text", &mut t.text), ("active", &mut t.active)] {
+                let value = str_field(v, key, 80);
+                if !value.is_empty() {
+                    *field = value;
+                }
+            }
+        }
+    }
+}
+
+// How far down its to-do list a session is, and what it is on.
+fn todo_view(s: &Session) -> Value {
+    if s.todos.is_empty() {
+        return Value::Null;
+    }
+    let done = s.todos.iter().filter(|t| t.status == "completed").count();
+    let active = s.todos.iter().find(|t| t.status == "in_progress").map_or("", |t| if t.active.is_empty() { &t.text } else { &t.active });
+    json!({ "done": done, "total": s.todos.len(), "active": active })
+}
+
+// A session as the pages draw it.
+fn view(s: &Session) -> Value {
+    let is_working = s.mood == "working";
+    let (step, step_since) = match s.running.last() {
+        _ if !is_working => (Value::Null, None),
+        Some(r) => (r.step.clone(), Some(r.since)),
+        None => (json!({ "key": "step.thinking", "vars": {} }), s.thought_at),
+    };
+    json!({
+        "id": s.id,
+        "project": s.project,
+        "mood": s.mood,
+        "detail": s.detail,
+        "at": s.at,
+        "since": s.since,
+        "took": s.took,
+        "name": s.name(),
+        "step": step,
+        "stepSince": step_since,
+        "todo": todo_view(s),
+        "files": s.files.len(),
+        "reply": if is_ending(&s.mood) { s.reply.as_str() } else { "" },
+        "error": if s.mood == "error" { s.error.clone() } else { Value::Null },
+    })
 }
 
 #[derive(Default)]
@@ -115,6 +265,7 @@ fn set(s: &mut Session, mood: &str, detail: Value, now: u64, hold: Hold) -> Opti
             s.took = Some(now - since);
         }
         s.since = None;
+        s.running.clear();
     }
 
     if let (true, Hold::Secs(secs)) = (is_ending(mood), hold) {
@@ -142,26 +293,67 @@ impl Pet {
             if event == "session-end" {
                 self.sessions.remove(&id);
             } else {
-                let s = self.sessions.entry(id.clone()).or_insert_with(|| Session {
-                    id,
-                    project: String::new(),
-                    mood: "idle".into(),
-                    detail: Value::String(String::new()),
-                    at: now,
-                    since: None,
-                    took: None,
-                    has_edited: false,
-                    settle_at: None,
-                });
+                let s = self.sessions.entry(id.clone()).or_insert_with(|| Session::new(id, now));
                 if !project.is_empty() {
                     s.project = project;
+                }
+                for (key, field) in [("title", &mut s.title), ("task", &mut s.task)] {
+                    let value = str_field(msg, key, 80);
+                    if !value.is_empty() {
+                        *field = value;
+                    }
                 }
                 if event == "turn-start" {
                     s.has_edited = false;
                     s.since = None;
+                    s.running.clear();
+                    s.thought_at = Some(now);
+                    s.files.clear();
+                    s.reply.clear();
+                    s.error = Value::Null;
+                    // A list all done belongs to the work before.
+                    if s.todos.iter().all(|t| t.status == "completed") {
+                        s.todos.clear();
+                    }
+                }
+                let tool_id = str_field(msg, "toolId", 200);
+                match event {
+                    "tool-start" => {
+                        s.running.retain(|r| tool_id.is_empty() || r.id != tool_id);
+                        if s.running.len() >= MAX_KEPT {
+                            s.running.remove(0);
+                        }
+                        s.running.push(Running { id: tool_id, step: text(msg.get("step"), 80), since: now });
+                    }
+                    "tool-done" | "tool-failed" => {
+                        // Its own start, or with no id to pair them by, the latest.
+                        match s.running.iter().rposition(|r| r.id == tool_id) {
+                            Some(at) => drop(s.running.remove(at)),
+                            None if tool_id.is_empty() => drop(s.running.pop()),
+                            None => {}
+                        }
+                        if s.running.is_empty() {
+                            s.thought_at = Some(now);
+                        }
+                    }
+                    _ => {}
                 }
                 if event == "tool-done" && detail.as_str().is_some_and(|d| EDIT_TOOLS.contains(&d)) {
                     s.has_edited = true;
+                }
+                let file = str_field(msg, "file", 400);
+                if !file.is_empty() && !s.files.contains(&file) && s.files.len() < MAX_KEPT {
+                    s.files.push(file);
+                }
+                if let Some(todo) = msg.get("todo") {
+                    apply_todo(s, todo);
+                }
+                let reply = str_field(msg, "reply", 160);
+                if !reply.is_empty() {
+                    s.reply = reply;
+                }
+                if msg.get("error").is_some() {
+                    s.error = text(msg.get("error"), 80);
                 }
                 let mut mood = mood;
                 if mood == "done" && s.has_edited {
@@ -170,8 +362,8 @@ impl Pet {
                 if mood == "done" || mood == "review" {
                     s.has_edited = false;
                 }
-                let project = s.project.clone();
-                out.alerts.extend(set(s, mood, detail, now, hold).map(|m| (m, project)));
+                let whose = s.whose();
+                out.alerts.extend(set(s, mood, detail, now, hold).map(|m| (m, whose)));
             }
             out.changed = true;
         }
@@ -229,30 +421,22 @@ impl Pet {
                 _ => Some(s),
             });
         let Some(top) = top else {
-            return json!({ "mood": "idle", "detail": "", "project": "", "since": null, "took": null, "at": now, "others": 0, "sessions": 0 });
+            let mut empty = view(&Session::new(String::new(), now));
+            empty["others"] = json!(0);
+            empty["sessions"] = json!(0);
+            return empty;
         };
-        let others = self.sessions.values().filter(|s| s.id != top.id && s.mood != "idle").count();
-        json!({
-            "mood": top.mood,
-            "detail": top.detail,
-            "project": top.project,
-            "since": top.since,
-            "took": top.took,
-            "at": top.at,
-            "others": others,
-            "sessions": self.sessions.len(),
-        })
+        let mut now = view(top);
+        now["others"] = json!(self.sessions.values().filter(|s| s.id != top.id && s.mood != "idle").count());
+        now["sessions"] = json!(self.sessions.len());
+        now
     }
 
-    // Every session, the one that most wants you first, for the settings.
+    // Every session, the one that most wants you first.
     pub fn list(&self) -> Value {
         let mut all: Vec<&Session> = self.sessions.values().filter(|s| !s.id.is_empty() || s.mood != "idle").collect();
         all.sort_by(|a, b| priority(&b.mood).cmp(&priority(&a.mood)).then(b.at.cmp(&a.at)));
-        Value::Array(
-            all.iter()
-                .map(|s| json!({ "id": s.id, "project": s.project, "mood": s.mood, "detail": s.detail, "at": s.at, "since": s.since, "took": s.took }))
-                .collect(),
-        )
+        Value::Array(all.into_iter().map(view).collect())
     }
 
     // The mood of the next session that wants something, after the one shown:
@@ -333,5 +517,76 @@ mod tests {
         assert_eq!(pet.get(FORGET_MS + 2)["sessions"], 1);
         pet.apply(&msg(json!({ "session": "a", "mood": "idle", "event": "session-end" })), 1, Hold::Seen);
         assert_eq!(pet.get(FORGET_MS + 3)["sessions"], 0);
+    }
+
+    #[test]
+    fn the_step_is_the_latest_tool_running_or_thinking() {
+        let mut pet = Pet::default();
+        let edit = json!({ "key": "step.edit", "vars": { "file": "a.rs" } });
+        let agent = json!({ "key": "step.agent", "vars": { "what": "Explore" } });
+        pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "turn-start" })), 10, Hold::Seen);
+        assert_eq!(pet.get(11)["step"]["key"], "step.thinking");
+        assert_eq!(pet.get(11)["stepSince"], 10);
+        pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "tool-start", "toolId": "1", "step": agent })), 20, Hold::Seen);
+        pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "tool-start", "toolId": "2", "step": edit })), 30, Hold::Seen);
+        assert_eq!((pet.get(31)["step"].clone(), pet.get(31)["stepSince"].clone()), (edit, json!(30)));
+        // The subagent's tool ends: back to the agent, not to thinking.
+        pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "tool-done", "toolId": "2", "detail": "Edit", "file": "D:/p/a.rs" })), 40, Hold::Seen);
+        assert_eq!(pet.get(41)["step"], agent);
+        pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "tool-failed", "toolId": "1" })), 50, Hold::Seen);
+        assert_eq!((pet.get(51)["step"]["key"].clone(), pet.get(51)["stepSince"].clone()), (json!("step.thinking"), json!(50)));
+        assert_eq!(pet.get(51)["files"], 1);
+        // Waiting or done, there is no step.
+        pet.apply(&msg(json!({ "session": "a", "mood": "done", "reply": "改好了。" })), 60, Hold::Seen);
+        let now = pet.get(61);
+        assert_eq!((now["mood"].as_str(), now["step"].is_null(), now["reply"].as_str(), now["files"].as_u64()), (Some("review"), true, Some("改好了。"), Some(1)));
+        // The next turn starts clean.
+        pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "turn-start" })), 70, Hold::Seen);
+        assert_eq!((pet.get(71)["files"].as_u64(), pet.get(71)["reply"].as_str()), (Some(0), Some("")));
+    }
+
+    #[test]
+    fn a_session_is_named_by_its_title_or_else_its_task() {
+        let mut pet = Pet::default();
+        let out = pet.apply(&msg(json!({ "session": "a", "project": "pet", "mood": "waiting" })), 1, Hold::Seen).unwrap();
+        assert_eq!(out.alerts, vec![("waiting".to_string(), "pet".to_string())]);
+        pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "turn-start", "task": "修复岛" })), 2, Hold::Seen);
+        assert_eq!(pet.get(3)["name"], "修复岛");
+        pet.apply(&msg(json!({ "session": "a", "mood": "done", "title": "岛的设置" })), 4, Hold::Seen);
+        assert_eq!(pet.get(5)["name"], "岛的设置");
+        // A new task does not take over a title.
+        pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "turn-start", "task": "下一件事" })), 6, Hold::Seen);
+        assert_eq!(pet.list()[0]["name"], "岛的设置");
+    }
+
+    #[test]
+    fn to_do_lists_count_what_is_done() {
+        let mut pet = Pet::default();
+        let todo = |pet: &mut Pet, todo: Value| {
+            pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "tool-start", "todo": todo })), 1, Hold::Seen);
+            pet.get(2)["todo"].clone()
+        };
+        let list = json!({ "set": [
+            { "text": "A", "active": "Doing A", "status": "completed" },
+            { "text": "B", "active": "Doing B", "status": "in_progress" },
+            { "text": "C", "active": "", "status": "pending" },
+        ] });
+        assert_eq!(todo(&mut pet, list), json!({ "done": 1, "total": 3, "active": "Doing B" }));
+
+        let mut pet = Pet::default();
+        todo(&mut pet, json!({ "add": { "text": "A", "active": "" } }));
+        todo(&mut pet, json!({ "add": { "text": "B", "active": "Doing B" } }));
+        todo(&mut pet, json!({ "update": { "id": "1", "status": "completed" } }));
+        assert_eq!(todo(&mut pet, json!({ "update": { "id": "2", "status": "in_progress" } })), json!({ "done": 1, "total": 2, "active": "Doing B" }));
+        assert_eq!(todo(&mut pet, json!({ "update": { "id": "2", "status": "deleted" } })), json!({ "done": 1, "total": 1, "active": "" }));
+        // All done, and a new turn: the list is gone.
+        pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "turn-start" })), 3, Hold::Seen);
+        assert!(pet.get(4)["todo"].is_null());
+    }
+
+    #[test]
+    fn texts_may_hold_one_text_inside() {
+        let nested = json!({ "key": "detail.approve", "vars": { "what": { "key": "step.command", "vars": { "what": "git push", "deeper": { "key": "x" } } } } });
+        assert_eq!(text(Some(&nested), 80), json!({ "key": "detail.approve", "vars": { "what": { "key": "step.command", "vars": { "what": "git push" } } } }));
     }
 }

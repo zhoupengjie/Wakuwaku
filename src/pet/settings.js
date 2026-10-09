@@ -1,7 +1,7 @@
 // The settings, grown out of the island: one click on it opens them (and only
 // then does the island take the keyboard); Esc, a click outside, ✕ or the head
 // close them. Five pages:
-//   now       the sessions, and four quick switches
+//   now       the sessions (a click on one goes to its window), and four quick switches
 //   pets      the pets downloaded, a download by link or id, the gallery
 //   look      pet or island, size, bubble, strolls, eyes, language
 //   alerts    how long endings stay, notifications, sound, prompts, quiet
@@ -151,7 +151,10 @@
               detailed && x.name && x.project !== name ? x.project : '',
               detailed && Status.isEnding(x) ? x.reply : '',
             ].filter(Boolean)
-            return `<div class="r"><span class="dot" style="background:${COLOR[x.mood] || COLOR.idle}"></span><div class="grow"><div class="ellip">${esc(name || '—')}</div><div class="d ellip" title="${esc(what.join('\n'))}">${esc(what.join(' · '))}</div></div>${clockTag(x)}</div>`
+            // One with a window to go to: a click on it goes there.
+            const jump = x.jump ? ` data-jump="${esc(x.id)}"` : ''
+            const tip = [...what, x.jump ? T('jump.hint') : ''].filter(Boolean).join('\n')
+            return `<div class="r${x.jump ? ' jumps' : ''}"${jump} title="${esc(tip)}"><span class="dot" style="background:${COLOR[x.mood] || COLOR.idle}"></span><div class="grow"><div class="ellip">${esc(name || '—')}</div><div class="d ellip">${esc(what.join(' · '))}</div></div>${clockTag(x)}</div>`
           })
           .join('')
       : `<div class="note">${esc(T('home.noSessions'))}</div>`
@@ -473,6 +476,13 @@
     if (at('[data-close]')) return close('click')
     const tabButton = at('[data-tab]')
     if (tabButton) return setTab(tabButton.dataset.tab)
+    // A session: to its window (the settings close as it comes to the front).
+    const session = at('[data-jump]')
+    if (session) {
+      return window.pet.jump(session.dataset.jump).then(went => {
+        if (!went) session.querySelector('.d').textContent = T('jump.notFound')
+      })
+    }
     const s = snap?.settings
     if (!s) return
 

@@ -16,6 +16,7 @@
 //            or { update: { id, status?, text?, active? } }
 //   file     a file just edited
 //   reply    how the turn ended, in Claude's words; error   why it failed
+//   chain    the processes it runs in, [[pid, started], ...] (jump.rs)
 //
 // Each session keeps its own mood; the pet shows the one that most wants you.
 // Instead of callbacks and timers, calls return what happened (Outcome) and
@@ -23,6 +24,8 @@
 use std::collections::HashMap;
 
 use serde_json::{json, Map, Value};
+
+use crate::jump;
 
 const MOODS: [&str; 6] = ["idle", "working", "waiting", "done", "review", "error"];
 const REACTS: [&str; 3] = ["wave", "jump", "failed"];
@@ -111,6 +114,8 @@ struct Session {
     reply: String,
     error: Value,
     agent: String,
+    // The processes it runs in, for going to its window.
+    chain: jump::Chain,
     // The turn under way, and the last few that ended (Codex).
     turn: String,
     ended_turns: Vec<String>,
@@ -138,6 +143,7 @@ impl Session {
             reply: String::new(),
             error: Value::Null,
             agent: String::new(),
+            chain: Vec::new(),
             turn: String::new(),
             ended_turns: Vec::new(),
         }
@@ -245,6 +251,8 @@ fn view(s: &Session) -> Value {
         "id": s.id,
         "project": s.project,
         "agent": s.agent,
+        // A window to go to when clicked.
+        "jump": !s.chain.is_empty(),
         "mood": s.mood,
         "detail": s.detail,
         "at": s.at,
@@ -313,6 +321,10 @@ impl Pet {
                 let s = self.sessions.entry(id.clone()).or_insert_with(|| Session::new(id, now));
                 if !project.is_empty() {
                     s.project = project;
+                }
+                let chain = jump::chain_from_json(msg.get("chain"));
+                if !chain.is_empty() {
+                    s.chain = chain;
                 }
                 if !agent.is_empty() {
                     s.agent = agent;
@@ -485,6 +497,18 @@ impl Pet {
         let mut busy: Vec<&Session> = self.sessions.values().filter(|s| s.mood != "idle").collect();
         busy.sort_by(|a, b| priority(&b.mood).cmp(&priority(&a.mood)).then(b.at.cmp(&a.at)));
         busy.get(1).map(|s| s.mood.clone())
+    }
+
+    // Whether a session already knows where it runs.
+    pub fn has_chain(&self, id: &str) -> bool {
+        self.sessions.get(id).is_some_and(|s| !s.chain.is_empty())
+    }
+
+    // Where to go for a session: its chain, and the words its window's
+    // title may hold (its name, its project).
+    pub fn jump_target(&self, id: &str) -> Option<(jump::Chain, Vec<String>)> {
+        let s = self.sessions.get(id).filter(|s| !s.chain.is_empty())?;
+        Some((s.chain.clone(), vec![s.title.clone(), s.task.clone(), s.project.clone()]))
     }
 
     pub fn mood(&self, now: u64) -> String {
@@ -676,5 +700,19 @@ mod tests {
         // The next turn works as ever.
         pet.apply(&codex("t4", json!({ "mood": "working", "event": "turn-start" })), 30, Hold::Seen);
         assert_eq!(pet.get(31)["mood"], "working");
+    }
+
+    #[test]
+    fn a_session_keeps_where_it_runs() {
+        let mut pet = Pet::default();
+        pet.apply(&msg(json!({ "session": "a", "mood": "working", "project": "pet", "chain": [[10, 5], [8, 3]] })), 1, Hold::Seen);
+        assert!(pet.has_chain("a"));
+        assert_eq!(pet.get(2)["jump"], true);
+        // A message without one keeps it.
+        pet.apply(&msg(json!({ "session": "a", "mood": "done", "title": "岛" })), 3, Hold::Seen);
+        assert_eq!(pet.jump_target("a"), Some((vec![(10, 5), (8, 3)], vec!["岛".into(), String::new(), "pet".into()])));
+        pet.apply(&msg(json!({ "session": "b", "mood": "working" })), 4, Hold::Seen);
+        assert!(!pet.has_chain("b") && pet.jump_target("b").is_none());
+        assert_eq!(pet.list().as_array().unwrap().iter().find(|s| s["id"] == "b").unwrap()["jump"], false);
     }
 }

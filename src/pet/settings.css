@@ -257,6 +257,16 @@
   padding: 10px 14px;
 }
 
+/* A session with a window to go to. */
+#island-settings .r.jumps {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+#island-settings .r.jumps:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
 #island-settings .r + .r {
   border-top: 1px solid #262628;
 }

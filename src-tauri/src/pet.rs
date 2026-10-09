@@ -28,6 +28,8 @@ const CELL_H: f64 = 208.0;
 const LOOK_FAR: f64 = 900.0;
 // Two clicks on her this close together are a double-click.
 const DOUBLE_MS: u64 = 500;
+// How long a click on her still goes to the session she showed as the pointer came.
+const CLICK_GOES_MS: u64 = 60_000;
 // Flying back into the island, from wherever she is.
 const FLY_MS: f64 = 380.0;
 
@@ -57,6 +59,9 @@ pub struct Win {
     walking: bool,
     flying: bool,
     last_click: Option<Instant>,
+    // The session she was showing when the pointer came over her (seeing it
+    // sends it to rest), and when: a click on her goes to its window.
+    click_goes: Option<(String, Instant)>,
     // Watching the button while the pointer is on her (see poll).
     watching: bool,
     was_down: bool,
@@ -519,6 +524,16 @@ pub fn hover(sh: &Shared, is_over: bool) {
         w.ct.set_over(is_over, held, passive)
     };
     set_ignore(sh, ignore);
+    if is_over {
+        let shown = {
+            let now = sh.pet.lock().unwrap().get(now_ms());
+            let id = now["id"].as_str().unwrap_or("");
+            (now["mood"] != "idle" && now["jump"] == true && !id.is_empty()).then(|| id.to_string())
+        };
+        if let Some(id) = shown {
+            sh.win.lock().unwrap().click_goes = Some((id, Instant::now()));
+        }
+    }
     // The pointer on her: you have seen what she had to say.
     if is_over && sh.pet.lock().unwrap().seen(now_ms(), sh.hold()) {
         sh.redraw();
@@ -545,7 +560,8 @@ pub fn drag_start(sh: &Shared) {
 }
 
 // Let go: back into the island if she is close enough to it, else she lands
-// where she is, kept on screen. A click makes her jump; two, see double_click.
+// where she is, kept on screen. A click makes her jump, and goes to the
+// window of the session she shows; two, see double_click.
 pub fn let_go(sh: &Arc<Shared>) {
     let scale = scale(sh);
     let (drag, is_double, her) = {
@@ -577,6 +593,28 @@ pub fn let_go(sh: &Arc<Shared>) {
     // A click: a jump. Carried out of the island: she lands with one.
     if !drag.moved || drag.carried {
         sh.apply(&json!({ "react": "jump" }));
+    }
+    // A click, and no second one after it: to the window of the session she
+    // was showing (jump.rs).
+    if !drag.moved && !drag.carried {
+        let sh = sh.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(DOUBLE_MS + 20));
+            let goes = {
+                let mut w = sh.win.lock().unwrap();
+                let is_single = w.last_click.is_some_and(|t| t.elapsed() >= Duration::from_millis(DOUBLE_MS));
+                match w.click_goes.take() {
+                    Some((id, at)) if is_single && at.elapsed() < Duration::from_millis(CLICK_GOES_MS) => Some(id),
+                    other => {
+                        w.click_goes = other;
+                        None
+                    }
+                }
+            };
+            if let Some(id) = goes {
+                crate::jump_to(&sh, &id);
+            }
+        });
     }
 }
 

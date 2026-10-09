@@ -15,6 +15,7 @@
 //   connection.rs  the plugin, hooks in settings.json and Codex's hooks.json, start at login
 //   fetch.rs       pets from codex-pets.net
 //   fullscreen.rs, focus.rs, notify.rs   bits of Windows
+//   jump.rs        to a session's window, when you click the session
 //   tray.rs        the tray icon and the menu
 //   server.rs      the port the hooks report to
 //   state.rs       per-session moods; events.rs (Claude Code) and
@@ -32,6 +33,7 @@ mod focus;
 mod fullscreen;
 mod i18n;
 mod island;
+mod jump;
 mod notify;
 mod pet;
 mod pointer;
@@ -537,6 +539,26 @@ async fn debug_result(app: AppHandle, id: u64, value: Value) {
     }
 }
 
+// A session clicked (in the island, the settings, the panel): to its window.
+// False when there is nowhere to go.
+#[tauri::command]
+async fn session_jump(app: AppHandle, id: String) -> bool {
+    let sh = shared(&app);
+    tauri::async_runtime::spawn_blocking(move || jump_to(&sh, &id)).await.unwrap_or(false)
+}
+
+// To a session's window (jump.rs), by what the pet knows of it. Blocking: it
+// looks through the processes and windows.
+pub fn jump_to(sh: &Shared, id: &str) -> bool {
+    let target = sh.pet.lock().unwrap().jump_target(id);
+    let went = target.is_some_and(|(chain, hints)| {
+        let hints: Vec<&str> = hints.iter().map(String::as_str).collect();
+        jump::go(id, &chain, &hints)
+    });
+    sh.log(&format!("jump to {id}: {}", if went { "there" } else { "nowhere to go" }));
+    went
+}
+
 #[tauri::command]
 async fn pet_log(app: AppHandle, window: WebviewWindow, line: String) {
     shared(&app).log(&format!("{} page: {line}", window.label()));
@@ -670,7 +692,12 @@ fn ensure_running(port: u16) {
 // for the model. SessionStart starts her when she is not up. Whatever
 // happens, leave with 0, so Codex never shows a failed hook.
 fn codex_hook(port: u16) {
-    let Some(event) = read_event() else { return };
+    let Some(mut event) = read_event() else { return };
+    // Where the Codex session runs (the processes above this one), for going
+    // to its window from the pet (jump.rs).
+    if let Some(fields) = event.as_object_mut() {
+        fields.insert(jump::CODEX_CHAIN.into(), jump::chain_json(&jump::hook_chain()));
+    }
     let name = event["hook_event_name"].as_str().unwrap_or("").to_string();
     let is_prompt = name == "PermissionRequest";
     // A prompt waits for the person, just under the hook's own timeout.
@@ -733,6 +760,7 @@ fn main() {
             island_drop,
             debug_result,
             pet_log,
+            session_jump,
             settings::settings_get,
             settings::settings_set,
             settings::settings_open,

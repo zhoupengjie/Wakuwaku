@@ -5,7 +5,8 @@
 //   expanded  hovered, or for a few seconds when something happens (a turn
 //             done, an error, she needs you): her whole self standing in it,
 //             playing that mood, beside the session's name, where it is, how
-//             its turn ended, and a line for each other session
+//             its turn ended, and a line for each other session; a click on
+//             a session goes to its window (jump.rs)
 //   ask       a prompt from Claude, answered right in the island, her beside it
 // Other sessions busy too: a small "+N" by the clock, in the colour of the
 // next one that wants something. The words come from status.js.
@@ -131,6 +132,9 @@
   let isReaching = false
   let isAbsorbing = false
   let retractTimer
+  // The session a press in the open island landed on: the clocks redraw it
+  // every second, so the release may come down on its redrawn self.
+  let pressed = { id: '', at: 0 }
 
   const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
   // Risen only for the settings (she is the pet on her own): it goes once they close.
@@ -210,10 +214,12 @@
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
     head.append(el('span', 'title', title), clockText)
-    const lines = el('span', 'lines')
-    lines.append(head)
-    if (sub.some(Boolean)) lines.append(el('span', 'sub', sub.filter(Boolean).join(' · ')))
-    if (detailed && Status.isEnding(now) && now.reply) lines.append(el('span', 'reply', now.reply))
+    // The session shown, all of it one place to click.
+    const me = el('span', 'me')
+    canJump(me, now)
+    me.append(head)
+    if (sub.some(Boolean)) me.append(el('span', 'sub', sub.filter(Boolean).join(' · ')))
+    if (detailed && Status.isEnding(now) && now.reply) me.append(el('span', 'reply', now.reply))
     // How far down the to-do list, and the item it is on.
     if (detailed && now.todo?.total) {
       const progress = el('span', 'progress')
@@ -223,12 +229,15 @@
       bar.append(fill)
       progress.append(bar)
       if (now.todo.active) progress.append(el('span', 'item', now.todo.active))
-      lines.append(progress)
+      me.append(progress)
     }
+    const lines = el('span', 'lines')
+    lines.append(me)
     if (others.length) {
       const list = el('span', 'others')
       for (const x of others.slice(0, OTHERS_SHOWN)) {
         const row = el('span', 'other')
+        canJump(row, x)
         const dot = el('i', 'dot')
         dot.style.background = COLOR[x.mood] || COLOR.idle
         const what = detailed ? Status.status(lang, x, { withClock: false }) : t(lang, `island.${x.mood}`)
@@ -241,6 +250,20 @@
       lines.append(list)
     }
     expanded.replaceChildren(...(isHome() ? [] : [stillHer(48)]), lines)
+  }
+
+  // A session with a window to go to: clicking it there goes there.
+  function canJump(node, session) {
+    if (!session.jump || !session.id) return
+    node.dataset.jump = session.id
+    node.title = t(lang, 'jump.hint')
+  }
+
+  // To a session's window; when it has none any more, the island says so.
+  function jumpTo(id) {
+    window.pet.jump(id).then(went => {
+      if (!went) nudgeFor(MOOD_CLIP[now.mood], t(lang, 'jump.notFound'), 2200)
+    })
   }
 
   // --- Her, in the island -----------------------------------------------------------
@@ -715,12 +738,21 @@
     })
     // One click opens the settings (no double-click to wait for), except on a
     // prompt and its buttons, in the settings themselves, or on her (her
-    // press may be a pull; pullUp decides).
+    // press may be a pull; pullUp decides). In the open island, a click on a
+    // session goes to its window instead.
     target.addEventListener('click', e => {
       // A click in the settings (✕, the head) may just have closed them: not a click to open.
       if (isSetting() || window.Settings?.layer?.contains(e.target) || Date.now() - pulledAt < 500) return
       if (view === 'ask' || panel.contains(e.target) || her.contains(e.target)) return
+      // The press, if the clocks redrew the session between it and the release.
+      const id = view === 'expanded' && (e.target.closest('[data-jump]')?.dataset.jump || (Date.now() - pressed.at < 1000 && pressed.id))
+      pressed = { id: '', at: 0 }
+      if (id) return jumpTo(id)
       window.pet.openSettings()
+    })
+    target.addEventListener('pointerdown', e => {
+      const session = e.button === 0 && view === 'expanded' && e.target.closest('[data-jump]')
+      pressed = { id: session ? session.dataset.jump : '', at: Date.now() }
     })
     target.addEventListener('contextmenu', e => {
       if (e.target.matches('input')) return

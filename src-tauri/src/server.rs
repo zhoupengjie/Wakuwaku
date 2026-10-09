@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 use tauri::Manager;
 use tiny_http::{Header, Request, Response, Server};
 
-use crate::{events, events_codex, island, now_ms, pet, Responder, Shared};
+use crate::{events, events_codex, island, jump, now_ms, pet, Responder, Shared};
 
 // Hook events carry whole files (an Edit's PostToolUse has the file before
 // the edit), so this is generous.
@@ -48,6 +48,25 @@ fn read_json(req: &mut Request) -> Option<Value> {
     serde_json::from_slice(&bytes).ok()
 }
 
+// The process chain of the session an event comes from, looked up when the
+// session has none yet or a turn begins (it may have been resumed in another
+// process): Codex's hook command brings its own; for Claude Code, it is the
+// process on the other end of this connection.
+fn chain_for(sh: &Shared, req: &Request, event: &Value, is_codex: bool) -> Option<jump::Chain> {
+    if is_codex {
+        let chain = jump::chain_from_json(event.get(jump::CODEX_CHAIN));
+        return (!chain.is_empty()).then_some(chain);
+    }
+    let session = event.get("session_id").and_then(Value::as_str).unwrap_or("");
+    let is_turn = matches!(event["hook_event_name"].as_str(), Some("UserPromptSubmit" | "SessionStart"));
+    if session.is_empty() || !(is_turn || !sh.pet.lock().unwrap().has_chain(session)) {
+        return None;
+    }
+    let client = jump::client_of(req.remote_addr()?.port(), sh.port)?;
+    let chain = jump::chain_of(client);
+    (!chain.is_empty()).then_some(chain)
+}
+
 fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool) {
     let path = req.url().split('?').next().unwrap_or("").to_string();
     let method = req.method().as_str().to_string();
@@ -61,7 +80,11 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool) {
                 sh.codex_seen.store(now_ms(), std::sync::atomic::Ordering::SeqCst);
             }
             let msg = if is_codex { events_codex::to_message(&event) } else { events::to_message(&event) };
-            if let Some(msg) = msg {
+            if let Some(mut msg) = msg {
+                // Where the session runs, for going to its window (jump.rs).
+                if let Some(chain) = chain_for(sh, &req, &event, is_codex) {
+                    msg["chain"] = jump::chain_json(&chain);
+                }
                 sh.apply(&msg);
             }
             // A prompt holds the answer until the person picks on the pet, the

@@ -67,6 +67,8 @@
     onBlur: on('island:blur'),
     openSettings: tab => send('settings_open', { tab: tab || null }),
     settingsClosed: () => send('settings_closed'),
+    // To a session's window; true when there was one to go to.
+    jump: id => invoke('session_jump', { id: String(id || '') }).catch(() => false),
     settings: {
       get: () => invoke('settings_get'),
       set: patch => invoke('settings_set', { patch }),

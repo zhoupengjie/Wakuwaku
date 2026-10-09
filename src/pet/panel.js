@@ -81,7 +81,12 @@
   }
 
   const answer = choice => window.pet.answer(shownId, choice)
-  const dismiss = () => window.pet.dismiss(shownId)
+  // To the terminal: the prompt is its again, and its window comes to the front.
+  const dismiss = () => {
+    const session = asks.find(a => a.id === shownId)?.session
+    window.pet.dismiss(shownId)
+    if (session) window.pet.jump(session)
+  }
 
   function header(title, ask) {
     return el(

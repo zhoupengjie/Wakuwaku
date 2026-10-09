@@ -30,6 +30,7 @@ src-tauri/
     fetch.rs              codex-pets.net：解析地址、下载宠物、图库
     fullscreen.rs         别的程序是否全屏（user32）
     focus.rs              前台窗口：设置拿走键盘前记下，收起时还回去
+    jump.rs               点会话就到它的窗口：会话的进程链、找窗口、叫到前面、桌面版的会话链接
     notify.rs             系统通知（登记 AppUserModelId 后发 toast）
     tray.rs               托盘图标（随心情变脸）和菜单
     server.rs             127.0.0.1:47213 上的 HTTP 接口
@@ -158,6 +159,23 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 面板什么时候收起：同一个调用的 `PostToolUse` / `PostToolUseFailure` 到达（比较输入时忽略 `answers`）；同一个会话的 `UserPromptSubmit`、`Stop`、`StopFailure`、`SessionEnd`、`Interrupt`（Codex）；同一个 agent 又来了新请求；等待时间到。
 
 面板在哪：灵动岛模式在岛里（岛的 `ask` 形状）；设置开着时是设置里的横幅（`panel.js` 的 `holdsPanel()` 看 `settingsOpen`）；只有宠物时在她头顶，她的窗口向上、向两侧长大，她本人不动（`pet.rs` 的 `set_panel`，挡在屏幕边上时用 `pet:shift` 把她挪回原位）。
+
+## 点会话就到它的窗口
+
+在哪里点：展开的岛里的会话（`island.js` 的 `data-jump`）、设置「现在」页的会话行、确认面板的「去终端处理」（先交还给终端再跳）、单击她（等 500ms 确认不是双击；去的是指针刚移到她身上时她显示的那个会话，因为移上去就算看过，结束的状态会变回空闲）。都走 `session_jump` 命令 → `main.rs` 的 `jump_to` → `jump.rs` 的 `go`。
+
+**会话在哪个进程里**（`state.rs` 的 `chain`，消息里是 `[[pid, 启动时间], …]`）：
+- Claude Code 的 HTTP hook：`server.rs` 用请求的对端端口查 TCP 表（`GetExtendedTcpTable`），连接另一头就是 Claude Code 自己的进程，再往上找父进程。会话还没有进程链、或者一轮开始（UserPromptSubmit / SessionStart，可能换了进程续上）时才查。
+- Codex：hook 命令（`--wakuwaku-codex-hook`）在自己里面算好父进程链，跳过它自己和 Codex 用来跑它的 shell，从 Codex 开始，放进事件的 `wakuwaku_chain` 字段。
+- 每个进程都记启动时间，父进程不会比子进程晚启动：对不上的就是 pid 被复用了。走到 explorer、sihost、svchost 这类所有程序都在其下的进程就停。
+
+**找哪个窗口**：会话自己的进程（链的第一个）还在才算（桌面版的会话除外，见下）。然后沿着链往上，第一个还活着（启动时间对得上）、有可见顶层窗口的进程：它自己的窗口，或者它下面 conhost / OpenConsole 的控制台窗口；有好几个（VS Code、Windows Terminal 都是一个进程好几个窗口）时取标题里有会话名、你的话或项目名的那个，没有就取最前面的。都没有时问控制台：`AttachConsole` → `GetConsoleWindow`，可见就是它，不可见就取它的根拥有者（Windows Terminal 托管从外面启动的控制台时，拥有那个隐藏的伪控制台窗口）。程序自己有控制台时（debug 版）不做这一步，否则要先放掉自己的。
+
+**叫到前面**：最小化的先还原，再 `SetForegroundWindow`；不给（前台锁）就 `AttachThreadInput` 借一下前台窗口的输入再试。以 `SetForegroundWindow` 的返回值为准：真正切过去可能晚一点。
+
+**Claude 桌面版**：它跑的每个会话在 `claude-code-sessions/**/local_<id>.json` 里有一条记录，开头有 `cliSessionId`（就是 hook 的 `session_id`）。安装版（MSIX）的在 `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\`，否则在 `%APPDATA%\Claude\`。找到了就打开 `claude://code/continue?session=local_<id>`，桌面版会切到那个会话；同时把它的窗口叫到前面，不管会话的进程还在不在。
+
+**测试**：debug 版有控制台，测不到控制台那一步；用 `cargo rustc --bin wakuwaku -- -C link-args=/SUBSYSTEM:WINDOWS -C link-args=/ENTRY:mainCRTStartup` 编一个没有控制台的 debug 版（放到单独的 `CARGO_TARGET_DIR`，`RUSTFLAGS` 会连 proc-macro 一起改坏）。发事件的进程要一直开着（就像 Claude Code 自己），用 `pwsh -NoExit -Command Invoke-RestMethod …`，不能用发完就退出的 curl。
 
 ## 点击穿透
 

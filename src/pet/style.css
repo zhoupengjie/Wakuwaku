@@ -535,6 +535,33 @@ body {
   gap: 3px;
 }
 
+/* The session shown: its name and clock, where it is, its reply, its list. */
+#island-expanded .me {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+/* A session with a window to go to: a soft light under the pointer. The
+   margin keeps its words where they were. */
+#island-expanded [data-jump] {
+  margin: -3px -8px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+#island-expanded [data-jump]:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#island-expanded .other[data-jump] {
+  margin: -1px -8px;
+  padding: 1px 8px;
+}
+
 /* The name, and the clock beside it. */
 #island-expanded .head {
   display: flex;

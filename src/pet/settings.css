@@ -694,6 +694,35 @@
   cursor: default;
 }
 
+#island-settings .mi.on::after {
+  content: ' ✓';
+  color: #34d27b;
+}
+
+/* How a letter goes to an agent: a model or an effort, picked from the menu. */
+#island-settings .agent-conf .seg {
+  flex: none;
+}
+
+#island-settings .pick {
+  flex: none;
+  max-width: 130px;
+  overflow: hidden;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--g2);
+  color: var(--fg);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#island-settings .pick:hover {
+  background: var(--g3);
+}
+
 #island-settings .mi-sep {
   height: 1px;
   margin: 4px 6px;

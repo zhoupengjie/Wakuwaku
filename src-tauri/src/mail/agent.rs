@@ -16,8 +16,10 @@
 // the letter is someone else's words: what it asks for is to be told, not
 // done. The background run gets the letter (and its small text attachments)
 // on stdin, so it needs no tool to read them; it may only read anyway
-// (Claude: Read, Glob, Grep; Codex: its read-only sandbox), and it ends with
-// her if she ends first.
+// (Claude: --restricted, Read, Glob, Grep, asking nobody; Codex: its
+// read-only sandbox), and it ends with her if she ends first. A session
+// may do as much as the Mail page says for that agent (read only, ask
+// first, or as the person has it), with the model and effort set there.
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -109,8 +111,7 @@ fn find(name: &str) -> Option<PathBuf> {
 pub fn available() -> Value {
     static SEEN: Mutex<Option<(Instant, Value)>> = Mutex::new(None);
     let mut seen = SEEN.lock().unwrap();
-    if let Some((at, v)) = seen.as_ref().filter(|(at, _)| at.elapsed() < Duration::from_secs(10)) {
-        let _ = at;
+    if let Some((_, v)) = seen.as_ref().filter(|(at, _)| at.elapsed() < Duration::from_secs(10)) {
         return v.clone();
     }
     let v = json!({ "claude": find("claude").is_some(), "codex": find("codex").is_some() });
@@ -300,18 +301,190 @@ fn hidden(command: &mut Command) {
 #[cfg(not(windows))]
 fn hidden(_command: &mut Command) {}
 
+// --- How much it may do, and with which model ---------------------------------------------
+
+// How a letter goes to an agent, as set on the Mail page ("mailAgentConf":
+// { claude: {…}, codex: {…} }): for a session, how much it may do and a
+// model and effort; for a summary, a model and effort (a summary only ever
+// reads). An empty model or effort is the agent's own setting.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+enum Access {
+    // Only read: no commands, no web, files only in the mail folder.
+    #[default]
+    Read,
+    // Anything, each step asked first.
+    Ask,
+    // As the person has it set up.
+    Mine,
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+struct Conf {
+    access: Access,
+    model: String,
+    effort: String,
+    sum_model: String,
+    sum_effort: String,
+}
+
+const CONF_KEYS: [&str; 5] = ["access", "model", "effort", "sumModel", "sumEffort"];
+
+// A model or effort that goes on a command line as it is: claude-opus-5-5[1m],
+// gpt-5.6-luna, high.
+fn is_word(s: &str) -> bool {
+    s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '[' | ']'))
+}
+
+// What the page may set (settings.rs asks).
+pub fn is_conf_ok(v: &Value) -> bool {
+    v.as_object().is_some_and(|all| {
+        all.iter().all(|(agent, c)| {
+            Agent::parse(agent).is_some()
+                && c.as_object().is_some_and(|c| {
+                    c.iter().all(|(k, v)| match k.as_str() {
+                        "access" => matches!(v.as_str(), Some("read" | "ask" | "mine")),
+                        k if CONF_KEYS.contains(&k) => v.as_str().is_some_and(is_word),
+                        _ => false,
+                    })
+                })
+        })
+    })
+}
+
+fn conf_of(all: &Value, agent: Agent) -> Conf {
+    let c = &all[agent.id()];
+    let word = |k: &str| c[k].as_str().filter(|v| is_word(v)).unwrap_or("").to_string();
+    let access = match c["access"].as_str() {
+        Some("ask") => Access::Ask,
+        Some("mine") => Access::Mine,
+        _ => Access::Read,
+    };
+    Conf { access, model: word("model"), effort: word("effort"), sum_model: word("sumModel"), sum_effort: word("sumEffort") }
+}
+
+// The model and effort in Claude Code's own settings: what --restricted
+// would leave out, so they go on its command line instead.
+fn claude_own() -> (String, String) {
+    let file = crate::connection::claude_settings_file();
+    let settings: Value = std::fs::read(file).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null);
+    let word = |v: &Value| v.as_str().filter(|s| is_word(s)).unwrap_or("").to_string();
+    (word(&settings["model"]), word(&settings["effortLevel"]))
+}
+
+fn model_args(agent: Agent, model: &str, effort: &str) -> Vec<String> {
+    let mut args = Vec::new();
+    match agent {
+        Agent::Claude => {
+            if !model.is_empty() {
+                args.extend(["--model".into(), model.into()]);
+            }
+            if !effort.is_empty() {
+                args.extend(["--effort".into(), effort.into()]);
+            }
+        }
+        Agent::Codex => {
+            if !model.is_empty() {
+                args.extend(["-m".into(), model.into()]);
+            }
+            // Read as TOML, else as the plain word it is: no quotes to get through a terminal.
+            if !effort.is_empty() {
+                args.extend(["-c".into(), format!("model_reasoning_effort={effort}")]);
+            }
+        }
+    }
+    args
+}
+
+// What a session starts with, before its prompt. Claude, only reading, is
+// --restricted (no commands, no web, files in its folders only), which
+// leaves out the person's settings: so her hooks come along by --settings
+// (the island still sees it) and so do their model and effort.
+fn session_args(agent: Agent, conf: &Conf, hooks: &Path, own: (String, String)) -> Vec<String> {
+    let mut args: Vec<String> = match (agent, conf.access) {
+        (Agent::Claude, Access::Read) => vec!["--restricted".into(), "--settings".into(), hooks.to_string_lossy().into_owned()],
+        (Agent::Claude, Access::Ask) => vec!["--permission-mode".into(), "manual".into()],
+        (Agent::Codex, Access::Read) => ["--sandbox", "read-only", "--ask-for-approval", "on-request"].map(String::from).to_vec(),
+        (Agent::Codex, Access::Ask) => ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"].map(String::from).to_vec(),
+        (_, Access::Mine) => Vec::new(),
+    };
+    let restricted = agent == Agent::Claude && conf.access == Access::Read;
+    let model = if conf.model.is_empty() && restricted { own.0 } else { conf.model.clone() };
+    let effort = if conf.effort.is_empty() && restricted { own.1 } else { conf.effort.clone() };
+    args.extend(model_args(agent, &model, &effort));
+    args
+}
+
+// What a summary in the background runs with, before its prompt: only
+// reading, asking nobody (there is nobody to ask).
+fn summary_args(agent: Agent, conf: &Conf, hooks: &Path, own: (String, String), cwd: &Path, summary: &Path) -> Vec<String> {
+    let path = |p: &Path| p.to_string_lossy().into_owned();
+    let mut args: Vec<String> = match agent {
+        Agent::Claude => ["-p", "--output-format", "text", "--restricted", "--settings", &path(hooks), "--permission-mode", "dontAsk", "--allowedTools", "Read", "Glob", "Grep"].map(String::from).to_vec(),
+        Agent::Codex => ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral", "-C", &path(cwd), "-o", &path(summary)].map(String::from).to_vec(),
+    };
+    let model = if conf.sum_model.is_empty() && agent == Agent::Claude { own.0 } else { conf.sum_model.clone() };
+    let effort = if conf.sum_effort.is_empty() && agent == Agent::Claude { own.1 } else { conf.sum_effort.clone() };
+    args.extend(model_args(agent, &model, &effort));
+    args
+}
+
+// Her hooks as a Claude Code settings file, for a session that leaves the
+// person's settings out: <data>/mail/.wakuwaku-hooks.json.
+fn hooks_file(sh: &Shared) -> PathBuf {
+    let file = home(sh).join(".wakuwaku-hooks.json");
+    let hooks = crate::connection::install(&json!({}), sh.port, false);
+    let _ = std::fs::create_dir_all(home(sh));
+    let _ = std::fs::write(&file, serde_json::to_string_pretty(&hooks).unwrap_or_default());
+    file
+}
+
+// The models each agent can be asked for, for the page: Claude's by alias
+// (the latest of each), Codex's from its own list (models_cache.json), each
+// with the efforts it takes.
+pub fn models() -> Value {
+    static SEEN: Mutex<Option<(Instant, Value)>> = Mutex::new(None);
+    let mut seen = SEEN.lock().unwrap();
+    if let Some((_, v)) = seen.as_ref().filter(|(at, _)| at.elapsed() < Duration::from_secs(30)) {
+        return v.clone();
+    }
+    let v = read_models();
+    *seen = Some((Instant::now(), v.clone()));
+    v
+}
+
+fn read_models() -> Value {
+    let claude_efforts = json!(["low", "medium", "high", "xhigh", "max"]);
+    let claude: Vec<Value> = [("fable", "Fable"), ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")]
+        .iter()
+        .map(|(id, name)| json!({ "id": id, "name": name, "efforts": claude_efforts }))
+        .collect();
+    let cache: Value = std::fs::read(crate::connection::codex_home().join("models_cache.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null);
+    let mut codex: Vec<(i64, Value)> = cache["models"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|m| m["visibility"] != "hide" && m["slug"].as_str().is_some_and(is_word))
+        .map(|m| {
+            let efforts: Vec<&str> = m["supported_reasoning_levels"].as_array().into_iter().flatten().filter_map(|e| e["effort"].as_str().or(e.as_str())).filter(|e| is_word(e)).collect();
+            (m["priority"].as_i64().unwrap_or(999), json!({ "id": m["slug"], "name": m["display_name"].as_str().or(m["slug"].as_str()), "efforts": efforts }))
+        })
+        .collect();
+    codex.sort_by_key(|(p, _)| *p);
+    json!({ "claude": claude, "codex": codex.into_iter().map(|(_, m)| m).collect::<Vec<_>>(), "claudeEfforts": claude_efforts })
+}
+
 // A session on the letter, in a terminal: Windows Terminal when there is
 // one, else a console window of its own.
-fn open_session(exe: &Path, cwd: &Path, prompt: &str) -> std::io::Result<()> {
+fn open_session(exe: &Path, cwd: &Path, args: &[String], prompt: &str) -> std::io::Result<()> {
     let mut command = match find("wt") {
         Some(wt) => {
             let mut c = Command::new(wt);
-            c.args(["-w", "new", "-d"]).arg(cwd).arg(exe).arg(prompt);
+            c.args(["-w", "new", "-d"]).arg(cwd).arg(exe).args(args).arg(prompt);
             c
         }
         None => {
             let mut c = Command::new("cmd.exe");
-            c.args(["/c", "start", "", "/D"]).arg(cwd).arg(exe).arg(prompt);
+            c.args(["/c", "start", "", "/D"]).arg(cwd).arg(exe).args(args).arg(prompt);
             hidden(&mut c);
             c
         }
@@ -328,11 +501,13 @@ fn start_run(sh: &Arc<Shared>, account: &Account, agent: Agent, exe: &Path, fold
     let _ = std::fs::remove_file(&summary);
     let line = prompt(folder, subject, true, sh.lang() == "zh");
     let letter: String = with_text_attachments(&dir).chars().take(MOST_STDIN).collect();
+    let conf = conf_of(&sh.setting("mailAgentConf"), agent);
+    let own = if agent == Agent::Claude { claude_own() } else { Default::default() };
+    let hooks = if agent == Agent::Claude { hooks_file(sh) } else { PathBuf::new() };
+    let args = summary_args(agent, &conf, &hooks, own, &cwd, &summary);
+    sh.log(&format!("mail: {} {}", agent.id(), args.join(" ")));
     let mut command = Command::new(exe);
-    match agent {
-        Agent::Claude => command.args(["-p", &line, "--output-format", "text", "--allowedTools", "Read", "Glob", "Grep"]),
-        Agent::Codex => command.args(["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral", "-C"]).arg(&cwd).arg("-o").arg(&summary).arg(&line),
-    };
+    command.args(&args).arg(&line);
     command.current_dir(&cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     hidden(&mut command);
     let mut child = command.spawn().map_err(|e| e.to_string())?;
@@ -474,7 +649,13 @@ pub async fn mail_hand(app: AppHandle, id: String, uid: u32, agent: String, how:
     let started = if background {
         start_run(&sh, &account, agent, &exe, &folder, &subject, &key)
     } else {
-        open_session(&exe, &home(&sh), &prompt(&folder, &subject, false, sh.lang() == "zh")).map_err(|e| e.to_string())
+        let conf = conf_of(&sh.setting("mailAgentConf"), agent);
+        let restricted = agent == Agent::Claude && conf.access == Access::Read;
+        let hooks = if restricted { hooks_file(&sh) } else { PathBuf::new() };
+        let own = if restricted { claude_own() } else { Default::default() };
+        let args = session_args(agent, &conf, &hooks, own);
+        sh.log(&format!("mail: {} {}", agent.id(), args.join(" ")));
+        open_session(&exe, &home(&sh), &args, &prompt(&folder, &subject, false, sh.lang() == "zh")).map_err(|e| e.to_string())
     };
     match started {
         Ok(()) => json!({ "ok": true, "folder": folder, "key": key }),
@@ -507,6 +688,51 @@ mod tests {
                 assert!(p.contains("2026-10-09-plan/letter.md"));
             }
         }
+    }
+
+    #[test]
+    fn what_the_page_sets_is_checked() {
+        assert!(is_conf_ok(&json!({ "claude": { "access": "ask", "model": "opus", "effort": "high", "sumModel": "haiku", "sumEffort": "" } })));
+        assert!(is_conf_ok(&json!({ "codex": { "model": "gpt-5.6-luna" } })));
+        assert!(is_conf_ok(&json!({ "claude": { "model": "claude-opus-5-5[1m]" } })));
+        assert!(!is_conf_ok(&json!({ "claude": { "access": "yolo" } })));
+        assert!(!is_conf_ok(&json!({ "claude": { "model": "opus --dangerously-skip-permissions" } })));
+        assert!(!is_conf_ok(&json!({ "claude": { "model": "\"x\"" } })));
+        assert!(!is_conf_ok(&json!({ "gemini": {} })));
+        assert!(!is_conf_ok(&json!({ "codex": { "extra": "--yolo" } })));
+        assert_eq!(conf_of(&Value::Null, Agent::Codex), Conf::default());
+        assert_eq!(conf_of(&json!({ "codex": { "access": "mine", "model": "a b" } }), Agent::Codex), Conf { access: Access::Mine, ..Conf::default() });
+    }
+
+    #[test]
+    fn a_session_starts_as_much_as_it_may() {
+        let hooks = Path::new("D:/data/mail/.wakuwaku-hooks.json");
+        let own = || ("opus".to_string(), "high".to_string());
+        let read = Conf::default();
+        assert_eq!(session_args(Agent::Claude, &read, hooks, own()), ["--restricted", "--settings", "D:/data/mail/.wakuwaku-hooks.json", "--model", "opus", "--effort", "high"]);
+        let ask = Conf { access: Access::Ask, model: "sonnet".into(), ..Conf::default() };
+        assert_eq!(session_args(Agent::Claude, &ask, hooks, own()), ["--permission-mode", "manual", "--model", "sonnet"]);
+        let mine = Conf { access: Access::Mine, ..Conf::default() };
+        assert!(session_args(Agent::Claude, &mine, hooks, own()).is_empty());
+        assert!(session_args(Agent::Codex, &mine, hooks, Default::default()).is_empty());
+        let codex = Conf { model: "gpt-5.6-luna".into(), effort: "low".into(), ..Conf::default() };
+        assert_eq!(
+            session_args(Agent::Codex, &codex, hooks, Default::default()),
+            ["--sandbox", "read-only", "--ask-for-approval", "on-request", "-m", "gpt-5.6-luna", "-c", "model_reasoning_effort=low"]
+        );
+        let ask = Conf { access: Access::Ask, ..Conf::default() };
+        assert_eq!(session_args(Agent::Codex, &ask, hooks, Default::default()), ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"]);
+    }
+
+    #[test]
+    fn a_summary_only_reads() {
+        let (hooks, cwd, out) = (Path::new("h.json"), Path::new("D:/m"), Path::new("D:/m/x/summary.md"));
+        let conf = Conf { sum_model: "haiku".into(), model: "opus".into(), ..Conf::default() };
+        let args = summary_args(Agent::Claude, &conf, hooks, ("fable".into(), "max".into()), cwd, out);
+        assert_eq!(args, ["-p", "--output-format", "text", "--restricted", "--settings", "h.json", "--permission-mode", "dontAsk", "--allowedTools", "Read", "Glob", "Grep", "--model", "haiku", "--effort", "max"]);
+        let conf = Conf { access: Access::Mine, sum_effort: "low".into(), ..Conf::default() };
+        let args = summary_args(Agent::Codex, &conf, hooks, Default::default(), cwd, out);
+        assert_eq!(args, ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral", "-C", "D:/m", "-o", "D:/m/x/summary.md", "-c", "model_reasoning_effort=low"]);
     }
 
     #[test]

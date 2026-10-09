@@ -495,7 +495,58 @@
     const left = inbox.total - inbox.letters.length
     const more = !inbox.error && left > 0 ? `<div class="r"><button class="pbtn wide" data-mail-more ${inbox.busy ? 'disabled' : ''}>${esc(T('mail.more', { n: Math.min(50, left) }))}</button></div>` : ''
     const agent = row(esc(T('mail.agent')), esc(T('mail.agentNote')), seg('mailAgent', [['claude', 'Claude Code'], ['codex', 'Codex']], firstAgent()))
-    return `${head}<div class="grp inbox">${pick}${note}${list}${more}</div><div class="grp agent-pick">${agent}</div>`
+    return `${head}<div class="grp inbox">${pick}${note}${list}${more}</div><div class="grp agent-pick">${agent}</div>${agentOrder().map(agentConfHTML).join('')}`
+  }
+
+  // How a letter goes to each agent (mailAgentConf, agent.rs): how much a
+  // session may do, and the model and effort of a session and of a summary;
+  // empty is the agent's own setting.
+  const confOf = ag => ((snap.settings.mailAgentConf || {})[ag] || {})
+  const modelsOf = ag => (snap.mailModels || {})[ag] || []
+
+  // The efforts a model takes (all of them while it is the agent's own).
+  function effortsOf(ag, model) {
+    const all = modelsOf(ag)
+    const m = all.find(x => x.id === model)
+    return m ? m.efforts : [...new Set(all.flatMap(x => x.efforts))]
+  }
+
+  // A picker's choices: the agent's own first, then each model or effort.
+  function choicesOf(ag, key) {
+    const c = confOf(ag)
+    const list = key === 'model' || key === 'sumModel' ? modelsOf(ag).map(m => [m.id, m.name]) : effortsOf(ag, c[key === 'effort' ? 'model' : 'sumModel']).map(e => [e, effortName(e)])
+    // One set before and no longer listed stays a choice.
+    if (c[key] && !list.some(([v]) => v === c[key])) list.push([c[key], c[key]])
+    return [['', T('mail.conf.own')], ...list]
+  }
+
+  const effortName = e => (T(`mail.effort.${e}`) === `mail.effort.${e}` ? e : T(`mail.effort.${e}`))
+
+  function pickerHTML(ag, key) {
+    const value = confOf(ag)[key] || ''
+    const label = choicesOf(ag, key).find(([v]) => v === value)?.[1] || value
+    return `<button class="pick" data-picker="${ag}.${key}">${esc(label)} ▾</button>`
+  }
+
+  function agentConfHTML(ag) {
+    const c = confOf(ag)
+    const access = ['read', 'ask', 'mine'].includes(c.access) ? c.access : 'read'
+    const missing = (snap.mailAgents || {})[ag] ? '' : ` · ${T('mail.hand.missing')}`
+    return `<div class="sec">${esc(ag === 'claude' ? 'Claude Code' : 'Codex')}${esc(missing)}</div><div class="grp agent-conf">
+      ${row(esc(T('mail.conf.access')), esc(T(`mail.conf.${access}Note.${ag}`)), seg(`mconf.${ag}`, ['read', 'ask', 'mine'].map(a => [a, T(`mail.conf.${a}`)]), access))}
+      <div class="r"><div class="grow">${esc(T('mail.conf.session'))}</div>${pickerHTML(ag, 'model')}${pickerHTML(ag, 'effort')}</div>
+      <div class="r"><div class="grow"><div>${esc(T('mail.conf.summary'))}</div><div class="d">${esc(T('mail.conf.summaryNote'))}</div></div>${pickerHTML(ag, 'sumModel')}${pickerHTML(ag, 'sumEffort')}</div>
+    </div>`
+  }
+
+  // One of them changed; an effort the new model does not take goes back
+  // to the agent's own.
+  function setConf(ag, key, value) {
+    const all = snap.settings.mailAgentConf || {}
+    const next = { ...(all[ag] || {}), [key]: value }
+    const effort = { model: 'effort', sumModel: 'sumEffort' }[key]
+    if (effort && next[effort] && !effortsOf(ag, value).includes(next[effort])) next[effort] = ''
+    patch({ mailAgentConf: { ...all, [ag]: next } })
   }
 
   // The buttons that hand the open letter to the first agent, and ⋯ for all.
@@ -627,14 +678,34 @@
         return `${i ? '<div class="mi-sep"></div>' : ''}<button class="mi" data-hand="${ag}:open" data-uid="${uid}" ${off}>${esc(T('mail.hand.open', { agent: AGENTS[ag] }))}${missing}</button><button class="mi" data-hand="${ag}:summary" data-uid="${uid}" ${off}>${esc(T('mail.hand.summary', { agent: AGENTS[ag] }))}${missing}</button>`
       })
       .join('')
+    menuPick = null
+    placeMenu(x, y)
+  }
+
+  // The same menu as a picker: a model or an effort, the one set ticked.
+  let menuPick = null
+
+  function placeMenu(x, y) {
     menuEl.hidden = false
     const box = layer.getBoundingClientRect()
     menuEl.style.left = `${Math.max(4, Math.min(x - box.left, box.width - menuEl.offsetWidth - 4))}px`
     menuEl.style.top = `${Math.max(4, Math.min(y - box.top, box.height - menuEl.offsetHeight - 4))}px`
   }
 
+  function openPicker(button) {
+    const [ag, key] = button.dataset.picker.split('.')
+    const value = confOf(ag)[key] || ''
+    menuEl.innerHTML = choicesOf(ag, key)
+      .map(([v, label], i) => `${i === 1 ? '<div class="mi-sep"></div>' : ''}<button class="mi${v === value ? ' on' : ''}" data-pick="${esc(v)}">${esc(label)}</button>`)
+      .join('')
+    menuPick = v => setConf(ag, key, v)
+    const r = button.getBoundingClientRect()
+    placeMenu(r.left, r.bottom + 4)
+  }
+
   function closeMenu() {
     menuEl.hidden = true
+    menuPick = null
   }
 
   layer.addEventListener('contextmenu', e => {
@@ -1020,6 +1091,25 @@
 
   // A mail account's setup: what was clicked, if it was its. True when it was.
   function handleMail(at) {
+    // How a letter goes to an agent: a model or effort picked, a picker
+    // opened, how much a session may do.
+    const picked = at('[data-pick]')
+    if (picked && menuPick) {
+      const pick = menuPick
+      closeMenu()
+      pick(picked.dataset.pick)
+      return true
+    }
+    const picker = at('[data-picker]')
+    if (picker) {
+      openPicker(picker)
+      return true
+    }
+    const access = at('[data-seg^="mconf."] > span')
+    if (access) {
+      setConf(access.parentElement.dataset.seg.slice(6), 'access', access.dataset.value)
+      return true
+    }
     // The inbox and a letter: handed to an agent (from a button or the
     // menu), the menu, back, again, more, another account, one opened.
     const handing = at('[data-hand]')

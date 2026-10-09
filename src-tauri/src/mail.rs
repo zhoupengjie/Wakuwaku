@@ -17,7 +17,9 @@
 //
 // Settings: "mail": [{ id, address, host, port, security: ssl | starttls |
 // plain, username, on }], changed only through the commands below;
-// "mailAgent": "claude" | "codex", who a letter goes to first.
+// "mailAgent": "claude" | "codex", who a letter goes to first;
+// "mailAgentConf": { claude | codex: { access, model, effort, sumModel,
+// sumEffort } }, what a session may do and the models (agent.rs).
 use std::collections::HashMap;
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};

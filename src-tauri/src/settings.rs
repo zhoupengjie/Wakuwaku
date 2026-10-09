@@ -53,6 +53,8 @@ pub fn snapshot(sh: &Shared) -> Value {
         // Who a letter can go to (claude, codex: found or not), and the
         // letters being read in the background or read this time.
         "mailAgents": mail::agent::available(),
+        // The models each can be asked for, with the efforts they take.
+        "mailModels": mail::agent::models(),
         "mailRuns": mail::agent::runs(sh),
         "waku": scripts::waku_path(sh).to_string_lossy(),
         "port": sh.port,
@@ -85,6 +87,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         }),
         "widgetNudge" => is_bool,
         "mailAgent" => matches!(v.as_str(), Some("claude" | "codex")),
+        "mailAgentConf" => mail::agent::is_conf_ok(v),
         _ => false,
     }
 }

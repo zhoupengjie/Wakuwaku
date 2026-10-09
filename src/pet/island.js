@@ -79,10 +79,14 @@
   const SET_HEAD = 32
   const SET_HEAD_SCALE = 0.28
   // The corner's circle and its margin, and the window without extra room
-  // there; the bar's height and her portrait in it (island.rs has these too).
+  // there: big enough for the card the circle opens into on a hover, so
+  // opening and closing never resize the window (a window resized shows its
+  // old picture from its new top-left corner for a frame or two: the circle
+  // jumped). It is see-through and lets clicks through but over the island.
+  // The bar's height and her portrait in it. (island.rs has these too.)
   const CIRCLE = 56
   const CORNER_M = 14
-  const CORNER_BASE = { width: 120, height: 120 }
+  const CORNER_BASE = { width: 520, height: 300 }
   const BAR_H = 30
   const BAR_HEAD = 22
   // A portrait px across is the sheet at this scale.

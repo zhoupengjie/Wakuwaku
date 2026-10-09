@@ -947,6 +947,33 @@ body {
   box-shadow:
     0 0 0 2.5px var(--ring, #8e8e93),
     0 6px 18px rgba(0, 0, 0, 0.35);
+  /* Back into the circle without the spring: overshooting, the card went
+     narrower than it was tall (an ellipse) before it came round. The ring
+     comes once it is nearly round. */
+  transition:
+    width 0.42s var(--settle),
+    height 0.42s var(--settle),
+    border-radius 0.42s var(--settle),
+    box-shadow 0.2s ease 0.3s;
+}
+
+.home-corner {
+  --settle: cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+
+/* She goes back into her portrait the same way. */
+.home-corner.compact-her #island-her {
+  transition:
+    left 0.42s var(--settle),
+    top 0.42s var(--settle),
+    width 0.42s var(--settle),
+    height 0.42s var(--settle),
+    border-radius 0.42s var(--settle),
+    opacity 0.12s ease;
+}
+
+.home-corner.compact-her #island-her .sheet {
+  transition: transform 0.42s var(--settle);
 }
 
 .home-corner #island.wants[data-view='compact'] {

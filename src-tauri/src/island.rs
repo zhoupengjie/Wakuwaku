@@ -24,11 +24,12 @@ use crate::screen::Area;
 use crate::{appbar, Shared};
 
 // The window without extra room, by home: the island at its widest without
-// a prompt, and its spring; the corner's circle and its margin; the bar's
+// a prompt, and its spring; the corner's card the circle opens into on a
+// hover, so hovering never resizes it (island.js CORNER_BASE); the bar's
 // height (its width is the screen's). The page asks for more (pet:panel)
 // when a shape needs it.
 const ISLAND: (f64, f64) = (460.0, 132.0);
-const CORNER: (f64, f64) = (120.0, 120.0);
+const CORNER: (f64, f64) = (520.0, 300.0);
 pub const BAR_H: f64 = 30.0;
 // The island's top edge in the window, and its compact height.
 const TOP: f64 = 8.0;

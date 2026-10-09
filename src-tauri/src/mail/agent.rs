@@ -395,6 +395,19 @@ fn model_args(agent: Agent, model: &str, effort: &str) -> Vec<String> {
     args
 }
 
+// Codex's sandbox on Windows: Microsoft Execution Containers where the
+// machine has them (Windows 11 24H2/25H2 and later; no admin setup), else
+// whatever the person set. Its "elevated" sandbox can fail every command
+// when the runtime it checks is in use (node_repl.exe, os error 32, as of
+// 0.162.1), and "unelevated" isolates less.
+fn codex_sandbox() -> Vec<String> {
+    if cfg!(windows) {
+        vec!["-c".into(), "features.prefer_mxc=true".into()]
+    } else {
+        Vec::new()
+    }
+}
+
 // What a session starts with, before its prompt. Claude, only reading, is
 // --restricted (no commands, no web, files in its folders only), which
 // leaves out the person's settings: so her hooks come along by --settings
@@ -403,8 +416,8 @@ fn session_args(agent: Agent, conf: &Conf, hooks: &Path, own: (String, String)) 
     let mut args: Vec<String> = match (agent, conf.access) {
         (Agent::Claude, Access::Read) => vec!["--restricted".into(), "--settings".into(), hooks.to_string_lossy().into_owned()],
         (Agent::Claude, Access::Ask) => vec!["--permission-mode".into(), "manual".into()],
-        (Agent::Codex, Access::Read) => ["--sandbox", "read-only", "--ask-for-approval", "on-request"].map(String::from).to_vec(),
-        (Agent::Codex, Access::Ask) => ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"].map(String::from).to_vec(),
+        (Agent::Codex, Access::Read) => ["--sandbox", "read-only", "--ask-for-approval", "on-request"].map(String::from).into_iter().chain(codex_sandbox()).collect(),
+        (Agent::Codex, Access::Ask) => ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"].map(String::from).into_iter().chain(codex_sandbox()).collect(),
         (_, Access::Mine) => Vec::new(),
     };
     let restricted = agent == Agent::Claude && conf.access == Access::Read;
@@ -420,7 +433,7 @@ fn summary_args(agent: Agent, conf: &Conf, hooks: &Path, own: (String, String), 
     let path = |p: &Path| p.to_string_lossy().into_owned();
     let mut args: Vec<String> = match agent {
         Agent::Claude => ["-p", "--output-format", "text", "--restricted", "--settings", &path(hooks), "--permission-mode", "dontAsk", "--allowedTools", "Read", "Glob", "Grep"].map(String::from).to_vec(),
-        Agent::Codex => ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral", "-C", &path(cwd), "-o", &path(summary)].map(String::from).to_vec(),
+        Agent::Codex => ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral", "-C", &path(cwd), "-o", &path(summary)].map(String::from).into_iter().chain(codex_sandbox()).collect(),
     };
     let model = if conf.sum_model.is_empty() && agent == Agent::Claude { own.0 } else { conf.sum_model.clone() };
     let effort = if conf.sum_effort.is_empty() && agent == Agent::Claude { own.1 } else { conf.sum_effort.clone() };
@@ -715,13 +728,16 @@ mod tests {
         let mine = Conf { access: Access::Mine, ..Conf::default() };
         assert!(session_args(Agent::Claude, &mine, hooks, own()).is_empty());
         assert!(session_args(Agent::Codex, &mine, hooks, Default::default()).is_empty());
+        // On Windows, Codex's sandbox is MXC where there is one.
+        let mxc: &[&str] = if cfg!(windows) { &["-c", "features.prefer_mxc=true"] } else { &[] };
+        let with_mxc = |head: &[&str], tail: &[&str]| -> Vec<String> { head.iter().chain(mxc).chain(tail).map(|s| s.to_string()).collect() };
         let codex = Conf { model: "gpt-5.6-luna".into(), effort: "low".into(), ..Conf::default() };
         assert_eq!(
             session_args(Agent::Codex, &codex, hooks, Default::default()),
-            ["--sandbox", "read-only", "--ask-for-approval", "on-request", "-m", "gpt-5.6-luna", "-c", "model_reasoning_effort=low"]
+            with_mxc(&["--sandbox", "read-only", "--ask-for-approval", "on-request"], &["-m", "gpt-5.6-luna", "-c", "model_reasoning_effort=low"])
         );
         let ask = Conf { access: Access::Ask, ..Conf::default() };
-        assert_eq!(session_args(Agent::Codex, &ask, hooks, Default::default()), ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"]);
+        assert_eq!(session_args(Agent::Codex, &ask, hooks, Default::default()), with_mxc(&["--sandbox", "workspace-write", "--ask-for-approval", "on-request"], &[]));
     }
 
     #[test]
@@ -732,7 +748,9 @@ mod tests {
         assert_eq!(args, ["-p", "--output-format", "text", "--restricted", "--settings", "h.json", "--permission-mode", "dontAsk", "--allowedTools", "Read", "Glob", "Grep", "--model", "haiku", "--effort", "max"]);
         let conf = Conf { access: Access::Mine, sum_effort: "low".into(), ..Conf::default() };
         let args = summary_args(Agent::Codex, &conf, hooks, Default::default(), cwd, out);
-        assert_eq!(args, ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral", "-C", "D:/m", "-o", "D:/m/x/summary.md", "-c", "model_reasoning_effort=low"]);
+        let mxc: &[&str] = if cfg!(windows) { &["-c", "features.prefer_mxc=true"] } else { &[] };
+        let want: Vec<&str> = ["exec", "--sandbox", "read-only", "--skip-git-repo-check", "--ephemeral", "-C", "D:/m", "-o", "D:/m/x/summary.md"].iter().chain(mxc).chain(&["-c", "model_reasoning_effort=low"]).copied().collect();
+        assert_eq!(args, want);
     }
 
     #[test]

@@ -248,11 +248,12 @@ mail/agent.rs      把一封信交给 Claude Code / Codex
 
     | 档位 | Claude | Codex |
     | --- | --- | --- |
-    | 只读 `read` | `--restricted --settings <数据目录>/mail/.wakuwaku-hooks.json` | `--sandbox read-only --ask-for-approval on-request` |
-    | 改东西要问我 `ask` | `--permission-mode manual` | `--sandbox workspace-write --ask-for-approval on-request` |
+    | 只读 `read` | `--restricted --settings <数据目录>/mail/.wakuwaku-hooks.json` | `--sandbox read-only --ask-for-approval on-request -c features.prefer_mxc=true` |
+    | 改东西要问我 `ask` | `--permission-mode manual` | `--sandbox workspace-write --ask-for-approval on-request -c features.prefer_mxc=true` |
     | 跟我平时一样 `mine` | 不加 | 不加 |
 
     `--restricted` 去掉跑命令的工具和 WebFetch，文件工具只在工作目录里，不接受 bypassPermissions，但也不读用户的设置文件。所以宠物的 hook 写成一个设置文件（`connection::install`，指向她自己的端口），用 `--settings` 带上；没选模型时，用户 settings.json 里的 `model` / `effortLevel` 照样传（`claude_own`）。后台总结总是只读，不分档。模型和思考强度：Claude 是 `--model` / `--effort`，Codex 是 `-m` / `-c model_reasoning_effort=<强度>`（不加引号：Codex 读不成 TOML 就当字符串，免得引号过终端）。值只能是字母、数字和 `.-_:[]`（`is_word`，设置补丁也这样查），空的就是 agent 自己的设置。可选的模型：Claude 用别名（fable、opus、sonnet、haiku，总是各自最新的），Codex 读它自己的 `~/.codex/models_cache.json`（不隐藏的那些，按 priority 排，每个带它支持的强度），设置快照里是 `mailModels`（30 秒内不重读）。页面上用的是和右键菜单同一个小菜单，不用 `<select>`：原生下拉框弹出时可能让岛失去焦点，设置会收起来。
+    - **Codex 的沙箱用 MXC**（`codex_sandbox`，只在 Windows 上加；后台总结也加）：`features.prefer_mxc=true` 让 Codex 在机器支持时用 Microsoft Execution Containers（Windows 11 24H2 26100.9278、25H2 26200.9278 以后，不用管理员设置），不支持就用用户自己配的沙箱。不直接写 `windows.sandbox=mxc`，因为不支持的机器上那样会直接失败。原因：Codex 的「提权」沙箱（`[windows] sandbox = "elevated"`）每次跑命令前都要给沙箱账户检查、改一遍它运行时目录（`AppData\Local\OpenAI\Codex\runtimes\cua_node\…`）里文件的权限，而 `codex` 一启动就会自己拉起其中的 `node_repl.exe`（cua-repl，关掉 node_repl MCP 和全部自带插件也一样），于是改权限时报 `os error 32`（文件被占用），每条命令都是 `helper_unknown_error: setup refresh had errors`（0.162.0、0.162.1 都这样，日志在 `~/.codex/.sandbox/sandbox.<日期>.log`）。Codex 桌面版开着时，它的电脑操作辅助程序（`codex-computer-use-swift.exe`）还会占着别的 DLL。「不提权」（`unelevated`）能用，但隔离弱一些，PowerShell 调 .NET 也会失败。实测 MXC：只读会话读得到信和附件、建不了文件，不弹批准。单次试 MXC：`codex -c windows.sandbox=mxc sandbox --include-managed-config --permission-profile :workspace -- cmd.exe /d /c echo MXC_OK`。
     - 还没实测的：Claude 只读档的会话会不会出现在岛上（`--restricted` 下用户的插件应该不加载，靠 `--settings` 里的 hook）。
   - 找 `claude` / `codex`：PATH 里的 `.exe`、`.cmd`、`.bat`，再加 `~/.local/bin`（Claude 的安装器）、`%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`、`%APPDATA%\npm`；设置快照里的 `mailAgents` 说两个各找没找到（10 秒内不重找），没找到的在菜单里是灰的。
 - **插件**：`inbox-<id>`，她自己的（`put_owned`，不过期，脚本不能用这个 id），私密（`private`）：标题是「发件人：主题」，数值是「3 封未读」/「没有未读」（`{ key, vars }`，按页面语言显示）。插件页上它们写着「邮件 · 在「邮件」页设置」，开关只管岛上显不显示。

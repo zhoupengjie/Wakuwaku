@@ -78,6 +78,8 @@ fn defaults() -> Map<String, Value> {
         "display": "corner",
         "out": true,
         "corner": "br",
+        // The compact island's width: narrow, normal or wide (island.js WIDTHS).
+        "islandWidth": "normal",
         "bubble": true,
         "details": true,
         // Widgets (plugins in the island): which are off, their order, how

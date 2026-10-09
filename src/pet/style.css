@@ -479,12 +479,70 @@ body {
   pointer-events: none;
 }
 
+/* Three places (island.js fillCompact): her at the left, the words in the
+   middle cut short, the value at the right edge; as wide as set. */
 #island-compact {
   height: 36px;
-  max-width: 340px;
   gap: 10px;
   padding: 0 16px 0 7px;
   font-size: 13px;
+}
+
+#island-compact .clock {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Another widget's turn, another session: it slides in. */
+#island-compact.turn {
+  animation: compact-turn 0.32s ease;
+}
+
+@keyframes compact-turn {
+  from {
+    opacity: 0;
+    transform: translateY(45%);
+  }
+}
+
+/* The monitor's capsule: beside the island, out of its way. */
+#island-gauge {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  background: #000;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
+  font-size: 12.5px;
+  white-space: nowrap;
+  opacity: 0;
+  transform: scale(0.9);
+  transform-origin: 0 50%;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  pointer-events: none;
+}
+
+#island-gauge.on {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.12s;
+}
+
+/* Each reading as wide as its widest (100%, 999K): the capsule, and the
+   bar's end, keep their size as the numbers change. */
+#island-gauge .wpart b,
+#bar-rest .mon .wpart b {
+  display: inline-block;
+  min-width: 4ch;
 }
 
 #island-compact.bare {
@@ -777,10 +835,8 @@ body {
   gap: 0;
 }
 
-#island-compact .wvalue {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+#island-compact .wlabel .wicon {
+  flex: none;
 }
 
 /* The widgets in the open island, the one shown lit. */
@@ -830,9 +886,10 @@ body {
   align-self: center;
 }
 
-/* Other sessions busy too: "+N" by the clock. */
+/* Other sessions busy too: "+N" before the clock. */
 #island-compact .more {
-  margin-left: -4px;
+  flex: none;
+  margin-right: -4px;
   padding: 1px 6px;
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.1);

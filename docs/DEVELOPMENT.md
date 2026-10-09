@@ -216,7 +216,7 @@ examples/widgets 里的天气、股票、番茄钟、倒计时、久坐提醒、
 - **怎么跑**：有 PowerShell 7（PATH 里或 Program Files）就用它，否则用 Windows 自带的。`-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command`，先把输出改成 UTF-8、去掉颜色，再 `& '<脚本>' -City '上海' -Port <端口>`。参数值放在单引号里，里面的单引号（包括 PowerShell 也认的弯引号）都写两遍，所以填什么都只是文字。没有窗口（`CREATE_NO_WINDOW`）。
 - **一直开着**：主循环每 3 秒 `scripts::sync` 一次，改设置时也马上来一次：该跑没跑的启动，关掉的停下，参数变了的重启；自己结束的再启动，60 秒内就结束算失败，接连失败就等 10 秒、30 秒、1 分钟、5 分钟再试。停下（关掉或换参数）时它之前发的 widget 一起去掉，省得留着旧的（`owner_of` 按 id 认是谁发的：`weather`、`stock-*`、`ci-*` / `prs-*`……）。
 - **说了什么**：脚本的输出全写进 `plugins/<id>.log`（每次启动重写），最后一行有内容的（去掉"警告:"前缀）显示在那一行下面：开着但岛上还没有它的东西时说「还没显示：……」，自己停了说「停了：…… · N 秒后再试」。
-- **跟她一起走**：她启动时把开着的都启动，她开机启动插件也就开机就跑（「插件」页底下有开机启动的开关，和「连接」页的是同一个）。所有插件进程都放进一个 job object（`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`），她退出时句柄关上，系统把它们全部结束，任务管理器里强行结束她也一样；正常退出时 `RunEvent::Exit` 还会先逐个结束。
+- **跟她一起走**：她启动时把开着的都启动，她开机启动（「连接」页的开关：注册表 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 里的 `Wakuwaku`），插件也就开机就跑；插件自己不登记开机启动。所有插件进程都放进一个 job object（`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`），她退出时句柄关上，系统把它们全部结束，任务管理器里强行结束她也一样；正常退出时 `RunEvent::Exit` 还会先逐个结束。
 - **waku** 不是开关：它包住你在终端里跑的命令。页面上给一条复制用的命令，指向写出来的 `plugins/waku.ps1`。
 
 **邮件**：IMAP（`mail-imap.ps1`）、Microsoft Graph（`mail-microsoft.ps1`）、Thunderbird 扩展，都只往 `/widget` 发文字，账号和密码不经过宠物。找 IMAP 服务器照 Thunderbird 的顺序：内置的几家 → ISPDB（`autoconfig.thunderbird.net/v1.1/<域名>`）→ MX 记录所属域名的 ISPDB → `imap.<域名>:993`。网易的服务器要先收到 ID 命令（RFC 2971）才肯打开收件箱，登录前后各发一次。授权码和 Graph 的 refresh token 用 DPAPI（`ConvertFrom-SecureString`）加密存在 `%LOCALAPPDATA%\wakuwaku\secrets`。测试时 `mail-imap.ps1 -NoTls -Server 127.0.0.1` 配一个本地的假 IMAP 服务器，`mail-microsoft.ps1 -LoginBase/-GraphBase` 指向本地的假登录和 Graph。**注意 PowerShell 变量名不分大小写**：脚本里的 `$server` 和参数 `-Server` 是同一个变量。

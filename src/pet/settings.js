@@ -319,9 +319,7 @@
     const spins = SPINS.map(n => [n, n ? T('settings.seconds', { n }) : T('w.spinOff')])
     const waku = `powershell -ExecutionPolicy Bypass -File "${snap.waku}" npm run build`
     const example = `Invoke-RestMethod -Method Post http://127.0.0.1:${snap.port}/widget -ContentType application/json -Body '{"id":"hello","label":"Hello","value":"42","icon":"star"}'`
-    return `${sec(T('w.section'))}<div class="grp"><div class="note">${esc(T('w.note'))}</div>${rows}
-        ${row(esc(T('pl.atLogin')), esc(T('pl.atLoginNote')), sw('login', snap.loginAtStart))}
-      </div>
+    return `${sec(T('w.section'))}<div class="grp"><div class="note">${esc(T('w.note'))}</div>${rows}</div>
       ${sec(T('w.show'))}<div class="grp">
         ${row(esc(T('w.spin')), '', seg('widgetSpin', spins, s.widgetSpin ?? 8))}
         ${row(esc(T('w.nudge')), esc(T('w.nudgeNote')), sw('widgetNudge', s.widgetNudge !== false))}

@@ -869,6 +869,9 @@ fn main() {
             mail::mail_save,
             mail::mail_remove,
             mail::mail_switch,
+            mail::letters::mail_letters,
+            mail::letters::mail_letter,
+            mail::agent::mail_hand,
         ])
         .on_menu_event(|app, event| tray::on_menu(&shared(app), event.id().as_ref()))
         .setup(move |app| {

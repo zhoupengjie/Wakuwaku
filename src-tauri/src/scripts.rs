@@ -439,7 +439,7 @@ fn from_code_page(bytes: &[u8]) -> String {
 
 // A job object that ends every process in it when she ends, however she ends.
 #[cfg(windows)]
-mod job {
+pub(crate) mod job {
     #[repr(C)]
     #[derive(Default)]
     struct Basic {
@@ -505,7 +505,7 @@ mod job {
 }
 
 #[cfg(not(windows))]
-mod job {
+pub(crate) mod job {
     pub struct Job;
     impl Job {
         pub fn new() -> Option<Job> {

@@ -50,6 +50,10 @@ pub fn snapshot(sh: &Shared) -> Value {
         "plugins": scripts::view(sh),
         // The mail accounts, each with how its watch is going.
         "mail": mail::view(sh),
+        // Who a letter can go to (claude, codex: found or not), and the
+        // letters being read in the background or read this time.
+        "mailAgents": mail::agent::available(),
+        "mailRuns": mail::agent::runs(sh),
         "waku": scripts::waku_path(sh).to_string_lossy(),
         "port": sh.port,
     })
@@ -80,6 +84,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
             })
         }),
         "widgetNudge" => is_bool,
+        "mailAgent" => matches!(v.as_str(), Some("claude" | "codex")),
         _ => false,
     }
 }

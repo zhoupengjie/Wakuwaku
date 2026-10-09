@@ -1,0 +1,13 @@
+From: Rust Weekly <news@this-week-in-rust.example>
+To: me@example.test
+Subject: This Week in Rust 600
+Date: Wed, 07 Oct 2026 09:00:00 +0000
+Message-ID: <twir-600@this-week-in-rust.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><body><h1>This Week in Rust 600</h1><p>Hello Rustaceans! Here is what=
+ happened this week.</p><ul><li><a href=3D"https://example.com/a">Async c=
+losures are stable</a></li><li>Cargo learns to build faster</li></ul></body>=
+</html>

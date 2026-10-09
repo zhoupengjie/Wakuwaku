@@ -83,12 +83,17 @@
       openSite: place => invoke('settings_open_site', { place }),
     },
     // Mail accounts (mail.rs): the server for an address, an account kept
-    // once it signs in, one removed, one on or off.
+    // once it signs in, one removed, one on or off; an inbox's newest
+    // letters, one letter opened (and marked read), one handed to an agent
+    // (agent claude | codex, how open | summary).
     mail: {
       discover: address => invoke('mail_discover', { address: String(address || '') }),
       save: (account, password) => invoke('mail_save', { account, password: String(password || '') }),
       remove: id => invoke('mail_remove', { id: String(id) }),
       switch: (id, on) => invoke('mail_switch', { id: String(id), on: on === true }),
+      letters: (id, count) => invoke('mail_letters', { id: String(id), count: Number(count) || 50 }),
+      letter: (id, uid) => invoke('mail_letter', { id: String(id), uid: Number(uid) }),
+      hand: (id, uid, agent, how) => invoke('mail_hand', { id: String(id), uid: Number(uid), agent: String(agent), how: String(how) }),
     },
   }
 

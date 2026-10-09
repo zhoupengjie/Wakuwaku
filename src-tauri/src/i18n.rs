@@ -45,6 +45,8 @@ pub fn t(lang: &str, key: &str) -> String {
         "notify.error" => if zh { "{project}出错了" } else { "{project}hit an error" },
         "notify.project" => if zh { "{project}：" } else { "{project}: " },
         "mail.new" => if zh { "新邮件 · {what}" } else { "New mail · {what}" },
+        "mail.handDone" => if zh { "{agent} 看完了：{what}" } else { "{agent} read it: {what}" },
+        "mail.handFailed" => if zh { "{agent} 没看成：{what}" } else { "{agent} could not read it: {what}" },
         "mood.idle" => if zh { "摸鱼中" } else { "Taking a break" },
         "mood.working" => if zh { "干活中…" } else { "Working…" },
         "mood.waiting" => if zh { "等你回复！" } else { "Waiting for you!" },

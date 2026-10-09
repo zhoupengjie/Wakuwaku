@@ -22,3 +22,6 @@ Thumbs.db
 # Only the note about them goes in (see art/README.md).
 art/*
 !art/README.md
+
+# The Thunderbird extension, packed (integrations/thunderbird/build.ps1)
+integrations/thunderbird/*.xpi

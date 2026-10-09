@@ -80,7 +80,7 @@ fn defaults() -> Map<String, Value> {
         "details": true,
         // Widgets (plugins in the island): which are off, their order, how
         // often the island turns to the next, whether they may open it.
-        "widgetsOff": ["sys"],
+        "widgetsOff": ["sys", "net", "battery"],
         "widgetOrder": [],
         "widgetSpin": 8,
         "widgetNudge": true,

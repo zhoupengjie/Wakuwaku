@@ -32,7 +32,8 @@ src-tauri/
     fullscreen.rs         别的程序是否全屏（user32）
     focus.rs              前台窗口：设置拿走键盘前记下，收起时还回去
     jump.rs               点会话就到它的窗口：会话的进程链、找窗口、叫到前面、桌面版的会话链接
-    widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、CPU · 内存），什么时候冒头
+    widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、CPU · 内存、网速、电池），什么时候冒头
+    tokens.rs             今天的 token：读 Claude Code 和 Codex 自己的会话记录
     notify.rs             系统通知（登记 AppUserModelId 后发 toast）
     tray.rs               托盘图标（随心情变脸）和菜单
     server.rs             127.0.0.1:47213 上的 HTTP 接口
@@ -46,7 +47,8 @@ integrations/claude-code/ Claude Code 插件 wakuwaku（只有 HTTP hooks）
 .claude-plugin/           插件市场入口 marketplace.json（位置是 Claude Code 规定的）
 scripts/make-icons.js     画图标（node + ImageMagick），输出提交在 src-tauri/icons
 test/                     页面的单元测试（node --test，不需要 npm install）
-examples/widgets/         岛上插件的示例脚本：天气、股票、起来走走
+examples/widgets/         岛上插件的示例脚本：waku、CI、番茄钟、截止日期、开发服务器、股票、天气、邮件……
+integrations/thunderbird/ Thunderbird 扩展：未读邮件发到岛上（build.ps1 打包成 .xpi）
 docs/prototypes/          设计原型：island-settings.html 是设置长在岛里的手感原型
 data/                     从源码运行时她的设置、宠物和日志（不进仓库）
 pets/                     从源码运行时也会读这里的宠物（不进仓库）
@@ -189,11 +191,18 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 
 **冒头**（`nudge`）：插件可以请岛打开一次，`main.rs` 的 `nudge_widget` 只在看得见、设置允许（`widgetNudge`）、插件开着、而且没有会话在等你或有没看过的结束（`state.rs` 的 `wants_you`）时才发 `pet:nudge`。同一个插件一分钟最多一次。岛上展开 6.5 秒显示它的话；宠物模式下她挥手，在气泡里说（挥 6 次，约 4 秒）。
 
-**内置的两个**（标题和数值是 `{ key, vars }`，按当前语言显示）：
+**私密**（`private: true`）：「显示具体内容」关掉时，页面不显示它的 `label` 和冒头的话，只显示 `value`（`widgets.js` 的 `words(lang, w, detailed)`）。邮件脚本都这样发：标题是"发件人：主题"，数值是"3 封未读"。
+
+**内置的**（标题和数值是 `{ key, vars }`，按当前语言显示）：
 - `today`：今天开始了几轮（state 的 `Outcome.turns`）、结束的几轮一共用了多久（`Outcome.worked_ms`，几个会话同时跑会叠加）、在宠物上批准了几次（`pet_answer` 的 allow / always）。存在数据目录的 `today.json`，按本地日期换天。
 - `sys`：CPU（两次 `GetSystemTimes` 之差）和内存（`GlobalMemoryStatusEx`），3 秒一次，只在打开时算。默认关闭。
+- `net`：网速，两次 `GetIfTable` 之差，3 秒一次。只算开着的以太网和 Wi-Fi；Windows 会把一块网卡经过各层过滤器列好几遍，按 MAC 地址只算一次。计数是 32 位的，过 4 GB 会从头再来，按回绕相减。默认关闭。
+- `battery`：电量和充电中或还能用多久（`GetSystemPowerStatus`），30 秒一次；没有电池就不显示。默认关闭。
+- `tokens`（`tokens.rs`）：今天的 token，每分钟读一次。Claude Code：`<配置目录>/projects/**/*.jsonl` 里每条回复的 `message.usage`（输入 + 缓存写 + 缓存读 + 输出），同一个 `message.id` 会按片段写好几行，只算一次。Codex：`~/.codex/sessions/**/*.jsonl` 的 `token_count` 事件是这个会话到那时的总数，今天的用量 = 今天最后一个 − 今天之前最后一个。只读今天改过的文件，每个文件从上次读到的地方接着读，只读完整的行；换天从头算。默认打开。
 
-**设置**：`widgetsOff`（关掉的 id，默认 `["sys"]`）、`widgetOrder`（显示顺序，「插件」页的 ↑ 改它）、`widgetSpin`（0 / 5 / 8 / 15）、`widgetNudge`。
+**设置**：`widgetsOff`（关掉的 id，默认 `["sys", "net", "battery"]`）、`widgetOrder`（显示顺序，「插件」页的 ↑ 改它）、`widgetSpin`（0 / 5 / 8 / 15）、`widgetNudge`。
+
+**邮件**：IMAP（`mail-imap.ps1`）、Microsoft Graph（`mail-microsoft.ps1`）、Thunderbird 扩展，都只往 `/widget` 发文字，账号和密码不经过宠物。找 IMAP 服务器照 Thunderbird 的顺序：内置的几家 → ISPDB（`autoconfig.thunderbird.net/v1.1/<域名>`）→ MX 记录所属域名的 ISPDB → `imap.<域名>:993`。网易的服务器要先收到 ID 命令（RFC 2971）才肯打开收件箱，登录前后各发一次。授权码和 Graph 的 refresh token 用 DPAPI（`ConvertFrom-SecureString`）加密存在 `%LOCALAPPDATA%\wakuwaku\secrets`。测试时 `mail-imap.ps1 -NoTls -Server 127.0.0.1` 配一个本地的假 IMAP 服务器，`mail-microsoft.ps1 -LoginBase/-GraphBase` 指向本地的假登录和 Graph。**注意 PowerShell 变量名不分大小写**：脚本里的 `$server` 和参数 `-Server` 是同一个变量。
 
 **以后的两层**：插件文件夹里的脚本由宠物定时运行（像 xbar），以及插件自己画的界面（要关进碰不到 IPC 的沙盒，否则能替你点"允许"）。
 

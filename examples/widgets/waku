@@ -1,0 +1,7 @@
+#!/bin/sh
+# waku for Git Bash (and other sh): runs waku.ps1 with PowerShell 7, or else Windows PowerShell.
+dir=$(dirname "$0")
+if command -v pwsh >/dev/null 2>&1; then
+  exec pwsh -NoProfile -File "$dir/waku.ps1" "$@"
+fi
+exec powershell -NoProfile -ExecutionPolicy Bypass -File "$dir/waku.ps1" "$@"

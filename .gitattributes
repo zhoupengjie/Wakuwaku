@@ -1,0 +1,2 @@
+# A shell script: LF, or Git Bash reads "sh"
+examples/widgets/waku text eol=lf

@@ -22,6 +22,7 @@
 //                  events_codex.rs (Codex) hook events into messages
 //   data.rs        her folder, settings and pets
 //   widgets.rs     plugins in the island: widgets from scripts, and the built-in ones
+//   tokens.rs      today's tokens, from Claude Code's and Codex's own records
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod asks;
@@ -42,6 +43,7 @@ mod screen;
 mod server;
 mod settings;
 mod state;
+mod tokens;
 mod tray;
 mod widgets;
 
@@ -269,8 +271,8 @@ impl Shared {
         if !self.is_visible() || self.setting("widgetNudge") == false || !self.is_widget_on(id) || self.pet.lock().unwrap().wants_you() {
             return;
         }
-        let Some((label, value)) = self.widgets.lock().unwrap().label_of(id) else { return };
-        self.to_pages("pet:nudge", json!({ "id": id, "words": words, "label": label, "value": value }));
+        let Some((label, value, private)) = self.widgets.lock().unwrap().label_of(id) else { return };
+        self.to_pages("pet:nudge", json!({ "id": id, "words": words, "label": label, "value": value, "private": private }));
     }
 
     // Today's counts changed: kept, and the widget says so.
@@ -903,22 +905,44 @@ fn main() {
                 std::thread::sleep(Duration::from_millis(wait));
             });
 
-            // The widgets: today's from the start; the machine's every few
-            // seconds while it is on; a script's gone once it stops sending.
+            // The widgets: today's from the start; the machine's and the
+            // network's every few seconds, the battery's twice a minute and
+            // the tokens' each minute, while they are on; a script's gone
+            // once it stops sending.
             sh.count_today(|_| {});
             let watcher = sh.clone();
             std::thread::spawn(move || {
                 let mut machine = widgets::Machine::new();
-                loop {
-                    std::thread::sleep(Duration::from_secs(3));
+                let mut network = widgets::Network::new();
+                let mut tokens = tokens::Tokens::default();
+                let (claude_dir, codex_dir) = (tokens::claude_dir(), tokens::codex_dir());
+                for n in 0u64.. {
                     let now = now_ms();
                     let mut changed = watcher.widgets.lock().unwrap().expire(now);
-                    if watcher.is_widget_on("sys") {
-                        if let Some(value) = machine.words() {
-                            changed |= watcher.widgets.lock().unwrap().set_built_in("sys", "cpu", "#5e9bff", json!({ "key": "widget.sys" }), value, now);
-                        }
-                    } else {
-                        changed |= watcher.widgets.lock().unwrap().remove_built_in("sys");
+                    // A built-in widget: its words while it is on, gone when off.
+                    let mut built_in = |id: &str, icon: &str, color: &str, words: Option<Value>| {
+                        let mut widgets = watcher.widgets.lock().unwrap();
+                        changed |= match words {
+                            Some(value) => widgets.set_built_in(id, icon, color, json!({ "key": format!("widget.{id}") }), value, now),
+                            None => widgets.remove_built_in(id),
+                        };
+                    };
+                    let sys = if watcher.is_widget_on("sys") { machine.words() } else { None };
+                    built_in("sys", "cpu", "#5e9bff", sys);
+                    let net = if watcher.is_widget_on("net") { network.words() } else { None };
+                    if net.is_some() || !watcher.is_widget_on("net") {
+                        built_in("net", "chart", "#64d2ff", net);
+                    }
+                    if n % 10 == 0 {
+                        let battery = if watcher.is_widget_on("battery") { widgets::battery_words() } else { None };
+                        built_in("battery", "battery", "#34d27b", battery);
+                    }
+                    if n % (tokens::EVERY.as_secs() / 3) == 0 {
+                        let count = watcher.is_widget_on("tokens").then(|| {
+                            tokens.update(&claude_dir, &codex_dir, widgets::local_midnight());
+                            tokens::words(tokens.count())
+                        });
+                        built_in("tokens", "code", "#ff9f0a", count);
                     }
                     // A new day: today's counts start again.
                     if watcher.today.lock().unwrap().date != widgets::local_date() {
@@ -927,6 +951,7 @@ fn main() {
                     if changed {
                         watcher.redraw();
                     }
+                    std::thread::sleep(Duration::from_secs(3));
                 }
             });
 

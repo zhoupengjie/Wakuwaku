@@ -215,7 +215,7 @@
 
   // A widget in the compact island: its icon and label, and its value where the clock would be.
   function fillCompactWidget(widget) {
-    const { label, value } = Widgets.words(lang, widget)
+    const { label, value } = Widgets.words(lang, widget, isDetailed())
     const text = el('span', 'label wlabel')
     text.insertAdjacentHTML('afterbegin', Widgets.icon(widget.icon))
     text.firstChild.style.color = widget.color || COLOR.idle
@@ -228,7 +228,7 @@
 
   // A widget's line in the open island: the one shown is lit.
   function widgetRow(widget, isShown) {
-    const { label, value } = Widgets.words(lang, widget)
+    const { label, value } = Widgets.words(lang, widget, isDetailed())
     const row = el('span', isShown ? 'wrow on' : 'wrow')
     row.dataset.widget = widget.id
     row.insertAdjacentHTML('afterbegin', Widgets.icon(widget.icon))
@@ -302,13 +302,15 @@
     // A widget that asked to open the island: what it says, over all else.
     if (isNudging() && nudge.widget) {
       const w = nudge.widget
-      const { label, value } = Widgets.words(lang, w)
+      const { label, value } = Widgets.words(lang, w, isDetailed())
+      // A private one's words stay off screen too, while the specifics do.
+      const words = w.private && !isDetailed() ? '' : w.words
       const card = el('span', 'me')
       const top = el('span', 'head')
       top.insertAdjacentHTML('afterbegin', Widgets.icon(w.icon))
       top.firstChild.style.color = w.color || COLOR.idle
-      top.append(el('span', 'title', w.words || label))
-      card.append(top, el('span', 'sub', w.words ? [label, value].filter(Boolean).join(' · ') : value))
+      top.append(el('span', 'title', words || label || value))
+      card.append(top, el('span', 'sub', words ? [label, value].filter(Boolean).join(' · ') : label ? value : ''))
       lines.replaceChildren(card)
     }
     expanded.replaceChildren(...(isHome() ? [] : [stillHer(48)]), lines)

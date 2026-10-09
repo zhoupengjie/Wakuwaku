@@ -10,18 +10,27 @@
 //     ttl    how long (s) it stays without a new one: 300 by default, 10 to 86400
 //     nudge  true, or a few words: the island opens for it once, if nothing
 //            else wants you; once a minute at most, per widget
+//     private  true: the label (and the nudge's words) are kept off screen
+//            while the specifics are (the details setting off); the value,
+//            like "3 封未读", still shows
 //   POST /widget { id, remove: true }
 //
 // Built in (texts as { key, vars } for the page to say in her language):
-//   sys    CPU and memory, every few seconds
-//   today  turns today, how long Claude worked, approvals given on her
+//   sys      CPU and memory, every few seconds
+//   net      how fast the network is moving now
+//   battery  charge, and charging or time left (only with a battery)
+//   today    turns today, how long Claude worked, approvals given on her
+//   tokens   today's tokens, Claude Code's and Codex's (tokens.rs)
 use std::collections::HashMap;
 use std::path::Path;
 
 use serde_json::{json, Value};
 
-pub const ICONS: [&str; 13] = ["cpu", "weather", "note", "calendar", "bell", "stock", "today", "clock", "mail", "music", "code", "star", "dot"];
-pub const BUILT_IN: [&str; 2] = ["sys", "today"];
+pub const ICONS: [&str; 21] = [
+    "cpu", "weather", "note", "calendar", "bell", "stock", "today", "clock", "mail", "music", "code", "star", "dot", "chart", "battery", "timer", "flag", "server",
+    "check", "terminal", "coin",
+];
+pub const BUILT_IN: [&str; 5] = ["sys", "net", "battery", "today", "tokens"];
 const MAX_SCRIPTED: usize = 32;
 const DEFAULT_TTL: u64 = 300;
 const NUDGE_EVERY_MS: u64 = 60_000;
@@ -35,6 +44,7 @@ pub struct Widget {
     // When it goes, if no new one comes (ms); never, for the built-in ones.
     until: Option<u64>,
     at: u64,
+    private: bool,
 }
 
 #[derive(Default)]
@@ -92,6 +102,7 @@ impl Widgets {
             color: if is_color(s("color")) { s("color").into() } else { String::new() },
             until: Some(now + ttl * 1000),
             at: now,
+            private: v.get("private").and_then(Value::as_bool) == Some(true),
         };
         let scripted = self.list.iter().filter(|w| w.until.is_some()).count();
         match self.list.iter_mut().find(|w| w.id == id) {
@@ -124,7 +135,7 @@ impl Widgets {
             return true;
         }
         let at = self.list.iter().take_while(|w| w.until.is_none()).count();
-        self.list.insert(at, Widget { id: id.into(), label, value, icon: icon.into(), color: color.into(), until: None, at: now });
+        self.list.insert(at, Widget { id: id.into(), label, value, icon: icon.into(), color: color.into(), until: None, at: now, private: false });
         true
     }
 
@@ -141,8 +152,9 @@ impl Widgets {
         self.list.len() != before
     }
 
-    pub fn label_of(&self, id: &str) -> Option<(Value, Value)> {
-        self.list.iter().find(|w| w.id == id).map(|w| (w.label.clone(), w.value.clone()))
+    // A widget's words, and whether they are private.
+    pub fn label_of(&self, id: &str) -> Option<(Value, Value, bool)> {
+        self.list.iter().find(|w| w.id == id).map(|w| (w.label.clone(), w.value.clone(), w.private))
     }
 
     // All of them, in the order the person put them in (then as first seen),
@@ -164,6 +176,7 @@ impl Widgets {
                         "on": !off.contains(&w.id),
                         "leftMs": w.until.map(|t| t.saturating_sub(now)),
                         "at": w.at,
+                        "private": w.private,
                     })
                 })
                 .collect(),
@@ -213,6 +226,17 @@ impl Today {
 
 // The local date, YYYY-MM-DD.
 pub fn local_date() -> String {
+    let (y, m, d, _) = local_now();
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+// Local midnight, in ms since 1970.
+pub fn local_midnight() -> u64 {
+    crate::now_ms().saturating_sub(local_now().3)
+}
+
+// The local year, month, day, and ms since midnight.
+fn local_now() -> (u16, u16, u16, u64) {
     #[cfg(windows)]
     {
         #[repr(C)]
@@ -234,12 +258,15 @@ pub fn local_date() -> String {
         let mut t = SystemTime::default();
         // SAFETY: fills our own struct.
         unsafe { GetLocalTime(&mut t) };
-        format!("{:04}-{:02}-{:02}", t.year, t.month, t.day)
+        let ms = ((u64::from(t.hour) * 60 + u64::from(t.minute)) * 60 + u64::from(t.second)) * 1000 + u64::from(t.ms);
+        (t.year, t.month, t.day, ms)
     }
     #[cfg(not(windows))]
     {
-        let days = crate::now_ms() / 86_400_000;
-        format!("day-{days}")
+        // Without the local time: the day in UTC.
+        let now = crate::now_ms();
+        let days = (now / 86_400_000) as u16;
+        (1970, 1, days, now % 86_400_000)
     }
 }
 
@@ -267,10 +294,74 @@ mod sys {
         avail_extended: u64,
     }
 
+    #[repr(C)]
+    #[derive(Default)]
+    struct PowerStatus {
+        ac_line: u8,
+        battery_flag: u8,
+        percent: u8,
+        saver: u8,
+        life_secs: u32,
+        full_life_secs: u32,
+    }
+
     #[link(name = "kernel32")]
     extern "system" {
         fn GetSystemTimes(idle: *mut FileTime, kernel: *mut FileTime, user: *mut FileTime) -> i32;
         fn GlobalMemoryStatusEx(status: *mut MemoryStatus) -> i32;
+        fn GetSystemPowerStatus(status: *mut PowerStatus) -> i32;
+    }
+
+    #[link(name = "iphlpapi")]
+    extern "system" {
+        fn GetIfTable(table: *mut u8, size: *mut u32, order: i32) -> u32;
+    }
+
+    // (percent, charging, seconds left if known), or None without a battery.
+    pub fn battery() -> Option<(u8, bool, Option<u32>)> {
+        let mut p = PowerStatus::default();
+        // SAFETY: fills our own struct.
+        if unsafe { GetSystemPowerStatus(&mut p) } == 0 || p.battery_flag & 128 != 0 || p.battery_flag == 255 || p.percent > 100 {
+            return None;
+        }
+        let is_charging = p.ac_line == 1;
+        Some((p.percent, is_charging, (p.life_secs != u32::MAX && !is_charging).then_some(p.life_secs)))
+    }
+
+    // Bytes in and out so far, over the network adapters that are up: each
+    // adapter once (Windows lists one several times, through its filters).
+    pub fn network_bytes() -> Option<(u64, u64)> {
+        // MIB_IFROW: 860 bytes; the type at 516, the MAC at 532 (8), the
+        // state at 544, bytes in at 552, bytes out at 576.
+        const ROW: usize = 860;
+        let mut size = 0u32;
+        // SAFETY: first the size, then a buffer of that size.
+        unsafe { GetIfTable(std::ptr::null_mut(), &mut size, 0) };
+        let mut buf = vec![0u8; size as usize + ROW];
+        // SAFETY: the buffer is as big as the call asked for.
+        if unsafe { GetIfTable(buf.as_mut_ptr(), &mut size, 0) } != 0 {
+            return None;
+        }
+        let dword = |at: usize| u32::from_le_bytes([buf[at], buf[at + 1], buf[at + 2], buf[at + 3]]);
+        let count = dword(0) as usize;
+        let mut by_mac: std::collections::HashMap<[u8; 8], (u32, u32)> = std::collections::HashMap::new();
+        for i in 0..count {
+            let row = 4 + i * ROW;
+            if row + ROW > buf.len() {
+                break;
+            }
+            let (kind, state) = (dword(row + 516), dword(row + 544));
+            let mut mac = [0u8; 8];
+            mac.copy_from_slice(&buf[row + 532..row + 540]);
+            // Ethernet or Wi-Fi, up, with an address of its own.
+            if !(kind == 6 || kind == 71) || state != 5 || mac == [0; 8] {
+                continue;
+            }
+            let (got, sent) = (dword(row + 552), dword(row + 576));
+            let seen = by_mac.entry(mac).or_insert((got, sent));
+            *seen = (seen.0.max(got), seen.1.max(sent));
+        }
+        Some(by_mac.values().fold((0, 0), |(a, b), &(got, sent)| (a + u64::from(got), b + u64::from(sent))))
     }
 
     fn n(t: FileTime) -> u64 {
@@ -303,6 +394,57 @@ mod sys {
     }
     pub fn memory_load() -> Option<u32> {
         None
+    }
+    pub fn battery() -> Option<(u8, bool, Option<u32>)> {
+        None
+    }
+    pub fn network_bytes() -> Option<(u64, u64)> {
+        None
+    }
+}
+
+// The battery, as words; None without one.
+pub fn battery_words() -> Option<Value> {
+    let (percent, is_charging, left) = sys::battery()?;
+    Some(match (is_charging, left) {
+        (true, _) => json!({ "key": "widget.batteryCharging", "vars": { "percent": percent.to_string() } }),
+        (false, Some(secs)) => json!({ "key": "widget.batteryLeft", "vars": { "percent": percent.to_string(), "time": format!("{}:{:02}", secs / 3600, secs / 60 % 60) } }),
+        (false, None) => json!(format!("{percent}%")),
+    })
+}
+
+// Bytes a second, as a few characters: 1.2 MB/s, 80 KB/s.
+pub fn rate(bytes_per_sec: f64) -> String {
+    let (n, unit) = match bytes_per_sec {
+        b if b >= 1e9 => (b / 1e9, "GB/s"),
+        b if b >= 1e6 => (b / 1e6, "MB/s"),
+        b if b >= 1e3 => (b / 1e3, "KB/s"),
+        b => (b, "B/s"),
+    };
+    if n >= 100.0 || unit == "B/s" { format!("{n:.0} {unit}") } else { format!("{n:.1} {unit}") }
+}
+
+// How fast the network moves, between two readings.
+pub struct Network {
+    last: Option<(u64, u64, std::time::Instant)>,
+}
+
+impl Network {
+    pub fn new() -> Self {
+        Network { last: sys::network_bytes().map(|(a, b)| (a, b, std::time::Instant::now())) }
+    }
+
+    pub fn words(&mut self) -> Option<Value> {
+        let (got, sent) = sys::network_bytes()?;
+        let now = std::time::Instant::now();
+        let words = self.last.map(|(g, s, at)| {
+            let secs = now.duration_since(at).as_secs_f64().max(0.5);
+            // The counters are 32 bits: they come round again after 4 GB.
+            let d = |a: u64, b: u64| (a as u32).wrapping_sub(b as u32) as f64 / secs;
+            json!(format!("↓ {} ↑ {}", rate(d(got, g)), rate(d(sent, s))))
+        });
+        self.last = Some((got, sent, now));
+        words
     }
 }
 
@@ -382,6 +524,17 @@ mod tests {
         // Built-in ones never go; a script's does.
         assert!(w.expire(u64::MAX));
         assert_eq!(ids(w.view(0, &[], &[])), ["today"]);
+    }
+
+    #[test]
+    fn private_widgets_say_so_and_rates_read_short() {
+        let mut w = Widgets::default();
+        w.put(&json!({ "id": "mail", "label": "王总：周五的方案", "value": "3 封未读", "private": true }), 0).unwrap();
+        assert_eq!(w.view(0, &[], &[])[0]["private"], true);
+        assert_eq!(w.label_of("mail").map(|l| l.2), Some(true));
+        assert_eq!((rate(80.0), rate(81_234.0), rate(1_234_567.0), rate(250_000_000.0)), ("80 B/s".into(), "81.2 KB/s".into(), "1.2 MB/s".into(), "250 MB/s".into()));
+        // On this machine: a reading, or none, but never a panic.
+        let _ = (battery_words(), Network::new().words());
     }
 
     #[test]

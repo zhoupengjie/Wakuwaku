@@ -318,9 +318,11 @@ window.pet.onReact(react)
 // island has it when it is up).
 window.pet.onNudge(n => {
   if (isIsland() || isOutOfIsland()) return
-  const { label, value } = Widgets.words(lang, n)
+  const detailed = config.details !== false
+  const { label, value } = Widgets.words(lang, n, detailed)
+  const words = n.private && !detailed ? '' : n.words
   // Long enough to read: six waves, about four seconds.
-  react({ react: 'wave', say: n.words || [label, value].filter(Boolean).join(' · '), times: 6 })
+  react({ react: 'wave', say: words || [label, value].filter(Boolean).join(' · '), times: 6 })
 })
 
 window.pet.onAlert(({ mood }) => chime(mood))

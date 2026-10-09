@@ -2,8 +2,9 @@
 // and their words in her language. Loaded by the page before island.js, and
 // required by the tests.
 //
-// A widget is { id, label, value, icon, color, builtIn, on, leftMs }; a
-// built-in one's label and value are { key, vars } to translate.
+// A widget is { id, label, value, icon, color, builtIn, on, leftMs, private };
+// a built-in one's label and value are { key, vars } to translate. A private
+// one's label stays off screen while the specifics are (details off).
 ;(function (root) {
   const { render } = root.I18n || require('../shared/i18n')
 
@@ -22,13 +23,22 @@
     code: '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
     star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
     dot: '<circle cx="12" cy="12" r="4"/>',
+    chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    battery: '<rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2M6 10v4M10 10v4"/>',
+    timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>',
+    flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+    server: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+    check: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
+    terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/>',
+    coin: '<circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.5-1-1.5-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 6v2M12 16v2"/>',
   }
 
   // The icon as markup: its own strokes, in the colour of what surrounds it.
   const icon = name => `<svg class="wicon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.dot}</svg>`
 
-  // What a widget says: its label and its value, in her language.
-  const words = (lang, w) => ({ label: render(lang, w.label), value: render(lang, w.value) })
+  // What a widget says: its label and its value, in her language; a private
+  // one's label not, unless the specifics may show.
+  const words = (lang, w, detailed = true) => ({ label: w.private && !detailed ? '' : render(lang, w.label), value: render(lang, w.value) })
 
   const api = { ICONS, icon, words }
 

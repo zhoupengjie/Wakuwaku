@@ -251,8 +251,8 @@
     const rows = all.length
       ? all
           .map((w, i) => {
-            const { label, value } = Widgets.words(lang, w)
-            const from = w.builtIn ? T('w.builtIn') : T('w.script', { time: left(w.leftMs || 0) })
+            const { label, value } = Widgets.words(lang, w, s.details !== false)
+            const from = [w.builtIn ? T('w.builtIn') : T('w.script', { time: left(w.leftMs || 0) }), w.private ? T('w.private') : ''].filter(Boolean).join(' · ')
             const up = i > 0 ? `<button class="pbtn sm" data-wup="${esc(w.id)}" title="${esc(T('w.up'))}">↑</button>` : ''
             return `<div class="r"><span class="wi" style="color:${esc(w.color || COLOR.idle)}">${Widgets.icon(w.icon)}</span><div class="grow"><div class="ellip">${esc(label)}<span class="d"> ${esc(value)}</span></div><div class="d">${esc(from)}</div></div>${up}${sw('w:' + w.id, w.on)}</div>`
           })

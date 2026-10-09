@@ -1023,6 +1023,18 @@ body {
   opacity: 0;
 }
 
+/* Out from the corner: her portrait in the circle (island.js stillHer),
+   ringed by the circle's own ring. */
+.home-corner:not(.has-her) #island-compact {
+  display: flex;
+  height: auto;
+  padding: 4px;
+}
+
+.home-corner:not(.has-her) #island-compact .still-her {
+  box-shadow: none !important;
+}
+
 /* Other sessions busy too: a dot in the next one's colour. */
 #corner-badge {
   display: none;

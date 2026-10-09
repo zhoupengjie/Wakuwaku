@@ -185,6 +185,9 @@
   // In her seat: there is a pet to show, and she is not out on the desktop.
   const isHome = () => !!spriteUrl && (config.out !== true || isComingHome)
   const isAsking = () => isOn() && !panel.hidden
+  // Out from the corner she does the talking (her bubble, her panel): the
+  // corner keeps her portrait, and opens only when hovered.
+  const sheTalks = () => home() === 'corner' && config.out === true
   // The settings open in the island (settings.js).
   const isSetting = () => isOn() && !!window.Settings?.isOpen()
   const isNudging = () => !!nudge && Date.now() < nudge.until
@@ -222,10 +225,26 @@
     const node = el('span', 'still-her')
     node.style.cssText = `width:${px}px;height:${px}px;box-shadow:0 0 0 1.5px ${COLOR[now.mood] || COLOR.idle}`
     const sheet = el('span', 'sheet')
-    sheet.style.cssText = `background-image:url("${spriteUrl}");background-position:0 ${-CLIPS[MOOD_CLIP[now.mood]].row * CELL_H}px;transform:translate(${-(CELL_W * scale - px) / 2}px, -2px) scale(${scale})`
+    const clip = MOOD_CLIP[now.mood]
+    sheet.dataset.clip = clip
+    sheet.style.cssText = `background-image:url("${spriteUrl}");transform:translate(${-(CELL_W * scale - px) / 2}px, -2px) scale(${scale})`
+    showFrame(sheet, CLIPS[clip].row, frameNow(CLIPS[clip]))
     node.append(sheet)
     return node
   }
+
+  // The frame a clip is on now, by the clock: a portrait drawn anew (the
+  // island redraws every second) carries on where the last one was.
+  const frameNow = clip => Math.floor(Date.now() / clip.ms) % clip.frames
+
+  // Her portraits while she is out play her mood's clip.
+  setInterval(() => {
+    if (!isOn() || document.hidden) return
+    for (const sheet of document.querySelectorAll('.still-her .sheet[data-clip]')) {
+      const clip = CLIPS[sheet.dataset.clip]
+      if (clip) showFrame(sheet, clip.row, frameNow(clip))
+    }
+  }, 60)
 
   function showFrame(sheet, row, frame) {
     sheet.style.backgroundPosition = `${-frame * CELL_W}px ${-row * CELL_H}px`
@@ -235,9 +254,15 @@
 
   function fillCompact() {
     // The corner's circle: her alone, ringed in the mood's colour, and a
-    // dot in the next one's when other sessions are busy too.
+    // dot in the next one's when other sessions are busy too; her portrait
+    // while she is out.
     cornerBadge.classList.toggle('on', now.others > 0)
     cornerBadge.style.background = COLOR[second] || COLOR.working
+    if (home() === 'corner' && !isHome()) {
+      compact.replaceChildren(stillHer(CIRCLE - 8))
+      compact.classList.add('bare')
+      return
+    }
     const widget = shownWidget()
     if (widget) return fillCompactWidget(widget)
     const label = Status.brief(lang, now, { detailed: isDetailed() })
@@ -429,10 +454,11 @@
     }
   }
 
-  // Still in the portrait (her mood's first frame); playing once she stands.
+  // Her mood's clip, in the portrait as standing; waiting by a prompt, a
+  // reaction's while the island says something.
   function animateHer() {
     if (!isHome()) return
-    const name = view === 'compact' || view === 'settings' ? null : view === 'ask' ? 'waiting' : isNudging() ? nudge.clip : MOOD_CLIP[now.mood]
+    const name = view === 'ask' ? 'waiting' : isNudging() ? nudge.clip : MOOD_CLIP[now.mood]
     if (name && name === herClip) return
     clearTimeout(herTimer)
     herClip = name
@@ -964,18 +990,18 @@
     // Something new that wants you, or is finished: the island opens for a
     // moment, a longer one with Claude's words to read.
     const isReading = isDetailed() && Status.isEnding(now) && !!now.reply
-    if (isOn() && before !== now.mood && NUDGE_CLIP[now.mood]) nudgeFor(NUDGE_CLIP[now.mood], null, isReading ? NUDGE_READ_MS : NUDGE_MS)
+    if (isOn() && !sheTalks() && before !== now.mood && NUDGE_CLIP[now.mood]) nudgeFor(NUDGE_CLIP[now.mood], null, isReading ? NUDGE_READ_MS : NUDGE_MS)
     else update()
   })
 
   // A hello, or something to fix: the island opens to say it, and she waves.
   window.pet.onReact(({ say: text }) => {
-    if (isOn() && text) nudgeFor('waving', say(lang, text))
+    if (isOn() && !sheTalks() && text) nudgeFor('waving', say(lang, text))
   })
 
   // A widget asks to open the island (main checked that nothing wants you).
   window.pet.onNudge(n => {
-    if (!isOn()) return
+    if (!isOn() || sheTalks()) return
     const at = widgets.findIndex(w => w.id === n.id)
     if (at >= 0) widgetAt = at
     nudgeFor('waving', null, NUDGE_READ_MS, { ...n, icon: widgets[at]?.icon, color: widgets[at]?.color })

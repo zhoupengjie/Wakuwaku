@@ -109,15 +109,13 @@ fn window(sh: &Shared) -> Option<WebviewWindow> {
     sh.app.get_webview_window("island")
 }
 
-// Up: whenever she is home, or her home talks while she is out (the island,
-// the bar); or risen for the settings, or for reaching and taking her in; or
-// the settings open in it, whatever they just hid (she, do not disturb): they
-// never go from under the person, only once closed.
+// Up whenever she is in sight, home or out (out from the corner, it keeps
+// her portrait while she does the talking); or risen for the settings; or
+// the settings open in it, whatever they just hid (she, do not disturb):
+// they never go from under the person, only once closed.
 pub fn is_shown(sh: &Shared) -> bool {
-    let is_visible = sh.is_visible();
-    let is_up = is_visible && !sh.she_talks();
     let isl = sh.island.lock().unwrap();
-    is_up || isl.temp || isl.settings_open || (is_visible && (isl.reaching || isl.absorbing))
+    sh.is_visible() || isl.temp || isl.settings_open
 }
 
 fn set_ignore(sh: &Shared, ignore: Option<bool>) {
@@ -507,7 +505,7 @@ pub fn absorb(sh: &Arc<Shared>, point: (i32, i32)) {
 // Open them on a page (or where they were). With no home up (she is out
 // from the corner, or out of sight), one rises for them and goes once they close.
 pub fn open_settings(sh: &Arc<Shared>, tab: Option<&str>) {
-    let is_up = sh.is_visible() && !sh.she_talks();
+    let is_up = sh.is_visible();
     let ready = {
         let mut isl = sh.island.lock().unwrap();
         isl.temp |= !is_up;

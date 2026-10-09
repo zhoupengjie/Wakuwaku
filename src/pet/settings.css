@@ -510,6 +510,66 @@
   opacity: 0.6;
 }
 
+/* The fold, as Thunderbird's manual setup: a chevron and its name; open, the
+   incoming server's settings under a small heading, the outgoing one's after. */
+#island-settings .adv {
+  margin: 4px 0 2px;
+}
+
+#island-settings .adv-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: #5e9bff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#island-settings .adv-h .chev {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+#island-settings .adv-h.on .chev {
+  transform: rotate(90deg);
+}
+
+#island-settings .adv-b {
+  margin: 2px 0 4px;
+  padding: 4px 12px 6px;
+  border-radius: 12px;
+  background: #151517;
+}
+
+#island-settings .adv-sec {
+  margin: 8px 0 2px;
+  color: var(--g4);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+#island-settings .adv-b .fr .fl {
+  width: 84px;
+}
+
+#island-settings .adv-b .note {
+  padding-left: 94px;
+}
+
+#island-settings .fr .pick:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+#island-settings .note.ok {
+  color: #34d27b;
+}
+
 /* The inbox: a line a letter, bold with a blue dot while unread. */
 #island-settings .inbox .r {
   min-height: 0;

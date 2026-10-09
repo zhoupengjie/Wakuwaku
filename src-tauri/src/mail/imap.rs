@@ -28,7 +28,7 @@ use io_imap::types::search::SearchKey;
 use io_imap::types::sequence::SequenceSet;
 use serde_json::{json, Value};
 
-use super::{Security, Server};
+use super::{Auth, Security, Server};
 
 // How long a read or a write may wait once connected; in IDLE, how often
 // the wait wakes (to refresh it when it is due).
@@ -208,12 +208,23 @@ impl Session {
         self.caps.iter().any(|c| c.eq_ignore_ascii_case(cap))
     }
 
-    // Signed in: AUTHENTICATE PLAIN where it is offered (any password goes),
-    // else LOGIN; the credentials sent after the server asks, never inline,
-    // as Coremail (163, 126) says it takes them inline and does not. Then
-    // who we are, where the server asks to be told.
-    pub fn login(&mut self, user: &str, password: &str) -> Result<(), Fail> {
-        let caps = if self.has("AUTH=PLAIN") {
+    // What the server can do, as it said before signing in.
+    pub fn caps(&self) -> &[String] {
+        &self.caps
+    }
+
+    // Signed in as `auth` says: AUTHENTICATE PLAIN (any password goes), or
+    // LOGIN, or (auto) PLAIN where it is offered, else LOGIN. The
+    // credentials go after the server asks, never inline, as Coremail (163,
+    // 126) says it takes them inline and does not. Then who we are, where
+    // the server asks to be told.
+    pub fn login(&mut self, user: &str, password: &str, auth: Auth) -> Result<(), Fail> {
+        let plain = match auth {
+            Auth::Plain => true,
+            Auth::Login => false,
+            Auth::Auto => self.has("AUTH=PLAIN"),
+        };
+        let caps = if plain {
             let opts = ImapAuthPlainOptions { initial_request: false, ensure_capabilities: true, auto_id: None };
             self.client.auth_plain(None, user, password, opts)
         } else if self.has("LOGINDISABLED") {
@@ -348,6 +359,6 @@ impl Session {
 // Connected and signed in.
 pub fn session(server: &Server, password: &str, timeout: Duration) -> Result<Session, Fail> {
     let mut s = Session::open(server, timeout)?;
-    s.login(&server.username, password)?;
+    s.login(&server.username, password, server.auth)?;
     Ok(s)
 }

@@ -410,11 +410,28 @@
 
   // Setting an account up: the address and the password, then the server
   // found (a line, and a way to change it) or its fields to fill in.
+  // Thunderbird's choices for the incoming server: how the connection is
+  // secured, and how to sign in (a normal password, either way; the others
+  // it offers are listed, not to be picked).
+  const SECURITIES = () => [['auto', T('mail.auto')], ['plain', T('mail.plain')], ['starttls', 'STARTTLS'], ['ssl', 'SSL/TLS']]
+  const AUTHS = () => [
+    ['auto', T('mail.auto')],
+    ['plain', T('mail.auth.plain')],
+    ['login', T('mail.auth.login')],
+    ['cram', T('mail.auth.cram'), true],
+    ['gssapi', 'Kerberos / GSSAPI', true],
+    ['ntlm', 'NTLM', true],
+    ['oauth2', 'OAuth2', true],
+  ]
+  const labelOf = (list, value) => list.find(x => x[0] === value)?.[1] || value
+
+  // Setting an account up: the address and the password; then the server
+  // found (a line) or not; and, folded as Thunderbird's manual setup, the
+  // incoming server's every setting, with Re-test.
   function mailFormHTML() {
     const f = mailForm
     const field = (key, label, attrs = '') =>
       `<label class="fr"><span class="fl">${esc(label)}</span><input class="in" data-mf="${key}" value="${esc(f[key] ?? '')}" spellcheck="false" ${attrs}></label>`
-    const securities = [['ssl', 'SSL/TLS'], ['starttls', 'STARTTLS'], ['plain', T('mail.plain')]]
     const head = [
       field('address', T('mail.address'), `placeholder="you@example.com" autocomplete="off"${f.id ? ' disabled' : ''}`),
       field('password', T('mail.password'), `type="password" autocomplete="off" placeholder="${esc(f.id ? T('mail.passwordKeep') : '')}"`),
@@ -422,25 +439,57 @@
     ].join('')
     const found =
       f.step === 'found'
-        ? `<div class="r"><div class="grow"><div class="ellip">IMAP · ${esc(f.host)}:${esc(f.port)} · ${esc(securities.find(s => s[0] === f.security)?.[1] || '')}</div><div class="d">${esc(T(`mail.source.${f.source}`))}</div></div><button class="pbtn sm" data-mail-manual>${esc(T('mail.manual'))}</button></div>`
+        ? `<div class="r"><div class="grow"><div class="ellip">IMAP · ${esc(f.host)}:${esc(f.port)} · ${esc(labelOf(SECURITIES(), f.security))}${f.auth && f.auth !== 'auto' ? ` · ${esc(labelOf(AUTHS(), f.auth))}` : ''}</div>${f.source ? `<div class="d">${esc(T(`mail.source.${f.source}`))}</div>` : ''}</div></div>`
         : ''
-    const manual =
-      f.step === 'manual'
-        ? [
-            f.notFound ? `<div class="note">${esc(T(f.oauth ? 'mail.oauth' : 'mail.notFound'))}</div>` : '',
-            field('host', T('mail.host'), 'placeholder="imap.example.com"'),
-            field('port', T('mail.port'), 'inputmode="numeric" placeholder="993"'),
-            `<div class="fr"><span class="fl">${esc(T('mail.security'))}</span>${seg('mf.security', securities, f.security)}</div>`,
-            field('username', T('mail.username'), `placeholder="${esc(f.address || 'you@example.com')}"`),
-          ].join('')
-        : ''
-    const busy = f.busy ? `<div class="note">${esc(T(f.busy === 'find' ? 'mail.finding' : 'mail.signingIn'))}</div>` : ''
+    const notFound = f.step === 'manual' && f.notFound ? `<div class="note">${esc(T(f.oauth ? 'mail.oauth' : 'mail.notFound'))}</div>` : ''
+    const adv = f.step === 'start' ? '' : advancedHTML(field)
+    const busy = f.busy ? `<div class="note">${esc(T({ find: 'mail.finding', probe: 'mail.adv.testing' }[f.busy] || 'mail.signingIn'))}</div>` : ''
     const result = f.result ? `<div class="note${f.result.bad ? ' err' : ''}">${esc(f.result.text)}</div>` : ''
-    const go = f.step === 'start' ? `<button class="pbtn al" data-mail-find ${f.busy ? 'disabled' : ''}>${esc(T('mail.continue'))}</button>` : `<button class="pbtn al" data-mail-save ${f.busy ? 'disabled' : ''}>${esc(T('mail.done'))}</button>`
-    const again = f.step === 'manual' && !f.id ? `<button class="pbtn" data-mail-find ${f.busy ? 'disabled' : ''}>${esc(T('mail.findAgain'))}</button>` : ''
+    const off = f.busy ? 'disabled' : ''
+    const go = f.step === 'start' ? `<button class="pbtn al" data-mail-find ${off}>${esc(T('mail.continue'))}</button>` : `<button class="pbtn al" data-mail-save ${off}>${esc(T('mail.done'))}</button>`
+    const again = f.step === 'manual' && !f.id ? `<button class="pbtn" data-mail-find ${off}>${esc(T('mail.findAgain'))}</button>` : ''
+    const retest = f.step !== 'start' && f.advanced ? `<button class="pbtn" data-mail-probe ${off}>${esc(T('mail.adv.retest'))}</button>` : ''
     const remove = f.id ? `<button class="pbtn" data-mail-remove="${esc(f.id)}">${esc(T(mailDelete === f.id ? 'mail.removeSure' : 'mail.remove'))}</button>` : ''
-    return `${sec(T(f.id ? 'mail.change' : 'mail.add'))}<div class="grp mail-form">${head}${found}${manual}${busy}${result}
-      <div class="r">${remove}<span class="grow"></span><button class="pbtn" data-mail-cancel>${esc(T('mail.cancel'))}</button>${again}${go}</div></div>`
+    return `${sec(T(f.id ? 'mail.change' : 'mail.add'))}<div class="grp mail-form">${head}${found}${notFound}${adv}${busy}${result}
+      <div class="r">${remove}<span class="grow"></span><button class="pbtn" data-mail-cancel>${esc(T('mail.cancel'))}</button>${again}${retest}${go}</div></div>`
+  }
+
+  // The fold: Thunderbird's manual setup for the incoming server (protocol,
+  // host name, port, connection security, authentication method, user name),
+  // what Re-test found, and the outgoing server, not here yet.
+  function advancedHTML(field) {
+    const f = mailForm
+    const toggle = `<button class="adv-h${f.advanced ? ' on' : ''}" data-mail-adv><span class="chev">›</span>${esc(T('mail.adv'))}</button>`
+    if (!f.advanced) return `<div class="adv">${toggle}</div>`
+    const pick = (key, list) => `<button class="pick" data-mfpick="${key}">${esc(labelOf(list, f[key] || 'auto'))} ▾</button>`
+    const rows = [
+      `<div class="adv-sec">${esc(T('mail.adv.in'))}</div>`,
+      `<div class="fr"><span class="fl">${esc(T('mail.adv.protocol'))}</span><button class="pick" disabled>IMAP</button></div>`,
+      field('host', T('mail.adv.host'), 'placeholder="imap.example.com"'),
+      field('port', T('mail.port'), `inputmode="numeric" placeholder="${esc(T('mail.auto'))}"`),
+      `<div class="fr"><span class="fl">${esc(T('mail.adv.security'))}</span>${pick('security', SECURITIES())}</div>`,
+      `<div class="fr"><span class="fl">${esc(T('mail.adv.auth'))}</span>${pick('auth', AUTHS())}</div>`,
+      field('username', T('mail.username'), `placeholder="${esc(f.address || 'you@example.com')}"`),
+      f.security === 'plain' ? `<div class="note err">${esc(T('mail.adv.plainWarn'))}</div>` : '',
+      probedHTML(),
+      `<div class="adv-sec">${esc(T('mail.adv.out'))}</div><div class="note">${esc(T('mail.adv.outNote'))}</div>`,
+    ]
+    return `<div class="adv on">${toggle}<div class="adv-b">${rows.join('')}</div></div>`
+  }
+
+  // What Re-test found: how it is reached, how it lets one sign in, and,
+  // for a Windows domain's server (Exchange), what the user name may be.
+  function probedHTML() {
+    const p = mailForm.probed
+    if (!p) return ''
+    const names = p.auths.map(a => {
+      const [, label, off] = AUTHS().find(x => x[0] === a) || [a, a, true]
+      return off ? `${label}${T('mail.unsupported')}` : label
+    })
+    const how = T('mail.adv.found', { how: labelOf(SECURITIES(), p.security), port: p.port })
+    const auths = p.auths.some(a => a === 'plain' || a === 'login') ? T('mail.adv.auths', { list: names.join(lang === 'zh' ? '、' : ', ') }) : T('mail.adv.noAuth')
+    const domain = p.auths.some(a => a === 'ntlm' || a === 'gssapi') ? `<div class="note">${esc(T('mail.adv.domain'))}</div>` : ''
+    return `<div class="note ok">✓ ${esc(how)} ${esc(auths)}</div>${domain}`
   }
 
   // Who a letter goes to first (the setting), and both in that order.
@@ -692,15 +741,23 @@
     menuEl.style.top = `${Math.max(4, Math.min(y - box.top, box.height - menuEl.offsetHeight - 4))}px`
   }
 
-  function openPicker(button) {
-    const [ag, key] = button.dataset.picker.split('.')
-    const value = confOf(ag)[key] || ''
-    menuEl.innerHTML = choicesOf(ag, key)
-      .map(([v, label], i) => `${i === 1 ? '<div class="mi-sep"></div>' : ''}<button class="mi${v === value ? ' on' : ''}" data-pick="${esc(v)}">${esc(label)}</button>`)
+  // A menu of [value, label, off] under a button, the first (the agent's or
+  // server's own, autodetect) apart; one that is off is there, greyed.
+  function openChoices(button, choices, value, onPick) {
+    menuEl.innerHTML = choices
+      .map(
+        ([v, label, off], i) =>
+          `${i === 1 ? '<div class="mi-sep"></div>' : ''}<button class="mi${v === value ? ' on' : ''}" data-pick="${esc(v)}" ${off ? 'disabled' : ''}>${esc(label)}${off ? ` <span class="d">${esc(T('mail.unsupported'))}</span>` : ''}</button>`,
+      )
       .join('')
-    menuPick = v => setConf(ag, key, v)
+    menuPick = onPick
     const r = button.getBoundingClientRect()
     placeMenu(r.left, r.bottom + 4)
+  }
+
+  function openPicker(button) {
+    const [ag, key] = button.dataset.picker.split('.')
+    openChoices(button, choicesOf(ag, key), confOf(ag)[key] || '', v => setConf(ag, key, v))
   }
 
   function closeMenu() {
@@ -1156,7 +1213,7 @@
       return true
     }
     if (at('[data-mail-add]')) {
-      mailForm = { id: '', address: '', password: '', host: '', port: 993, security: 'ssl', username: '', step: 'start', busy: '', result: null }
+      mailForm = { id: '', address: '', password: '', host: '', port: 993, security: 'ssl', auth: 'auto', username: '', step: 'start', advanced: false, probed: null, busy: '', result: null }
       mailDelete = ''
       redrawMail('[data-mf="address"]')
       return true
@@ -1164,7 +1221,7 @@
     const change = at('[data-mail-edit]')
     if (change) {
       const a = (snap.mail || []).find(x => x.id === change.dataset.mailEdit)
-      if (a) mailForm = { id: a.id, address: a.address, password: '', host: a.host, port: a.port, security: a.security, username: a.username, step: 'manual', busy: '', result: null }
+      if (a) mailForm = { id: a.id, address: a.address, password: '', host: a.host, port: a.port, security: a.security, auth: a.auth || 'auto', username: a.username, step: 'found', source: '', advanced: true, probed: null, busy: '', result: null }
       mailDelete = ''
       redrawMail('[data-mf="password"]')
       return true
@@ -1174,9 +1231,28 @@
       redrawMail()
       return true
     }
-    if (at('[data-mail-manual]')) {
-      mailForm.step = 'manual'
-      redrawMail('[data-mf="host"]')
+    // The fold opened or closed; a way or a method picked; Re-test.
+    if (at('[data-mail-adv]') && mailForm) {
+      mailForm.advanced = !mailForm.advanced
+      redrawMail(mailForm.advanced ? '[data-mf="host"]' : null)
+      return true
+    }
+    const mfpick = at('[data-mfpick]')
+    if (mfpick && mailForm) {
+      const f = mailForm
+      const key = mfpick.dataset.mfpick
+      openChoices(mfpick, key === 'security' ? SECURITIES() : AUTHS(), f[key] || 'auto', value => {
+        f[key] = value
+        // The usual port for the way, if the port was the other way's.
+        const usual = { ssl: 993, starttls: 143, plain: 143, auto: '' }
+        if (key === 'security' && ['993', '143', ''].includes(String(f.port))) f.port = usual[value]
+        f.probed = null
+        draw()
+      })
+      return true
+    }
+    if (at('[data-mail-probe]')) {
+      probeServer()
       return true
     }
     if (at('[data-mail-find]')) {
@@ -1198,15 +1274,6 @@
       mailDelete = ''
       mailForm = null
       window.pet.mail.remove(id).then(got => ((snap = got), draw(), relayout()))
-      return true
-    }
-    const security = at('[data-seg="mf.security"] > span')
-    if (security && mailForm) {
-      mailForm.security = security.dataset.value
-      // The usual port for the way, if the port was the other way's.
-      const usual = { ssl: 993, starttls: 143, plain: 143 }
-      if (['993', '143', ''].includes(String(mailForm.port))) mailForm.port = usual[mailForm.security]
-      draw()
       return true
     }
     return false
@@ -1232,25 +1299,57 @@
     const got = await window.pet.mail.discover(f.address.trim())
     if (mailForm !== f) return
     f.busy = ''
+    f.probed = null
     if (got.ok && got.found) {
-      Object.assign(f, got.server, { step: 'found', source: got.source, notFound: false, oauth: false })
+      Object.assign(f, got.server, { step: 'found', source: got.source, notFound: false, oauth: false, advanced: false })
     } else {
-      Object.assign(f, { step: 'manual', notFound: true, oauth: !!got.oauth, username: f.username || f.address.trim() })
+      // Thunderbird's manual setup: the fold open, the way and port to be found.
+      Object.assign(f, { step: 'manual', notFound: true, oauth: !!got.oauth, advanced: true, host: '', port: '', security: 'auto', auth: 'auto', username: f.username || f.address.trim() })
     }
     redrawMail(f.step === 'manual' ? '[data-mf="host"]' : null)
   }
 
-  // Signed in once, then kept; or what went wrong.
+  // Re-test: the server tried without signing in; the way and port, when
+  // they were to be detected, set to what answered. True when it did.
+  async function probeServer() {
+    const f = mailForm
+    if (!String(f.host || '').trim()) {
+      f.result = { bad: true, text: T('mail.err.fields') }
+      redrawMail('[data-mf="host"]')
+      return false
+    }
+    f.busy = 'probe'
+    f.result = null
+    f.probed = null
+    redrawMail()
+    const got = await window.pet.mail.probe(String(f.host).trim(), String(f.port ?? '').trim(), f.security || 'auto')
+    if (mailForm !== f) return false
+    f.busy = ''
+    if (got.ok && got.found) {
+      Object.assign(f, { security: got.security, port: got.port })
+      f.probed = { security: got.security, port: got.port, auths: got.auths || [] }
+    } else {
+      f.result = { bad: true, text: mailError(got.error, { host: String(f.host).trim(), port: String(f.port || '').trim() || '993 / 143' }) }
+    }
+    redrawMail()
+    return !!f.probed
+  }
+
+  // Signed in once, then kept; or what went wrong (and, for a Windows
+  // domain's server, what the user name may be). A way or port still to be
+  // detected is, first.
   async function saveAccount() {
     const f = mailForm
     if (!f.id && !f.password) {
       f.result = { bad: true, text: T('mail.err.password') }
       return redrawMail('[data-mf="password"]')
     }
+    if ((f.security === 'auto' || !String(f.port ?? '').trim()) && !(await probeServer())) return
+    if (mailForm !== f) return
     f.busy = 'save'
     f.result = null
     redrawMail()
-    const account = { id: f.id, address: f.address.trim(), host: String(f.host).trim(), port: Number(f.port), security: f.security, username: String(f.username || f.address).trim() }
+    const account = { id: f.id, address: f.address.trim(), host: String(f.host).trim(), port: Number(f.port), security: f.security, auth: f.auth || 'auto', username: String(f.username || f.address).trim() }
     const got = await window.pet.mail.save(account, f.password)
     if (mailForm !== f) return
     f.busy = ''
@@ -1258,7 +1357,8 @@
       mailForm = null
       snap = got.snapshot
     } else {
-      f.result = { bad: true, text: mailError(got.error, account) }
+      const domain = got.error?.kind === 'login' && (got.auths || []).some(a => a === 'ntlm' || a === 'gssapi')
+      f.result = { bad: true, text: mailError(got.error, account) + (domain ? ` ${T('mail.adv.domain')}` : '') }
     }
     redrawMail()
   }

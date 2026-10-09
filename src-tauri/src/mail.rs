@@ -72,27 +72,68 @@ impl Security {
     }
 }
 
+// How to sign in, as Thunderbird's "Authentication method" has it: auto
+// (AUTHENTICATE PLAIN where offered, else LOGIN), or one of them always.
+// Both are Thunderbird's "Normal password"; the others it offers (NTLM,
+// Kerberos, OAuth2, an encrypted password) are not here.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub enum Auth {
+    #[default]
+    Auto,
+    Plain,
+    Login,
+}
+
+impl Auth {
+    fn parse(s: &str) -> Auth {
+        match s {
+            "plain" => Auth::Plain,
+            "login" => Auth::Login,
+            _ => Auth::Auto,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Auth::Auto => "auto",
+            Auth::Plain => "plain",
+            Auth::Login => "login",
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct Server {
     pub host: String,
     pub port: u16,
     pub security: Security,
     pub username: String,
+    pub auth: Auth,
+}
+
+// A host name as one is written: letters, digits, dots, dashes.
+fn host_of(v: &Value) -> Option<String> {
+    let host = v.as_str()?.trim().to_ascii_lowercase();
+    (!host.is_empty() && host.len() <= 253 && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')).then_some(host)
+}
+
+fn port_of(v: &Value) -> Option<u16> {
+    v.as_u64().or_else(|| v.as_str()?.trim().parse().ok()).filter(|p| (1..=65535).contains(p)).map(|p| p as u16)
 }
 
 impl Server {
     fn json(&self) -> Value {
-        json!({ "host": self.host, "port": self.port, "security": self.security.name(), "username": self.username })
+        json!({ "host": self.host, "port": self.port, "security": self.security.name(), "username": self.username, "auth": self.auth.name() })
     }
 
-    // As the page sent it, checked: a host name, a port, a way, a user.
+    // As the page sent it, checked: a host name, a port, a way, a user, how to sign in.
     fn from_json(v: &Value) -> Option<Server> {
-        let host = v["host"].as_str()?.trim().to_ascii_lowercase();
-        let is_host = !host.is_empty() && host.len() <= 253 && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
-        let port = v["port"].as_u64().or_else(|| v["port"].as_str()?.trim().parse().ok()).filter(|p| (1..=65535).contains(p))? as u16;
+        let host = host_of(&v["host"])?;
+        let port = port_of(&v["port"])?;
         let username = v["username"].as_str()?.trim();
         let is_user = !username.is_empty() && username.chars().count() <= 320 && !username.chars().any(char::is_control);
-        (is_host && is_user).then(|| Server { host, port, security: Security::parse(v["security"].as_str().unwrap_or("")).unwrap_or(Security::Ssl), username: username.into() })
+        let security = Security::parse(v["security"].as_str().unwrap_or("")).unwrap_or(Security::Ssl);
+        is_user.then(|| Server { host, port, security, username: username.into(), auth: Auth::parse(v["auth"].as_str().unwrap_or("")) })
     }
 }
 
@@ -148,13 +189,23 @@ fn from_and_subject(head: &[u8]) -> (String, String) {
 }
 
 // A try before an account is kept: signed in, the inbox opened read-only,
-// and the unread counted.
-fn test(server: &Server, password: &str) -> Result<usize, Fail> {
-    let mut s = session(server, password, CONNECT)?;
-    s.inbox(false)?;
-    let unread = s.unseen()?.len();
-    s.logout();
-    Ok(unread)
+// and the unread counted; or what went wrong, with how the server lets one
+// sign in (the page says more when that is a Windows domain's).
+fn test(server: &Server, password: &str) -> Result<usize, (Fail, Vec<&'static str>)> {
+    let mut s = imap::Session::open(server, CONNECT).map_err(|f| (f, Vec::new()))?;
+    let auths = discover::auths_of(s.caps());
+    let tried = (|| {
+        s.login(&server.username, password, server.auth)?;
+        s.inbox(false)?;
+        s.unseen()
+    })();
+    match tried {
+        Ok(unseen) => {
+            s.logout();
+            Ok(unseen.len())
+        }
+        Err(fail) => Err((fail, auths)),
+    }
 }
 
 // An account's password, as kept.
@@ -365,6 +416,16 @@ pub async fn mail_discover(address: String) -> Value {
     tauri::async_runtime::spawn_blocking(move || discover(&address)).await.unwrap_or_else(|e| json!({ "ok": false, "error": e.to_string() }))
 }
 
+// "Re-test", as Thunderbird has it: the server tried without signing in,
+// the port and the way as given or (empty, "auto") found.
+#[tauri::command]
+pub async fn mail_probe(host: Value, port: Value, security: String) -> Value {
+    let Some(host) = host_of(&host) else { return json!({ "ok": false, "error": { "kind": "fields", "text": "" } }) };
+    let port = port_of(&port);
+    let security = Security::parse(&security);
+    tauri::async_runtime::spawn_blocking(move || discover::probe_server(&host, port, security)).await.unwrap_or_else(|e| json!({ "ok": false, "error": { "kind": "other", "text": e.to_string() } }))
+}
+
 // An account added or changed: signed in once to see that it works, then
 // kept, its password in the Credential Manager. An empty password keeps the
 // one kept before.
@@ -382,10 +443,10 @@ pub async fn mail_save(app: AppHandle, account: Value, password: String) -> Valu
         return json!({ "ok": false, "error": { "kind": "password", "text": "" } });
     }
     let (s, p) = (server.clone(), password.clone());
-    let tried = tauri::async_runtime::spawn_blocking(move || test(&s, &p)).await.unwrap_or_else(|e| Err(Fail::Other(e.to_string())));
+    let tried = tauri::async_runtime::spawn_blocking(move || test(&s, &p)).await.unwrap_or_else(|e| Err((Fail::Other(e.to_string()), Vec::new())));
     let unread = match tried {
         Ok(n) => n,
-        Err(fail) => return json!({ "ok": false, "error": fail.json() }),
+        Err((fail, auths)) => return json!({ "ok": false, "error": fail.json(), "auths": auths }),
     };
     if let Err(e) = secret::write(&id, &password) {
         return json!({ "ok": false, "error": { "kind": "keep", "text": e } });

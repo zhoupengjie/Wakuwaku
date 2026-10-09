@@ -83,11 +83,13 @@
       openSite: place => invoke('settings_open_site', { place }),
     },
     // Mail accounts (mail.rs): the server for an address, an account kept
-    // once it signs in, one removed, one on or off; an inbox's newest
+    // once it signs in, one removed, one on or off, a server tried without
+    // signing in (Re-test); an inbox's newest
     // letters, one letter opened (and marked read), one handed to an agent
     // (agent claude | codex, how open | summary).
     mail: {
       discover: address => invoke('mail_discover', { address: String(address || '') }),
+      probe: (host, port, security) => invoke('mail_probe', { host: String(host || ''), port: String(port ?? ''), security: String(security || 'auto') }),
       save: (account, password) => invoke('mail_save', { account, password: String(password || '') }),
       remove: id => invoke('mail_remove', { id: String(id) }),
       switch: (id, on) => invoke('mail_switch', { id: String(id), on: on === true }),

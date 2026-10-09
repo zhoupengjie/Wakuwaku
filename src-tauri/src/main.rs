@@ -866,6 +866,7 @@ fn main() {
             settings::settings_gallery,
             settings::settings_open_site,
             mail::mail_discover,
+            mail::mail_probe,
             mail::mail_save,
             mail::mail_remove,
             mail::mail_switch,

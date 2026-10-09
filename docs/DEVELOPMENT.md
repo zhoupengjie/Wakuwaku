@@ -224,7 +224,7 @@ examples/widgets 里的天气、股票、番茄钟、倒计时、久坐提醒、
 
 ## 邮件（mail.rs、mail/）
 
-设置里的「邮件」页，照 Thunderbird 添加账户的样子：填邮箱地址和密码，点「继续」去找服务器；找到了显示一行设置和来源，可以「手动配置」；没找到直接给收信服务器、端口、加密、用户名几个框。点「完成」先真的登录一次，能登录才保存。下面是收件箱：最新的信，点开读一封，右键交给 Claude Code 或 Codex。只收信，不发信。
+设置里的「邮件」页，照 Thunderbird 添加账户的样子：填邮箱地址和密码，点「继续」去找服务器；找到了显示一行设置和来源，下面是折起来的「高级设置」；没找到就直接展开它。点「完成」先真的登录一次，能登录才保存。下面是收件箱：最新的信，点开读一封，右键交给 Claude Code 或 Codex。只收信，不发信。
 
 ```
 mail.rs            账户、盯收件箱的线程、岛上的插件、设置页的命令、凭据管理器
@@ -234,7 +234,9 @@ mail/letters.rs    邮件页的收件箱：列表、读一封
 mail/agent.rs      把一封信交给 Claude Code / Codex
 ```
 
+- **内置的几家**（`discover.rs` 的 `KNOWN`）先查，来源是 `builtin`：现在只有 TU Dresden（`tu-dresden.de` 和学生的 `mailbox.tu-dresden.de`）→ `msx.tu-dresden.de:993` SSL/TLS，用户名是邮箱地址（ZIH FAQ 的写法），密码是 ZIH 密码。它是学校自己的 Exchange，没有 autoconfig，ISPDB 里也没有，MX 是 DFN 的网关，下面的查找都找不到。msx 在 993 上提供 `AUTH=PLAIN AUTH=NTLM AUTH=GSSAPI`，143 上 STARTTLS 之前 `LOGINDISABLED`。
 - **找服务器**（`discover`），和 Thunderbird 的顺序一样：邮箱域名自己的 `autoconfig.<域名>/mail/config-v1.1.xml`、`<域名>/.well-known/autoconfig/…`，Thunderbird 的数据库 ISPDB（`autoconfig.thunderbird.net/v1.1/<域名>`），再查域名的 MX 记录（Windows 的 `DnsQuery_W`），拿 MX 主机所属的域名（`base_domain`：`mx1.qq.com` 是 qq.com，`a3011.mx.srv.dfn.de` 是 dfn.de）再问 ISPDB，最后猜 `imap.<域名>`、`mail.<域名>`、`<域名>`（993 上能 TLS 握手并收到 IMAP 问候，或者 143 上有 STARTTLS）。配置里只取 IMAP、能用密码登录的那一个；全都只能 OAuth（Outlook、Hotmail）时告诉页面 `oauth`，还不支持。用户名里的 `%EMAILADDRESS%` 等照填。实测：QQ、163、Gmail、iCloud、GMX 在 ISPDB 里；托管在 Google 上的公司域名经 MX 找到 imap.gmail.com；交大猜中 imap.sjtu.edu.cn；TU Dresden 找不到，手动填 `msx.tu-dresden.de`。
+- **高级设置**（账户表单里的折叠区，照 Thunderbird 的「手动配置」）：收件服务器的协议（只有 IMAP）、主机名、端口、连接安全性（自动检测 / 不加密 / STARTTLS / SSL/TLS）、验证方式（自动检测 / 普通密码 / 普通密码（LOGIN 命令），加密的密码、Kerberos/GSSAPI、NTLM、OAuth2 列着但是灰的）、用户名；发件服务器只写一句「还不能发信」。选项用和右键菜单同一个小菜单。「重新测试」（`mail_probe` → `discover::probe_server`）只连不登录：连接安全性是自动检测时先试 993 上的 TLS 再试 143 上的 STARTTLS（给了端口就只在那个端口上试，从不自动选不加密），把连上的方式和端口填回去，再按服务器说的能力列出验证方式（`auths_of`）；有 NTLM 或 GSSAPI 时提示用户名可以是邮箱地址、登录名或「域\登录名」。「完成」时连接安全性还是自动检测、或者端口空着，就先重新测试一次。登录失败时 `mail_save` 也带回 `auths`，同样给这个提示。验证方式存在账户的 `auth` 里（`auto` | `plain` | `login`；`Session::login` 照它选 AUTHENTICATE PLAIN 或 LOGIN，自动是有 `AUTH=PLAIN` 就用它）。
 - **IMAP**（`imap.rs` 的 `Session`）用 [io-imap](https://github.com/pimalaya/io-imap)，himalaya 底下的那个库（pimalaya，MIT/Apache-2.0）。只用它的「light client」：连接我们自己开（993 直接 TLS，或者 143 上 `STARTTLS` 后换成 TLS；TLS 用系统的 native-tls，认系统证书；`STARTTLS` 的 OK 后面要是跟着别的字节就不升级，那是有人在中间），它负责说 IMAP、解析回复（imap-codec）。登录时服务器提供 `AUTH=PLAIN` 就用 `AUTHENTICATE PLAIN`，否则 `LOGIN`；密码总是等服务器说 `+` 再发，不用 SASL-IR，因为网易（Coremail）号称支持其实不支持。服务器支持 `ID` 就报名字（网易不报不让开文件夹）。盯信用 `EXAMINE INBOX`（只读）、`UID SEARCH UNSEEN`、`UID FETCH <uid> (BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])`（PEEK 不会标成已读）；`IDLE` 用 io-imap 的协程，我们自己读写 socket（每 60 秒醒一次，到 9 分钟刷新一次 IDLE）。发件人和主题用 mail-parser 读（编码字、GBK 等字符集都认，要开 `full_encoding`）。
   - **io-imap 的版本锁死**（`=0.7.1`）：它还在 0.x，两三周就出一个不兼容的版本。升级时改 `Cargo.toml`，编译报错的地方跟着改，再用假服务器跑一遍。
   - **只开 `client` 功能时编不过**：io-imap 用的 imap-codec 需要 nom 的 `alloc`，它自己没打开（himalaya 靠别的依赖顺带打开）。所以 `Cargo.toml` 里多一行 `nom = { version = "7", default-features = false, features = ["alloc"] }`。
@@ -257,7 +259,7 @@ mail/agent.rs      把一封信交给 Claude Code / Codex
     - 实测（Claude Code 2.1.296）：`--restricted` 的会话和后台总结都出现在岛上（hook 来自 `--settings` 的文件），只读会话用 Read 读了 letter.md 和 meta.json，没有弹确认；第一次进 `<数据目录>/mail` 会问一次信不信任这个文件夹。
   - 找 `claude` / `codex`：PATH 里的 `.exe`、`.cmd`、`.bat`，再加 `~/.local/bin`（Claude 的安装器）、`%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`、`%APPDATA%\npm`；设置快照里的 `mailAgents` 说两个各找没找到（10 秒内不重找），没找到的在菜单里是灰的。
 - **插件**：`inbox-<id>`，她自己的（`put_owned`，不过期，脚本不能用这个 id），私密（`private`）：标题是「发件人：主题」，数值是「3 封未读」/「没有未读」（`{ key, vars }`，按页面语言显示）。插件页上它们写着「邮件 · 在「邮件」页设置」，开关只管岛上显不显示。
-- **存哪**：账户在设置的 `mail` 里（`[{ id, address, host, port, security, username, on }]`，只能通过 `mail_save` / `mail_remove` / `mail_switch` 改，设置补丁里的 `mail` 不收）；密码在 Windows 凭据管理器，名字是 `Wakuwaku mail <id>`（`CredWriteW`），删除邮箱时一起删。交给 agent 的信在 `<数据目录>/mail/`，不会自动删。
+- **存哪**：账户在设置的 `mail` 里（`[{ id, address, host, port, security, auth, username, on }]`，只能通过 `mail_save` / `mail_remove` / `mail_switch` 改，设置补丁里的 `mail` 不收）；密码在 Windows 凭据管理器，名字是 `Wakuwaku mail <id>`（`CredWriteW`），删除邮箱时一起删。交给 agent 的信在 `<数据目录>/mail/`，不会自动删。
 - **测试**：单元测试读 ISPDB 配置、MX 域名、GBK 主题、一封信的正文和附件、文件夹名和提示里没有终端会当真的字符、`letter.md`、凭据管理器写读删。整体用 `test/fake-imap.js`（不加密，`node test/fake-imap.js --port 14310 --want-id --dir <文件夹>`，密码 `test`）：收件箱是文件夹里的 `.eml`（`test/fixtures/mail/` 有四封：已读的、GBK 主题加抄送、只有 HTML、带附件的回信），运行时放进一个新文件就推 `EXISTS`；`--want-id` 像网易不报 ID 不让开文件夹，`--login-only` 只有 `LOGIN`，`--no-idle` 让宠物轮询，`--log` 打出每条命令。测试宠物上用 `/debug/eval` 调 `window.pet.mail.save({ address, host: '127.0.0.1', port, security: 'plain', username }, 'test')` 加账户。
 
 ## 点击穿透

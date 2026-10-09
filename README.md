@@ -53,7 +53,7 @@
 
 - **单个 exe（Windows）**：`wakuwaku.exe` 只有约 5 MB，放进哪个文件夹都能直接运行，设置和宠物都存在它旁边的 `wakuwaku-data` 文件夹里；不要了直接删掉这两样。用的是 Windows 11 自带的 WebView2，不用另装运行库。
 
-目前需要自己构建，见下面"从源码运行"里的 `cargo build --release`。不提供安装程序。
+在 [Releases](https://github.com/zhoupengjie/Wakuwaku/releases) 下载 `wakuwaku-<版本>-windows-x64.exe`，不需要安装。exe 没有代码签名，第一次运行时 Windows SmartScreen 可能会拦下，点「更多信息 → 仍要运行」即可。也可以自己构建，见下面"从源码运行"。
 - **从源码运行**：见下文。
 
 第一次打开时，她会自动下载默认宠物 Claude 小姐（需要联网；没网时屏幕顶部会升起设置面板，之后再挑）。想换别的，单击灵动岛打开设置，在「宠物」页挑一只（图库直接来自 codex-pets.net，点「下载」即可），或者粘贴宠物页面的地址。

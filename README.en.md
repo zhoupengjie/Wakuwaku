@@ -53,7 +53,7 @@ Both v2 pets (11 animations) and older v1 pets (9, without looking around; she j
 
 - **One exe (Windows)**: `wakuwaku.exe` is about 5 MB, runs from any folder and keeps her settings and pets in a `wakuwaku-data` folder beside it; to remove her, delete the two. It uses the WebView2 that comes with Windows 11, nothing else to install.
 
-For now you build it yourself: `cargo build --release`, see below. There is no installer.
+Download `wakuwaku-<version>-windows-x64.exe` from [Releases](https://github.com/zhoupengjie/Wakuwaku/releases); there is nothing to install. The exe is not code-signed, so on first run Windows SmartScreen may stop it: click More info → Run anyway. Or build it yourself, see below.
 - **From source**: see below.
 
 On first launch she downloads the default pet, Claude小姐 (online; offline, the settings rise at the top of the screen so you can pick one later). For another, click the island to open the settings and pick one on the Pets page (the gallery comes straight from codex-pets.net; click Download), or paste a pet page URL.

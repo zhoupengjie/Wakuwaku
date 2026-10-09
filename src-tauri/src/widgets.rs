@@ -158,15 +158,24 @@ impl Widgets {
         self.list.iter().find(|w| w.id == id).map(|w| (w.label.clone(), w.value.clone(), w.private))
     }
 
+    // A script's widgets that are gone with it. True when any were there.
+    pub fn remove_scripted(&mut self, gone: impl Fn(&str) -> bool) -> bool {
+        let before = self.list.len();
+        self.list.retain(|w| w.until.is_none() || !gone(&w.id));
+        self.list.len() != before
+    }
+
     // All of them, in the order the person put them in (then as first seen),
-    // each saying whether it is on. The built-in ones not measured (off, or
-    // nothing to read yet, like a battery on a desktop) are there too, with
-    // no value, so they can be turned on.
-    pub fn view(&self, now: u64, off: &[String], order: &[String]) -> Value {
+    // each saying whether it is on and which plugin it comes from (`owner`:
+    // one she runs, scripts.rs), which places it when the plugin was placed.
+    // The built-in ones not measured (off, or nothing to read yet, like a
+    // battery on a desktop) are there too, with no value, so they can be
+    // turned on.
+    pub fn view(&self, now: u64, off: &[String], order: &[String], owner: &dyn Fn(&str) -> Option<&'static str>) -> Value {
         let unread: Vec<Widget> = BUILT_IN.iter().filter(|b| !self.list.iter().any(|w| w.id == b.0)).map(|b| built_in(b.0)).collect();
         let measured = self.list.iter().take_while(|w| w.until.is_none()).count();
         let mut all: Vec<&Widget> = self.list[..measured].iter().chain(&unread).chain(&self.list[measured..]).collect();
-        let rank = |w: &Widget| order.iter().position(|o| *o == w.id).unwrap_or(usize::MAX);
+        let rank = |w: &Widget| order.iter().position(|o| *o == w.id || Some(o.as_str()) == owner(&w.id)).unwrap_or(usize::MAX);
         all.sort_by_key(|w| rank(w));
         Value::Array(
             all.into_iter()
@@ -178,6 +187,7 @@ impl Widgets {
                         "icon": w.icon,
                         "color": w.color,
                         "builtIn": w.until.is_none(),
+                        "plugin": owner(&w.id),
                         "on": !off.contains(&w.id),
                         "leftMs": w.until.map(|t| t.saturating_sub(now)),
                         "at": w.at,
@@ -496,12 +506,12 @@ mod tests {
         let put = w.put(&json!({ "id": "weather", "label": "上海 · 多云", "value": "22°", "icon": "weather", "color": "#ffb340" }), 1_000).unwrap();
         assert_eq!((put.id.as_str(), put.nudge), ("weather", None));
         w.put(&json!({ "id": "weather", "label": "上海 · 晴", "value": "24°", "icon": "nope", "color": "red" }), 2_000).unwrap();
-        let view = scripted(w.view(2_000, &[], &[]));
+        let view = scripted(w.view(2_000, &[], &[], &|_| None));
         assert_eq!(view.as_array().unwrap().len(), 1);
         assert_eq!((view[0]["label"].as_str(), view[0]["icon"].as_str(), view[0]["color"].as_str()), (Some("上海 · 晴"), Some("dot"), Some("")));
         assert_eq!(view[0]["leftMs"], 300_000);
         w.put(&json!({ "id": "weather", "remove": true }), 3_000).unwrap();
-        assert!(scripted(w.view(3_000, &[], &[])).as_array().unwrap().is_empty());
+        assert!(scripted(w.view(3_000, &[], &[], &|_| None)).as_array().unwrap().is_empty());
     }
 
     #[test]
@@ -535,21 +545,28 @@ mod tests {
         assert!(!w.set_built_in("sys", json!("1"), 5));
         let ids = |v: Value| v.as_array().unwrap().iter().map(|w| w["id"].as_str().unwrap().to_string()).collect::<Vec<_>>();
         // The ones not measured are listed too, without a value.
-        let all = w.view(0, &[], &[]);
+        let none = |_: &str| None;
+        let all = w.view(0, &[], &[], &none);
         assert_eq!(ids(all.clone()), ["sys", "today", "tokens", "net", "battery", "a"]);
         assert_eq!((all[0]["value"].clone(), all[1]["value"].clone(), all[1]["icon"].clone()), (json!("1"), Value::Null, json!("today")));
-        assert_eq!(ids(w.view(0, &[], &["a".into()]))[0], "a");
-        assert_eq!(w.view(0, &["net".into()], &[])[3]["on"], false);
+        assert_eq!(ids(w.view(0, &[], &["a".into()], &none))[0], "a");
+        assert_eq!(w.view(0, &["net".into()], &[], &none)[3]["on"], false);
+        // A plugin's widgets go where the plugin was put, and say whose they are.
+        let mine = |id: &str| (id == "a").then_some("mine");
+        let view = w.view(0, &[], &["mine".into()], &mine);
+        assert_eq!((view[0]["id"].clone(), view[0]["plugin"].clone()), (json!("a"), json!("mine")));
+        assert!(w.remove_scripted(|id| id == "a") && !w.remove_scripted(|id| id == "sys"));
+        w.put(&json!({ "id": "a", "label": "A" }), 0).unwrap();
         // Built-in ones never go; a script's does.
         assert!(w.expire(u64::MAX));
-        assert_eq!(ids(w.view(0, &[], &[])), ["sys", "today", "tokens", "net", "battery"]);
+        assert_eq!(ids(w.view(0, &[], &[], &none)), ["sys", "today", "tokens", "net", "battery"]);
     }
 
     #[test]
     fn private_widgets_say_so_and_rates_read_short() {
         let mut w = Widgets::default();
         w.put(&json!({ "id": "mail", "label": "王总：周五的方案", "value": "3 封未读", "private": true }), 0).unwrap();
-        assert_eq!(scripted(w.view(0, &[], &[]))[0]["private"], true);
+        assert_eq!(scripted(w.view(0, &[], &[], &|_| None))[0]["private"], true);
         assert_eq!(w.label_of("mail").map(|l| l.2), Some(true));
         assert_eq!((rate(80.0), rate(81_234.0), rate(1_234_567.0), rate(250_000_000.0)), ("80 B/s".into(), "81.2 KB/s".into(), "1.2 MB/s".into(), "250 MB/s".into()));
         // On this machine: a reading, or none, but never a panic.

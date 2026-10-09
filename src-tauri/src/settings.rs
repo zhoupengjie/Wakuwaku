@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, WebviewWindow};
 
-use crate::{connection, data, fetch, fullscreen, i18n, island, now_ms, pet, set_display, set_out, shared, Shared};
+use crate::{connection, data, fetch, fullscreen, i18n, island, now_ms, pet, scripts, set_display, set_out, shared, Shared};
 
 const REPO: &str = "https://github.com/zhoupengjie/wakuwaku";
 
@@ -46,7 +46,9 @@ pub fn snapshot(sh: &Shared) -> Value {
         "version": sh.app.package_info().version.to_string(),
         "fullscreenAvailable": fullscreen::AVAILABLE,
         "widgets": sh.widgets_view(),
-        "examples": data::examples().map(|d| d.to_string_lossy().into_owned()),
+        // The plugins she runs, and where waku is for the terminal.
+        "plugins": scripts::view(sh),
+        "waku": scripts::waku_path(sh).to_string_lossy(),
         "port": sh.port,
     })
 }
@@ -66,6 +68,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "notify" => ["waiting", "done", "error"].iter().all(|k| v.get(k).is_some_and(Value::is_boolean)),
         "widgetsOff" | "widgetOrder" => v.as_array().is_some_and(|ids| ids.len() <= 64 && ids.iter().all(|id| id.as_str().is_some_and(crate::widgets::is_id))),
         "widgetSpin" => matches!(v.as_u64(), Some(0 | 5 | 8 | 15)),
+        "plugins" => scripts::is_ok(v),
         "widgetNudge" => is_bool,
         _ => false,
     }
@@ -101,8 +104,12 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
     if rest.contains_key("dnd") && rest["dnd"] == true && sh.asks.lock().unwrap().dismiss_all() {
         sh.push_asks();
     }
+    let plugins = rest.contains_key("plugins");
     if !rest.is_empty() {
         sh.change(Value::Object(rest));
+    }
+    if plugins && scripts::sync(sh) {
+        sh.redraw();
     }
     snapshot(sh)
 }

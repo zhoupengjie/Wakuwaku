@@ -453,6 +453,29 @@
   border-color: #5e9bff;
 }
 
+/* A plugin's settings, folded out under its row. */
+#island-settings .pf {
+  padding: 2px 14px 10px 44px;
+}
+
+#island-settings .fr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+#island-settings .fr .fl {
+  flex: none;
+  width: 96px;
+  color: var(--g4);
+  font-size: 12px;
+}
+
+#island-settings .d.bad {
+  color: #ffb340;
+}
+
 #island-settings .cmd {
   flex: 1;
   min-width: 0;

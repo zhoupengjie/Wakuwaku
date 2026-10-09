@@ -35,6 +35,7 @@ src-tauri/
     jump.rs               点会话就到它的窗口：会话的进程链、找窗口、叫到前面、桌面版的会话链接
     widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、CPU · 内存、网速、电池），什么时候冒头
     tokens.rs             今天的 token：读 Claude Code 和 Codex 自己的会话记录
+    scripts.rs            她替你在后台跑的插件：示例脚本的开关、参数、启动、重启、停下
     notify.rs             系统通知（登记 AppUserModelId 后发 toast）
     tray.rs               托盘图标（随心情变脸）和菜单
     server.rs             127.0.0.1:47213 上的 HTTP 接口
@@ -204,7 +205,19 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 
 **设置**：`widgetsOff`（关掉的 id，默认 `["sys", "net", "battery"]`）、`widgetOrder`（显示顺序，「插件」页的 ↑ 改它）、`widgetSpin`（0 / 5 / 8 / 15）、`widgetNudge`。
 
-**「插件」页**：五个内置的一直列着（`widgets.rs` 的 `BUILT_IN`），关着的、或者开着还没读到的（比如台式机的电池）没有数值，岛上不显示它们（`main.rs` 发给岛的只有开着且有数值的）。刚打开的电池和 token 马上读一次，不等下一轮。下面「更多插件」列出 examples/widgets 的脚本，每个一个「复制」，复制的是一条 `powershell -ExecutionPolicy Bypass -File "…\weather.ps1" …` 命令（Windows PowerShell 哪台都有；端口不是 47213 时带上 `-Port`）。脚本目录（`data::examples`）：编译它的源码目录还在就用那里的，否则找 exe 旁边的 `examples/widgets`；都没有就只给 GitHub 地址。
+**「插件」页**：一行一个插件，每行一个开关。五个内置的一直列着（`widgets.rs` 的 `BUILT_IN`），关着的、或者开着还没读到的（比如台式机的电池）没有数值，岛上不显示它们（`main.rs` 发给岛的只有开着且有数值的）。刚打开的电池和 token 马上读一次，不等下一轮。接着是她替你跑的插件（下一节），最后是别人的脚本发来的。↑ 改的是 `widgetOrder`，里面可以是 widget 的 id，也可以是插件的 id：插件发来的 widget 排在插件的位置（`view` 的 `owner`）。
+
+## 她替你跑的插件（scripts.rs）
+
+examples/widgets 里的天气、股票、番茄钟、倒计时、久坐提醒、CI、开发服务器，打开开关她就在后台替你跑，不用开终端。邮件的几个暂时不在里面。
+
+- **设置**：`plugins: { <id>: { on, <参数>: 值 } }`，参数名就是脚本的参数名（`City`、`Repo`……），`scripts::is_ok` 只收认识的插件和参数：文字不带控制字符，数字是正数，开关是 true / false。页面上点「设置」展开参数；打开一个缺必填参数的插件时自动展开，那一行说「先填……」。正在输入的不会被每 3 秒的刷新冲掉（`settings.js` 的 `drafts`），回车或离开输入框才保存。
+- **脚本从哪来**：编进 exe（`include_bytes!`），启动后写到 `<数据目录>/plugins/<id>.ps1`（内容不同才写），所以哪份宠物跑的都是自己那一版。
+- **怎么跑**：有 PowerShell 7（PATH 里或 Program Files）就用它，否则用 Windows 自带的。`-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command`，先把输出改成 UTF-8、去掉颜色，再 `& '<脚本>' -City '上海' -Port <端口>`。参数值放在单引号里，里面的单引号（包括 PowerShell 也认的弯引号）都写两遍，所以填什么都只是文字。没有窗口（`CREATE_NO_WINDOW`）。
+- **一直开着**：主循环每 3 秒 `scripts::sync` 一次，改设置时也马上来一次：该跑没跑的启动，关掉的停下，参数变了的重启；自己结束的再启动，60 秒内就结束算失败，接连失败就等 10 秒、30 秒、1 分钟、5 分钟再试。停下（关掉或换参数）时它之前发的 widget 一起去掉，省得留着旧的（`owner_of` 按 id 认是谁发的：`weather`、`stock-*`、`ci-*` / `prs-*`……）。
+- **说了什么**：脚本的输出全写进 `plugins/<id>.log`（每次启动重写），最后一行有内容的（去掉"警告:"前缀）显示在那一行下面：开着但岛上还没有它的东西时说「还没显示：……」，自己停了说「停了：…… · N 秒后再试」。
+- **跟她一起走**：她启动时把开着的都启动，她开机启动插件也就开机就跑（「插件」页底下有开机启动的开关，和「连接」页的是同一个）。所有插件进程都放进一个 job object（`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`），她退出时句柄关上，系统把它们全部结束，任务管理器里强行结束她也一样；正常退出时 `RunEvent::Exit` 还会先逐个结束。
+- **waku** 不是开关：它包住你在终端里跑的命令。页面上给一条复制用的命令，指向写出来的 `plugins/waku.ps1`。
 
 **邮件**：IMAP（`mail-imap.ps1`）、Microsoft Graph（`mail-microsoft.ps1`）、Thunderbird 扩展，都只往 `/widget` 发文字，账号和密码不经过宠物。找 IMAP 服务器照 Thunderbird 的顺序：内置的几家 → ISPDB（`autoconfig.thunderbird.net/v1.1/<域名>`）→ MX 记录所属域名的 ISPDB → `imap.<域名>:993`。网易的服务器要先收到 ID 命令（RFC 2971）才肯打开收件箱，登录前后各发一次。授权码和 Graph 的 refresh token 用 DPAPI（`ConvertFrom-SecureString`）加密存在 `%LOCALAPPDATA%\wakuwaku\secrets`。测试时 `mail-imap.ps1 -NoTls -Server 127.0.0.1` 配一个本地的假 IMAP 服务器，`mail-microsoft.ps1 -LoginBase/-GraphBase` 指向本地的假登录和 Graph。**注意 PowerShell 变量名不分大小写**：脚本里的 `$server` 和参数 `-Server` 是同一个变量。
 

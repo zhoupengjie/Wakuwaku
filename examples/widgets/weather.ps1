@@ -32,7 +32,7 @@ while ($true) {
     if (-not $place) {
       $found = Invoke-RestMethod "https://geocoding-api.open-meteo.com/v1/search?name=$([uri]::EscapeDataString($City))&count=1&language=$Lang" -TimeoutSec 20
       $place = $found.results | Select-Object -First 1
-      if (-not $place) { throw "no city called $City" }
+      if (-not $place) { throw $(if ($Lang -eq 'zh') { "找不到这个城市：$City" } else { "no city called $City" }) }
     }
     $now = (Invoke-RestMethod "https://api.open-meteo.com/v1/forecast?latitude=$($place.latitude)&longitude=$($place.longitude)&current=temperature_2m,weather_code" -TimeoutSec 20).current
     $words = $sky[[int]$now.weather_code]

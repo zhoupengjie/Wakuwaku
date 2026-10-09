@@ -5,7 +5,7 @@
 //   pets      the pets downloaded, a download by link or id, the gallery
 //   look      her home (corner, island, bar), size, bubble, strolls, eyes, language
 //   alerts    how long endings stay, notifications, sound, prompts, quiet
-//   widgets   plugins in the island: on or off, their order, turns, nudges, the example scripts, and how to write one
+//   widgets   plugins: the built-in ones, those she runs for you (a switch, their settings folded under), their order, turns, nudges, waku, and how to write one
 //   connect   how Claude Code and Codex reach her, start at login, the hooks, about
 //
 // What they show comes from main as a snapshot, again whenever it changes;
@@ -58,6 +58,10 @@
   const gallery = { sort: 'popular', items: [], page: 0, totalPages: 1, loading: false, error: '', getting: '' }
   let thumbTimers = []
   let clockTimer
+  // The plugins page: the plugin whose settings are folded out, and what is
+  // typed in them and not yet kept ("weather.City": "上海").
+  let openPlugin = ''
+  const drafts = {}
 
   const T = (key, vars) => t(lang, key, vars)
   const esc = value =>
@@ -245,65 +249,85 @@
       </div>`
   }
 
-  // The example scripts (examples/widgets): file, icon, what to run it with.
-  // Their name and what they do are w.ex.<file> and w.ex.<file>.note.
-  const SCRIPTS = [
-    ['weather', 'weather', '-City Shanghai'],
-    ['stock', 'stock', '-Symbol 600519.SS,USDCNY=X,BTC-USD'],
-    ['pomodoro', 'timer', ''],
-    ['countdown', 'flag', ''],
-    ['stretch', 'bell', '-Minutes 50'],
-    ['ci', 'check', '-Repo zhoupengjie/wakuwaku -Prs'],
-    ['devserver', 'server', '-Url http://localhost:3000,http://localhost:5173'],
-    ['mail-imap', 'mail', '-Address you@qq.com -Setup'],
-    ['mail-microsoft', 'mail', '-ClientId YOUR-APP-ID -Setup'],
-    ['thunderbird', 'mail', null],
-    ['waku', 'terminal', 'npm run build'],
-  ]
-
-  // A script's command, for any terminal: Windows PowerShell is always there.
-  function scriptCommand(file, args) {
-    if (file === 'countdown') {
-      const d = new Date(Date.now() + 86400000)
-      const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      args = `-At "${day} 18:00" -Title ${T('w.ex.countdown.title')}`
+  // The plugins page as rows, in the order the person put them in: the
+  // built-in ones, the plugins she runs (with what their widgets say), and
+  // the widgets of anyone else's scripts.
+  function widgetRows() {
+    const rank = key => {
+      const i = (snap.settings.widgetOrder || []).indexOf(key)
+      return i < 0 ? Infinity : i
     }
-    // waku asks the port of WAKUWAKU_PORT; the others take -Port.
-    const port = snap.port !== 47213 && file !== 'waku' ? ` -Port ${snap.port}` : ''
-    return `powershell -ExecutionPolicy Bypass -File "${snap.examples}\\${file}.ps1" ${args}${port}`.trim()
+    const widgets = snap.widgets || []
+    const rows = [
+      ...widgets.filter(w => w.builtIn).map(w => ({ key: w.id, widget: w })),
+      ...(snap.plugins || []).map(p => ({ key: p.id, plugin: p, mine: widgets.filter(w => w.plugin === p.id) })),
+      ...widgets.filter(w => !w.builtIn && !w.plugin).map(w => ({ key: w.id, widget: w })),
+    ]
+    return rows.map((r, i) => ({ ...r, i })).sort((x, y) => rank(x.key) - rank(y.key) || x.i - y.i)
   }
 
-  // Plugins in the island: each with its switch (and a step up), how they
-  // take turns, whether they may open the island, the example scripts, and
-  // how to write one.
+  // What a plugin she runs says under its name: what it does, or why it
+  // shows nothing.
+  function pluginNote(p, mine) {
+    if (p.state === 'needs') return { text: T('pl.needs', { what: T(`pl.${p.id}.${p.missing}`) }), bad: true }
+    if (p.state === 'stopped') {
+      const why = p.said ? T('pl.stopped', { line: p.said }) : T('pl.stoppedQuiet')
+      return { text: p.retryIn ? `${why} · ${T('pl.retry', { n: p.retryIn })}` : why, bad: true }
+    }
+    if (p.state === 'running' && !mine.length) return p.said ? { text: T('pl.trouble', { line: p.said }), bad: true } : { text: T('pl.starting') }
+    return { text: T(`w.ex.${p.id}.note`) }
+  }
+
+  // A plugin's settings, folded out under it: what is being typed stays.
+  function pluginFields(p) {
+    const fields = p.params.map(f => {
+      const key = `${p.id}.${f.name}`
+      const label = esc(T(`pl.${key}`))
+      if (f.kind === 'flag') return `<div class="fr"><span class="fl">${label}</span><span class="grow"></span>${sw('pf:' + key, f.value === true)}</div>`
+      const value = key in drafts ? drafts[key] : f.value || ''
+      return `<label class="fr"><span class="fl">${label}${f.required ? ' *' : ''}</span><input class="in" data-field="${esc(key)}" value="${esc(value)}" placeholder="${esc(T(`pl.${key}.hint`))}" spellcheck="false"${f.kind === 'number' ? ' inputmode="decimal"' : ''}></label>`
+    })
+    return `<div class="pf">${fields.join('')}</div>`
+  }
+
+  // Plugins: built in, run by her, or anyone's script, each with its switch
+  // (and a step up); how they take turns, whether they may open the island,
+  // waku for the terminal, and how to write one.
   function pageWidgets() {
     const s = snap.settings
-    const all = snap.widgets || []
     const left = ms => (ms >= 60000 ? T('settings.minutes', { n: Math.round(ms / 60000) }) : T('settings.seconds', { n: Math.max(1, Math.round(ms / 1000)) }))
-    const rows = all.length
-      ? all
-          .map((w, i) => {
-            const { label, value } = Widgets.words(lang, w, s.details !== false)
-            // A built-in one says what it shows; on, with nothing read, says so.
-            const builtIn = w.builtIn && [T('w.builtIn'), T(`w.about.${w.id}`), w.on && w.value == null ? T(w.id === 'battery' ? 'w.noBattery' : 'w.unread') : ''].filter(Boolean).join(' · ')
-            const from = builtIn || [T('w.script', { time: left(w.leftMs || 0) }), w.private ? T('w.private') : ''].filter(Boolean).join(' · ')
-            const up = i > 0 ? `<button class="pbtn sm" data-wup="${esc(w.id)}" title="${esc(T('w.up'))}">↑</button>` : ''
-            return `<div class="r"><span class="wi" style="color:${esc(w.color || COLOR.idle)}">${Widgets.icon(w.icon)}</span><div class="grow"><div class="ellip">${esc(label)}<span class="d"> ${esc(value)}</span></div><div class="d">${esc(from)}</div></div>${up}${sw('w:' + w.id, w.on)}</div>`
-          })
-          .join('')
-      : `<div class="note">${esc(T('w.none'))}</div>`
+    const rows = widgetRows()
+      .map((r, i) => {
+        const up = i > 0 ? `<button class="pbtn sm" data-wup="${esc(r.key)}" title="${esc(T('w.up'))}">↑</button>` : ''
+        if (r.plugin) {
+          const p = r.plugin
+          const says = r.mine.map(w => Widgets.words(lang, w, s.details !== false)).map(({ label, value }) => [label, value].filter(Boolean).join(' ')).join(' · ')
+          const note = pluginNote(p, r.mine)
+          const color = (r.mine[0] && r.mine[0].color) || (p.on ? '#5e9bff' : COLOR.idle)
+          const isOpen = openPlugin === p.id
+          const more = p.params.length ? `<button class="pbtn sm" data-pexp="${esc(p.id)}">${esc(T(isOpen ? 'pl.fold' : 'pl.settings'))}</button>` : ''
+          return `<div class="r"><span class="wi" style="color:${esc(color)}">${Widgets.icon(p.icon)}</span><div class="grow"><div class="ellip">${esc(T(`w.ex.${p.id}`))}<span class="d"> ${esc(says)}</span></div><div class="d${note.bad ? ' bad' : ''}">${esc(note.text)}</div></div>${more}${up}${sw('pl:' + p.id, p.on)}</div>${isOpen ? pluginFields(p) : ''}`
+        }
+        const w = r.widget
+        const { label, value } = Widgets.words(lang, w, s.details !== false)
+        // A built-in one says what it shows; on, with nothing read, says so.
+        const builtIn = w.builtIn && [T('w.builtIn'), T(`w.about.${w.id}`), w.on && w.value == null ? T(w.id === 'battery' ? 'w.noBattery' : 'w.unread') : ''].filter(Boolean).join(' · ')
+        const from = builtIn || [T('w.script', { time: left(w.leftMs || 0) }), w.private ? T('w.private') : ''].filter(Boolean).join(' · ')
+        return `<div class="r"><span class="wi" style="color:${esc(w.color || COLOR.idle)}">${Widgets.icon(w.icon)}</span><div class="grow"><div class="ellip">${esc(label)}<span class="d"> ${esc(value)}</span></div><div class="d">${esc(from)}</div></div>${up}${sw('w:' + w.id, w.on)}</div>`
+      })
+      .join('')
     const spins = SPINS.map(n => [n, n ? T('settings.seconds', { n }) : T('w.spinOff')])
+    const waku = `powershell -ExecutionPolicy Bypass -File "${snap.waku}" npm run build`
     const example = `Invoke-RestMethod -Method Post http://127.0.0.1:${snap.port}/widget -ContentType application/json -Body '{"id":"hello","label":"Hello","value":"42","icon":"star"}'`
-    const scripts = SCRIPTS.map(([file, icon, args]) => {
-      const copy = snap.examples && args != null ? `<button class="pbtn" data-copy="${esc(scriptCommand(file, args))}">${esc(T('home.copy'))}</button>` : ''
-      return `<div class="r"><span class="wi">${Widgets.icon(icon)}</span><div class="grow"><div>${esc(T(`w.ex.${file}`))}</div><div class="d">${esc(T(`w.ex.${file}.note`))}</div></div>${copy}</div>`
-    }).join('')
-    const where = snap.examples ? T('w.moreNote') : T('w.moreNoteNone')
-    return `${sec(T('w.section'))}<div class="grp"><div class="note">${esc(T('w.note'))}</div>${rows}</div>
-      ${sec(T('w.more'))}<div class="grp"><div class="note">${esc(where)}</div>${scripts}</div>
+    return `${sec(T('w.section'))}<div class="grp"><div class="note">${esc(T('w.note'))}</div>${rows}
+        ${row(esc(T('pl.atLogin')), esc(T('pl.atLoginNote')), sw('login', snap.loginAtStart))}
+      </div>
       ${sec(T('w.show'))}<div class="grp">
         ${row(esc(T('w.spin')), '', seg('widgetSpin', spins, s.widgetSpin ?? 8))}
         ${row(esc(T('w.nudge')), esc(T('w.nudgeNote')), sw('widgetNudge', s.widgetNudge !== false))}
+      </div>
+      ${sec(T('w.terminal'))}<div class="grp"><div class="note">${esc(T('w.ex.waku.note'))}</div>
+        <div class="r"><span class="cmd mono">${esc(waku)}</span><button class="pbtn" data-copy="${esc(waku)}">${esc(T('home.copy'))}</button></div>
       </div>
       ${sec(T('w.write'))}<div class="grp"><div class="note">${esc(T('w.writeNote'))}</div>
         <div class="r"><span class="cmd mono">${esc(example)}</span><button class="pbtn" data-copy="${esc(example)}">${esc(T('home.copy'))}</button></div>
@@ -410,22 +434,22 @@
     tabs.querySelector('[data-tab="now"] .n').hidden = !(snap.asks || []).length
   }
 
-  // The page, kept as it is when nothing changed (a redraw would take the
-  // focus and the caret from the download box).
+  // The page, kept as it is when nothing changed; redrawn, the box being
+  // typed in (the download box, a plugin's setting) gets the focus and the
+  // caret back.
   function drawBody(reset) {
-    const box = document.getElementById('s-ref')
-    const hadFocus = document.activeElement === box
-    const caret = hadFocus ? box.selectionStart : null
+    const box = body.contains(document.activeElement) && document.activeElement.matches('input') ? document.activeElement : null
+    const which = box && (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : null)
+    const caret = which ? box.selectionStart : null
     const changed = setHTML(body, PAGES[tab]())
     if (reset) body.scrollTop = 0
     if (!changed) return
     const again = document.getElementById('s-ref')
-    if (again) {
-      again.value = typedRef
-      if (hadFocus) {
-        again.focus()
-        again.setSelectionRange(caret, caret)
-      }
+    if (again) again.value = typedRef
+    const back = which && body.querySelector(which)
+    if (back) {
+      back.focus()
+      back.setSelectionRange(caret, caret)
     }
     startThumbs()
   }
@@ -581,12 +605,32 @@
         return patch({ widgetsOff: off.length === (s.widgetsOff || []).length ? [...off, id] : off })
       }
       if (key === 'widgetNudge') return patch({ widgetNudge: s.widgetNudge === false })
+      // A plugin she runs on or off; on and missing a setting, its settings open.
+      if (key.startsWith('pl:')) {
+        const p = (snap.plugins || []).find(x => x.id === key.slice(3))
+        if (!p) return
+        if (!p.on && p.params.some(f => f.required && !String(f.value || '').trim())) openPlugin = p.id
+        return setPlugin(p.id, { on: !p.on })
+      }
+      // A plugin's yes-or-no setting.
+      if (key.startsWith('pf:')) {
+        const [id, name] = key.slice(3).split('.')
+        const p = (snap.plugins || []).find(x => x.id === id)
+        return p && setPlugin(id, { [name]: !(p.params.find(f => f.name === name) || {}).value })
+      }
       return patch({ [key]: !s[key] })
     }
-    // A widget a step up: the order as shown, with it and the one before swapped.
+    // A plugin's settings folded out, or in.
+    const fold = at('[data-pexp]')
+    if (fold) {
+      openPlugin = openPlugin === fold.dataset.pexp ? '' : fold.dataset.pexp
+      draw()
+      return relayout()
+    }
+    // A row a step up: the order as shown, with it and the one before swapped.
     const up = at('[data-wup]')
     if (up) {
-      const ids = (snap.widgets || []).map(w => w.id)
+      const ids = widgetRows().map(r => r.key)
       const i = ids.indexOf(up.dataset.wup)
       if (i > 0) [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]
       return patch({ widgetOrder: ids })
@@ -650,7 +694,27 @@
 
   layer.addEventListener('input', e => {
     if (e.target.id === 's-ref') typedRef = e.target.value
+    if (e.target.dataset.field) drafts[e.target.dataset.field] = e.target.value
   })
+
+  // A plugin's setting kept once typed (Enter, or leaving the box); a
+  // number that is none goes back to what it was.
+  layer.addEventListener('change', e => {
+    const key = e.target.dataset.field
+    if (!key || !(key in drafts)) return
+    const value = drafts[key].trim()
+    delete drafts[key]
+    const [id, name] = key.split('.')
+    const field = ((snap.plugins || []).find(p => p.id === id)?.params || []).find(f => f.name === name)
+    if (!field || (field.kind === 'number' && value && !(Number(value) > 0))) return draw()
+    setPlugin(id, { [name]: value })
+  })
+
+  // A plugin's settings changed, the others kept.
+  function setPlugin(id, change) {
+    const all = snap.settings.plugins || {}
+    return patch({ plugins: { ...all, [id]: { ...(all[id] || {}), ...change } } })
+  }
 
   document.addEventListener('keydown', e => {
     if (!isOpen) return
@@ -660,6 +724,7 @@
     }
     if (e.target.matches?.('input, textarea')) {
       if (e.key === 'Enter' && e.target.id === 's-ref') layer.querySelector('[data-fetch]')?.click()
+      if (e.key === 'Enter' && e.target.dataset.field) e.target.blur()
       return
     }
     const i = TABS.indexOf(tab)

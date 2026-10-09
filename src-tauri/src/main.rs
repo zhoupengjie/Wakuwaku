@@ -44,6 +44,7 @@ mod notify;
 mod pet;
 mod pointer;
 mod screen;
+mod scripts;
 mod server;
 mod settings;
 mod state;
@@ -84,6 +85,8 @@ pub struct Shared {
     // Plugins in the island (widgets.rs), and what today has seen.
     pub widgets: Mutex<widgets::Widgets>,
     pub today: Mutex<widgets::Today>,
+    // The plugins she runs for you (scripts.rs).
+    pub scripts: Mutex<scripts::Runner>,
     screens: Mutex<screen::Screens>,
     // Out of sight: hidden from the tray, or another app is full screen.
     pub hidden: AtomicBool,
@@ -268,7 +271,7 @@ impl Shared {
     // Every widget, in the person's order, on or off.
     pub fn widgets_view(&self) -> Value {
         let (off, order) = (self.list_setting("widgetsOff"), self.list_setting("widgetOrder"));
-        self.widgets.lock().unwrap().view(now_ms(), &off, &order)
+        self.widgets.lock().unwrap().view(now_ms(), &off, &order, &scripts::owner_of)
     }
 
     // A widget from a script: there it is, and it may open the island for itself.
@@ -890,6 +893,7 @@ fn main() {
                 island: Mutex::new(island::Island::default()),
                 asks: Mutex::new(asks::Asks::default()),
                 widgets: Mutex::new(widgets::Widgets::default()),
+                scripts: Mutex::new(scripts::Runner::default()),
                 today: Mutex::new(today),
                 screens: Mutex::new(screen::read(app.handle())),
                 hidden: AtomicBool::new(false),
@@ -969,6 +973,8 @@ fn main() {
                     if watcher.today.lock().unwrap().date != widgets::local_date() {
                         watcher.count_today(|_| {});
                     }
+                    // The plugins she runs: started, stopped, started again.
+                    changed |= scripts::sync(&watcher);
                     if changed {
                         watcher.redraw();
                     }
@@ -1039,10 +1045,12 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while running wakuwaku")
-        // Quitting: the bar's strip back to the other windows.
+        // Quitting: the bar's strip back to the other windows, and the
+        // plugins she ran stopped.
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 island::release_bar(&shared(app));
+                scripts::stop_all(&shared(app));
             }
         });
 }

@@ -1,8 +1,7 @@
 // Her window: transparent, frameless, always on top, her whole self on the
 // desktop. Where it sits and how big it is, the mouse (click-through, her
-// eyes, dragging and being carried) and her walks. Up when she is the pet
-// (display 'pet'), or out of the island (display 'island' with out); in the
-// island, the island has her (island.rs).
+// eyes, dragging and being carried) and her walks. Up when she is out of
+// her home (out); at home, her home's window has her (island.rs).
 //
 // Everything here is in physical pixels; the page gets logical (CSS) ones.
 //
@@ -107,13 +106,9 @@ fn scale(sh: &Shared) -> f64 {
     sh.setting("scale").as_f64().unwrap_or(0.55)
 }
 
-fn is_island_mode(sh: &Shared) -> bool {
-    sh.setting("display").as_str() == Some("island")
-}
-
-// Up: she is the pet, or out of the island.
+// Up: she is out of her home.
 pub fn is_shown(sh: &Shared) -> bool {
-    sh.is_visible() && (!is_island_mode(sh) || sh.flag("out"))
+    sh.is_visible() && sh.flag("out")
 }
 
 fn set_ignore(sh: &Shared, ignore: Option<bool>) {
@@ -220,13 +215,13 @@ pub fn create(sh: &Shared) -> tauri::Result<()> {
     Ok(())
 }
 
-// Her page has its listeners up: draw, show, and say hello unless the island
-// is the one up (it says it).
+// Her page has its listeners up: draw, show, and say hello if she is the
+// one talking (else her home says it).
 pub fn ready(sh: &Shared) {
     sh.log("pet: page ready");
     sh.win.lock().unwrap().ready = true;
     sh.redraw();
-    if !is_island_mode(sh) {
+    if sh.she_talks() {
         sh.greet();
     }
     apply_visibility(sh);
@@ -406,7 +401,6 @@ pub fn poll(sh: &Arc<Shared>, cursor: (i32, i32)) -> u64 {
     let is_idle = sh.pet.lock().unwrap().mood(now_ms()) == "idle";
     let look = sh.flag("look");
     let scale = scale(sh);
-    let island_mode = is_island_mode(sh);
     let down = primary_down();
 
     let mut events: Vec<(&str, Value)> = Vec::new();
@@ -447,7 +441,7 @@ pub fn poll(sh: &Arc<Shared>, cursor: (i32, i32)) -> u64 {
                     d.y = ny;
                     w.pos = (nx, ny);
                     moved_to = Some((nx, ny));
-                    if island_mode && moved {
+                    if moved {
                         reach = Some(w.her_point(scale));
                     }
                 }
@@ -579,7 +573,7 @@ pub fn let_go(sh: &Arc<Shared>) {
     if drag.carried {
         island::end_hold(sh);
     }
-    if is_island_mode(sh) && drag.moved {
+    if drag.moved {
         if island::reach(sh, Some(her), true) == island::Reach::Snap {
             return crate::absorb(sh, her);
         }
@@ -618,21 +612,21 @@ pub fn let_go(sh: &Arc<Shared>) {
     }
 }
 
-// A double-click: out of the island, she flies back into it; as the pet on
-// her own, the settings (grown out of an island risen for them).
+// A double-click: she flies back into her home (else the settings, grown
+// out of a home risen for them).
 pub fn double_click(sh: &Arc<Shared>) {
-    if is_island_mode(sh) && sh.flag("out") {
+    if sh.flag("out") {
         fly_home(sh);
     } else {
         island::open_settings(sh, None);
     }
 }
 
-// Back to the island from wherever she is: drawn in faster and faster,
-// running that way, the island reaching out for her; then it takes her in.
+// Back to her home from wherever she is: drawn in faster and faster,
+// running that way, her home reaching out for her; then it takes her in.
 // Her spot on the desktop stays where it was, for when she is let out again.
 fn fly_home(sh: &Arc<Shared>) {
-    let Some(seat) = island::seat(sh) else { return };
+    let Some(end) = island::landing(sh) else { return };
     let scale = scale(sh);
     let (start, offset, end) = {
         let mut w = sh.win.lock().unwrap();
@@ -644,8 +638,6 @@ fn fly_home(sh: &Arc<Shared>) {
         w.walk_gen += 1;
         w.walking = false;
         let start = w.her_point(scale);
-        // Just under the island, where the drop can take her.
-        let end = (seat.0, seat.1 + (70.0 * w.sf()) as i32);
         (start, (start.0 - w.pos.0, start.1 - w.pos.1), end)
     };
     let dir = if end.0 == start.0 { 1 } else { end.0 - start.0 };

@@ -254,9 +254,11 @@
   // Which page holds the panel: the island's in island mode, or while the
   // settings are open in it (a banner there); hers otherwise.
   const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
-  let display = 'pet'
+  // Her home talks (has the prompts), unless she is out from the corner and
+  // talks herself; the open settings always have them.
+  let homeTalks = true
   let settingsOpen = false
-  const holdsPanel = () => (ROLE === 'island') === (display === 'island' || settingsOpen)
+  const holdsPanel = () => (ROLE === 'island') === (homeTalks || settingsOpen)
 
   function render(armMs = ARM_MS) {
     const ask = holdsPanel() ? asks[0] : null
@@ -323,7 +325,7 @@
 
   window.pet.onUpdate(data => {
     const wasHolding = holdsPanel()
-    display = data.config?.display || 'pet'
+    homeTalks = !(data.config?.display === 'corner' && data.config?.out === true)
     settingsOpen = data.settingsOpen === true
     if ((data.lang && data.lang !== lang) || wasHolding !== holdsPanel()) {
       lang = data.lang || lang

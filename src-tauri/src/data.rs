@@ -74,8 +74,10 @@ fn defaults() -> Map<String, Value> {
         "lang": "auto",
         "pet": "claude-chan",
         "scale": 0.55,
-        "display": "pet",
-        "out": false,
+        // Her home: corner, island or bar; out, she is on the desktop.
+        "display": "corner",
+        "out": true,
+        "corner": "br",
         "bubble": true,
         "details": true,
         // Widgets (plugins in the island): which are off, their order, how
@@ -105,6 +107,11 @@ pub fn load(dir: &Path) -> Map<String, Value> {
         settings.extend(saved);
     }
     // The capsule of earlier versions is the island now.
+    // The pet on her own is now the corner's, with her out.
+    if settings.get("display").and_then(Value::as_str) == Some("pet") {
+        settings.insert("display".into(), json!("corner"));
+        settings.insert("out".into(), json!(true));
+    }
     if settings.get("display").and_then(Value::as_str) == Some("capsule") {
         settings.insert("display".into(), json!("island"));
     }

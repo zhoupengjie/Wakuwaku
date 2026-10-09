@@ -8,6 +8,7 @@
 //   POST /come-home    started again while running: back into sight
 //   POST /debug/eval   { page, code }: run code in her page or the island's (WAKUWAKU_DEBUG=1 only)
 //   POST /debug/walk   { dx, ms }: take a walk now (WAKUWAKU_DEBUG=1 only)
+//   POST /debug/quit   quit, as the menu does (WAKUWAKU_DEBUG=1 only)
 use std::io::Read;
 use std::sync::Arc;
 
@@ -150,6 +151,11 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool) {
                 Some(value) => reply(req, 200, json!({ "result": value })),
                 None => reply(req, 504, json!({ "error": "no answer" })),
             }
+        }
+        // Quit as the menu does (the bar's strip given back on the way).
+        ("POST", "/debug/quit") if is_debug => {
+            reply(req, 200, json!({ "ok": true }));
+            sh.app.exit(0);
         }
         ("POST", "/debug/walk") if is_debug => {
             let Some(body) = read_json(&mut req) else { return reply(req, 400, json!({ "error": "bad json" })) };

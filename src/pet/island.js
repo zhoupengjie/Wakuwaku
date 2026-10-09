@@ -1,5 +1,9 @@
-// The island: a black pill at the top of the screen, after the iPhone's
-// Dynamic Island, and her home. It springs between three shapes:
+// Her home: by display, a round portrait in a corner of the screen (corner),
+// a black pill at the top centre after the iPhone's Dynamic Island (island),
+// or a strip along the top of the screen (bar), its left end hers and the
+// other sessions as tags along the rest. The same element in each, which
+// springs between three shapes (in a corner, away from the corner; in the
+// bar, hanging below it):
 //   compact   her round portrait, where the session is (or whose ending it
 //             is) and the clock
 //   expanded  hovered, or for a few seconds when something happens (a turn
@@ -74,6 +78,15 @@
   // Her portrait in the settings' head.
   const SET_HEAD = 32
   const SET_HEAD_SCALE = 0.28
+  // The corner's circle and its margin, and the window without extra room
+  // there; the bar's height and her portrait in it (island.rs has these too).
+  const CIRCLE = 56
+  const CORNER_M = 14
+  const CORNER_BASE = { width: 120, height: 120 }
+  const BAR_H = 30
+  const BAR_HEAD = 22
+  // A portrait px across is the sheet at this scale.
+  const PER_PX = 0.00875
   // The settings' width.
   const SETTINGS_W = 520
   const BODY_SCALE = 0.5
@@ -148,8 +161,11 @@
 
   const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
   // Risen only for the settings (she is the pet on her own): it goes once they close.
-  let islandTemp = false
-  const isOn = () => ROLE === 'island' && (config.display === 'island' || islandTemp)
+  // This page draws her home in the home's window; her own window draws her.
+  const isOn = () => ROLE === 'island'
+  // Her home, and for the corner, which.
+  const home = () => (config.display === 'corner' || config.display === 'bar' ? config.display : 'island')
+  const corner = () => (['br', 'bl', 'tr', 'tl'].includes(config.corner) ? config.corner : 'br')
   // In her seat: there is a pet to show, and she is not out on the desktop.
   const isHome = () => !!spriteUrl && config.out !== true
   const isAsking = () => isOn() && !panel.hidden
@@ -202,12 +218,17 @@
   // --- The shapes ---------------------------------------------------------------
 
   function fillCompact() {
+    // The corner's circle: her alone, ringed in the mood's colour, and a
+    // dot in the next one's when other sessions are busy too.
+    cornerBadge.classList.toggle('on', now.others > 0)
+    cornerBadge.style.background = COLOR[second] || COLOR.working
     const widget = shownWidget()
     if (widget) return fillCompactWidget(widget)
     const label = Status.brief(lang, now, { detailed: isDetailed() })
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
-    const more = now.others > 0 ? el('span', 'more', `+${now.others}`) : null
+    // In the bar the other sessions have their own tags.
+    const more = now.others > 0 && home() !== 'bar' ? el('span', 'more', `+${now.others}`) : null
     if (more) more.style.color = COLOR[second] || COLOR.working
     compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), el('span', 'label', label), clockText, ...(more ? [more] : []))
     compact.classList.toggle('bare', !label && !clockText.textContent && !more)
@@ -371,7 +392,9 @@
       herSheet.style.transform = `translate(${-(CELL_W * scale - px) / 2}px, -2px) scale(${scale})`
     }
     if (view === 'compact') {
-      portrait(HEAD, HEAD_SCALE, 6, 6)
+      if (home() === 'corner') portrait(CIRCLE - 8, (CIRCLE - 8) * PER_PX, 4, 4)
+      else if (home() === 'bar') portrait(BAR_HEAD, BAR_HEAD * PER_PX, 4, 4)
+      else portrait(HEAD, HEAD_SCALE, 6, 6)
     } else if (view === 'settings') {
       portrait(SET_HEAD, SET_HEAD_SCALE, 16, 13)
     } else {
@@ -401,7 +424,20 @@
 
   // --- Room: the window grows before the island does, and shrinks after ----------------
 
+  // The window with no extra room, by home: the bar is as wide as the screen.
+  const baseRoom = () => (home() === 'corner' ? CORNER_BASE : home() === 'bar' ? { width: innerWidth, height: BAR_H } : BASE)
+
   function roomFor(want) {
+    if (home() === 'corner') {
+      const width = want.width + 2 * CORNER_M + 8
+      const height = want.height + 2 * CORNER_M + 8
+      return width <= CORNER_BASE.width && height <= CORNER_BASE.height ? null : { width, height }
+    }
+    // The bar: whatever hangs below it (main keeps the width the screen's).
+    if (home() === 'bar') {
+      if (want.height <= BAR_H) return null
+      return { width: innerWidth, height: want.height + 12 }
+    }
     const width = want.width + 48
     const height = TOP + want.height + 24
     return width <= BASE.width && height <= BASE.height ? null : { width, height }
@@ -409,7 +445,7 @@
 
   // Returns true when the window has to grow first.
   function setRoom(next) {
-    const size = r => r || BASE
+    const size = r => r || baseRoom()
     clearTimeout(roomTimer)
     if (JSON.stringify(next) === JSON.stringify(room)) return false
     const grows = size(next).width > size(room).width || size(next).height > size(room).height
@@ -425,7 +461,10 @@
   function setSize({ width, height }) {
     island.style.width = `${width}px`
     island.style.height = `${height}px`
-    island.style.borderRadius = `${height > 60 ? 30 : height / 2}px`
+    // The bar's left end is square, and what hangs from it is rounded below;
+    // the corner's is a circle until it opens.
+    island.style.borderRadius =
+      home() === 'bar' ? (view === 'compact' ? '0' : '0 0 22px 22px') : home() === 'corner' && view === 'compact' ? `${CIRCLE / 2}px` : `${height > 60 ? 30 : height / 2}px`
   }
 
   // --- Deciding ---------------------------------------------------------------
@@ -445,8 +484,71 @@
         ? { width: Math.min(OPEN_MAX_W, Math.max(320, expanded.offsetWidth)), height: Math.max(OPEN_H, expanded.offsetHeight) }
         : { width: Math.min(OPEN_BARE_MAX_W, Math.max(300, expanded.offsetWidth)), height: Math.max(84, expanded.offsetHeight) }
     }
+    if (home() === 'corner') return { width: CIRCLE, height: CIRCLE }
+    if (home() === 'bar') return { width: Math.max(MIN_W, compact.offsetWidth), height: BAR_H }
     return { width: Math.max(MIN_W, compact.offsetWidth), height: 36 }
   }
+
+  // --- The bar's right part ---------------------------------------------------------
+
+  // The other sessions as tags (a press goes to one's window), a widget, and
+  // the settings. Its left edge stays where the compact island ends, so what
+  // opens from the island hangs over it.
+  const barRest = document.createElement('div')
+  barRest.id = 'bar-rest'
+  island.after(barRest)
+  // The corner's dot for other busy sessions.
+  const cornerBadge = el('span')
+  cornerBadge.id = 'corner-badge'
+  island.append(cornerBadge)
+
+  function fillBar() {
+    if (home() !== 'bar') return
+    barRest.style.left = `${Math.max(MIN_W, compact.offsetWidth)}px`
+    const detailed = isDetailed()
+    const tags = Status.othersOf(now.list, now).map(x => {
+      const tag = el('span', 'tag')
+      if (x.jump && x.id) {
+        tag.dataset.jump = x.id
+        tag.title = t(lang, 'jump.hint')
+      }
+      const dot = el('i', 'dot')
+      dot.style.background = COLOR[x.mood] || COLOR.idle
+      const when = el('span', 'when', Status.time(x))
+      when.style.color = COLOR[x.mood] || COLOR.idle
+      tag.append(dot, el('span', 'who', Status.nameOf(x, detailed)), el('span', 'what', Status.brief(lang, x, { detailed })), when)
+      return tag
+    })
+    const parts = [el('span', 'tags'), el('span', 'grow')]
+    parts[0].append(...tags)
+    const w = widgets.length ? widgets[widgetAt % widgets.length] : null
+    if (w) {
+      const { label, value } = Widgets.words(lang, w, detailed)
+      const face = el('span', 'face')
+      face.insertAdjacentHTML('afterbegin', Widgets.icon(w.icon))
+      face.firstChild.style.color = w.color || COLOR.idle
+      const v = el('span', 'v', value)
+      v.style.color = w.color || COLOR.idle
+      face.append(label, v)
+      parts.push(face)
+    }
+    const gear = el('span', 'gear')
+    gear.dataset.bar = 'settings'
+    gear.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>')
+    parts.push(gear)
+    barRest.replaceChildren(...parts)
+  }
+
+  // A press on a tag goes to its session; on the gear, the settings.
+  barRest.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return
+    const tag = e.target.closest('[data-jump]')
+    if (tag) return jumpTo(tag.dataset.jump)
+    if (e.target.closest('[data-bar="settings"]')) window.pet.openSettings()
+  })
+  // It takes the pointer while it is under it (the window lets clicks through elsewhere).
+  barRest.addEventListener('mouseenter', () => window.pet.hover(true))
+  barRest.addEventListener('mouseleave', () => window.pet.hover(false))
 
   function update() {
     clearInterval(clockTimer)
@@ -456,12 +558,15 @@
     if (view === 'ask' && !isAsking()) nudge = null
     view = isSetting() ? 'settings' : isAsking() ? 'ask' : isHover || isNudging() ? 'expanded' : 'compact'
     island.dataset.view = view
+    island.style.setProperty('--ring', COLOR[now.mood])
+    island.classList.toggle('wants', now.mood === 'waiting')
     seatPanel()
     body.classList.toggle('has-her', isHome())
     body.classList.toggle('compact-her', view === 'compact' || view === 'settings')
     if (spriteUrl) herSheet.style.backgroundImage = `url("${spriteUrl}")`
     fillCompact()
     fillExpanded()
+    fillBar()
 
     const want = sizeOf(view)
     // Reaching for her keeps the room to reach in.
@@ -561,12 +666,25 @@
     step()
   }
 
-  // The island's double, a neck from it to (cx, cy), and a drop there; the
+  // Where a neck leaves her home: the point of its edge nearest (x, y), so a
+  // drop below the island hangs from its lower edge, and one up and to the
+  // left of a corner's circle from that side.
+  function edgeNear(r, x, y) {
+    return [Math.min(Math.max(x, r.left + 24), r.right - 24), Math.min(Math.max(y, r.top + 14), r.bottom - 14)]
+  }
+
+  // Her seat in her home, in the page: where she springs back to.
+  function seatIn(r) {
+    if (home() === 'corner') return [r.left + CIRCLE / 2, r.top + CIRCLE / 2]
+    if (home() === 'bar') return [r.left + 15, r.top + 15]
+    return [r.left + 18, r.top + 18]
+  }
+
+  // The home's double, a neck from it to (cx, cy), and a drop there; the
   // filter melts them into one shape. A neck of 0 leaves the drop on its own.
   function drawGoo(cx, cy, { neck, radius = DROP_R }) {
     const r = island.getBoundingClientRect()
-    const ax = Math.min(Math.max(cx, r.left + 24), r.right - 24)
-    const ay = r.bottom - 14
+    const [ax, ay] = edgeNear(r, cx, cy)
     Object.assign(gooIsland.style, {
       left: `${r.left}px`,
       top: `${r.top}px`,
@@ -592,9 +710,10 @@
   function stretch(x, y) {
     const r = island.getBoundingClientRect()
     const cx = x
-    const cy = Math.max(y + 30, r.bottom - 10)
-    const ax = Math.min(Math.max(cx, r.left + 24), r.right - 24)
-    const dist = Math.hypot(cx - ax, cy - (r.bottom - 14))
+    // From the top of the screen she can only come down; from a corner, any way.
+    const cy = home() === 'corner' ? y + 30 : Math.max(y + 30, r.bottom - 10)
+    const [ax, ay] = edgeNear(r, cx, cy)
+    const dist = Math.hypot(cx - ax, cy - ay)
     pull.broken = dist > BREAK_PX
     drawGoo(cx, cy, { neck: pull.broken ? 0 : Math.max(8, 34 - dist * 0.22) })
     Object.assign(dropHer.style, { left: `${cx - BODY_W / 2}px`, top: `${cy - BODY_H / 2}px` })
@@ -649,8 +768,7 @@
   // Into her seat from where the drop has her: the drop and she spring back.
   function settleBack(at) {
     const r = island.getBoundingClientRect()
-    const tx = r.left + 18
-    const ty = r.top + 18
+    const [tx, ty] = seatIn(r)
     if (at) drawGoo(at.cx, at.cy, { neck: 26 })
     body.classList.add('pulling')
     requestAnimationFrame(() => {
@@ -697,7 +815,8 @@
       // The drop draws back into the island.
       body.classList.add('settling')
       const r = island.getBoundingClientRect()
-      drawGoo(r.left + r.width / 2, r.bottom - 16, { neck: 0, radius: 8 })
+      const [sx, sy] = seatIn(r)
+      drawGoo(sx, sy, { neck: 0, radius: 8 })
       retractTimer = setTimeout(() => {
         body.classList.remove('reaching', 'settling')
         update()
@@ -714,8 +833,7 @@
     const x = at.x - window.screenX
     const y = at.y - window.screenY
     const r = island.getBoundingClientRect()
-    const ax = Math.min(Math.max(x, r.left + 24), r.right - 24)
-    const ay = r.bottom - 14
+    const [ax, ay] = edgeNear(r, x, y)
     // Close: the drop reaches all the way and holds her; nearer: part way.
     const k = at.snap ? 1 : REACH_SHARE * Math.min(1, Math.max(0, 1 - (Math.hypot(x - ax, y - ay) - 140) / 140))
     const tx = ax + (x - ax) * k
@@ -769,6 +887,8 @@
 
   function place() {
     body.classList.toggle('island', isOn())
+    body.classList.remove('home-corner', 'home-island', 'home-bar', 'at-br', 'at-bl', 'at-tr', 'at-tl')
+    if (isOn()) body.classList.add(`home-${home()}`, `at-${corner()}`)
     seatPanel()
     if (!isOn() && panel.parentElement !== stage) stage.prepend(panel)
     if (!isOn()) {
@@ -798,7 +918,6 @@
     widgets = Array.isArray(data.widgets) ? data.widgets : []
     const still = widgets.findIndex(w => w.id === was)
     if (still >= 0) widgetAt = still
-    islandTemp = data.islandTemp === true
     place()
     // Something new that wants you, or is finished: the island opens for a
     // moment, a longer one with Claude's words to read.

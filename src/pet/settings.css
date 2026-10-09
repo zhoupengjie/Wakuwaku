@@ -518,10 +518,10 @@
   color: #000;
 }
 
-/* Pet or island: two pictures to pick from. */
+/* Her home: three pictures to pick from. */
 #island-settings .modes {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 8px;
 }
 
@@ -557,6 +557,33 @@
   background: #000;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
   transform: translateX(-50%);
+}
+
+/* The corner's circle, her in it; the bar's strip along the top. */
+#island-settings .mode .pv .circle {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 26px;
+  height: 26px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #000;
+  box-shadow: 0 0 0 2px #5e9bff;
+}
+
+#island-settings .mode .pv .circle .thumb {
+  position: absolute;
+  left: 1px;
+  top: 0;
+}
+
+#island-settings .mode .pv u {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 11px;
+  background: #000;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.15);
 }
 
 #island-settings .mode .pv .thumb {

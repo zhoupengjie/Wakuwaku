@@ -38,8 +38,9 @@ let spriteVersion = 2
 // island.js); in the island's, she is not drawn here.
 const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
 const isIsland = () => ROLE === 'island'
-// Out of the island on the desktop, the island does the talking.
-const isOutOfIsland = () => ROLE === 'pet' && config.display === 'island'
+// Out on the desktop, her home does the talking, unless her home is the
+// corner: out from it, she talks herself (her bubble, her panel).
+const isOutOfIsland = () => ROLE === 'pet' && !(config.display === 'corner' && config.out === true)
 
 let reaction = null // { clip, times, say, start }
 let dragged = null // { dir, at }

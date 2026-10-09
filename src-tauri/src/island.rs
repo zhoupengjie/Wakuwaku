@@ -1,10 +1,16 @@
-// The island's window: a black pill at the top centre of the screen (the
-// page draws it, src/pet/island.js), up whenever display is 'island', whether
-// she is in it or out on the desktop.
+// Her home's window (the page draws it, src/pet/island.js), by display:
+//   corner  a round portrait in a corner of the screen (the corner setting:
+//           br, bl, tr, tl); with her out on the desktop it goes, and she
+//           talks herself, with her bubble and panel
+//   island  a black pill at the top centre
+//   bar     a strip along the top of the screen whose height is kept from
+//           other windows, as the taskbar's is (appbar.rs)
+// The island and the bar stay up while she is out, and do the talking.
 //
-// It is her home: pulled out of it, she becomes the pet window (carried
-// under the cursor while the button is still held on the island); brought
-// close to it again, it reaches for her and takes her back.
+// Pulled out of her home, she becomes the pet window (carried under the
+// cursor while the button is still held on the home); brought close to it
+// again, it reaches for her and takes her back. From the corner, the home
+// comes up for that while she is near.
 //
 // Sizes here are logical (the page's) unless they say physical.
 use std::sync::Arc;
@@ -14,15 +20,25 @@ use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 use crate::pointer::{ClickThrough, Mode};
-use crate::Shared;
+use crate::screen::Area;
+use crate::{appbar, Shared};
 
-// The window without extra room: the island at its widest without a prompt,
-// and its spring. The page asks for more (pet:panel) when a shape needs it.
+// The window without extra room, by home: the island at its widest without
+// a prompt, and its spring; the corner's circle and its margin; the bar's
+// height (its width is the screen's). The page asks for more (pet:panel)
+// when a shape needs it.
 const ISLAND: (f64, f64) = (460.0, 132.0);
+const CORNER: (f64, f64) = (120.0, 120.0);
+pub const BAR_H: f64 = 30.0;
 // The island's top edge in the window, and its compact height.
 const TOP: f64 = 8.0;
 const COMPACT_H: f64 = 36.0;
-// Her middle this close to the island: it reaches out for her; this close,
+// The corner's circle, and how far it keeps from the screen's edges.
+const CIRCLE: f64 = 56.0;
+const CORNER_M: f64 = 14.0;
+// The middle of her portrait at the bar's left end.
+const BAR_SEAT_X: f64 = 17.0;
+// Her middle this close to her home: it reaches out for her; this close,
 // letting go puts her back in.
 const REACH_PX: f64 = 280.0;
 const SNAP_PX: f64 = 140.0;
@@ -46,10 +62,18 @@ pub struct Island {
     ready: bool,
     shown: bool,
     ct: ClickThrough,
+    // The window, once made (for the app bar).
+    hwnd: isize,
+    // The bar's strip, as Windows granted it (physical x, y, w, h), and what
+    // it was asked for (the display, the height): asked again only on a change.
+    bar: Option<(i32, i32, i32, i32)>,
+    bar_for: Option<((i32, i32, i32, i32), i32)>,
     // The button held on her (a pull, or carrying her out): the window keeps the pointer.
     holding: bool,
     reaching: bool,
-    // Risen only for the settings (she is the pet on her own, or out of
+    // Taking her in: the window stays up for it (the corner's goes once she is out).
+    pub absorbing: bool,
+    // Risen only for the settings (she is out from the corner, or out of
     // sight): it goes again once they close.
     pub temp: bool,
     pub settings_open: bool,
@@ -62,12 +86,20 @@ impl Island {
         if self.sf > 0.0 { self.sf } else { 1.0 }
     }
 
-    fn size_for(&self) -> (i32, i32) {
-        let (w, h) = match self.room {
-            Some((w, h)) => (w.max(ISLAND.0), h.max(ISLAND.1)),
-            None => ISLAND,
+    // Physical. The bar is as wide as its display.
+    fn size_for(&self, home: &str, area: &Area) -> (i32, i32) {
+        let sf = self.sf();
+        let base = match home {
+            "corner" => CORNER,
+            "bar" => (area.mon.2 as f64 / sf, BAR_H),
+            _ => ISLAND,
         };
-        ((w * self.sf()).round() as i32, (h * self.sf()).round() as i32)
+        let (w, h) = match self.room {
+            Some((w, h)) => (w.max(base.0), h.max(base.1)),
+            None => base,
+        };
+        let w = if home == "bar" { base.0 } else { w };
+        ((w * sf).round() as i32, (h * sf).round() as i32)
     }
 }
 
@@ -75,17 +107,15 @@ fn window(sh: &Shared) -> Option<WebviewWindow> {
     sh.app.get_webview_window("island")
 }
 
-fn is_island_mode(sh: &Shared) -> bool {
-    sh.setting("display").as_str() == Some("island")
-}
-
-// Up: the island mode, in sight; or risen for the settings; or the settings
-// open in it, whatever they just hid (she, do not disturb): they never go
-// from under the person, only once closed.
+// Up: whenever she is home, or her home talks while she is out (the island,
+// the bar); or risen for the settings, or for reaching and taking her in; or
+// the settings open in it, whatever they just hid (she, do not disturb): they
+// never go from under the person, only once closed.
 pub fn is_shown(sh: &Shared) -> bool {
-    let is_up = sh.is_visible() && is_island_mode(sh);
+    let is_visible = sh.is_visible();
+    let is_up = is_visible && !sh.she_talks();
     let isl = sh.island.lock().unwrap();
-    is_up || isl.temp || isl.settings_open
+    is_up || isl.temp || isl.settings_open || (is_visible && (isl.reaching || isl.absorbing))
 }
 
 fn set_ignore(sh: &Shared, ignore: Option<bool>) {
@@ -95,19 +125,42 @@ fn set_ignore(sh: &Shared, ignore: Option<bool>) {
     }
 }
 
-// The top centre of the display it is on (the primary one to start with),
-// below a taskbar that sits at the top. Returns the physical rect if it moved.
-fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
+// The display it is on: where it is, else the primary one.
+fn area(sh: &Shared) -> Option<Area> {
     let screens = sh.screens();
+    let at = {
+        let isl = sh.island.lock().unwrap();
+        (isl.created && isl.size.0 > 0).then(|| (isl.pos.0 + isl.size.0 / 2, isl.pos.1 + isl.size.1 / 2))
+    };
+    match at {
+        Some((x, y)) => screens.near(x, y),
+        None => screens.primary,
+    }
+}
+
+// Which corner, for the corner home.
+fn corner(sh: &Shared) -> String {
+    sh.setting("corner").as_str().filter(|c| matches!(*c, "br" | "bl" | "tr" | "tl")).unwrap_or("br").to_string()
+}
+
+// Where the window goes, by home. Returns the physical rect if it moved.
+fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
+    let (home, corner) = (sh.home(), corner(sh));
+    let area = area(sh)?;
     let mut isl = sh.island.lock().unwrap();
-    let area = if isl.created && isl.size.0 > 0 {
-        screens.near(isl.pos.0 + isl.size.0 / 2, isl.pos.1 + isl.size.1 / 2)
-    } else {
-        screens.primary
-    }?;
     isl.sf = area.sf;
-    let size = isl.size_for();
-    let pos = (area.x + (area.w - size.0) / 2, area.y);
+    let size = isl.size_for(home, &area);
+    let pos = match home {
+        // Its corner of the work area, the page drawing the circle in from it.
+        "corner" => (
+            if corner.ends_with('l') { area.x } else { area.x + area.w - size.0 },
+            if corner.starts_with('t') { area.y } else { area.y + area.h - size.1 },
+        ),
+        // The strip Windows granted, or the display's top until then.
+        "bar" => isl.bar.map_or((area.mon.0, area.mon.1), |b| (b.0, b.1)),
+        // The top centre, below a taskbar that sits at the top.
+        _ => (area.x + (area.w - size.0) / 2, area.y),
+    };
     if (pos, size) == (isl.pos, isl.size) {
         return None;
     }
@@ -116,7 +169,44 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
     Some((pos, size))
 }
 
+// The bar's strip: asked of Windows while the home is the bar and up; given
+// back otherwise. Asked again only when the display or the height change.
+fn sync_bar(sh: &Shared, is_up: bool) {
+    let want = is_up && sh.home() == "bar";
+    let area = if want { area(sh) } else { None };
+    let mut isl = sh.island.lock().unwrap();
+    let hwnd = isl.hwnd;
+    if hwnd == 0 {
+        return;
+    }
+    let Some(area) = area else {
+        if isl.bar_for.take().is_some() {
+            appbar::remove(hwnd);
+            isl.bar = None;
+            sh.log("island: bar strip given back");
+        }
+        return;
+    };
+    let ask = (area.mon, (BAR_H * area.sf).round() as i32);
+    if isl.bar_for == Some(ask) {
+        return;
+    }
+    if isl.bar_for.is_none() && !appbar::register(hwnd) {
+        sh.log("island: Windows would not take the bar");
+        return;
+    }
+    isl.bar = Some(appbar::place_top(hwnd, ask.0, ask.1));
+    isl.bar_for = Some(ask);
+    sh.log(&format!("island: bar strip {:?}", isl.bar));
+}
+
+// Quitting, or the window going: the bar's strip back to the other windows.
+pub fn release_bar(sh: &Shared) {
+    sync_bar(sh, false);
+}
+
 fn place(sh: &Shared) {
+    sync_bar(sh, true);
     let Some((pos, size)) = fit(sh) else { return };
     if let Some(win) = window(sh) {
         let _ = win.set_size(PhysicalSize::new(size.0 as u32, size.1 as u32));
@@ -124,8 +214,8 @@ fn place(sh: &Shared) {
     }
 }
 
-// Made the first time she goes into the island, then kept (hidden when the
-// pet is on her own), so coming back is instant.
+// Made the first time her home shows, then kept (hidden while she talks
+// herself), so coming back is instant.
 fn create(sh: &Arc<Shared>) {
     fit(sh);
     let (pos, size, sf) = {
@@ -173,6 +263,10 @@ fn create(sh: &Arc<Shared>) {
                         }
                     }
                 });
+                #[cfg(windows)]
+                if let Ok(hwnd) = win.hwnd() {
+                    sh.island.lock().unwrap().hwnd = hwnd.0 as isize;
+                }
                 sh.own_window(&win);
             }
             Err(err) => sh.log(&format!("island: could not make its window: {err}")),
@@ -189,7 +283,7 @@ pub fn ready(sh: &Arc<Shared>) {
         isl.pending.take()
     };
     sh.redraw();
-    if is_island_mode(sh) {
+    if !sh.she_talks() {
         sh.greet();
     }
     apply_visibility(sh);
@@ -215,6 +309,8 @@ pub fn apply_visibility(sh: &Arc<Shared>) {
     }
     if want {
         place(sh);
+    } else {
+        sync_bar(sh, false);
     }
     if want == shown {
         return;
@@ -232,7 +328,7 @@ pub fn apply_visibility(sh: &Arc<Shared>) {
     }
 }
 
-// Kept at the top centre (a display gone, the scale changed).
+// Kept in its place (a display gone, the scale changed, another bar).
 pub fn keep_on_screen(sh: &Shared) {
     let is_up = {
         let isl = sh.island.lock().unwrap();
@@ -245,7 +341,7 @@ pub fn keep_on_screen(sh: &Shared) {
 
 // One look at the mouse. Returns ms until the next look.
 pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
-    // She is being dragged past: the island is not being hovered.
+    // She is being dragged past: the home is not being hovered.
     let passive = crate::pet::is_dragged(sh);
     let (ignore, pointer, wait) = {
         let mut isl = sh.island.lock().unwrap();
@@ -275,7 +371,7 @@ pub fn hover(sh: &Shared, is_over: bool) {
         isl.ct.set_over(is_over, held, false)
     };
     set_ignore(sh, ignore);
-    // The island opens up to say what happened while hovered, so it counts
+    // The home opens up to say what happened while hovered, so it counts
     // as seen once the pointer leaves.
     if !is_over && sh.pet.lock().unwrap().seen(crate::now_ms(), sh.hold()) {
         sh.redraw();
@@ -292,7 +388,7 @@ pub fn set_room(sh: &Shared, measured: &Value) {
     place(sh);
 }
 
-// The button is held on her in the island (a pull, or carrying her out).
+// The button is held on her in her home (a pull, or carrying her out).
 pub fn set_holding(sh: &Shared, is_holding: bool) {
     sh.log(&format!("island: holding {is_holding}"));
     let ignore = {
@@ -303,24 +399,54 @@ pub fn set_holding(sh: &Shared, is_holding: bool) {
     set_ignore(sh, ignore);
 }
 
-// Where the island hangs: the middle of its lower edge (compact), physical;
-// None while it is not up.
+// Where her home is on the screen, physical, whether it is up or not: what
+// she is reached for from and taken back into. The island: the middle of
+// its lower edge (compact); the corner: the circle's middle; the bar: under
+// her portrait at its left end.
 pub fn seat(sh: &Shared) -> Option<(i32, i32)> {
-    let isl = sh.island.lock().unwrap();
-    if !isl.shown {
-        return None;
-    }
-    Some((isl.pos.0 + isl.size.0 / 2, isl.pos.1 + ((TOP + COMPACT_H) * isl.sf()).round() as i32))
+    let (home, corner) = (sh.home(), corner(sh));
+    let area = area(sh)?;
+    let bar = sh.island.lock().unwrap().bar;
+    let px = |v: f64| (v * area.sf).round() as i32;
+    Some(match home {
+        "corner" => {
+            let m = px(CORNER_M + CIRCLE / 2.0);
+            (
+                if corner.ends_with('l') { area.x + m } else { area.x + area.w - m },
+                if corner.starts_with('t') { area.y + m } else { area.y + area.h - m },
+            )
+        }
+        "bar" => {
+            let (x, y, _, h) = bar.unwrap_or((area.mon.0, area.mon.1, area.mon.2, px(BAR_H)));
+            (x + px(BAR_SEAT_X), y + h)
+        }
+        _ => (area.x + area.w / 2, area.y + px(TOP + COMPACT_H)),
+    })
 }
 
-// She is being moved near the island (point: her middle on the screen,
+// Where she flies to before her home takes her in: just under the island or
+// the bar, where the drop can take her; into the corner's circle itself.
+pub fn landing(sh: &Shared) -> Option<(i32, i32)> {
+    let seat = seat(sh)?;
+    let sf = area(sh).map_or(1.0, |a| a.sf);
+    let below = match sh.home() {
+        "corner" => 0.0,
+        "bar" => 50.0,
+        _ => 70.0,
+    };
+    Some((seat.0, seat.1 + (below * sf) as i32))
+}
+
+// She is being moved near her home (point: her middle on the screen,
 // physical), or no longer (None). Tells the page, which reaches out a drop
-// for her, and says how close she is (Snap: let go, and she is back).
-pub fn reach(sh: &Shared, point: Option<(i32, i32)>, is_final: bool) -> Reach {
+// for her, and says how close she is (Snap: let go, and she is back). The
+// corner's home comes up for it while she is near.
+pub fn reach(sh: &Arc<Shared>, point: Option<(i32, i32)>, is_final: bool) -> Reach {
     let anchor = seat(sh);
-    let (event, state) = {
+    let (event, state, changed) = {
         let mut isl = sh.island.lock().unwrap();
         let sf = isl.sf();
+        let was = isl.reaching;
         let state = match (point, anchor) {
             (Some(p), Some(a)) => {
                 let distance = ((p.0 - a.0) as f64).hypot((p.1 - a.1) as f64) / sf;
@@ -341,15 +467,18 @@ pub fn reach(sh: &Shared, point: Option<(i32, i32)>, is_final: bool) -> Reach {
             // Screen coordinates as the page has them (window.screenX): logical.
             Some(json!({ "x": p.0 as f64 / sf, "y": p.1 as f64 / sf, "snap": state == Reach::Snap }))
         };
-        (event, state)
+        (event, state, was != isl.reaching)
     };
+    if changed {
+        apply_visibility(sh);
+    }
     if let Some(at) = event {
         let _ = sh.app.emit_to("island", "island:reach", at);
     }
     state
 }
 
-// She has landed (or come home): whatever the island's page heard of the
+// She has landed (or come home): whatever the home's page heard of the
 // button, it is no longer held there.
 pub fn end_hold(sh: &Shared) {
     let was = std::mem::take(&mut sh.island.lock().unwrap().holding);
@@ -358,22 +487,25 @@ pub fn end_hold(sh: &Shared) {
     }
 }
 
-// Take her in from where she is (her middle on the screen, physical).
-pub fn absorb(sh: &Shared, point: (i32, i32)) {
+// Take her in from where she is (her middle on the screen, physical); the
+// window stays up for it until she is in (main.rs absorb).
+pub fn absorb(sh: &Arc<Shared>, point: (i32, i32)) {
     let sf = {
         let mut isl = sh.island.lock().unwrap();
         isl.reaching = false;
+        isl.absorbing = true;
         isl.sf()
     };
+    apply_visibility(sh);
     let _ = sh.app.emit_to("island", "island:absorb", json!({ "x": point.0 as f64 / sf, "y": point.1 as f64 / sf }));
 }
 
-// --- The settings, grown out of the island ------------------------------------------------
+// --- The settings, grown out of her home ------------------------------------------------
 
-// Open them on a page (or where they were). With no island up (she is the pet
-// on her own, or out of sight), one rises for them and goes once they close.
+// Open them on a page (or where they were). With no home up (she is out
+// from the corner, or out of sight), one rises for them and goes once they close.
 pub fn open_settings(sh: &Arc<Shared>, tab: Option<&str>) {
-    let is_up = sh.is_visible() && is_island_mode(sh);
+    let is_up = sh.is_visible() && !sh.she_talks();
     let ready = {
         let mut isl = sh.island.lock().unwrap();
         isl.temp |= !is_up;
@@ -391,7 +523,7 @@ pub fn open_settings(sh: &Arc<Shared>, tab: Option<&str>) {
     }
 }
 
-// The page closed them (Esc, a click outside, ✕, the head). Once the island
+// The page closed them (Esc, a click outside, ✕, the head). Once the home
 // has shrunk back: a risen one goes, and so does one the settings kept up
 // (she was hidden, or do not disturb turned on, while they were open).
 pub fn settings_closed(sh: &Arc<Shared>) {
@@ -431,5 +563,6 @@ pub fn where_(sh: &Shared) -> Value {
         "reaching": isl.reaching,
         "temp": isl.temp,
         "settingsOpen": isl.settings_open,
+        "bar": isl.bar.map(|b| json!([b.0, b.1, b.2, b.3])),
     })
 }

@@ -3,7 +3,7 @@
 // close them. Five pages:
 //   now       the sessions (a click on one goes to its window), and four quick switches
 //   pets      the pets downloaded, a download by link or id, the gallery
-//   look      pet or island, size, bubble, strolls, eyes, language
+//   look      her home (corner, island, bar), size, bubble, strolls, eyes, language
 //   alerts    how long endings stay, notifications, sound, prompts, quiet
 //   widgets   plugins in the island: on or off, their order, turns, nudges, and how to write one
 //   connect   how Claude Code and Codex reach her, start at login, the hooks, about
@@ -32,6 +32,9 @@
   const TAB_KEY = { now: 's.tabNow', pets: 's.tabPets', look: 's.tabLook', alerts: 's.tabAlerts', widgets: 's.tabWidgets', connect: 's.tabConnect' }
   const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
   const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
+  const HOMES = ['corner', 'island', 'bar']
+  const HOME_KEY = { corner: 's.displayCorner', island: 's.displayIsland', bar: 's.displayBar' }
+  const CORNERS = ['br', 'bl', 'tr', 'tl']
   const HOLDS = ['seen', 8, 30, 120]
   const WAITS = [30, 60, 120, 290]
   const SPINS = [0, 5, 8, 15]
@@ -161,14 +164,12 @@
           })
           .join('')
       : `<div class="note">${esc(T('home.noSessions'))}</div>`
-    // Show the pet: in the island, whether she is out on the desktop (she is
-    // always in sight there); as the pet on her own, shown or hidden.
-    const isShown = s.display === 'island' ? !snap.hidden && s.out === true : !snap.hidden
+    // Her out on the desktop; and her home, the next one at a press.
     const tiles = [
-      ['show', 'eye', T('home.showPet'), isShown],
+      ['show', 'eye', T('s.outTile'), !snap.hidden && s.out === true],
       ['dnd', 'moon', T('menu.dnd'), s.dnd],
       ['sound', 'sound', T('settings.sound'), s.sound],
-      ['island', 'pill', T('s.island'), s.display === 'island'],
+      ['home', 'pill', T(HOME_KEY[s.display] || 's.displayIsland'), true],
     ]
     const welcome = !s.onboarded && snap.connection === 'none' ? `<div class="welcome">${esc(T('s.welcome'))}</div>` : ''
     return `${welcome}${sec(T('home.sessions'))}<div class="grp">${list}</div>
@@ -210,9 +211,11 @@
     const s = snap.settings
     const current = snap.pets.find(p => p.id === s.pet)
     return `${sec(T('home.display'))}<div class="modes">
-        <div class="mode${s.display === 'pet' ? ' on' : ''}" data-mode="pet"><div class="pv">${current ? thumb(42, current.url, current.version) : ''}</div><div class="l"><span class="rd"></span>${esc(T('home.displayPet'))}</div></div>
+        <div class="mode${s.display === 'corner' ? ' on' : ''}" data-mode="corner"><div class="pv"><b class="circle">${current ? thumb(24, current.url, current.version) : ''}</b></div><div class="l"><span class="rd"></span>${esc(T('s.displayCorner'))}</div></div>
         <div class="mode${s.display === 'island' ? ' on' : ''}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div></div>
+        <div class="mode${s.display === 'bar' ? ' on' : ''}" data-mode="bar"><div class="pv"><u></u></div><div class="l"><span class="rd"></span>${esc(T('s.displayBar'))}</div></div>
       </div>
+      ${s.display === 'corner' ? `<div class="grp">${row(esc(T('s.corner')), '', seg('corner', CORNERS.map(c => [c, T(`s.corner.${c}`)]), s.corner || 'br'))}</div>` : ''}
       ${sec(T('s.her'))}<div class="grp">
         ${row(esc(T('menu.size')), '', seg('scale', SIZES.map(([name, scale]) => [scale, T(`menu.${name}`)]), s.scale))}
         ${row(esc(T('s.bubble')), esc(T('s.bubbleNote')), sw('bubble', s.bubble))}
@@ -562,17 +565,17 @@
         gallery.items = []
         return loadGallery(false)
       }
-      const value = key === 'lang' ? raw : raw === 'seen' ? 'seen' : Number(raw)
+      const value = key === 'lang' || key === 'corner' ? raw : raw === 'seen' ? 'seen' : Number(raw)
       return patch({ [key]: value })
     }
     const tile = at('[data-tile]')
     if (tile) {
       const key = tile.dataset.tile
       if (key === 'show') {
-        if (s.display === 'island' && !snap.hidden) return patch({ out: s.out !== true })
-        return window.pet.settings.showPet(snap.hidden).then(got => ((snap = got), draw()))
+        if (!snap.hidden) return patch({ out: s.out !== true })
+        return window.pet.settings.showPet(true).then(got => ((snap = got), draw()))
       }
-      if (key === 'island') return patch({ display: s.display === 'island' ? 'pet' : 'island' })
+      if (key === 'home') return patch({ display: HOMES[(HOMES.indexOf(s.display) + 1) % HOMES.length] })
       return patch({ [key]: !s[key] })
     }
     const mode = at('[data-mode]')

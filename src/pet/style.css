@@ -913,3 +913,211 @@ body {
   background-repeat: no-repeat;
   transform-origin: 0 0;
 }
+
+/* --- Her home, by display (island.js home()); the island is the one above. --- */
+
+/* A corner: the window sits in a corner of the screen, the circle in its
+   corner, and whatever grows out of the circle grows away from the corner. */
+.home-corner #island-bar {
+  padding: 14px;
+}
+
+.home-corner.at-br #island-bar,
+.home-corner.at-bl #island-bar {
+  justify-content: flex-end;
+}
+
+.home-corner.at-br #island-bar,
+.home-corner.at-tr #island-bar {
+  align-items: flex-end;
+}
+
+.home-corner.at-bl #island-bar,
+.home-corner.at-tl #island-bar {
+  align-items: flex-start;
+}
+
+/* The circle: her alone, ringed in the mood's colour; pulsing while she
+   waits on you. */
+.home-corner #island-compact {
+  display: none;
+}
+
+.home-corner #island[data-view='compact'] {
+  box-shadow:
+    0 0 0 2.5px var(--ring, #8e8e93),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.home-corner #island.wants[data-view='compact'] {
+  animation: ring-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ring-pulse {
+  50% {
+    box-shadow:
+      0 0 0 5px var(--ring, #8e8e93),
+      0 6px 18px rgba(0, 0, 0, 0.35);
+  }
+}
+
+.home-corner.compact-her #island-her::after {
+  opacity: 0;
+}
+
+/* Other sessions busy too: a dot in the next one's colour. */
+#corner-badge {
+  display: none;
+}
+
+.home-corner #island[data-view='compact'] #corner-badge.on {
+  display: block;
+  position: absolute;
+  z-index: 2;
+  top: 7px;
+  right: 7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #000;
+}
+
+/* The bar: a strip along the top of the screen; her end at the left, what
+   opens from it hanging below. */
+.home-bar #island-bar {
+  padding: 0;
+  align-items: stretch;
+}
+
+.home-bar #island-row {
+  width: 100%;
+  height: 30px;
+  gap: 0;
+  background: #000;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Above the tags: what opens from her end covers them. */
+.home-bar #island {
+  z-index: 2;
+  box-shadow: none;
+}
+
+.home-bar #island:not([data-view='compact']) {
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.home-bar #island-compact {
+  height: 30px;
+}
+
+.home-bar.has-her #island-compact {
+  padding-left: 34px;
+}
+
+#bar-rest {
+  display: none;
+}
+
+.home-bar #bar-rest {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 0 4px;
+  font-size: 12px;
+  color: #d1d1d6;
+  white-space: nowrap;
+}
+
+#bar-rest .tags {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Another session: its colour, its name, where it is, its clock. */
+#bar-rest .tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 300px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: #1c1c1e;
+  overflow: hidden;
+}
+
+#bar-rest .tag[data-jump] {
+  cursor: pointer;
+}
+
+#bar-rest .tag[data-jump]:hover {
+  background: #2c2c2e;
+}
+
+#bar-rest .tag .dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+#bar-rest .tag .who {
+  flex: none;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #e5e5ea;
+}
+
+#bar-rest .tag .what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #a1a1a6;
+}
+
+#bar-rest .tag .when,
+#bar-rest .face .v {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+#bar-rest .grow {
+  flex: 1;
+}
+
+#bar-rest .face {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#bar-rest .gear {
+  display: flex;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#bar-rest .gear:hover {
+  background: #2c2c2e;
+}
+
+#bar-rest .gear svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: #d1d1d6;
+  stroke-width: 2;
+  stroke-linecap: round;
+}

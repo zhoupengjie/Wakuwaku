@@ -31,7 +31,7 @@ pub fn menu(sh: &Shared, is_tray: bool) -> tauri::Result<Menu<Wry>> {
     let t = |key: &str| i18n::t(lang, key);
     let settings = sh.settings.lock().unwrap().clone();
     let flag = |key: &str| settings.get(key).and_then(|v| v.as_bool()).unwrap_or(false);
-    let is_island = settings.get("display").and_then(|v| v.as_str()) == Some("island");
+    let home = sh.home();
     let menu = Menu::new(app)?;
 
     if is_tray {
@@ -61,13 +61,16 @@ pub fn menu(sh: &Shared, is_tray: bool) -> tauri::Result<Menu<Wry>> {
     for key in ["bubble", "walk", "look"] {
         menu.append(&CheckMenuItem::with_id(app, key, t(&format!("menu.{key}")), true, flag(key), None::<&str>)?)?;
     }
-    menu.append(&CheckMenuItem::with_id(app, "island", t("menu.island"), true, is_island, None::<&str>)?)?;
-    // In island mode: let her out onto the desktop, or call her back in.
-    if is_island {
-        let label = if flag("out") { t("menu.callBack") } else { t("menu.letOut") };
-        menu.append(&MenuItem::with_id(app, "out", label, true, None::<&str>)?)?;
+    // Her home: the corner, the island or the bar.
+    let homes = Submenu::new(app, t("menu.home"), true)?;
+    for id in ["corner", "island", "bar"] {
+        homes.append(&CheckMenuItem::with_id(app, format!("display:{id}"), t(&format!("menu.{id}")), true, home == id, None::<&str>)?)?;
     }
-    menu.append(&MenuItem::with_id(app, "home", t("menu.home"), true, None::<&str>)?)?;
+    menu.append(&homes)?;
+    // Let her out onto the desktop, or call her back home.
+    let label = if flag("out") { t("menu.callBack") } else { t("menu.letOut") };
+    menu.append(&MenuItem::with_id(app, "out", label, true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "corner", t("menu.backToCorner"), true, None::<&str>)?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, flag("dnd"), None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?)?;
@@ -80,13 +83,14 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
     match id {
         "toggle" => sh.set_hidden(sh.is_visible()),
         "bubble" | "walk" | "look" | "dnd" => sh.change(json!({ id: !sh.flag(id) })),
-        "island" => crate::set_display(sh, if sh.setting("display").as_str() == Some("island") { "pet" } else { "island" }),
         "out" => crate::set_out(sh, !sh.flag("out")),
-        "home" => crate::come_home(sh),
+        "corner" => crate::come_home(sh),
         "settings" => crate::island::open_settings(sh, None),
         "quit" => sh.app.exit(0),
         _ => {
-            if let Some(pet_id) = id.strip_prefix("pet:") {
+            if let Some(home) = id.strip_prefix("display:") {
+                crate::set_display(sh, home);
+            } else if let Some(pet_id) = id.strip_prefix("pet:") {
                 sh.change(json!({ "pet": pet_id }));
             } else if let Some(name) = id.strip_prefix("size:") {
                 if let Some((_, scale)) = data::SCALES.iter().find(|(n, _)| *n == name) {

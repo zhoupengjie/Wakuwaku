@@ -22,7 +22,8 @@ src-tauri/
   src/
     main.rs               入口：--wakuwaku-ensure-running、--wakuwaku-codex-hook、单实例、各部分共享的 Shared、页面能调的命令
     pet.rs                她的窗口：大小和位置、眼睛、拖动和被"携带"、走动、头顶的面板、飞回岛里
-    island.rs             灵动岛的窗口：挂在顶部正中、按页面要求扩大、伸手够她、把她吸回去、为设置临时升起
+    island.rs             她的家的窗口：角落头像、灵动岛、顶栏各放在哪，按页面要求扩大、伸手够她、把她吸回去、为设置临时升起
+    appbar.rs             顶栏占住的那条空间（Windows 的 AppBar）
     settings.rs           设置看到的快照、校验后的设置补丁、设置的各个命令
     pointer.rs            两个窗口共用的点击穿透
     screen.rs             各个显示器的工作区
@@ -215,6 +216,22 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 3. 页面照旧调用 `window.pet.hover(true)`，Rust 让窗口接住鼠标（`set_ignore_cursor_events(false)`）；离开时再变回穿透。
 
 拖动由 Rust 跟随光标，并直接读鼠标按键（`GetAsyncKeyState`）：松手时页面没收到 mouseup 也能结束。鼠标在她身上时 Rust 也盯着按键，按下就开始拖（在岛里进出过之后，Windows 有时会吞掉她窗口的按下）。她被拖着经过灵动岛时，岛只做穿透，不会被"悬停"展开。
+
+## 她的家：角落头像、灵动岛、顶栏
+
+`display` 是她的家：`corner` | `island` | `bar`；`out` 是她在不在桌面上。三种用的是同一个窗口（`island`）、同一个页面元素 `#island`，同样的四种形状（收起、展开、确认、设置），只是放的位置和收起时的样子不同（`island.js` 的 `home()`，`body` 上的 `home-*`、`at-*` 类）：
+
+| | 窗口放在 | 收起时 | 展开往哪长 | 她回家的落点（`seat`） |
+| --- | --- | --- | --- | --- |
+| `corner` | 工作区的一角（`corner`：br / bl / tr / tl），平时 120×120 | 56px 的圆，外圈是状态色，等你时脉动，别的会话在忙时有个小点 | 离开那个角 | 圆心 |
+| `island` | 工作区顶部正中，平时 460×132 | 胶囊 | 往下 | 岛下沿中间 |
+| `bar` | AppBar 给的那条（显示器顶部，30px 高），和屏幕一样宽 | 左端是她和最需要你的会话，右边是别的会话的标签（`#bar-rest`）、插件、设置 | 从左端往下垂 | 左端头像下面 |
+
+**谁说话**：`Shared::she_talks()` = `corner` 且 `out`：圆圈收起，她自己用气泡和头顶的面板说话（就是以前的 `display: 'pet'`，旧设置读进来时换成 `corner` + `out`）。灵动岛和顶栏在她出门时照样留着、照样说话。`pet.js` 的气泡、`panel.js` 的 `holdsPanel`、提示音和通知发给哪个窗口，都看这个。
+
+**把她拉出来、放回去**对三种都一样：脖子从家的边上离光标最近的点伸出来（`edgeNear`），所以在角落可以往上、往左拉。她在桌面上被拖近家时，角落的窗口会临时升起来伸手够她（`Island.reaching`），吸回去的动画期间也一直在（`absorbing`）。
+
+**顶栏的空间**（`appbar.rs`）：顶栏显示时用 `SHAppBarMessage` 登记（`ABM_NEW`），按显示器顶部要一条 30 逻辑像素高的（`ABM_QUERYPOS` 后 `ABM_SETPOS`），系统把它从工作区里扣掉；窗口放到批下来的位置。只在显示器或高度变了时再要一次（`bar_for`），否则每次重排都会让所有窗口重新布局。换成别的方式、被隐藏（勿扰、全屏、隐藏）、退出（`RunEvent::Exit`）时 `ABM_REMOVE` 还回去。**进程被强行结束时还不回去**：调试时用 `POST /debug/quit` 正常退出，别直接杀进程。
 
 ## 灵动岛
 

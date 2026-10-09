@@ -1,4 +1,4 @@
-// The displays' work areas, in physical pixels, read now and then (a window
+// The displays' work areas (and the whole of each), in physical pixels, read now and then (a window
 // getter waits on the main thread, so not on every move).
 use tauri::{AppHandle, Monitor};
 
@@ -9,6 +9,8 @@ pub struct Area {
     pub w: i32,
     pub h: i32,
     pub sf: f64,
+    // The whole display: x, y, width, height (the top bar takes its strip from it).
+    pub mon: (i32, i32, i32, i32),
 }
 
 #[derive(Clone, Default)]
@@ -19,7 +21,8 @@ pub struct Screens {
 
 fn area(m: &Monitor) -> Area {
     let wa = m.work_area();
-    Area { x: wa.position.x, y: wa.position.y, w: wa.size.width as i32, h: wa.size.height as i32, sf: m.scale_factor() }
+    let (p, s) = (m.position(), m.size());
+    Area { x: wa.position.x, y: wa.position.y, w: wa.size.width as i32, h: wa.size.height as i32, sf: m.scale_factor(), mon: (p.x, p.y, s.width as i32, s.height as i32) }
 }
 
 pub fn read(app: &AppHandle) -> Screens {

@@ -3,12 +3,15 @@
 // src/pet (her window and the island's), talking to this side through
 // src/pet/bridge.js.
 //
-// Where she is: display 'pet' is the pet alone; display 'island' is the
-// island, with her in it, or out on the desktop (out) while it stays. The
-// settings grow out of the island; with no island up, one rises for them.
+// Where she is: her home (display) is a round portrait in a corner, the
+// island at the top centre, or a bar along the top of the screen; she is in
+// it, or out on the desktop (out). Out from the corner she talks herself
+// (bubble, panel); the island and the bar stay up and talk for her. The
+// settings grow out of her home; with none up, one rises for them.
 //
 //   pet.rs         her window: size, place, eyes, drags, being carried, walks
-//   island.rs      the island at the top of the screen, her home, and the settings
+//   island.rs      her home's window (corner, island, bar), and the settings
+//   appbar.rs      the bar's strip, kept from other windows
 //   settings.rs    what the settings show and change
 //   pointer.rs     click-through, for both windows; screen.rs the work areas
 //   asks.rs        prompts answered on her or the island
@@ -25,6 +28,7 @@
 //   tokens.rs      today's tokens, from Claude Code's and Codex's own records
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod appbar;
 mod asks;
 mod connection;
 mod data;
@@ -131,8 +135,19 @@ impl Shared {
             && !(self.flag("hideInFullscreen") && self.by_fullscreen.load(Ordering::SeqCst))
     }
 
-    pub fn is_island_mode(&self) -> bool {
-        self.setting("display").as_str() == Some("island")
+    // Her home: 'corner', 'island' or 'bar' (island.rs).
+    pub fn home(&self) -> &'static str {
+        match self.setting("display").as_str() {
+            Some("corner") => "corner",
+            Some("bar") => "bar",
+            _ => "island",
+        }
+    }
+
+    // Out from the corner, she does the talking herself (her bubble, her
+    // panel); the island and the bar talk for her when she is out.
+    pub fn she_talks(&self) -> bool {
+        self.home() == "corner" && self.flag("out")
     }
 
     pub fn own_window(&self, _win: &WebviewWindow) {
@@ -291,7 +306,7 @@ impl Shared {
 
     // A chime from the window that is up, and a system notification if asked for.
     fn alert(&self, mood: &str, project: &str) {
-        let front = if self.is_island_mode() { "island" } else { "pet" };
+        let front = if self.she_talks() { "pet" } else { "island" };
         let _ = self.app.emit_to(front, "pet:alert", json!({ "mood": mood }));
         let group = match mood {
             "waiting" => "waiting",
@@ -324,7 +339,7 @@ impl Shared {
 
     pub fn change(self: &Arc<Self>, patch: Value) {
         let Value::Object(patch) = patch else { return };
-        let touches_visibility = ["dnd", "display", "out", "hideInFullscreen"].iter().any(|k| patch.contains_key(*k));
+        let touches_visibility = ["dnd", "display", "out", "corner", "hideInFullscreen"].iter().any(|k| patch.contains_key(*k));
         {
             let mut settings = self.settings.lock().unwrap();
             settings.extend(patch);
@@ -401,20 +416,20 @@ impl Shared {
 
 // --- Where she is -----------------------------------------------------------------
 
-// The pet alone, or the island (she goes into it).
+// A new home: the corner, the island or the bar (she goes into it).
 pub fn set_display(sh: &Arc<Shared>, display: &str) {
     if sh.setting("display").as_str() == Some(display) && !sh.flag("out") {
         return;
     }
-    if display == "pet" {
-        pet::return_to_spot(sh);
+    if sh.flag("out") {
+        pet::hide_now(sh);
     }
     sh.change(json!({ "display": display, "out": false }));
 }
 
-// Out on the desktop where she was last left, or back in the island, from the menu.
+// Out on the desktop where she was last left, or back home, from the menu.
 pub fn set_out(sh: &Arc<Shared>, out: bool) {
-    if !sh.is_island_mode() || sh.flag("out") == out {
+    if sh.flag("out") == out {
         return;
     }
     if out {
@@ -432,13 +447,15 @@ pub fn absorb(sh: &Arc<Shared>, point: (i32, i32)) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(ABSORB_MS));
         sh.change(json!({ "out": false }));
+        sh.island.lock().unwrap().absorbing = false;
+        sh.apply_visibility();
     });
 }
 
 // Started again while running, or "back to the corner": find her.
 pub fn come_home(sh: &Arc<Shared>) {
     sh.hidden.store(false, Ordering::SeqCst);
-    if !sh.is_island_mode() || sh.flag("out") {
+    if sh.flag("out") {
         pet::come_home(sh);
     }
     sh.apply_visibility();
@@ -588,7 +605,7 @@ async fn island_holding(app: AppHandle, is_holding: bool) {
 async fn island_release(app: AppHandle, offset: Value) {
     let sh = shared(&app);
     sh.log(&format!("island: release {offset}"));
-    if sh.is_island_mode() && !sh.flag("out") {
+    if !sh.flag("out") {
         pet::carry(&sh, &offset);
     }
 }
@@ -1016,6 +1033,12 @@ fn main() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running wakuwaku");
+        .build(tauri::generate_context!())
+        .expect("error while running wakuwaku")
+        // Quitting: the bar's strip back to the other windows.
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                island::release_bar(&shared(app));
+            }
+        });
 }

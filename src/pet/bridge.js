@@ -29,6 +29,8 @@
   window.pet = {
     onUpdate: on('pet:update'),
     onReact: on('pet:react'),
+    // A widget asks to open the island for itself (widgets.rs).
+    onNudge: on('pet:nudge'),
     onAlert: on('pet:alert'),
     onCursor: on('pet:cursor'),
     onDrag: on('pet:drag'),

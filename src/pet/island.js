@@ -11,6 +11,11 @@
 // Other sessions busy too: a small "+N" by the clock, in the colour of the
 // next one that wants something. The words come from status.js.
 //
+// While no session needs anything, plugins (widgets.rs, widgets.js) take
+// turns in the compact island, and the open one lists them all; the wheel
+// turns to the next, a click on one keeps it. One may ask to open the island
+// for itself (a nudge): never while a session wants you.
+//
 // She is one element throughout: the portrait grows into her whole self and
 // shrinks back, so she is never in two places at once.
 //
@@ -33,6 +38,7 @@
   const { t, render: say } = window.I18n
   const { CELL_W, CELL_H, CLIPS, MOOD_CLIP } = window.Sprite
   const Status = window.Status
+  const Widgets = window.Widgets
 
   // Brighter than the pet's colours: these sit on black.
   const COLOR = {
@@ -135,6 +141,10 @@
   // The session a press in the open island landed on: the clocks redraw it
   // every second, so the release may come down on its redrawn self.
   let pressed = { id: '', at: 0 }
+  // The widgets that are on, the one shown, and the turn to the next.
+  let widgets = []
+  let widgetAt = 0
+  let spinTimer = null
 
   const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
   // Risen only for the settings (she is the pet on her own): it goes once they close.
@@ -148,6 +158,9 @@
   const isNudging = () => !!nudge && Date.now() < nudge.until
   // The specifics on screen (session names, commands, replies), unless turned off.
   const isDetailed = () => config.details !== false
+  // Nothing from the sessions to show: the widgets' turn.
+  const isQuiet = () => now.mood === 'idle'
+  const shownWidget = () => (isQuiet() && widgets.length ? widgets[widgetAt % widgets.length] : null)
 
   // The clock: how long this turn has run, or how long the finished one took.
   const time = () => Status.time(now)
@@ -189,6 +202,8 @@
   // --- The shapes ---------------------------------------------------------------
 
   function fillCompact() {
+    const widget = shownWidget()
+    if (widget) return fillCompactWidget(widget)
     const label = Status.brief(lang, now, { detailed: isDetailed() })
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
@@ -196,6 +211,32 @@
     if (more) more.style.color = COLOR[second] || COLOR.working
     compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), el('span', 'label', label), clockText, ...(more ? [more] : []))
     compact.classList.toggle('bare', !label && !clockText.textContent && !more)
+  }
+
+  // A widget in the compact island: its icon and label, and its value where the clock would be.
+  function fillCompactWidget(widget) {
+    const { label, value } = Widgets.words(lang, widget)
+    const text = el('span', 'label wlabel')
+    text.insertAdjacentHTML('afterbegin', Widgets.icon(widget.icon))
+    text.firstChild.style.color = widget.color || COLOR.idle
+    text.append(label)
+    const valueText = el('span', 'clock wvalue', value)
+    valueText.style.color = widget.color || COLOR.idle
+    compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), text, valueText)
+    compact.classList.remove('bare')
+  }
+
+  // A widget's line in the open island: the one shown is lit.
+  function widgetRow(widget, isShown) {
+    const { label, value } = Widgets.words(lang, widget)
+    const row = el('span', isShown ? 'wrow on' : 'wrow')
+    row.dataset.widget = widget.id
+    row.insertAdjacentHTML('afterbegin', Widgets.icon(widget.icon))
+    row.firstChild.style.color = widget.color || COLOR.idle
+    const valueText = el('span', 'wv', value)
+    valueText.style.color = widget.color || COLOR.idle
+    row.append(el('span', 'wl', label), valueText)
+    return row
   }
 
   // Whose it is (the session's name) with the clock, where it is, how the
@@ -218,7 +259,9 @@
     const me = el('span', 'me')
     canJump(me, now)
     me.append(head)
-    if (sub.some(Boolean)) me.append(el('span', 'sub', sub.filter(Boolean).join(' · ')))
+    // Not the title again (resting, with no name: both would say so).
+    const subText = sub.filter(p => p && p !== title).join(' · ')
+    if (subText) me.append(el('span', 'sub', subText))
     if (detailed && Status.isEnding(now) && now.reply) me.append(el('span', 'reply', now.reply))
     // How far down the to-do list, and the item it is on.
     if (detailed && now.todo?.total) {
@@ -249,7 +292,52 @@
       if (others.length > OTHERS_SHOWN) list.append(el('span', 'other rest', t(lang, 'status.moreSessions', { n: others.length - OTHERS_SHOWN })))
       lines.append(list)
     }
+    // Nothing from the sessions: the widgets, the one shown lit.
+    if (isQuiet() && widgets.length && !(isNudging() && nudge.widget)) {
+      const list = el('span', 'wlist')
+      const shown = shownWidget()
+      for (const w of widgets) list.append(widgetRow(w, w === shown))
+      lines.append(list)
+    }
+    // A widget that asked to open the island: what it says, over all else.
+    if (isNudging() && nudge.widget) {
+      const w = nudge.widget
+      const { label, value } = Widgets.words(lang, w)
+      const card = el('span', 'me')
+      const top = el('span', 'head')
+      top.insertAdjacentHTML('afterbegin', Widgets.icon(w.icon))
+      top.firstChild.style.color = w.color || COLOR.idle
+      top.append(el('span', 'title', w.words || label))
+      card.append(top, el('span', 'sub', w.words ? [label, value].filter(Boolean).join(' · ') : value))
+      lines.replaceChildren(card)
+    }
     expanded.replaceChildren(...(isHome() ? [] : [stillHer(48)]), lines)
+  }
+
+  // On to the next widget (or back), and its turn starts over.
+  function turnWidget(step) {
+    if (widgets.length < 2) return
+    widgetAt = (widgetAt + step + widgets.length) % widgets.length
+    clearTimeout(spinTimer)
+    spinTimer = null
+    update()
+  }
+
+  // Widgets take turns while the island is quiet and compact.
+  function spin() {
+    const sec = Number(config.widgetSpin ?? 8)
+    if (!(isQuiet() && widgets.length > 1 && sec > 0 && view === 'compact')) {
+      clearTimeout(spinTimer)
+      spinTimer = null
+      return
+    }
+    if (!spinTimer) {
+      spinTimer = setTimeout(() => {
+        spinTimer = null
+        widgetAt = (widgetAt + 1) % widgets.length
+        update()
+      }, sec * 1000)
+    }
   }
 
   // A session with a window to go to: clicking it there goes there.
@@ -389,10 +477,11 @@
     // may grow (a step timed once it has run a while), so the shape follows.
     const isTimed = time() || now.stepSince || Status.othersOf(now.list, now).some(x => Status.time(x))
     if (isTimed && (view === 'compact' || view === 'expanded')) clockTimer = setInterval(update, 1000)
+    spin()
   }
 
-  function nudgeFor(clip, text, ms = NUDGE_MS) {
-    nudge = { until: Date.now() + ms, clip, text }
+  function nudgeFor(clip, text, ms = NUDGE_MS, widget = null) {
+    nudge = { until: Date.now() + ms, clip, text, widget }
     clearTimeout(nudgeTimer)
     nudgeTimer = setTimeout(() => {
       nudge = null
@@ -702,6 +791,11 @@
     config = data.config || {}
     spriteUrl = data.sprite
     second = data.second || null
+    // The same widget stays shown as the list changes around it.
+    const was = widgets.length ? widgets[widgetAt % widgets.length].id : null
+    widgets = Array.isArray(data.widgets) ? data.widgets : []
+    const still = widgets.findIndex(w => w.id === was)
+    if (still >= 0) widgetAt = still
     islandTemp = data.islandTemp === true
     place()
     // Something new that wants you, or is finished: the island opens for a
@@ -714,6 +808,14 @@
   // A hello, or something to fix: the island opens to say it, and she waves.
   window.pet.onReact(({ say: text }) => {
     if (isOn() && text) nudgeFor('waving', say(lang, text))
+  })
+
+  // A widget asks to open the island (main checked that nothing wants you).
+  window.pet.onNudge(n => {
+    if (!isOn()) return
+    const at = widgets.findIndex(w => w.id === n.id)
+    if (at >= 0) widgetAt = at
+    nudgeFor('waving', null, NUDGE_READ_MS, { ...n, icon: widgets[at]?.icon, color: widgets[at]?.color })
   })
 
   // --- The pointer ----------------------------------------------------------------
@@ -748,8 +850,25 @@
       const id = view === 'expanded' && (e.target.closest('[data-jump]')?.dataset.jump || (Date.now() - pressed.at < 1000 && pressed.id))
       pressed = { id: '', at: 0 }
       if (id) return jumpTo(id)
+      // A widget in the open island: the one shown from now on.
+      const row = view === 'expanded' && e.target.closest('[data-widget]')
+      if (row) {
+        const at = widgets.findIndex(w => w.id === row.dataset.widget)
+        if (at >= 0) turnWidget(at - (widgetAt % widgets.length))
+        return
+      }
       window.pet.openSettings()
     })
+    // The wheel turns to the next widget, while the widgets have the island.
+    target.addEventListener(
+      'wheel',
+      e => {
+        if (!isQuiet() || widgets.length < 2 || isSetting() || view === 'ask') return
+        e.preventDefault()
+        turnWidget(e.deltaY > 0 ? 1 : -1)
+      },
+      { passive: false },
+    )
     target.addEventListener('pointerdown', e => {
       const session = e.button === 0 && view === 'expanded' && e.target.closest('[data-jump]')
       pressed = { id: session ? session.dataset.jump : '', at: Date.now() }

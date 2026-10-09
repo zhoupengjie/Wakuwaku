@@ -15,6 +15,7 @@ src/                      页面，Tauri 直接把整个文件夹打进 exe（ta
     panel.js              确认面板：在岛里、在设置的横幅里，或在她头顶
     sprite.js             图集布局、16 个注视方向
     status.js             把一个会话说成话：名字、当前这一步、任务清单进度、结果（气泡、岛、设置共用）
+    widgets.js            岛上插件的图标和文字
     style.css, settings.css
   shared/i18n.js          中英文（页面用；Rust 那边的几句在 src-tauri/src/i18n.rs）
 src-tauri/
@@ -31,6 +32,7 @@ src-tauri/
     fullscreen.rs         别的程序是否全屏（user32）
     focus.rs              前台窗口：设置拿走键盘前记下，收起时还回去
     jump.rs               点会话就到它的窗口：会话的进程链、找窗口、叫到前面、桌面版的会话链接
+    widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、CPU · 内存），什么时候冒头
     notify.rs             系统通知（登记 AppUserModelId 后发 toast）
     tray.rs               托盘图标（随心情变脸）和菜单
     server.rs             127.0.0.1:47213 上的 HTTP 接口
@@ -44,6 +46,7 @@ integrations/claude-code/ Claude Code 插件 wakuwaku（只有 HTTP hooks）
 .claude-plugin/           插件市场入口 marketplace.json（位置是 Claude Code 规定的）
 scripts/make-icons.js     画图标（node + ImageMagick），输出提交在 src-tauri/icons
 test/                     页面的单元测试（node --test，不需要 npm install）
+examples/widgets/         岛上插件的示例脚本：天气、股票、起来走走
 docs/prototypes/          设计原型：island-settings.html 是设置长在岛里的手感原型
 data/                     从源码运行时她的设置、宠物和日志（不进仓库）
 pets/                     从源码运行时也会读这里的宠物（不进仓库）
@@ -140,6 +143,7 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 | `GET /health` | `{ ok, app: "wakuwaku", runtime: "tauri", state }`；调试模式下还有 `window`、`island`、`settings` |
 | `POST /hook` | Claude Code 的 hook 事件；一般立刻回 `{}`，`PermissionRequest` 等面板上的回答。正文上限 16 MB（Edit 的 PostToolUse 带着改之前的整个文件）。带 `?agent=codex` 的是 Codex 的事件（由 `--wakuwaku-codex-hook` 转来） |
 | `POST /state` | 一条消息 |
+| `POST /widget` | 岛上的一个插件（见"岛上的插件"）；回 `{ ok: true }`，或者 400 和 `{ error }` |
 | `POST /come-home` | 再次启动时用：她重新出现 |
 | `POST /debug/eval` | `{ page: "pet" \| "island", code }`：在页面里运行一段表达式，返回结果（可以是 Promise） |
 | `POST /debug/walk` | `{ dx, ms }`：立刻走一段 |
@@ -176,6 +180,22 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 **Claude 桌面版**：它跑的每个会话在 `claude-code-sessions/**/local_<id>.json` 里有一条记录，开头有 `cliSessionId`（就是 hook 的 `session_id`）。安装版（MSIX）的在 `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\`，否则在 `%APPDATA%\Claude\`。找到了就打开 `claude://code/continue?session=local_<id>`，桌面版会切到那个会话；同时把它的窗口叫到前面，不管会话的进程还在不在。
 
 **测试**：debug 版有控制台，测不到控制台那一步；用 `cargo rustc --bin wakuwaku -- -C link-args=/SUBSYSTEM:WINDOWS -C link-args=/ENTRY:mainCRTStartup` 编一个没有控制台的 debug 版（放到单独的 `CARGO_TARGET_DIR`，`RUSTFLAGS` 会连 proc-macro 一起改坏）。发事件的进程要一直开着（就像 Claude Code 自己），用 `pwsh -NoExit -Command Invoke-RestMethod …`，不能用发完就退出的 curl。
+
+## 岛上的插件（第一层：只收数据）
+
+插件就是岛上的一行字：图标、标题、数值、颜色。脚本往 `/widget` 发 JSON（字段见 [examples/widgets](../examples/widgets/README.md)），`widgets.rs` 校验后放进 `Shared.widgets`，宠物只显示文字，不运行任何东西。同一个 `id` 再发一次就是更新；`ttl` 秒没再收到就去掉（每 3 秒清一次），脚本停了它就自己消失。脚本发来的最多 32 个。
+
+**会话永远优先**：只有最需要你的会话是空闲（`now.mood === 'idle'`）时，收起的岛才显示插件（`island.js` 的 `isQuiet`），展开时列出全部，当前那个高亮。轮换（`widgetSpin` 秒，0 不轮换）只在收起时走；滚轮切到下一个，点一个就固定显示它。宠物模式下不显示插件。
+
+**冒头**（`nudge`）：插件可以请岛打开一次，`main.rs` 的 `nudge_widget` 只在看得见、设置允许（`widgetNudge`）、插件开着、而且没有会话在等你或有没看过的结束（`state.rs` 的 `wants_you`）时才发 `pet:nudge`。同一个插件一分钟最多一次。岛上展开 6.5 秒显示它的话；宠物模式下她挥手，在气泡里说（挥 6 次，约 4 秒）。
+
+**内置的两个**（标题和数值是 `{ key, vars }`，按当前语言显示）：
+- `today`：今天开始了几轮（state 的 `Outcome.turns`）、结束的几轮一共用了多久（`Outcome.worked_ms`，几个会话同时跑会叠加）、在宠物上批准了几次（`pet_answer` 的 allow / always）。存在数据目录的 `today.json`，按本地日期换天。
+- `sys`：CPU（两次 `GetSystemTimes` 之差）和内存（`GlobalMemoryStatusEx`），3 秒一次，只在打开时算。默认关闭。
+
+**设置**：`widgetsOff`（关掉的 id，默认 `["sys"]`）、`widgetOrder`（显示顺序，「插件」页的 ↑ 改它）、`widgetSpin`（0 / 5 / 8 / 15）、`widgetNudge`。
+
+**以后的两层**：插件文件夹里的脚本由宠物定时运行（像 xbar），以及插件自己画的界面（要关进碰不到 IPC 的沙盒，否则能替你点"允许"）。
 
 ## 点击穿透
 

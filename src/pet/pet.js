@@ -302,14 +302,25 @@ window.pet.onUpdate(data => {
   kick()
 })
 
-window.pet.onReact(({ react, say: text }) => {
-  const r = REACTIONS[react]
+function react({ react: name, say: text, times }) {
+  const r = REACTIONS[name]
   if (!r) return
   stopIdle()
-  reaction = { ...r, say: text, start: performance.now() }
+  reaction = { ...r, ...(times ? { times } : {}), say: text, start: performance.now() }
   render()
   kick()
   scheduleIdle()
+}
+
+window.pet.onReact(react)
+
+// A widget asks for her attention: on her own, she waves and says it (the
+// island has it when it is up).
+window.pet.onNudge(n => {
+  if (isIsland() || isOutOfIsland()) return
+  const { label, value } = Widgets.words(lang, n)
+  // Long enough to read: six waves, about four seconds.
+  react({ react: 'wave', say: n.words || [label, value].filter(Boolean).join(' · '), times: 6 })
 })
 
 window.pet.onAlert(({ mood }) => chime(mood))

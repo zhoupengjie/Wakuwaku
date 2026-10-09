@@ -74,6 +74,9 @@ pub struct Outcome {
     // Moods just arrived that want a chime (and a notification): (mood,
     // whose: the session's name, or its project).
     pub alerts: Vec<(String, String)>,
+    // For today's count: turns begun, and how long the ones that ended took.
+    pub turns: u64,
+    pub worked_ms: u64,
 }
 
 // A tool running now, and what it does.
@@ -356,6 +359,7 @@ impl Pet {
                     s.turn = turn;
                 }
                 if event == "turn-start" && is_new_turn {
+                    out.turns += 1;
                     s.has_edited = false;
                     s.since = None;
                     s.running.clear();
@@ -415,7 +419,11 @@ impl Pet {
                     s.has_edited = false;
                 }
                 let whose = s.whose();
+                let was_busy = s.since.is_some();
                 out.alerts.extend(set(s, mood, detail, now, hold).map(|m| (m, whose)));
+                if was_busy && is_ending(mood) {
+                    out.worked_ms += s.took.unwrap_or(0);
+                }
             }
             out.changed = true;
         }
@@ -497,6 +505,12 @@ impl Pet {
         let mut busy: Vec<&Session> = self.sessions.values().filter(|s| s.mood != "idle").collect();
         busy.sort_by(|a, b| priority(&b.mood).cmp(&priority(&a.mood)).then(b.at.cmp(&a.at)));
         busy.get(1).map(|s| s.mood.clone())
+    }
+
+    // Whether a session wants you: waiting on you, or an ending not yet seen.
+    // Widgets keep to themselves meanwhile.
+    pub fn wants_you(&self) -> bool {
+        self.sessions.values().any(|s| s.mood == "waiting" || is_ending(&s.mood))
     }
 
     // Whether a session already knows where it runs.
@@ -714,5 +728,18 @@ mod tests {
         pet.apply(&msg(json!({ "session": "b", "mood": "working" })), 4, Hold::Seen);
         assert!(!pet.has_chain("b") && pet.jump_target("b").is_none());
         assert_eq!(pet.list().as_array().unwrap().iter().find(|s| s["id"] == "b").unwrap()["jump"], false);
+    }
+
+    #[test]
+    fn a_turn_counts_for_today_and_an_ending_wants_you() {
+        let mut pet = Pet::default();
+        let out = pet.apply(&msg(json!({ "session": "a", "mood": "working", "event": "turn-start" })), 1_000, Hold::Seen).unwrap();
+        assert_eq!((out.turns, out.worked_ms), (1, 0));
+        assert!(!pet.wants_you());
+        let out = pet.apply(&msg(json!({ "session": "a", "mood": "done" })), 61_000, Hold::Seen).unwrap();
+        assert_eq!((out.turns, out.worked_ms), (0, 60_000));
+        assert!(pet.wants_you());
+        pet.seen(62_000, Hold::Seen);
+        assert!(!pet.wants_you());
     }
 }

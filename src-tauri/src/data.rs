@@ -78,6 +78,12 @@ fn defaults() -> Map<String, Value> {
         "out": false,
         "bubble": true,
         "details": true,
+        // Widgets (plugins in the island): which are off, their order, how
+        // often the island turns to the next, whether they may open it.
+        "widgetsOff": ["sys"],
+        "widgetOrder": [],
+        "widgetSpin": 8,
+        "widgetNudge": true,
         "walk": true,
         "look": true,
         "hold": "seen",

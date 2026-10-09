@@ -727,6 +727,78 @@ body {
   transform: scaleY(0.15);
 }
 
+/* A widget's icon: its strokes in the colour around it. */
+.wicon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* A widget in the compact island: icon and label, the value where the clock goes. */
+#island-compact .wlabel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#island-compact .wvalue {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The widgets in the open island, the one shown lit. */
+#island-expanded .wlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+}
+
+#island-expanded .wrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 -8px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  color: #a1a1a6;
+  cursor: pointer;
+}
+
+#island-expanded .wrow.on {
+  background: rgba(255, 255, 255, 0.07);
+  color: #e5e5ea;
+}
+
+#island-expanded .wrow .wl {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#island-expanded .wrow .wv {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+#island-expanded .head .wicon {
+  width: 16px;
+  height: 16px;
+  align-self: center;
+}
+
 /* Other sessions busy too: "+N" by the clock. */
 #island-compact .more {
   margin-left: -4px;

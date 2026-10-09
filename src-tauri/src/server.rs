@@ -4,6 +4,7 @@
 //   POST /hook         a Claude Code hook event; answers {}, or for a prompt the person's answer
 //                      ?agent=codex: a Codex one, handed on by this program (main.rs codex_hook)
 //   POST /state        a message (state.rs)
+//   POST /widget       a widget for the island, from a script (widgets.rs)
 //   POST /come-home    started again while running: back into sight
 //   POST /debug/eval   { page, code }: run code in her page or the island's (WAKUWAKU_DEBUG=1 only)
 //   POST /debug/walk   { dx, ms }: take a walk now (WAKUWAKU_DEBUG=1 only)
@@ -114,6 +115,14 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool) {
             }
             reply(req, 200, json!({}))
         }
+        // A widget from a script (widgets.rs).
+        ("POST", "/widget") => match read_json(&mut req) {
+            Some(v) => match sh.put_widget(&v) {
+                Ok(()) => reply(req, 200, json!({ "ok": true })),
+                Err(why) => reply(req, 400, json!({ "error": why })),
+            },
+            None => reply(req, 400, json!({ "error": "bad json" })),
+        },
         // Started again while she runs: she comes back into sight.
         ("POST", "/come-home") => {
             crate::come_home(sh);

@@ -21,6 +21,7 @@
 //   state.rs       per-session moods; events.rs (Claude Code) and
 //                  events_codex.rs (Codex) hook events into messages
 //   data.rs        her folder, settings and pets
+//   widgets.rs     plugins in the island: widgets from scripts, and the built-in ones
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod asks;
@@ -42,6 +43,7 @@ mod server;
 mod settings;
 mod state;
 mod tray;
+mod widgets;
 
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -73,6 +75,9 @@ pub struct Shared {
     pub win: Mutex<pet::Win>,
     pub island: Mutex<island::Island>,
     pub asks: Mutex<asks::Asks<Responder>>,
+    // Plugins in the island (widgets.rs), and what today has seen.
+    pub widgets: Mutex<widgets::Widgets>,
+    pub today: Mutex<widgets::Today>,
     screens: Mutex<screen::Screens>,
     // Out of sight: hidden from the tray, or another app is full screen.
     pub hidden: AtomicBool,
@@ -170,6 +175,8 @@ impl Shared {
         // then the island holds any prompt.
         now["islandTemp"] = json!(temp);
         now["settingsOpen"] = json!(settings_open);
+        // The widgets that are on, for the island while nothing needs you.
+        now["widgets"] = Value::Array(self.widgets_view().as_array().into_iter().flatten().filter(|w| w["on"] == true).cloned().collect());
         now
     }
 
@@ -210,6 +217,12 @@ impl Shared {
     pub fn apply(&self, msg: &Value) -> bool {
         let out = self.pet.lock().unwrap().apply(msg, now_ms(), self.hold());
         let Some(out) = out else { return false };
+        if out.turns > 0 || out.worked_ms > 0 {
+            self.count_today(|t| {
+                t.turns += out.turns;
+                t.worked_ms += out.worked_ms;
+            });
+        }
         if out.changed {
             self.redraw();
         }
@@ -222,6 +235,56 @@ impl Shared {
             }
         }
         true
+    }
+
+    // --- Widgets ----------------------------------------------------------------------
+
+    fn list_setting(&self, key: &str) -> Vec<String> {
+        self.setting(key).as_array().into_iter().flatten().filter_map(|v| v.as_str().map(str::to_string)).collect()
+    }
+
+    pub fn is_widget_on(&self, id: &str) -> bool {
+        !self.list_setting("widgetsOff").iter().any(|o| o == id)
+    }
+
+    // Every widget, in the person's order, on or off.
+    pub fn widgets_view(&self) -> Value {
+        let (off, order) = (self.list_setting("widgetsOff"), self.list_setting("widgetOrder"));
+        self.widgets.lock().unwrap().view(now_ms(), &off, &order)
+    }
+
+    // A widget from a script: there it is, and it may open the island for itself.
+    pub fn put_widget(&self, v: &Value) -> Result<(), &'static str> {
+        let put = self.widgets.lock().unwrap().put(v, now_ms())?;
+        self.redraw();
+        if let Some(words) = put.nudge {
+            self.nudge_widget(&put.id, &words);
+        }
+        Ok(())
+    }
+
+    // The island opens for a widget, once: only in sight, when nudges are
+    // allowed and the widget is on, and while no session needs you.
+    fn nudge_widget(&self, id: &str, words: &str) {
+        if !self.is_visible() || self.setting("widgetNudge") == false || !self.is_widget_on(id) || self.pet.lock().unwrap().wants_you() {
+            return;
+        }
+        let Some((label, value)) = self.widgets.lock().unwrap().label_of(id) else { return };
+        self.to_pages("pet:nudge", json!({ "id": id, "words": words, "label": label, "value": value }));
+    }
+
+    // Today's counts changed: kept, and the widget says so.
+    pub fn count_today(&self, change: impl FnOnce(&mut widgets::Today)) {
+        let words = {
+            let mut today = self.today.lock().unwrap();
+            today.roll(&widgets::local_date());
+            change(&mut today);
+            today.save(&self.dir);
+            today.words()
+        };
+        if self.widgets.lock().unwrap().set_built_in("today", "today", "#34d27b", json!({ "key": "widget.today" }), words, now_ms()) {
+            self.redraw();
+        }
     }
 
     // A chime from the window that is up, and a system notification if asked for.
@@ -470,6 +533,10 @@ async fn pet_answer(app: AppHandle, id: u64, choice: Value) -> bool {
     sh.log(&format!("answer {id}: {choice} -> {ok}"));
     if ok {
         sh.push_asks();
+        // An approval given on her, for today's count.
+        if matches!(choice["action"].as_str(), Some("allow" | "always")) {
+            sh.count_today(|t| t.approvals += 1);
+        }
     }
     ok
 }
@@ -791,6 +858,7 @@ fn main() {
             }
             notify::register(&dir);
 
+            let today = widgets::Today::load(&dir, &widgets::local_date());
             let sh = Arc::new(Shared {
                 app: app.handle().clone(),
                 is_logging: dir.join("debug.on").exists(),
@@ -801,6 +869,8 @@ fn main() {
                 win: Mutex::new(pet::Win::default()),
                 island: Mutex::new(island::Island::default()),
                 asks: Mutex::new(asks::Asks::default()),
+                widgets: Mutex::new(widgets::Widgets::default()),
+                today: Mutex::new(today),
                 screens: Mutex::new(screen::read(app.handle())),
                 hidden: AtomicBool::new(false),
                 by_fullscreen: AtomicBool::new(false),
@@ -831,6 +901,33 @@ fn main() {
                     Err(_) => 200,
                 };
                 std::thread::sleep(Duration::from_millis(wait));
+            });
+
+            // The widgets: today's from the start; the machine's every few
+            // seconds while it is on; a script's gone once it stops sending.
+            sh.count_today(|_| {});
+            let watcher = sh.clone();
+            std::thread::spawn(move || {
+                let mut machine = widgets::Machine::new();
+                loop {
+                    std::thread::sleep(Duration::from_secs(3));
+                    let now = now_ms();
+                    let mut changed = watcher.widgets.lock().unwrap().expire(now);
+                    if watcher.is_widget_on("sys") {
+                        if let Some(value) = machine.words() {
+                            changed |= watcher.widgets.lock().unwrap().set_built_in("sys", "cpu", "#5e9bff", json!({ "key": "widget.sys" }), value, now);
+                        }
+                    } else {
+                        changed |= watcher.widgets.lock().unwrap().remove_built_in("sys");
+                    }
+                    // A new day: today's counts start again.
+                    if watcher.today.lock().unwrap().date != widgets::local_date() {
+                        watcher.count_today(|_| {});
+                    }
+                    if changed {
+                        watcher.redraw();
+                    }
+                }
             });
 
             // Endings held for a while; prompts out of time; sessions gone

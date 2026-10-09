@@ -12,9 +12,9 @@ const session = fields => ({ id: 'a', project: 'pet', mood: 'working', detail: '
 test('every text the Rust side makes has words in both languages', () => {
   const dir = path.join(__dirname, '..', 'src-tauri', 'src')
   const used = new Set()
-  for (const file of ['events.rs', 'state.rs']) {
+  for (const file of ['events.rs', 'state.rs', 'widgets.rs', 'main.rs']) {
     const text = fs.readFileSync(path.join(dir, file), 'utf8')
-    for (const m of text.matchAll(/"((?:step|detail|say|error)\.[A-Za-z_]+)"/g)) used.add(m[1])
+    for (const m of text.matchAll(/"((?:step|detail|say|error|widget)\.[A-Za-z_]+)"/g)) used.add(m[1])
     // error.{kind}, for each kind events.rs knows
     const kinds = text.match(/const KINDS: \[&str; \d+\] = \[([^\]]*)\]/)
     if (kinds) for (const k of kinds[1].matchAll(/"(\w+)"/g)) used.add(`error.${k[1]}`)

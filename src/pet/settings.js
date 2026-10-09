@@ -5,6 +5,7 @@
 //   pets      the pets downloaded, a download by link or id, the gallery
 //   look      pet or island, size, bubble, strolls, eyes, language
 //   alerts    how long endings stay, notifications, sound, prompts, quiet
+//   widgets   plugins in the island: on or off, their order, turns, nudges, and how to write one
 //   connect   how Claude Code and Codex reach her, start at login, the hooks, about
 //
 // What they show comes from main as a snapshot, again whenever it changes;
@@ -23,15 +24,17 @@
   const { t } = window.I18n
   const { CLIPS } = window.Sprite
   const Status = window.Status
+  const Widgets = window.Widgets
 
   // The island's colours (on black), the same as island.js.
   const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
-  const TABS = ['now', 'pets', 'look', 'alerts', 'connect']
-  const TAB_KEY = { now: 's.tabNow', pets: 's.tabPets', look: 's.tabLook', alerts: 's.tabAlerts', connect: 's.tabConnect' }
+  const TABS = ['now', 'pets', 'look', 'alerts', 'widgets', 'connect']
+  const TAB_KEY = { now: 's.tabNow', pets: 's.tabPets', look: 's.tabLook', alerts: 's.tabAlerts', widgets: 's.tabWidgets', connect: 's.tabConnect' }
   const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
   const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
   const HOLDS = ['seen', 8, 30, 120]
   const WAITS = [30, 60, 120, 290]
+  const SPINS = [0, 5, 8, 15]
   const ICON = {
     eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
     moon: '<path d="M20 14A8 8 0 1 1 10 4a7 7 0 0 0 10 10z"/>',
@@ -239,6 +242,34 @@
       </div>`
   }
 
+  // Plugins in the island: each with its switch (and a step up), how they
+  // take turns, whether they may open the island, and how to write one.
+  function pageWidgets() {
+    const s = snap.settings
+    const all = snap.widgets || []
+    const left = ms => (ms >= 60000 ? T('settings.minutes', { n: Math.round(ms / 60000) }) : T('settings.seconds', { n: Math.max(1, Math.round(ms / 1000)) }))
+    const rows = all.length
+      ? all
+          .map((w, i) => {
+            const { label, value } = Widgets.words(lang, w)
+            const from = w.builtIn ? T('w.builtIn') : T('w.script', { time: left(w.leftMs || 0) })
+            const up = i > 0 ? `<button class="pbtn sm" data-wup="${esc(w.id)}" title="${esc(T('w.up'))}">↑</button>` : ''
+            return `<div class="r"><span class="wi" style="color:${esc(w.color || COLOR.idle)}">${Widgets.icon(w.icon)}</span><div class="grow"><div class="ellip">${esc(label)}<span class="d"> ${esc(value)}</span></div><div class="d">${esc(from)}</div></div>${up}${sw('w:' + w.id, w.on)}</div>`
+          })
+          .join('')
+      : `<div class="note">${esc(T('w.none'))}</div>`
+    const spins = SPINS.map(n => [n, n ? T('settings.seconds', { n }) : T('w.spinOff')])
+    const example = `Invoke-RestMethod -Method Post http://127.0.0.1:${snap.port}/widget -ContentType application/json -Body '{"id":"hello","label":"Hello","value":"42","icon":"star"}'`
+    return `${sec(T('w.section'))}<div class="grp"><div class="note">${esc(T('w.note'))}</div>${rows}</div>
+      ${sec(T('w.show'))}<div class="grp">
+        ${row(esc(T('w.spin')), '', seg('widgetSpin', spins, s.widgetSpin ?? 8))}
+        ${row(esc(T('w.nudge')), esc(T('w.nudgeNote')), sw('widgetNudge', s.widgetNudge !== false))}
+      </div>
+      ${sec(T('w.write'))}<div class="grp"><div class="note">${esc(T('w.writeNote'))}</div>
+        <div class="r"><span class="cmd mono">${esc(example)}</span><button class="pbtn" data-copy="${esc(example)}">${esc(T('home.copy'))}</button></div>
+      </div>`
+  }
+
   function pageConnect() {
     const conn = { plugin: 'home.connPlugin', hooks: 'home.connHooks', both: 'home.connBoth', none: 'home.connNone' }[snap.connection] || 'home.connNone'
     const isOk = snap.connection === 'plugin' || snap.connection === 'hooks'
@@ -313,7 +344,7 @@
       </div>`
   }
 
-  const PAGES = { now: pageNow, pets: pagePets, look: pageLook, alerts: pageAlerts, connect: pageConnect }
+  const PAGES = { now: pageNow, pets: pagePets, look: pageLook, alerts: pageAlerts, widgets: pageWidgets, connect: pageConnect }
 
   // --- Drawing --------------------------------------------------------------------------------
 
@@ -503,7 +534,22 @@
       const key = toggle.dataset.sw
       if (key === 'login') return window.pet.settings.login(!snap.loginAtStart).then(got => ((snap = got), draw()))
       if (key.startsWith('notify.')) return patch({ notify: { ...s.notify, [key.slice(7)]: !s.notify?.[key.slice(7)] } })
+      // A widget on or off.
+      if (key.startsWith('w:')) {
+        const id = key.slice(2)
+        const off = (s.widgetsOff || []).filter(o => o !== id)
+        return patch({ widgetsOff: off.length === (s.widgetsOff || []).length ? [...off, id] : off })
+      }
+      if (key === 'widgetNudge') return patch({ widgetNudge: s.widgetNudge === false })
       return patch({ [key]: !s[key] })
+    }
+    // A widget a step up: the order as shown, with it and the one before swapped.
+    const up = at('[data-wup]')
+    if (up) {
+      const ids = (snap.widgets || []).map(w => w.id)
+      const i = ids.indexOf(up.dataset.wup)
+      if (i > 0) [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]
+      return patch({ widgetOrder: ids })
     }
     const option = at('[data-seg] > span')
     if (option) {

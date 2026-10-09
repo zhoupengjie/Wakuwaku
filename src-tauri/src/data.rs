@@ -86,7 +86,7 @@ fn defaults() -> Map<String, Value> {
         // often the island turns to the next, whether they may open it.
         "widgetsOff": ["monitor"],
         // The monitor's parts, and how often it reads (seconds, 1 to 10).
-        "monitor": { "cpu": true, "mem": true, "net": true, "battery": true, "every": 2 },
+        "monitor": { "cpu": true, "mem": true, "net": true, "battery": true, "every": 2, "pin": true },
         "widgetOrder": [],
         "widgetSpin": 8,
         "widgetNudge": true,

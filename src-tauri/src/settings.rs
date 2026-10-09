@@ -74,7 +74,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "plugins" => scripts::is_ok(v),
         "monitor" => v.as_object().is_some_and(|m| {
             m.iter().all(|(k, v)| match k.as_str() {
-                "cpu" | "mem" | "net" | "battery" => v.is_boolean(),
+                "cpu" | "mem" | "net" | "battery" | "pin" => v.is_boolean(),
                 "every" => v.as_u64().is_some_and(|s| (1..=10).contains(&s)),
                 _ => false,
             })

@@ -24,13 +24,12 @@ use crate::screen::Area;
 use crate::{appbar, Shared};
 
 // The window without extra room, by home (island.js BASE, CORNER_BASE): the
-// island as wide as pulling her out needs and the monitor's capsule beside
-// the widest island, so it only ever grows down; the
+// island as wide as pulling her out needs, so it only ever grows down; the
 // corner's room for the hover card and for a pull. A window whose top-left
 // corner moves shows its old picture from there for a frame or two, so these
 // never move it. The bar's height (its width is the screen's). The page
 // asks for more (pet:panel) when a shape needs it.
-const ISLAND: (f64, f64) = (960.0, 132.0);
+const ISLAND: (f64, f64) = (760.0, 132.0);
 const CORNER: (f64, f64) = (760.0, 440.0);
 pub const BAR_H: f64 = 30.0;
 // The island's top edge in the window, and its compact height.

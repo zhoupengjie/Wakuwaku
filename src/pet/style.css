@@ -490,15 +490,24 @@ body {
 
 #island-compact .clock {
   flex: none;
-  max-width: 45%;
+  max-width: 60%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* What takes turns (words, "+N", value) as one, its width what is left. */
+#island-compact .turning {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 /* Another widget's turn, another session: it slides in. */
-#island-compact.turn {
-  animation: compact-turn 0.32s ease;
+#island-compact .turning.turn {
+  animation: compact-turn 0.32s ease both;
 }
 
 @keyframes compact-turn {
@@ -508,41 +517,22 @@ body {
   }
 }
 
-/* The monitor's capsule: beside the island, out of its way. */
-#island-gauge {
-  position: absolute;
-  top: 0;
-  left: calc(100% + 8px);
+/* The monitor pinned: its readings at the island's right end, past a line. */
+#island-compact .pinned {
+  flex: none;
   display: flex;
   align-items: center;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 18px;
-  background: #000;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
   font-size: 12.5px;
-  white-space: nowrap;
-  opacity: 0;
-  transform: scale(0.9);
-  transform-origin: 0 50%;
-  transition:
-    opacity 0.2s ease,
-    transform 0.2s ease;
-  pointer-events: none;
 }
 
-#island-gauge.on {
-  opacity: 1;
-  transform: none;
-  transition-delay: 0.12s;
-}
-
-/* Each reading as wide as its widest (100%, 999K): the capsule, and the
+/* Each reading as wide as its widest (100%, 999K): the island, and the
    bar's end, keep their size as the numbers change. */
-#island-gauge .wpart b,
+#island-compact .wpart b,
 #bar-rest .mon .wpart b {
   display: inline-block;
-  min-width: 4ch;
+  min-width: 4.8ch;
 }
 
 #island-compact.bare {

@@ -72,12 +72,11 @@
   // widgets take turns. Just her (MIN_W) when there is nothing to say.
   const WIDTHS = { narrow: 240, normal: 300, wide: 380 }
   // The window without extra room (main's ISLAND), and the island's distance
-  // from the top of it. Wide enough for a pull (PULL_ROOM) and for the
-  // monitor's capsule beside the widest island, so the window
+  // from the top of it. As wide as a pull needs (PULL_ROOM), so the window
   // only ever grows down: a window whose top-left corner moves shows its old
   // picture from the new corner for a frame or two, and the island jumped
   // sideways as she was pulled out or taken back.
-  const BASE = { width: 960, height: 132 }
+  const BASE = { width: 760, height: 132 }
   const TOP = 8
   // Her two sizes: the round portrait in the compact island, and her whole
   // self (one sheet cell, halved) standing in the open one.
@@ -178,11 +177,16 @@
   // The widgets that are on, the one shown, and the turn to the next.
   let widgets = []
   let widgetAt = 0
-  // The monitor stands apart: always in sight (its capsule, the bar's right
-  // end), never one of the turns.
+  // The monitor, pinned (its setting, on by default): always in sight at the
+  // island's right end (the bar's), never one of the turns. Unpinned it is
+  // one of the widgets taking turns.
   let monitor = null
-  // What the compact island showed last: something else slides in.
+  // What the compact island showed last, and when something else came: it
+  // slides in, and carries on sliding in when the island is drawn again.
   let shownKey = ''
+  let turnedAt = 0
+  // The compact island's width, as drawn last.
+  let compactWidth = MIN_W
   let spinTimer = null
 
   const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
@@ -274,11 +278,17 @@
       return
     }
     // Three places: her at the left (her portrait while she is out), a line
-    // of words cut short in the middle, a short value at the right edge (the
-    // clock, a widget's number), with "+N" for the other sessions before it.
+    // of words cut short in the middle, a short value at its right (the
+    // clock, a widget's number), with "+N" for the other sessions before it;
+    // then, pinned, the monitor's readings at the island's right end.
     const widget = shownWidget()
     let words, value, key
-    if (widget) {
+    if (widget && Widgets.partsOf(widget)) {
+      words = el('span', 'label wparts')
+      words.innerHTML = Widgets.partsHTML(widget)
+      value = el('span', 'clock')
+      key = `w:${widget.id}`
+    } else if (widget) {
       const said = Widgets.words(lang, widget, isDetailed())
       words = el('span', 'label wlabel')
       words.insertAdjacentHTML('afterbegin', Widgets.icon(widget.icon))
@@ -296,21 +306,32 @@
     // In the bar the other sessions have their own tags.
     const more = now.others > 0 && home() !== 'bar' ? el('span', 'more', `+${now.others}`) : null
     if (more) more.style.color = COLOR[second] || COLOR.working
-    compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), words, ...(more ? [more] : []), value)
+    // What takes turns, together: it slides in when it is something else.
+    const turning = el('span', 'turning')
+    turning.append(words, ...(more ? [more] : []), value)
     const isBare = !words.textContent && !value.textContent && !more
+    const pinned = isPinned() && home() === 'island' ? el('span', 'pinned') : null
+    if (pinned) pinned.innerHTML = Widgets.partsHTML(monitor)
+    compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), ...(isBare && pinned ? [] : [turning]), ...(pinned ? [pinned] : []))
     compact.classList.toggle('bare', isBare)
-    compact.style.width = isBare ? '' : `${slotWidth()}px`
-    // Something else now (another widget's turn, another session): it slides in.
+    // As wide as set, and the readings' width more when pinned (their own,
+    // fixed); just her (and the readings) with nothing to say.
+    compact.style.width = isBare ? '' : `${slotWidth() + (pinned ? pinned.offsetWidth + 12 : 0)}px`
+    compactWidth = isBare ? Math.max(MIN_W, compact.offsetWidth) : parseFloat(compact.style.width)
     if (key !== shownKey) {
-      const isFirst = !shownKey
+      if (shownKey && view === 'compact') turnedAt = Date.now()
       shownKey = key
-      if (!isFirst && view === 'compact') {
-        compact.classList.remove('turn')
-        void compact.offsetWidth
-        compact.classList.add('turn')
-      }
+    }
+    const into = Date.now() - turnedAt
+    if (into < TURN_MS) {
+      turning.classList.add('turn')
+      turning.style.animationDelay = `-${into}ms`
     }
   }
+
+  // How long something new takes to slide into the compact island.
+  const TURN_MS = 320
+  const isPinned = () => !!monitor && config.monitor?.pin !== false
 
   // The compact island's width as set.
   const slotWidth = () => WIDTHS[config.islandWidth] || WIDTHS.normal
@@ -386,7 +407,7 @@
     if (isQuiet() && (widgets.length || monitor) && !(isNudging() && nudge.widget)) {
       const list = el('span', 'wlist')
       const shown = shownWidget()
-      if (monitor) list.append(widgetRow(monitor, false))
+      if (isPinned()) list.append(widgetRow(monitor, false))
       for (const w of widgets) list.append(widgetRow(w, w === shown))
       lines.append(list)
     }
@@ -556,8 +577,7 @@
         : { width: Math.min(OPEN_BARE_MAX_W, Math.max(300, expanded.offsetWidth)), height: Math.max(84, expanded.offsetHeight) }
     }
     if (home() === 'corner') return { width: CIRCLE, height: CIRCLE }
-    const width = compact.classList.contains('bare') ? Math.max(MIN_W, compact.offsetWidth) : slotWidth()
-    return { width, height: home() === 'bar' ? BAR_H : 36 }
+    return { width: compactWidth, height: home() === 'bar' ? BAR_H : 36 }
   }
 
   // --- The bar's right part ---------------------------------------------------------
@@ -572,19 +592,6 @@
   const cornerBadge = el('span')
   cornerBadge.id = 'corner-badge'
   island.append(cornerBadge)
-  // The monitor's capsule, beside the compact island (the island keeps the
-  // middle): its readings always in sight, whatever the island says.
-  const gauge = el('div')
-  gauge.id = 'island-gauge'
-  island.after(gauge)
-  compact.addEventListener('animationend', () => compact.classList.remove('turn'))
-
-  function fillGauge() {
-    const isUp = isOn() && home() === 'island' && view === 'compact' && !!monitor
-    gauge.classList.toggle('on', isUp)
-    if (isUp) gauge.innerHTML = Widgets.partsHTML(monitor)
-  }
-
   function fillBar() {
     if (home() !== 'bar') return
     barRest.style.left = `${sizeOf('compact').width}px`
@@ -616,8 +623,8 @@
       face.append(Widgets.partsOf(w) ? '' : label, v)
       parts.push(face)
     }
-    // The monitor, always there by the settings.
-    if (monitor) {
+    // The monitor, pinned: always there by the settings.
+    if (isPinned()) {
       const readings = el('span', 'face mon')
       readings.innerHTML = Widgets.partsHTML(monitor)
       parts.push(readings)
@@ -657,7 +664,6 @@
     fillCompact()
     fillExpanded()
     fillBar()
-    fillGauge()
 
     const want = sizeOf(view)
     // Reaching for her keeps the room to reach in.
@@ -1024,7 +1030,7 @@
     const was = widgets.length ? widgets[widgetAt % widgets.length].id : null
     const all = Array.isArray(data.widgets) ? data.widgets : []
     monitor = all.find(w => w.id === 'monitor') || null
-    widgets = all.filter(w => w.id !== 'monitor')
+    widgets = all.filter(w => !(w === monitor && isPinned()))
     const still = widgets.findIndex(w => w.id === was)
     if (still >= 0) widgetAt = still
     place()

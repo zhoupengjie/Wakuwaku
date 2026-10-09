@@ -488,25 +488,38 @@ impl Watching {
 pub struct Monitor {
     times: Option<(u64, u64)>,
     bytes: Option<(u64, u64, std::time::Instant)>,
+    // The last CPU use and pace read: kept for a reading that fails once,
+    // so a part on stays in sight (pinned, the island keeps its width).
+    cpu: Option<String>,
+    net: Option<(String, String)>,
 }
 
 impl Monitor {
     pub fn new() -> Self {
-        Monitor { times: None, bytes: None }
+        Monitor { times: None, bytes: None, cpu: None, net: None }
     }
 
     // The parts that are on, as icon and number: cpu 12%, memory 45%, down
     // 1.2M and up 80K a second, battery (a bolt while charging) 85%. A part
-    // needing two readings shows from its second. None with nothing to show.
+    // needing two readings shows from its second, and keeps its last when a
+    // reading fails. None with nothing to show.
     pub fn read(&mut self, w: &Watching) -> Option<Value> {
         let mut parts = Vec::new();
         let mut part = |icon: &str, text: String| parts.push(json!({ "icon": icon, "text": text }));
         let times = if w.cpu { sys::times() } else { None };
         if let (Some(now), Some((idle, busy))) = (times, self.times) {
             let (di, db) = (now.0.saturating_sub(idle), now.1.saturating_sub(busy));
-            part("cpu", format!("{}%", if di + db == 0 { 0 } else { (db * 100 + (di + db) / 2) / (di + db) }));
+            self.cpu = Some(format!("{}%", if di + db == 0 { 0 } else { (db * 100 + (di + db) / 2) / (di + db) }));
         }
-        self.times = times;
+        if !w.cpu {
+            self.cpu = None;
+        }
+        if times.is_some() || !w.cpu {
+            self.times = times;
+        }
+        if let Some(cpu) = &self.cpu {
+            part("cpu", cpu.clone());
+        }
         if let Some(memory) = w.memory.then(sys::memory_load).flatten() {
             part("memory", format!("{memory}%"));
         }
@@ -515,10 +528,18 @@ impl Monitor {
             let secs = now.duration_since(at).as_secs_f64().max(0.5);
             // The counters are 32 bits: they come round again after 4 GB.
             let d = |a: u64, b: u64| (a as u32).wrapping_sub(b as u32) as f64 / secs;
-            part("down", rate(d(got, g)));
-            part("up", rate(d(sent, s)));
+            self.net = Some((rate(d(got, g)), rate(d(sent, s))));
         }
-        self.bytes = bytes;
+        if !w.net {
+            self.net = None;
+        }
+        if bytes.is_some() || !w.net {
+            self.bytes = bytes;
+        }
+        if let Some((down, up)) = &self.net {
+            part("down", down.clone());
+            part("up", up.clone());
+        }
         if let Some((percent, is_charging, _)) = w.battery.then(sys::battery).flatten() {
             part(if is_charging { "bolt" } else { "battery" }, format!("{percent}%"));
         }

@@ -148,6 +148,7 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 | `POST /state` | 一条消息 |
 | `POST /widget` | 岛上的一个插件（见"岛上的插件"）；回 `{ ok: true }`，或者 400 和 `{ error }` |
 | `POST /come-home` | 再次启动时用：她重新出现 |
+| `POST /quit` | 像菜单里的「退出」一样退出（顶栏的空间还回去）；换新版本时用，别直接杀进程 |
 | `POST /debug/eval` | `{ page: "pet" \| "island", code }`：在页面里运行一段表达式，返回结果（可以是 Promise） |
 | `POST /debug/walk` | `{ dx, ms }`：立刻走一段 |
 
@@ -231,7 +232,7 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 
 **把她拉出来、放回去**对三种都一样：脖子从家的边上离光标最近的点伸出来（`edgeNear`），所以在角落可以往上、往左拉。她在桌面上被拖近家时，角落的窗口会临时升起来伸手够她（`Island.reaching`），吸回去的动画期间也一直在（`absorbing`）。
 
-**顶栏的空间**（`appbar.rs`）：顶栏显示时用 `SHAppBarMessage` 登记（`ABM_NEW`），按显示器顶部要一条 30 逻辑像素高的（`ABM_QUERYPOS` 后 `ABM_SETPOS`），系统把它从工作区里扣掉；窗口放到批下来的位置。只在显示器或高度变了时再要一次（`bar_for`），否则每次重排都会让所有窗口重新布局。换成别的方式、被隐藏（勿扰、全屏、隐藏）、退出（`RunEvent::Exit`）时 `ABM_REMOVE` 还回去。**进程被强行结束时还不回去**：调试时用 `POST /debug/quit` 正常退出，别直接杀进程。
+**顶栏的空间**（`appbar.rs`）：顶栏显示时用 `SHAppBarMessage` 登记（`ABM_NEW`），按显示器顶部要一条 30 逻辑像素高的（`ABM_QUERYPOS` 后 `ABM_SETPOS`），系统把它从工作区里扣掉；窗口放到批下来的位置。只在显示器或高度变了时再要一次（`bar_for`），否则每次重排都会让所有窗口重新布局。换成别的方式、被隐藏（勿扰、全屏、隐藏）、退出（`RunEvent::Exit`）时 `ABM_REMOVE` 还回去。**进程被强行结束时还不回去**：要换新版本或调试时用 `POST /quit` 正常退出，别直接杀进程。
 
 ## 灵动岛
 

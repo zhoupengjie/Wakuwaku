@@ -8,7 +8,8 @@
 //   POST /come-home    started again while running: back into sight
 //   POST /debug/eval   { page, code }: run code in her page or the island's (WAKUWAKU_DEBUG=1 only)
 //   POST /debug/walk   { dx, ms }: take a walk now (WAKUWAKU_DEBUG=1 only)
-//   POST /debug/quit   quit, as the menu does (WAKUWAKU_DEBUG=1 only)
+//   POST /quit         quit, as the menu does (a new build replacing her; killing her
+//                      would leave the top bar's strip taken)
 use std::io::Read;
 use std::sync::Arc;
 
@@ -152,8 +153,9 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool) {
                 None => reply(req, 504, json!({ "error": "no answer" })),
             }
         }
-        // Quit as the menu does (the bar's strip given back on the way).
-        ("POST", "/debug/quit") if is_debug => {
+        // Quit as the menu does (the bar's strip given back on the way): for
+        // replacing her with a new build, which must not just kill her.
+        ("POST", "/quit") | ("POST", "/debug/quit") => {
             reply(req, 200, json!({ "ok": true }));
             sh.app.exit(0);
         }

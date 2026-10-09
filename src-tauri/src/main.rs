@@ -937,15 +937,11 @@ fn main() {
                 std::thread::sleep(Duration::from_millis(wait));
             });
 
-            // The widgets: today's from the start; the machine's and the
-            // network's every few seconds, the battery's twice a minute and
-            // the tokens' each minute, while they are on; a script's gone
-            // once it stops sending.
+            // The widgets: today's from the start; the tokens' each minute
+            // while they are on; a script's gone once it stops sending.
             sh.count_today(|_| {});
             let watcher = sh.clone();
             std::thread::spawn(move || {
-                let mut machine = widgets::Machine::new();
-                let mut network = widgets::Network::new();
                 let mut tokens = tokens::Tokens::default();
                 let (claude_dir, codex_dir) = (tokens::claude_dir(), tokens::codex_dir());
                 for n in 0u64.. {
@@ -961,18 +957,7 @@ fn main() {
                     };
                     // Just turned on: read now, not at its next turn.
                     let unread = |id: &str| watcher.is_widget_on(id) && watcher.widgets.lock().unwrap().label_of(id).is_none();
-                    let (battery_due, tokens_due) = (n % 10 == 0 || unread("battery"), n % (tokens::EVERY.as_secs() / 3) == 0 || unread("tokens"));
-                    let sys = if watcher.is_widget_on("sys") { machine.words() } else { None };
-                    built_in("sys", sys);
-                    let net = if watcher.is_widget_on("net") { network.words() } else { None };
-                    if net.is_some() || !watcher.is_widget_on("net") {
-                        built_in("net", net);
-                    }
-                    if battery_due {
-                        let battery = if watcher.is_widget_on("battery") { widgets::battery_words() } else { None };
-                        built_in("battery", battery);
-                    }
-                    if tokens_due {
+                    if n % (tokens::EVERY.as_secs() / 3) == 0 || unread("tokens") {
                         let count = watcher.is_widget_on("tokens").then(|| {
                             tokens.update(&claude_dir, &codex_dir, widgets::local_midnight());
                             tokens::words(tokens.count())
@@ -989,6 +974,36 @@ fn main() {
                         watcher.redraw();
                     }
                     std::thread::sleep(Duration::from_secs(3));
+                }
+            });
+
+            // The monitor: the parts that are on, every so many seconds (its
+            // setting, 1 to 10), while it is on; looked at again within a
+            // quarter second when it is turned on or its pace changes.
+            let monitored = sh.clone();
+            std::thread::spawn(move || {
+                let mut monitor = widgets::Monitor::new();
+                let mut next = std::time::Instant::now();
+                let mut was = (false, 0);
+                loop {
+                    let watching = widgets::Watching::from(&monitored.setting("monitor"));
+                    let on = monitored.is_widget_on("monitor");
+                    if std::time::Instant::now() >= next || (on, watching.every) != was {
+                        was = (on, watching.every);
+                        next = std::time::Instant::now() + Duration::from_secs(watching.every);
+                        let words = if on { monitor.read(&watching) } else { None };
+                        let changed = {
+                            let mut widgets = monitored.widgets.lock().unwrap();
+                            match words {
+                                Some(value) => widgets.set_built_in("monitor", value, now_ms()),
+                                None => widgets.remove_built_in("monitor"),
+                            }
+                        };
+                        if changed {
+                            monitored.redraw();
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(250));
                 }
             });
 

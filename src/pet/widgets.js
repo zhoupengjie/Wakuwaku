@@ -4,7 +4,8 @@
 //
 // A widget is { id, label, value, icon, color, builtIn, on, leftMs, private };
 // a built-in one's label and value are { key, vars } to translate. A private
-// one's label stays off screen while the specifics are (details off).
+// one's label stays off screen while the specifics are (details off). The
+// monitor's value is { parts: [{ icon, text }] }: shown as icon and number.
 ;(function (root) {
   const { render } = root.I18n || require('../shared/i18n')
 
@@ -31,16 +32,35 @@
     check: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
     terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/>',
     coin: '<circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.5-1-1.5-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 6v2M12 16v2"/>',
+    gauge: '<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-6"/><path d="M4 17h2M18 17h2M12 9V7"/>',
+    memory: '<rect x="3" y="7" width="18" height="10" rx="1.5"/><path d="M7 7v10M11 7v10M15 7v10M6 17v3M10 17v3M14 17v3M18 17v3"/>',
+    down: '<path d="M12 4v15M6 13l6 6 6-6"/>',
+    up: '<path d="M12 20V5M6 11l6-6 6 6"/>',
+    bolt: '<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
   }
+
+  // Each monitor part in a colour of its own.
+  const PART_COLOR = { cpu: '#5e9bff', memory: '#b18cff', down: '#64d2ff', up: '#64d2ff', battery: '#34d27b', bolt: '#34d27b' }
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+
+  // The monitor's readings, or null for a widget that has none.
+  const partsOf = w => (Array.isArray(w?.value?.parts) ? w.value.parts : null)
 
   // The icon as markup: its own strokes, in the colour of what surrounds it.
   const icon = name => `<svg class="wicon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.dot}</svg>`
 
   // What a widget says: its label and its value, in her language; a private
   // one's label not, unless the specifics may show.
-  const words = (lang, w, detailed = true) => ({ label: w.private && !detailed ? '' : render(lang, w.label), value: render(lang, w.value) })
+  const words = (lang, w, detailed = true) => ({
+    label: w.private && !detailed ? '' : render(lang, w.label),
+    value: partsOf(w) ? partsOf(w).map(p => p.text).join(' ') : render(lang, w.value),
+  })
 
-  const api = { ICONS, icon, words }
+  // The monitor's readings as markup: each icon and number in its colour.
+  const partsHTML = w =>
+    (partsOf(w) || []).map(p => `<span class="wpart" style="color:${PART_COLOR[p.icon] || 'inherit'}">${icon(p.icon)}<b>${esc(p.text)}</b></span>`).join('')
+
+  const api = { ICONS, icon, words, partsOf, partsHTML }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api

@@ -33,7 +33,7 @@ src-tauri/
     fullscreen.rs         别的程序是否全屏（user32）
     focus.rs              前台窗口：设置拿走键盘前记下，收起时还回去
     jump.rs               点会话就到它的窗口：会话的进程链、找窗口、叫到前面、桌面版的会话链接
-    widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、CPU · 内存、网速、电池），什么时候冒头
+    widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、今天的 token、监控），什么时候冒头
     tokens.rs             今天的 token：读 Claude Code 和 Codex 自己的会话记录
     scripts.rs            她替你在后台跑的插件：示例脚本的开关、参数、启动、重启、停下
     mail.rs               邮件：找服务器（像 Thunderbird 那样）、IMAP、每个邮箱一个线程盯着收件箱、密码存进凭据管理器
@@ -199,14 +199,12 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 
 **内置的**（标题和数值是 `{ key, vars }`，按当前语言显示）：
 - `today`：今天开始了几轮（state 的 `Outcome.turns`）、结束的几轮一共用了多久（`Outcome.worked_ms`，几个会话同时跑会叠加）、在宠物上批准了几次（`pet_answer` 的 allow / always）。存在数据目录的 `today.json`，按本地日期换天。
-- `sys`：CPU（两次 `GetSystemTimes` 之差）和内存（`GlobalMemoryStatusEx`），3 秒一次，只在打开时算。默认关闭。
-- `net`：网速，两次 `GetIfTable` 之差，3 秒一次。只算开着的以太网和 Wi-Fi；Windows 会把一块网卡经过各层过滤器列好几遍，按 MAC 地址只算一次。计数是 32 位的，过 4 GB 会从头再来，按回绕相减。默认关闭。
-- `battery`：电量和充电中或还能用多久（`GetSystemPowerStatus`），30 秒一次；没有电池就不显示（「插件」页说「这台电脑没有电池」）。默认关闭。
+- `monitor`（监控，`widgets::Monitor`）：CPU（两次 `GetSystemTimes` 之差）、内存（`GlobalMemoryStatusEx`）、网速（两次 `GetIfTable` 之差，只算开着的以太网和 Wi-Fi，Windows 会把一块网卡经过各层过滤器列好几遍，按 MAC 地址只算一次；计数是 32 位的，过 4 GB 会从头再来，按回绕相减）、电池（`GetSystemPowerStatus`，没有电池这项就没有）。每项一个开关，设置 `monitor: { cpu, mem, net, battery, every }`，`every` 是几秒读一次，1 到 10，默认 2，「插件」页那一行的「设置」里 − / + 调。它的数值是 `{ parts: [{ icon, text }] }`：`cpu 12%`、`memory 46%`、`down 1.2M`、`up 80K`（每秒字节，`rate`）、`battery 85%`（充电时图标是 `bolt`）；岛上收起时只显示这一串图标加数字（`widgets.js` 的 `partsHTML`，每项自己的颜色），没有标题。要两次读数的（CPU、网速）从第二次起才有。一个线程单独读它（`main.rs`），每 0.25 秒看一眼设置，打开或改了频率马上读。默认关闭。以前的 `sys`、`net`、`battery` 三个插件读设置时并进来（`data::adopt_monitor`）：哪个开着，监控就开着、开着那几项。
 - `tokens`（`tokens.rs`）：今天的 token，每分钟读一次。Claude Code：`<配置目录>/projects/**/*.jsonl` 里每条回复的 `message.usage`（输入 + 缓存写 + 缓存读 + 输出），同一个 `message.id` 会按片段写好几行，只算一次。Codex：`~/.codex/sessions/**/*.jsonl` 的 `token_count` 事件是这个会话到那时的总数，今天的用量 = 今天最后一个 − 今天之前最后一个。只读今天改过的文件，每个文件从上次读到的地方接着读，只读完整的行；换天从头算。默认打开。
 
-**设置**：`widgetsOff`（关掉的 id，默认 `["sys", "net", "battery"]`）、`widgetOrder`（显示顺序，「插件」页的 ↑ 改它）、`widgetSpin`（0 / 5 / 8 / 15）、`widgetNudge`。
+**设置**：`widgetsOff`（关掉的 id，默认 `["monitor"]`）、`widgetOrder`（显示顺序，「插件」页的 ↑ 改它）、`widgetSpin`（0 / 5 / 8 / 15）、`widgetNudge`。
 
-**「插件」页**：一行一个插件，每行一个开关。五个内置的一直列着（`widgets.rs` 的 `BUILT_IN`），关着的、或者开着还没读到的（比如台式机的电池）没有数值，岛上不显示它们（`main.rs` 发给岛的只有开着且有数值的）。刚打开的电池和 token 马上读一次，不等下一轮。接着是她替你跑的插件（下一节），最后是别人的脚本发来的。↑ 改的是 `widgetOrder`，里面可以是 widget 的 id，也可以是插件的 id：插件发来的 widget 排在插件的位置（`view` 的 `owner`）。
+**「插件」页**：一行一个插件，每行一个开关。三个内置的一直列着（`widgets.rs` 的 `BUILT_IN`），关着的、或者开着还没读到的没有数值，岛上不显示它们（`main.rs` 发给岛的只有开着且有数值的）。刚打开的 token 马上读一次，不等下一轮。设置页的内容是原地改的（`settings.js` 的 `setHTML`：新的 HTML 和页面上的逐个节点比，只改不一样的属性和文字），所以监控每秒变的数字不会让整页重画、闪一下，正在输入的框也不会丢焦点。接着是她替你跑的插件（下一节），最后是别人的脚本发来的。↑ 改的是 `widgetOrder`，里面可以是 widget 的 id，也可以是插件的 id：插件发来的 widget 排在插件的位置（`view` 的 `owner`）。
 
 ## 她替你跑的插件（scripts.rs）
 

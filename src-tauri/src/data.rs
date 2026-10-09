@@ -82,7 +82,9 @@ fn defaults() -> Map<String, Value> {
         "details": true,
         // Widgets (plugins in the island): which are off, their order, how
         // often the island turns to the next, whether they may open it.
-        "widgetsOff": ["sys", "net", "battery"],
+        "widgetsOff": ["monitor"],
+        // The monitor's parts, and how often it reads (seconds, 1 to 10).
+        "monitor": { "cpu": true, "mem": true, "net": true, "battery": true, "every": 2 },
         "widgetOrder": [],
         "widgetSpin": 8,
         "widgetNudge": true,
@@ -119,7 +121,36 @@ pub fn load(dir: &Path) -> Map<String, Value> {
     if settings.get("display").and_then(Value::as_str) == Some("capsule") {
         settings.insert("display".into(), json!("island"));
     }
+    adopt_monitor(&mut settings);
     settings
+}
+
+// CPU · memory, the network and the battery were widgets of their own: now
+// they are the monitor's parts. It is on if any of them was, with those
+// parts (all of them, if none was); it takes the first one's place in the order.
+fn adopt_monitor(settings: &mut Map<String, Value>) {
+    const OLD: [&str; 3] = ["sys", "net", "battery"];
+    let list = |v: Option<&Value>| -> Vec<String> { v.and_then(Value::as_array).into_iter().flatten().filter_map(|s| s.as_str().map(String::from)).collect() };
+    let off = list(settings.get("widgetsOff"));
+    if !off.iter().any(|id| OLD.contains(&id.as_str())) {
+        return;
+    }
+    let on = |id: &str| !off.iter().any(|o| o == id);
+    let any = OLD.iter().any(|id| on(id));
+    settings.insert("monitor".into(), json!({ "cpu": on("sys") || !any, "mem": on("sys") || !any, "net": on("net") || !any, "battery": on("battery") || !any, "every": 2 }));
+    let mut off: Vec<String> = off.into_iter().filter(|id| !OLD.contains(&id.as_str())).collect();
+    if !any {
+        off.push("monitor".into());
+    }
+    settings.insert("widgetsOff".into(), json!(off));
+    let mut order = Vec::new();
+    for id in list(settings.get("widgetOrder")) {
+        let id = if OLD.contains(&id.as_str()) { "monitor".to_string() } else { id };
+        if !order.contains(&id) {
+            order.push(id);
+        }
+    }
+    settings.insert("widgetOrder".into(), json!(order));
 }
 
 pub fn save(dir: &Path, settings: &Map<String, Value>) {
@@ -198,5 +229,32 @@ pub fn asset_url(path: &Path) -> String {
         format!("http://asset.localhost/{out}")
     } else {
         format!("asset://localhost/{out}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn settings(v: Value) -> Map<String, Value> {
+        let Value::Object(map) = v else { unreachable!() };
+        map
+    }
+
+    #[test]
+    fn the_three_old_widgets_become_the_monitor() {
+        // CPU on, the network and the battery off: the monitor on with CPU and memory.
+        let mut s = settings(json!({ "widgetsOff": ["net", "battery", "x"], "widgetOrder": ["today", "sys", "net"] }));
+        adopt_monitor(&mut s);
+        assert_eq!(s["monitor"], json!({ "cpu": true, "mem": true, "net": false, "battery": false, "every": 2 }));
+        assert_eq!((s["widgetsOff"].clone(), s["widgetOrder"].clone()), (json!(["x"]), json!(["today", "monitor"])));
+        // All three off: the monitor off, with every part ready for when it is on.
+        let mut s = settings(json!({ "widgetsOff": ["sys", "net", "battery"] }));
+        adopt_monitor(&mut s);
+        assert_eq!((s["monitor"]["net"].clone(), s["widgetsOff"].clone()), (json!(true), json!(["monitor"])));
+        // Already the monitor's: left as it is.
+        let mut s = settings(json!({ "widgetsOff": ["monitor"] }));
+        adopt_monitor(&mut s);
+        assert!(!s.contains_key("monitor"));
     }
 }

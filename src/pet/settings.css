@@ -453,6 +453,18 @@
   border-color: #5e9bff;
 }
 
+/* The monitor's how-often: − n s +. */
+#island-settings .every {
+  min-width: 46px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+#island-settings .grow .wpart .wicon {
+  width: 12px;
+  height: 12px;
+}
+
 /* A plugin's settings, folded out under its row. */
 #island-settings .pf {
   padding: 2px 14px 10px 44px;

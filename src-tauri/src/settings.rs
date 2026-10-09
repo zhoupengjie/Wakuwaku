@@ -71,6 +71,13 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "widgetsOff" | "widgetOrder" => v.as_array().is_some_and(|ids| ids.len() <= 64 && ids.iter().all(|id| id.as_str().is_some_and(crate::widgets::is_id))),
         "widgetSpin" => matches!(v.as_u64(), Some(0 | 5 | 8 | 15)),
         "plugins" => scripts::is_ok(v),
+        "monitor" => v.as_object().is_some_and(|m| {
+            m.iter().all(|(k, v)| match k.as_str() {
+                "cpu" | "mem" | "net" | "battery" => v.is_boolean(),
+                "every" => v.as_u64().is_some_and(|s| (1..=10).contains(&s)),
+                _ => false,
+            })
+        }),
         "widgetNudge" => is_bool,
         _ => false,
     }

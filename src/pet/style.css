@@ -359,6 +359,12 @@ body {
   transition: transform 0.56s cubic-bezier(0.3, 1.45, 0.5, 1);
 }
 
+/* Back in her home: put in her place at once (island.js herShown). */
+#island-her.snap,
+#island-her.snap .sheet {
+  transition: none !important;
+}
+
 /* Pulled out: her seat in the island is empty while she hangs in the drop. */
 .pulling #island-her {
   opacity: 0;
@@ -744,6 +750,31 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+
+/* The monitor: each reading its icon and number. */
+.wpart {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wpart + .wpart {
+  margin-left: 9px;
+}
+
+.wpart .wicon {
+  width: 12px;
+  height: 12px;
+}
+
+.wpart b {
+  font-weight: 600;
+}
+
+#island-compact .wparts {
+  gap: 0;
 }
 
 #island-compact .wvalue {

@@ -88,11 +88,36 @@
   const body = layer.querySelector('.s-body')
   const foot = layer.querySelector('.s-foot')
 
+  // The new markup, changed in place: only what differs is touched, so a
+  // number that changed (a plugin's reading) does not redraw the page around
+  // it, and a box being typed in keeps its focus and caret.
   function setHTML(el, html) {
     if (el._html === html) return false
     el._html = html
-    el.innerHTML = html
+    const next = document.createElement('template')
+    next.innerHTML = html
+    morphChildren(el, next.content)
     return true
+  }
+
+  function morph(from, to) {
+    if (from.nodeType !== to.nodeType || from.nodeName !== to.nodeName) return from.replaceWith(to.cloneNode(true))
+    if (from.nodeType !== Node.ELEMENT_NODE) {
+      if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue
+      return
+    }
+    for (const { name } of [...from.attributes]) if (!to.hasAttribute(name)) from.removeAttribute(name)
+    for (const { name, value } of to.attributes) if (from.getAttribute(name) !== value) from.setAttribute(name, value)
+    // A box's text, once typed in, is its own: set while it is not being typed in.
+    if (from.nodeName === 'INPUT' && from !== document.activeElement && from.value !== (to.getAttribute('value') ?? '')) from.value = to.getAttribute('value') ?? ''
+    morphChildren(from, to)
+  }
+
+  function morphChildren(from, to) {
+    const have = [...from.childNodes]
+    const want = [...to.childNodes]
+    want.forEach((node, i) => (i < have.length ? morph(have[i], node) : from.appendChild(node.cloneNode(true))))
+    for (const extra of have.slice(want.length)) extra.remove()
   }
 
   function clock(ms) {
@@ -298,6 +323,16 @@
     return `<div class="pf">${fields.join('')}</div>`
   }
 
+  // The monitor's settings, folded out under it: its parts on or off, and
+  // how often it reads (1 to 10 seconds).
+  function monitorFields() {
+    const m = snap.settings.monitor || {}
+    const parts = ['cpu', 'mem', 'net', 'battery'].map(k => `<div class="fr"><span class="fl">${esc(T(`mon.${k}`))}</span><span class="grow"></span>${sw('mon:' + k, m[k] !== false)}</div>`)
+    const every = m.every || 2
+    const pace = `<div class="fr"><span class="fl">${esc(T('mon.every'))}</span><span class="grow"></span><button class="pbtn sm" data-every="-1" ${every <= 1 ? 'disabled' : ''}>−</button><span class="every">${esc(T('settings.seconds', { n: every }))}</span><button class="pbtn sm" data-every="1" ${every >= 10 ? 'disabled' : ''}>+</button></div>`
+    return `<div class="pf">${parts.join('')}${pace}</div>`
+  }
+
   // Plugins: built in, run by her, or anyone's script, each with its switch
   // (and a step up); how they take turns, whether they may open the island,
   // waku for the terminal, and how to write one.
@@ -319,9 +354,13 @@
         const w = r.widget
         const { label, value } = Widgets.words(lang, w, s.details !== false)
         // A built-in one says what it shows; on, with nothing read, says so.
-        const builtIn = w.builtIn && [T('w.builtIn'), T(`w.about.${w.id}`), w.on && w.value == null ? T(w.id === 'battery' ? 'w.noBattery' : 'w.unread') : ''].filter(Boolean).join(' · ')
+        const builtIn = w.builtIn && [T('w.builtIn'), T(`w.about.${w.id}`), w.on && w.value == null ? T('w.unread') : ''].filter(Boolean).join(' · ')
         const from = builtIn || (w.from === 'mail' ? T('w.fromMail') : [T('w.script', { time: left(w.leftMs || 0) }), w.private ? T('w.private') : ''].filter(Boolean).join(' · '))
-        return `<div class="r"><span class="wi" style="color:${esc(w.color || COLOR.idle)}">${Widgets.icon(w.icon)}</span><div class="grow"><div class="ellip">${esc(label)}<span class="d"> ${esc(value)}</span></div><div class="d">${esc(from)}</div></div>${up}${sw('w:' + w.id, w.on)}</div>`
+        // The monitor: its readings as icon and number, its settings folded under it.
+        const says = Widgets.partsOf(w) ? ` ${Widgets.partsHTML(w)}` : `<span class="d"> ${esc(value)}</span>`
+        const isMonitor = w.id === 'monitor'
+        const more = isMonitor ? `<button class="pbtn sm" data-pexp="monitor">${esc(T(openPlugin === 'monitor' ? 'pl.fold' : 'pl.settings'))}</button>` : ''
+        return `<div class="r"><span class="wi" style="color:${esc(w.color || COLOR.idle)}">${Widgets.icon(w.icon)}</span><div class="grow"><div class="ellip">${esc(label)}${says}</div><div class="d">${esc(from)}</div></div>${more}${up}${sw('w:' + w.id, w.on)}</div>${isMonitor && openPlugin === 'monitor' ? monitorFields() : ''}`
       })
       .join('')
     const spins = SPINS.map(n => [n, n ? T('settings.seconds', { n }) : T('w.spinOff')])
@@ -683,6 +722,8 @@
         return patch({ widgetsOff: off.length === (s.widgetsOff || []).length ? [...off, id] : off })
       }
       if (key === 'widgetNudge') return patch({ widgetNudge: s.widgetNudge === false })
+      // One of the monitor's parts on or off.
+      if (key.startsWith('mon:')) return patch({ monitor: { ...(s.monitor || {}), [key.slice(4)]: (s.monitor || {})[key.slice(4)] === false } })
       // A plugin she runs on or off; on and missing a setting, its settings open.
       if (key.startsWith('pl:')) {
         const p = (snap.plugins || []).find(x => x.id === key.slice(3))
@@ -697,6 +738,12 @@
         return p && setPlugin(id, { [name]: !(p.params.find(f => f.name === name) || {}).value })
       }
       return patch({ [key]: !s[key] })
+    }
+    // The monitor a second faster or slower.
+    const pace = at('[data-every]')
+    if (pace && !pace.disabled) {
+      const every = Math.min(10, Math.max(1, (s.monitor?.every || 2) + Number(pace.dataset.every)))
+      return patch({ monitor: { ...(s.monitor || {}), every } })
     }
     // A plugin's settings folded out, or in.
     const fold = at('[data-pexp]')

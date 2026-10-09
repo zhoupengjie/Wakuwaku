@@ -22,7 +22,7 @@
 | `mail-microsoft.ps1 -ClientId <id>` | 同上 | Outlook.com、Hotmail、Microsoft 365 |
 | [Thunderbird 扩展](../../integrations/thunderbird) | 同上 | 用 Thunderbird 收信的，不用再登录 |
 
-内置的（不用脚本，在设置的「插件」页开关）：今天（几轮、干了多久、批准几次）、今天的 token（Claude Code 和 Codex 的，读它们自己的记录）、CPU · 内存、网速、电池。
+内置的（不用脚本，在设置的「插件」页开关）：今天（几轮、干了多久、批准几次）、今天的 token（Claude Code 和 Codex 的，读它们自己的记录）、监控（CPU、内存、网速、电池，各一个开关）。
 
 ## 邮件
 
@@ -53,7 +53,7 @@
 | `id` | 小写字母、数字、`_`、`-`，最长 40；同一个 id 再发一次就是更新 |
 | `label` | 最长 40 个字 |
 | `value` | 可选，最长 24 个字，显示在右边，用 `color` 的颜色 |
-| `icon` | 可选：`cpu` `weather` `note` `calendar` `bell` `stock` `today` `clock` `mail` `music` `code` `star` `dot` `chart` `battery` `timer` `flag` `server` `check` `terminal` `coin` |
+| `icon` | 可选：`cpu` `weather` `note` `calendar` `bell` `stock` `today` `clock` `mail` `music` `code` `star` `dot` `chart` `battery` `timer` `flag` `server` `check` `terminal` `coin` `gauge` `memory` `down` `up` `bolt` |
 | `color` | 可选，`#rgb` 或 `#rrggbb` |
 | `ttl` | 可选，多少秒没再收到就消失，默认 300，10 到 86400 |
 | `nudge` | 可选，`true` 或一句话：叫开灵动岛一次（有会话在等你时不会；同一个插件一分钟最多一次） |

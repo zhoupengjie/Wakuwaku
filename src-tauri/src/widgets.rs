@@ -16,9 +16,9 @@
 //   POST /widget { id, remove: true }
 //
 // Built in (texts as { key, vars } for the page to say in her language):
-//   sys      CPU and memory, every few seconds
-//   net      how fast the network is moving now
-//   battery  charge, and charging or time left (only with a battery)
+//   monitor  the machine: CPU, memory, the network's pace, the battery, each
+//            on or off ("monitor" setting), read every 1 to 10 seconds; its
+//            value is { parts: [{ icon, text }] }, shown as icon and number
 //   today    turns today, how long Claude worked, approvals given on her
 //   tokens   today's tokens, Claude Code's and Codex's (tokens.rs)
 //
@@ -29,13 +29,12 @@ use std::path::Path;
 
 use serde_json::{json, Value};
 
-pub const ICONS: [&str; 21] = [
+pub const ICONS: [&str; 26] = [
     "cpu", "weather", "note", "calendar", "bell", "stock", "today", "clock", "mail", "music", "code", "star", "dot", "chart", "battery", "timer", "flag", "server",
-    "check", "terminal", "coin",
+    "check", "terminal", "coin", "gauge", "memory", "down", "up", "bolt",
 ];
 // The built-in ones: id, icon, colour.
-pub const BUILT_IN: [(&str, &str, &str); 5] =
-    [("today", "today", "#34d27b"), ("tokens", "code", "#ff9f0a"), ("sys", "cpu", "#5e9bff"), ("net", "chart", "#64d2ff"), ("battery", "battery", "#34d27b")];
+pub const BUILT_IN: [(&str, &str, &str); 3] = [("today", "today", "#34d27b"), ("tokens", "code", "#ff9f0a"), ("monitor", "gauge", "#5e9bff")];
 const MAX_SCRIPTED: usize = 32;
 const DEFAULT_TTL: u64 = 300;
 const NUDGE_EVERY_MS: u64 = 60_000;
@@ -457,70 +456,73 @@ mod sys {
     }
 }
 
-// The battery, as words; None without one.
-pub fn battery_words() -> Option<Value> {
-    let (percent, is_charging, left) = sys::battery()?;
-    Some(match (is_charging, left) {
-        (true, _) => json!({ "key": "widget.batteryCharging", "vars": { "percent": percent.to_string() } }),
-        (false, Some(secs)) => json!({ "key": "widget.batteryLeft", "vars": { "percent": percent.to_string(), "time": format!("{}:{:02}", secs / 3600, secs / 60 % 60) } }),
-        (false, None) => json!(format!("{percent}%")),
-    })
-}
-
-// Bytes a second, as a few characters: 1.2 MB/s, 80 KB/s.
+// Bytes a second, in a few characters: 512B, 8.4K, 80K, 1.2M, 35M, 1.1G.
 pub fn rate(bytes_per_sec: f64) -> String {
-    let (n, unit) = match bytes_per_sec {
-        b if b >= 1e9 => (b / 1e9, "GB/s"),
-        b if b >= 1e6 => (b / 1e6, "MB/s"),
-        b if b >= 1e3 => (b / 1e3, "KB/s"),
-        b => (b, "B/s"),
+    let (n, unit) = match bytes_per_sec.max(0.0) {
+        b if b >= 1e9 => (b / 1e9, "G"),
+        b if b >= 1e6 => (b / 1e6, "M"),
+        b if b >= 1e3 => (b / 1e3, "K"),
+        b => return format!("{b:.0}B"),
     };
-    if n >= 100.0 || unit == "B/s" { format!("{n:.0} {unit}") } else { format!("{n:.1} {unit}") }
+    if n < 10.0 { format!("{n:.1}{unit}") } else { format!("{n:.0}{unit}") }
 }
 
-// How fast the network moves, between two readings.
-pub struct Network {
-    last: Option<(u64, u64, std::time::Instant)>,
+// The monitor's settings: which parts are on, and how often it reads.
+pub struct Watching {
+    pub cpu: bool,
+    pub memory: bool,
+    pub net: bool,
+    pub battery: bool,
+    pub every: u64,
 }
 
-impl Network {
+impl Watching {
+    pub fn from(v: &Value) -> Watching {
+        let on = |k: &str| v[k] != false;
+        Watching { cpu: on("cpu"), memory: on("mem"), net: on("net"), battery: on("battery"), every: v["every"].as_u64().unwrap_or(2).clamp(1, 10) }
+    }
+}
+
+// The machine as the monitor reads it: CPU use and the network's pace
+// between two readings, memory in use, the battery.
+pub struct Monitor {
+    times: Option<(u64, u64)>,
+    bytes: Option<(u64, u64, std::time::Instant)>,
+}
+
+impl Monitor {
     pub fn new() -> Self {
-        Network { last: sys::network_bytes().map(|(a, b)| (a, b, std::time::Instant::now())) }
+        Monitor { times: None, bytes: None }
     }
 
-    pub fn words(&mut self) -> Option<Value> {
-        let (got, sent) = sys::network_bytes()?;
-        let now = std::time::Instant::now();
-        let words = self.last.map(|(g, s, at)| {
+    // The parts that are on, as icon and number: cpu 12%, memory 45%, down
+    // 1.2M and up 80K a second, battery (a bolt while charging) 85%. A part
+    // needing two readings shows from its second. None with nothing to show.
+    pub fn read(&mut self, w: &Watching) -> Option<Value> {
+        let mut parts = Vec::new();
+        let mut part = |icon: &str, text: String| parts.push(json!({ "icon": icon, "text": text }));
+        let times = if w.cpu { sys::times() } else { None };
+        if let (Some(now), Some((idle, busy))) = (times, self.times) {
+            let (di, db) = (now.0.saturating_sub(idle), now.1.saturating_sub(busy));
+            part("cpu", format!("{}%", if di + db == 0 { 0 } else { (db * 100 + (di + db) / 2) / (di + db) }));
+        }
+        self.times = times;
+        if let Some(memory) = w.memory.then(sys::memory_load).flatten() {
+            part("memory", format!("{memory}%"));
+        }
+        let bytes = if w.net { sys::network_bytes().map(|(a, b)| (a, b, std::time::Instant::now())) } else { None };
+        if let (Some((got, sent, now)), Some((g, s, at))) = (bytes, self.bytes) {
             let secs = now.duration_since(at).as_secs_f64().max(0.5);
             // The counters are 32 bits: they come round again after 4 GB.
             let d = |a: u64, b: u64| (a as u32).wrapping_sub(b as u32) as f64 / secs;
-            json!(format!("↓ {} ↑ {}", rate(d(got, g)), rate(d(sent, s))))
-        });
-        self.last = Some((got, sent, now));
-        words
-    }
-}
-
-// CPU use between two readings of sys::times, and memory in use, as words.
-pub struct Machine {
-    last: Option<(u64, u64)>,
-}
-
-impl Machine {
-    pub fn new() -> Self {
-        Machine { last: sys::times() }
-    }
-
-    pub fn words(&mut self) -> Option<Value> {
-        let now = sys::times()?;
-        let cpu = self.last.map(|(idle, busy)| {
-            let (di, db) = (now.0.saturating_sub(idle), now.1.saturating_sub(busy));
-            if di + db == 0 { 0 } else { (db * 100 + (di + db) / 2) / (di + db) }
-        });
-        self.last = Some(now);
-        let memory = sys::memory_load()?;
-        Some(json!(format!("{}% · {}%", cpu.unwrap_or(0), memory)))
+            part("down", rate(d(got, g)));
+            part("up", rate(d(sent, s)));
+        }
+        self.bytes = bytes;
+        if let Some((percent, is_charging, _)) = w.battery.then(sys::battery).flatten() {
+            part(if is_charging { "bolt" } else { "battery" }, format!("{percent}%"));
+        }
+        (!parts.is_empty()).then(|| json!({ "parts": parts }))
     }
 }
 
@@ -552,7 +554,7 @@ mod tests {
         let mut w = Widgets::default();
         assert!(w.put(&json!({ "id": "Has Space", "label": "x" }), 0).is_err());
         assert!(w.put(&json!({ "id": "x" }), 0).is_err());
-        assert!(w.put(&json!({ "id": "sys", "label": "mine" }), 0).is_err());
+        assert!(w.put(&json!({ "id": "monitor", "label": "mine" }), 0).is_err());
         for n in 0..MAX_SCRIPTED {
             w.put(&json!({ "id": format!("w{n}"), "label": "x" }), 0).unwrap();
         }
@@ -574,16 +576,16 @@ mod tests {
     fn built_ins_stay_first_and_the_order_is_the_persons() {
         let mut w = Widgets::default();
         w.put(&json!({ "id": "a", "label": "A" }), 0).unwrap();
-        assert!(w.set_built_in("sys", json!("1"), 0));
-        assert!(!w.set_built_in("sys", json!("1"), 5));
+        assert!(w.set_built_in("monitor", json!("1"), 0));
+        assert!(!w.set_built_in("monitor", json!("1"), 5));
         let ids = |v: Value| v.as_array().unwrap().iter().map(|w| w["id"].as_str().unwrap().to_string()).collect::<Vec<_>>();
         // The ones not measured are listed too, without a value.
         let none = |_: &str| None;
         let all = w.view(0, &[], &[], &none);
-        assert_eq!(ids(all.clone()), ["sys", "today", "tokens", "net", "battery", "a"]);
+        assert_eq!(ids(all.clone()), ["monitor", "today", "tokens", "a"]);
         assert_eq!((all[0]["value"].clone(), all[1]["value"].clone(), all[1]["icon"].clone()), (json!("1"), Value::Null, json!("today")));
         assert_eq!(ids(w.view(0, &[], &["a".into()], &none))[0], "a");
-        assert_eq!(w.view(0, &["net".into()], &[], &none)[3]["on"], false);
+        assert_eq!(w.view(0, &["tokens".into()], &[], &none)[2]["on"], false);
         // A plugin's widgets go where the plugin was put, and say whose they are.
         let mine = |id: &str| (id == "a").then_some("mine");
         let view = w.view(0, &[], &["mine".into()], &mine);
@@ -593,12 +595,12 @@ mod tests {
         assert!(w.put_owned("inbox-1", "mail", "", json!("王总：周五的方案"), json!("3"), true, 0));
         assert!(!w.put_owned("inbox-1", "mail", "", json!("王总：周五的方案"), json!("3"), true, 9));
         assert!(w.put(&json!({ "id": "inbox-1", "label": "mine" }), 0).is_err());
-        assert_eq!(w.view(0, &[], &[], &none)[5]["from"], "mail");
+        assert_eq!(w.view(0, &[], &[], &none)[3]["from"], "mail");
         assert!(!w.expire(u64::MAX) && w.remove("inbox-1"));
         w.put(&json!({ "id": "a", "label": "A" }), 0).unwrap();
         // Built-in ones never go; a script's does.
         assert!(w.expire(u64::MAX));
-        assert_eq!(ids(w.view(0, &[], &[], &none)), ["sys", "today", "tokens", "net", "battery"]);
+        assert_eq!(ids(w.view(0, &[], &[], &none)), ["monitor", "today", "tokens"]);
     }
 
     #[test]
@@ -607,9 +609,17 @@ mod tests {
         w.put(&json!({ "id": "mail", "label": "王总：周五的方案", "value": "3 封未读", "private": true }), 0).unwrap();
         assert_eq!(scripted(w.view(0, &[], &[], &|_| None))[0]["private"], true);
         assert_eq!(w.label_of("mail").map(|l| l.2), Some(true));
-        assert_eq!((rate(80.0), rate(81_234.0), rate(1_234_567.0), rate(250_000_000.0)), ("80 B/s".into(), "81.2 KB/s".into(), "1.2 MB/s".into(), "250 MB/s".into()));
-        // On this machine: a reading, or none, but never a panic.
-        let _ = (battery_words(), Network::new().words());
+        assert_eq!([rate(80.0), rate(8_400.0), rate(81_234.0), rate(1_234_567.0), rate(250_000_000.0)], ["80B", "8.4K", "81K", "1.2M", "250M"]);
+        // On this machine: the second reading has CPU use and the network's pace.
+        let all = Watching::from(&json!({ "every": 99 }));
+        assert_eq!((all.cpu, all.battery, all.every), (true, true, 10));
+        let mut m = Monitor::new();
+        let _ = m.read(&all);
+        let icons = |v: Option<Value>| v.map(|v| v["parts"].as_array().unwrap().iter().map(|p| p["icon"].as_str().unwrap().to_string()).collect::<Vec<_>>()).unwrap_or_default();
+        let second = icons(m.read(&all));
+        assert!(second.starts_with(&["cpu".into(), "memory".into()]), "{second:?}");
+        let only = Watching::from(&json!({ "cpu": false, "net": false, "battery": false }));
+        assert_eq!(icons(m.read(&only)), ["memory"]);
     }
 
     #[test]

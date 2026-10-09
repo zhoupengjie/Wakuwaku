@@ -158,6 +158,14 @@
   // Reaching for her (her middle on the screen, close), or taking her in.
   let isReaching = false
   let isAbsorbing = false
+  // Taken back in: she is home from then on for this page, before main says
+  // so, so she lands in her live portrait and not in the still one.
+  let isComingHome = false
+  let comingHomeTimer
+  // Her live portrait was showing at the last draw: one showing again is put
+  // in its place at once, not sprung there from where she last stood (her
+  // whole self, if she was pulled out of the open island).
+  let herShown = false
   let retractTimer
   // The session a press in the open island landed on: the clocks redraw it
   // every second, so the release may come down on its redrawn self.
@@ -175,7 +183,7 @@
   const home = () => (config.display === 'corner' || config.display === 'bar' ? config.display : 'island')
   const corner = () => (['br', 'bl', 'tr', 'tl'].includes(config.corner) ? config.corner : 'br')
   // In her seat: there is a pet to show, and she is not out on the desktop.
-  const isHome = () => !!spriteUrl && config.out !== true
+  const isHome = () => !!spriteUrl && (config.out !== true || isComingHome)
   const isAsking = () => isOn() && !panel.hidden
   // The settings open in the island (settings.js).
   const isSetting = () => isOn() && !!window.Settings?.isOpen()
@@ -242,8 +250,16 @@
     compact.classList.toggle('bare', !label && !clockText.textContent && !more)
   }
 
-  // A widget in the compact island: its icon and label, and its value where the clock would be.
+  // A widget in the compact island: its icon and label, and its value where
+  // the clock would be; the monitor's readings, each icon and number, alone.
   function fillCompactWidget(widget) {
+    if (Widgets.partsOf(widget)) {
+      const parts = el('span', 'label wparts')
+      parts.innerHTML = Widgets.partsHTML(widget)
+      compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), parts)
+      compact.classList.remove('bare')
+      return
+    }
     const { label, value } = Widgets.words(lang, widget, isDetailed())
     const text = el('span', 'label wlabel')
     text.insertAdjacentHTML('afterbegin', Widgets.icon(widget.icon))
@@ -264,6 +280,7 @@
     row.firstChild.style.color = widget.color || COLOR.idle
     const valueText = el('span', 'wv', value)
     valueText.style.color = widget.color || COLOR.idle
+    if (Widgets.partsOf(widget)) valueText.innerHTML = Widgets.partsHTML(widget)
     row.append(el('span', 'wl', label), valueText)
     return row
   }
@@ -537,7 +554,8 @@
       face.firstChild.style.color = w.color || COLOR.idle
       const v = el('span', 'v', value)
       v.style.color = w.color || COLOR.idle
-      face.append(label, v)
+      if (Widgets.partsOf(w)) v.innerHTML = Widgets.partsHTML(w)
+      face.append(Widgets.partsOf(w) ? '' : label, v)
       parts.push(face)
     }
     const gear = el('span', 'gear')
@@ -582,7 +600,14 @@
     // The window has its room before the island (and she) grow into it.
     const grow = () => {
       setSize(want)
+      const snap = isHome() && !herShown
+      if (snap) her.classList.add('snap')
       placeHer(want)
+      if (snap) {
+        void her.offsetWidth
+        her.classList.remove('snap')
+      }
+      herShown = isHome()
       animateHer()
     }
     if (grows) setTimeout(grow, 40)
@@ -856,6 +881,13 @@
     clearTimeout(retractTimer)
     isReaching = false
     isAbsorbing = true
+    isComingHome = true
+    clearTimeout(comingHomeTimer)
+    // Main says she is in a moment after; should it not, she is not.
+    comingHomeTimer = setTimeout(() => {
+      isComingHome = false
+      update()
+    }, 3000)
     body.classList.remove('reaching', 'settling')
     startDropHer()
     whenRoomy(() => {
@@ -911,6 +943,7 @@
       herClip = null
       room = null
       view = ''
+      herShown = false
     }
   }
 
@@ -919,6 +952,7 @@
     now = data
     lang = data.lang || lang
     config = data.config || {}
+    if (config.out !== true) isComingHome = false
     spriteUrl = data.sprite
     second = data.second || null
     // The same widget stays shown as the list changes around it.

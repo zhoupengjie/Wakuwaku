@@ -261,7 +261,10 @@
       's.codex': 'Codex',
       's.codexWhy':
         '写入 ~/.codex/hooks.json（先备份，移除时只删我们加的条目）。Codex 只能用命令做 hook：一轮对话的开始和结束、改文件、确认时，Codex 会等本程序运行一次（约 0.3 秒）；每一步用的工具在后台报告。新会话开始时还能自动启动宠物。',
-      's.codexTrust': '还没收到 Codex 的事件：在 Codex 里输入 /hooks，信任 Wakuwaku 的 hook。程序换了位置要重新信任。',
+      's.codexTrust': '还没收到 Codex 的事件：在 Codex 里输入 /hooks（桌面版：设置 → 钩子），信任 Wakuwaku 的 hook。程序换了位置要重新信任。',
+      's.codexConnUpgrade': 'Codex 已升级：点「修复」，气泡就能显示每一步用的工具',
+      's.codexUpgradable': '可以补上后台 hook（Codex 已升级）',
+      's.codexUpgradeNote': '现在的 hook 都正常。修复只会加上 2 个在后台报告每一步的 hook，加完在 Codex 的 /hooks（桌面版：设置 → 钩子）里信任这 2 个，原来的不用再信任。',
       's.codexConnOk': '已连接 Codex',
       's.codexConnTrust': 'Codex 的 hooks 已装好，等你在 Codex 的 /hooks 里信任',
       's.codexConnRepair': 'Codex 的 hooks 需要修复',
@@ -523,7 +526,11 @@
       's.codex': 'Codex',
       's.codexWhy':
         "Writes ~/.codex/hooks.json (backed up first; removing takes out only our entries). Codex's hooks can only be commands: when a turn starts and ends, on an edit and on a prompt, Codex waits for this app to run once (about 0.3 s); each step's tool is reported in the background. New sessions also start the pet.",
-      's.codexTrust': "No Codex event yet: in Codex, enter /hooks and trust Wakuwaku's hooks. Moving the app means trusting them again.",
+      's.codexTrust': "No Codex event yet: in Codex, enter /hooks (desktop app: Settings → Hooks) and trust Wakuwaku's hooks. Moving the app means trusting them again.",
+      's.codexConnUpgrade': "Codex was updated: click Repair and the bubble shows each step's tool",
+      's.codexUpgradable': 'Background hooks can be added (Codex was updated)',
+      's.codexUpgradeNote':
+        "The hooks in now all work. Repair only adds 2 that report each step in the background; then trust those 2 in Codex's /hooks (desktop app: Settings → Hooks). The others need no new trust.",
       's.codexConnOk': 'Connected to Codex',
       's.codexConnTrust': "Codex's hooks are in; trust them in Codex's /hooks",
       's.codexConnRepair': "Codex's hooks need a repair",

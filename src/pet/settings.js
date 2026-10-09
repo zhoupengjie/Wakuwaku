@@ -260,13 +260,24 @@
     // Codex: hooks in its hooks.json, which it runs only once trusted (/hooks):
     // until an event came, they may be waiting for that.
     const codex = snap.codex || {}
-    const codexIn = ['ok', 'stale', 'partial'].includes(codex.hooks)
-    const codexConn = codex.hooks === 'ok' && codex.seen ? 's.codexConnOk' : codex.hooks === 'ok' ? 's.codexConnTrust' : codexIn ? 's.codexConnRepair' : 's.codexConnNone'
-    const codexColor = codexConn === 's.codexConnOk' ? COLOR.done : codexIn ? COLOR.waiting : COLOR.idle
+    // upgradable: all works; Codex was updated since and runs background hooks now.
+    const codexIn = ['ok', 'stale', 'upgradable', 'partial'].includes(codex.hooks)
+    const codexConn =
+      codex.hooks === 'ok' && codex.seen
+        ? 's.codexConnOk'
+        : codex.hooks === 'ok'
+          ? 's.codexConnTrust'
+          : codex.hooks === 'upgradable'
+            ? 's.codexConnUpgrade'
+            : codexIn
+              ? 's.codexConnRepair'
+              : 's.codexConnNone'
+    const codexColor = codexConn === 's.codexConnOk' ? COLOR.done : codex.hooks === 'upgradable' ? COLOR.working : codexIn ? COLOR.waiting : COLOR.idle
     const codexWord = {
       ok: 'settings.hooksOk',
       missing: 'settings.hooksMissing',
       stale: 'settings.hooksStale',
+      upgradable: 's.codexUpgradable',
       partial: 'settings.hooksPartial',
       unreadable: 's.codexUnreadable',
       absent: 's.codexAbsent',
@@ -292,7 +303,8 @@
       ${sec(T('s.codex'))}<div class="grp">
         <div class="note">${esc(T('s.codexWhy'))}</div>
         <div class="r"><div class="grow"><div>${esc(T('settings.hooks'))}: ${esc(T(codexWord))}</div><div class="d mono ellip">${esc(codex.file)}</div></div>${codexButtons}</div>
-        ${codexIn && !codex.seen ? `<div class="note">${esc(T('s.codexTrust'))}</div>` : ''}
+        ${codex.hooks === 'upgradable' ? `<div class="note">${esc(T('s.codexUpgradeNote'))}</div>` : ''}
+        ${codexIn && codex.hooks !== 'upgradable' && !codex.seen ? `<div class="note">${esc(T('s.codexTrust'))}</div>` : ''}
         ${codex.hooks !== 'absent' && !codex.async ? `<div class="note">${esc(T('s.codexOld', { version: codex.version }))}</div>` : ''}
       </div>
       ${sec(T('settings.about'))}<div class="grp">

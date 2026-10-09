@@ -430,8 +430,9 @@ fn is_codex_hook(found: &(String, Option<String>, Value), want: &CodexHook, comm
 }
 
 // How our entries stand against what this copy would install: missing / ok /
-// stale (another copy of the program, or another version's hooks) / partial
-// (some lack, such as the background ones after Codex was updated).
+// stale (another copy of the program, or another version's hooks) /
+// upgradable (only the background ones lack: Codex was updated since) /
+// partial (others lack).
 pub fn codex_status_of(file: &Value, command: &str, with_async: bool) -> &'static str {
     let ours = codex_ours(file);
     if ours.is_empty() {
@@ -440,10 +441,14 @@ pub fn codex_status_of(file: &Value, command: &str, with_async: bool) -> &'stati
     if !ours.iter().all(|found| CODEX_HOOKS.iter().any(|want| is_codex_hook(found, want, command))) {
         return "stale";
     }
-    if codex_hooks_for(with_async).any(|want| !ours.iter().any(|found| is_codex_hook(found, want, command))) {
-        return "partial";
+    let lacking: Vec<&CodexHook> = codex_hooks_for(with_async).filter(|want| !ours.iter().any(|found| is_codex_hook(found, want, command))).collect();
+    if lacking.is_empty() {
+        "ok"
+    } else if lacking.iter().all(|want| want.is_async) {
+        "upgradable"
+    } else {
+        "partial"
     }
-    "ok"
 }
 
 // absent (no Codex here), unreadable, or how our entries stand.
@@ -458,7 +463,7 @@ pub fn codex_hooks_status() -> &'static str {
 }
 
 pub fn is_codex_connected() -> bool {
-    matches!(codex_hooks_status(), "ok" | "stale" | "partial")
+    matches!(codex_hooks_status(), "ok" | "stale" | "upgradable" | "partial")
 }
 
 // Change Codex's hooks.json, backed up once beside itself. action: install, remove.
@@ -594,8 +599,11 @@ mod tests {
         assert_eq!(all.len(), 8);
         assert!(all.iter().all(|g| g["hooks"][0].get("async").is_none()));
         assert_eq!(codex_status_of(&old, &cmd, false), "ok");
-        // Codex updated since: the background ones are missing.
-        assert_eq!(codex_status_of(&old, &cmd, true), "partial");
+        // Codex updated since: only the background ones lack.
+        assert_eq!(codex_status_of(&old, &cmd, true), "upgradable");
+        let mut part = old.clone();
+        part["hooks"].as_object_mut().unwrap().remove("Stop");
+        assert_eq!(codex_status_of(&part, &cmd, true), "partial");
         // Installed for a newer Codex, read for an older one: still ours, nothing stale.
         assert_eq!(codex_status_of(&codex_install(&json!({}), &cmd, "w", true), &cmd, false), "ok");
     }

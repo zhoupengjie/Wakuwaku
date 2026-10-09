@@ -79,8 +79,13 @@ fn is_island_mode(sh: &Shared) -> bool {
     sh.setting("display").as_str() == Some("island")
 }
 
+// Up: the island mode, in sight; or risen for the settings; or the settings
+// open in it, whatever they just hid (she, do not disturb): they never go
+// from under the person, only once closed.
 pub fn is_shown(sh: &Shared) -> bool {
-    (sh.is_visible() && is_island_mode(sh)) || sh.island.lock().unwrap().temp
+    let is_up = sh.is_visible() && is_island_mode(sh);
+    let isl = sh.island.lock().unwrap();
+    is_up || isl.temp || isl.settings_open
 }
 
 fn set_ignore(sh: &Shared, ignore: Option<bool>) {
@@ -161,8 +166,11 @@ fn create(sh: &Arc<Shared>) {
                 // A click anywhere else takes the focus from the settings: they close.
                 let app = sh.app.clone();
                 win.on_window_event(move |event| {
+                    // Not when it is her own window being shown (Shared::show_window).
                     if let WindowEvent::Focused(false) = event {
-                        let _ = app.emit_to("island", "island:blur", ());
+                        if !crate::shared(&app).is_shuffling() {
+                            let _ = app.emit_to("island", "island:blur", ());
+                        }
                     }
                 });
                 sh.own_window(&win);
@@ -383,35 +391,30 @@ pub fn open_settings(sh: &Arc<Shared>, tab: Option<&str>) {
     }
 }
 
-// The page closed them (Esc, a click outside, ✕, the head). A risen island
-// goes once it has shrunk back.
+// The page closed them (Esc, a click outside, ✕, the head). Once the island
+// has shrunk back: a risen one goes, and so does one the settings kept up
+// (she was hidden, or do not disturb turned on, while they were open).
 pub fn settings_closed(sh: &Arc<Shared>) {
-    let was_temp = {
-        let mut isl = sh.island.lock().unwrap();
-        isl.settings_open = false;
-        isl.temp
-    };
+    sh.island.lock().unwrap().settings_open = false;
     sh.log("island: settings closed");
     if !sh.flag("onboarded") {
         sh.change(json!({ "onboarded": true }));
     } else {
         sh.redraw();
     }
-    if was_temp {
-        let sh = sh.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(620));
-            {
-                let mut isl = sh.island.lock().unwrap();
-                if isl.settings_open {
-                    return;
-                }
-                isl.temp = false;
+    let sh = sh.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(620));
+        {
+            let mut isl = sh.island.lock().unwrap();
+            if isl.settings_open {
+                return;
             }
-            apply_visibility(&sh);
-            sh.redraw();
-        });
-    }
+            isl.temp = false;
+        }
+        apply_visibility(&sh);
+        sh.redraw();
+    });
 }
 
 pub fn where_(sh: &Shared) -> Value {

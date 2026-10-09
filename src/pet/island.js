@@ -165,6 +165,20 @@
     return node
   }
 
+  // Her in the island's line while she is out on the desktop (her own
+  // element went with her): a round portrait, her mood's first frame, ringed
+  // in its colour. The face stands in only when there is no pet at all.
+  function stillHer(px) {
+    if (!spriteUrl) return face(now.mood, px)
+    const scale = px * 0.00875
+    const node = el('span', 'still-her')
+    node.style.cssText = `width:${px}px;height:${px}px;box-shadow:0 0 0 1.5px ${COLOR[now.mood] || COLOR.idle}`
+    const sheet = el('span', 'sheet')
+    sheet.style.cssText = `background-image:url("${spriteUrl}");background-position:0 ${-CLIPS[MOOD_CLIP[now.mood]].row * CELL_H}px;transform:translate(${-(CELL_W * scale - px) / 2}px, -2px) scale(${scale})`
+    node.append(sheet)
+    return node
+  }
+
   function showFrame(sheet, row, frame) {
     sheet.style.backgroundPosition = `${-frame * CELL_W}px ${-row * CELL_H}px`
   }
@@ -177,7 +191,7 @@
     clockText.style.color = COLOR[now.mood]
     const more = now.others > 0 ? el('span', 'more', `+${now.others}`) : null
     if (more) more.style.color = COLOR[second] || COLOR.working
-    compact.replaceChildren(...(isHome() ? [] : [face(now.mood, 24)]), el('span', 'label', label), clockText, ...(more ? [more] : []))
+    compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), el('span', 'label', label), clockText, ...(more ? [more] : []))
     compact.classList.toggle('bare', !label && !clockText.textContent && !more)
   }
 
@@ -190,7 +204,7 @@
     if (sub || more) lines.append(el('span', 'sub', [sub, more].filter(Boolean).join(' · ')))
     const clockText = el('span', 'clock', time())
     clockText.style.color = COLOR[now.mood]
-    expanded.replaceChildren(...(isHome() ? [] : [face(now.mood, 48)]), lines, clockText)
+    expanded.replaceChildren(...(isHome() ? [] : [stillHer(48)]), lines, clockText)
   }
 
   // --- Her, in the island -----------------------------------------------------------

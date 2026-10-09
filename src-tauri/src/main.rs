@@ -80,6 +80,9 @@ pub struct Shared {
     // The window that had the keyboard before one of hers took it.
     prev_focus: Mutex<isize>,
     push_pending: AtomicBool,
+    // Until when (ms) a loss of focus is our own doing: showing a window of
+    // hers makes it the active one, and that is no click elsewhere.
+    pub shuffle_until: std::sync::atomic::AtomicU64,
     // Debug only: answers to /debug/eval, by id.
     pub evals: Mutex<(u64, std::collections::HashMap<u64, std::sync::mpsc::Sender<Value>>)>,
 }
@@ -275,6 +278,25 @@ impl Shared {
         self.apply_visibility();
         tray::refresh_menu(self);
         self.push_settings();
+    }
+
+    // Show a window of hers. Once created, a Tauri window shows activated
+    // (SW_SHOW): the active one of this app, and the foreground one if this
+    // app had it (the settings open). Neither is the person clicking
+    // elsewhere, so the island ignores the loss of focus for a moment; and
+    // open settings get the keyboard straight back.
+    pub fn show_window(&self, win: &WebviewWindow) {
+        self.shuffle_until.store(now_ms() + 500, Ordering::SeqCst);
+        let _ = win.show();
+        if self.island.lock().unwrap().settings_open && win.label() != "island" {
+            if let Some(island) = self.app.get_webview_window("island") {
+                let _ = island.set_focus();
+            }
+        }
+    }
+
+    pub fn is_shuffling(&self) -> bool {
+        now_ms() < self.shuffle_until.load(Ordering::SeqCst)
     }
 
     // A window of hers takes the keyboard (the settings, a box to type in),
@@ -632,6 +654,7 @@ fn main() {
                 own: Mutex::new(Vec::new()),
                 prev_focus: Mutex::new(0),
                 push_pending: AtomicBool::new(false),
+                shuffle_until: std::sync::atomic::AtomicU64::new(0),
                 evals: Mutex::new((0, std::collections::HashMap::new())),
             });
             app.manage(sh.clone());

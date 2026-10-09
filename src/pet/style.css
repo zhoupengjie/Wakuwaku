@@ -23,8 +23,14 @@ body {
   justify-content: flex-end;
 }
 
+/* The bubble may shrink, she never does: its lines are cut short instead
+   (pet.js fillBubble), so however long the words, she is drawn whole. */
 #bubble {
-  max-width: 92%;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-width: 96%;
+  box-sizing: border-box;
+  overflow: hidden;
   margin-bottom: calc(6px * var(--scale) / 0.55);
   padding: 0.35em 0.7em;
   border-radius: 0.9em;
@@ -45,8 +51,29 @@ body {
   opacity: 0;
 }
 
+#bubble .line {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#bubble .more {
+  font-size: 0.86em;
+  opacity: 0.75;
+}
+
+#bubble .say {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 /* One 192x208 cell of the 1536x2288 sheet, scaled. */
 #pet {
+  flex: none;
   transform: translateX(var(--shift, 0px));
   width: calc(192px * var(--scale));
   height: calc(208px * var(--scale));
@@ -657,4 +684,24 @@ body {
 .island #panel .qdesc,
 .island #panel .btn.option .desc {
   color: #98989d;
+}
+
+/* Her portrait in the island while she is out (island.js stillHer). */
+.still-her {
+  position: relative;
+  flex: none;
+  display: inline-block;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #1c1c1e;
+}
+
+.still-her .sheet {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 192px;
+  height: 208px;
+  background-repeat: no-repeat;
+  transform-origin: 0 0;
 }

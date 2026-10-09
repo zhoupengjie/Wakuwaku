@@ -19,8 +19,9 @@ use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, Webvie
 use crate::pointer::{ClickThrough, Mode};
 use crate::{island, now_ms, Shared};
 
-// Window size at scale 1: room for the bubble above a 192x208 cell.
-const BASE_W: f64 = 300.0;
+// Window size at scale 1: room for the bubble above a 192x208 cell, and
+// wide enough that the bubble says something before it has to cut it short.
+const BASE_W: f64 = 360.0;
 const BASE_H: f64 = 320.0;
 const CELL_H: f64 = 208.0;
 // The cursor further than this (logical px) from her face does not catch her eye.
@@ -241,7 +242,11 @@ pub fn apply_visibility(sh: &Shared) {
         }
     }
     if let Some(win) = window(sh) {
-        let _ = if want { win.show() } else { win.hide() };
+        if want {
+            sh.show_window(&win);
+        } else {
+            let _ = win.hide();
+        }
     }
 }
 

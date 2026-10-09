@@ -146,8 +146,11 @@
           })
           .join('')
       : `<div class="note">${esc(T('home.noSessions'))}</div>`
+    // Show the pet: in the island, whether she is out on the desktop (she is
+    // always in sight there); as the pet on her own, shown or hidden.
+    const isShown = s.display === 'island' ? !snap.hidden && s.out === true : !snap.hidden
     const tiles = [
-      ['show', 'eye', T('home.showPet'), !snap.hidden],
+      ['show', 'eye', T('home.showPet'), isShown],
       ['dnd', 'moon', T('menu.dnd'), s.dnd],
       ['sound', 'sound', T('settings.sound'), s.sound],
       ['island', 'pill', T('s.island'), s.display === 'island'],
@@ -342,8 +345,9 @@
     window.Island?.changed()
   }
 
-  function close() {
+  function close(why = 'asked') {
     if (!isOpen) return
+    console.log('settings close:', why)
     isOpen = false
     clearInterval(clockTimer)
     for (const timer of thumbTimers) clearTimeout(timer)
@@ -429,7 +433,7 @@
 
   layer.addEventListener('click', e => {
     const at = selector => e.target.closest(selector)
-    if (at('[data-close]')) return close()
+    if (at('[data-close]')) return close('click')
     const tabButton = at('[data-tab]')
     if (tabButton) return setTab(tabButton.dataset.tab)
     const s = snap?.settings
@@ -459,7 +463,10 @@
     const tile = at('[data-tile]')
     if (tile) {
       const key = tile.dataset.tile
-      if (key === 'show') return window.pet.settings.showPet(snap.hidden).then(got => ((snap = got), draw()))
+      if (key === 'show') {
+        if (s.display === 'island' && !snap.hidden) return patch({ out: s.out !== true })
+        return window.pet.settings.showPet(snap.hidden).then(got => ((snap = got), draw()))
+      }
       if (key === 'island') return patch({ display: s.display === 'island' ? 'pet' : 'island' })
       return patch({ [key]: !s[key] })
     }
@@ -496,7 +503,7 @@
     if (!isOpen) return
     if (e.key === 'Escape') {
       e.preventDefault()
-      return close()
+      return close('Esc')
     }
     if (e.target.matches?.('input, textarea')) {
       if (e.key === 'Enter' && e.target.id === 's-ref') layer.querySelector('[data-fetch]')?.click()
@@ -520,7 +527,7 @@
     draw()
   })
   // The keyboard went elsewhere: a click outside the island.
-  window.pet.onBlur(() => close())
+  window.pet.onBlur(() => close('blur'))
 
   window.Settings = {
     isOpen: () => isOpen,

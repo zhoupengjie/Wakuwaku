@@ -139,18 +139,38 @@ function clock(ms) {
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
 }
 
-// The bubble's words: whose, what, for how long, and who else is busy.
+// The bubble's words: whose, what, for how long; and on a line of its own,
+// who else is busy (or '').
 function words() {
   const parts = [t(lang, `mood.${now.mood}`)]
   const detail = say(lang, now.detail)
   if (detail) parts.push(detail)
   if ((now.mood === 'working' || now.mood === 'waiting') && now.since) parts.push(clock(Date.now() - now.since))
   if ((now.mood === 'done' || now.mood === 'review' || now.mood === 'error') && now.took) parts.push(t(lang, 'detail.took', { time: clock(now.took) }))
-  let text = parts.join(' · ')
-  // Several sessions: say whose this is, and how many others are busy.
-  if (now.project && now.sessions > 1) text = `${now.project}：${text}`
-  if (now.others > 0) text += `\n${t(lang, 'detail.moreSessions', { n: now.others })}`
-  return text
+  let main = parts.join(' · ')
+  // Several sessions: say whose this is, kept short so the status still shows.
+  if (now.project && now.sessions > 1) {
+    const project = now.project.length > 14 ? `${now.project.slice(0, 13)}…` : now.project
+    main = `${project}：${main}`
+  }
+  const more = now.others > 0 ? t(lang, 'detail.moreSessions', { n: now.others }) : ''
+  return { main, more }
+}
+
+// The bubble never pushes her out of her window: one line for the status
+// and one for the others, cut short with an ellipsis; something she says
+// (a task's name can be long) two lines at most. All of it in the tooltip.
+function fillBubble(lines, isSaying = false) {
+  const line = (cls, text) => {
+    const node = document.createElement('span')
+    node.className = cls
+    node.textContent = text
+    return node
+  }
+  bubble.replaceChildren(
+    ...(isSaying ? [line('say', lines.main)] : [line('line', lines.main), ...(lines.more ? [line('line more', lines.more)] : [])]),
+  )
+  bubble.title = [lines.main, lines.more].filter(Boolean).join('\n')
 }
 
 let clockTimer
@@ -168,23 +188,22 @@ function render() {
 
   // No sprite yet: say how to get one, and keep a box to right-click.
   if (!spriteUrl) {
-    bubble.textContent = t(lang, 'say.noSprite')
+    fillBubble({ main: t(lang, 'say.noSprite') }, true)
     bubble.classList.remove('hidden')
     sprite.classList.add('empty')
     return
   }
   sprite.classList.remove('empty')
 
-  const text = reaction?.say ? say(lang, reaction.say) : words()
-  bubble.textContent = text
+  if (reaction?.say) fillBubble({ main: say(lang, reaction.say) }, true)
+  else fillBubble(words())
   bubble.classList.toggle('hidden', !config.bubble || isOutOfIsland() || (now.mood === 'idle' && !reaction?.say))
-  sprite.title = words()
+  const { main, more } = words()
+  sprite.title = [main, more].filter(Boolean).join('\n')
 
   // The running clock in the bubble.
   if (!reaction?.say && now.since && (now.mood === 'working' || now.mood === 'waiting')) {
-    clockTimer = setInterval(() => {
-      bubble.textContent = words()
-    }, 1000)
+    clockTimer = setInterval(() => fillBubble(words()), 1000)
   }
 }
 

@@ -68,8 +68,11 @@
   const SPRING_MS = 560
   const MIN_W = 112
   // The window without extra room (main's ISLAND), and the island's distance
-  // from the top of it.
-  const BASE = { width: 460, height: 132 }
+  // from the top of it. As wide as a pull needs (PULL_ROOM), so the window
+  // only ever grows down: a window whose top-left corner moves shows its old
+  // picture from the new corner for a frame or two, and the island jumped
+  // sideways as she was pulled out or taken back.
+  const BASE = { width: 760, height: 132 }
   const TOP = 8
   // Her two sizes: the round portrait in the compact island, and her whole
   // self (one sheet cell, halved) standing in the open one.
@@ -79,14 +82,15 @@
   const SET_HEAD = 32
   const SET_HEAD_SCALE = 0.28
   // The corner's circle and its margin, and the window without extra room
-  // there: big enough for the card the circle opens into on a hover, so
-  // opening and closing never resize the window (a window resized shows its
-  // old picture from its new top-left corner for a frame or two: the circle
-  // jumped). It is see-through and lets clicks through but over the island.
+  // there: big enough for the card the circle opens into on a hover and for
+  // a pull (PULL_ROOM), so none of those resize the window (one resized from
+  // a corner moves its top-left corner and shows its old picture from there
+  // for a frame or two: the circle jumped). It is see-through and lets
+  // clicks through but over the island.
   // The bar's height and her portrait in it. (island.rs has these too.)
   const CIRCLE = 56
   const CORNER_M = 14
-  const CORNER_BASE = { width: 520, height: 300 }
+  const CORNER_BASE = { width: 760, height: 440 }
   const BAR_H = 30
   const BAR_HEAD = 22
   // A portrait px across is the sheet at this scale.

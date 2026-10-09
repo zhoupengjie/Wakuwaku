@@ -22,6 +22,13 @@ fn in_tree(up: usize, rest: &str) -> PathBuf {
     tree.ancestors().nth(up).unwrap_or(tree).join(rest)
 }
 
+// The example plugin scripts: in the source tree she was built from, while
+// it is there, else beside the .exe.
+pub fn examples() -> Option<PathBuf> {
+    let beside = std::env::current_exe().ok().and_then(|exe| Some(exe.parent()?.join("examples").join("widgets")));
+    std::iter::once(in_tree(1, "examples").join("widgets")).chain(beside).find(|d| d.is_dir())
+}
+
 pub fn folder() -> PathBuf {
     if let Ok(dir) = std::env::var("WAKUWAKU_USER_DATA") {
         return dir.into();

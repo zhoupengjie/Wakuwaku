@@ -30,7 +30,9 @@ pub const ICONS: [&str; 21] = [
     "cpu", "weather", "note", "calendar", "bell", "stock", "today", "clock", "mail", "music", "code", "star", "dot", "chart", "battery", "timer", "flag", "server",
     "check", "terminal", "coin",
 ];
-pub const BUILT_IN: [&str; 5] = ["sys", "net", "battery", "today", "tokens"];
+// The built-in ones: id, icon, colour.
+pub const BUILT_IN: [(&str, &str, &str); 5] =
+    [("today", "today", "#34d27b"), ("tokens", "code", "#ff9f0a"), ("sys", "cpu", "#5e9bff"), ("net", "chart", "#64d2ff"), ("battery", "battery", "#34d27b")];
 const MAX_SCRIPTED: usize = 32;
 const DEFAULT_TTL: u64 = 300;
 const NUDGE_EVERY_MS: u64 = 60_000;
@@ -82,7 +84,7 @@ impl Widgets {
         if !is_id(id) {
             return Err("id: a-z 0-9 _ -, up to 40");
         }
-        if BUILT_IN.contains(&id) {
+        if BUILT_IN.iter().any(|b| b.0 == id) {
             return Err("id: taken by a built-in widget");
         }
         if v.get("remove").and_then(Value::as_bool) == Some(true) {
@@ -124,18 +126,17 @@ impl Widgets {
     }
 
     // A built-in widget's words, now. True when they changed.
-    pub fn set_built_in(&mut self, id: &str, icon: &str, color: &str, label: Value, value: Value, now: u64) -> bool {
+    pub fn set_built_in(&mut self, id: &str, value: Value, now: u64) -> bool {
         if let Some(w) = self.list.iter_mut().find(|w| w.id == id) {
-            if w.label == label && w.value == value {
+            if w.value == value {
                 return false;
             }
-            w.label = label;
             w.value = value;
             w.at = now;
             return true;
         }
         let at = self.list.iter().take_while(|w| w.until.is_none()).count();
-        self.list.insert(at, Widget { id: id.into(), label, value, icon: icon.into(), color: color.into(), until: None, at: now, private: false });
+        self.list.insert(at, Widget { value, at: now, ..built_in(id) });
         true
     }
 
@@ -158,9 +159,13 @@ impl Widgets {
     }
 
     // All of them, in the order the person put them in (then as first seen),
-    // each saying whether it is on.
+    // each saying whether it is on. The built-in ones not measured (off, or
+    // nothing to read yet, like a battery on a desktop) are there too, with
+    // no value, so they can be turned on.
     pub fn view(&self, now: u64, off: &[String], order: &[String]) -> Value {
-        let mut all: Vec<&Widget> = self.list.iter().collect();
+        let unread: Vec<Widget> = BUILT_IN.iter().filter(|b| !self.list.iter().any(|w| w.id == b.0)).map(|b| built_in(b.0)).collect();
+        let measured = self.list.iter().take_while(|w| w.until.is_none()).count();
+        let mut all: Vec<&Widget> = self.list[..measured].iter().chain(&unread).chain(&self.list[measured..]).collect();
         let rank = |w: &Widget| order.iter().position(|o| *o == w.id).unwrap_or(usize::MAX);
         all.sort_by_key(|w| rank(w));
         Value::Array(
@@ -182,6 +187,12 @@ impl Widgets {
                 .collect(),
         )
     }
+}
+
+// A built-in widget with nothing to say yet.
+fn built_in(id: &str) -> Widget {
+    let (icon, color) = BUILT_IN.iter().find(|b| b.0 == id).map_or(("dot", ""), |b| (b.1, b.2));
+    Widget { id: id.into(), label: json!({ "key": format!("widget.{id}") }), value: Value::Null, icon: icon.into(), color: color.into(), until: None, at: 0, private: false }
 }
 
 // --- Today: what the day has seen ---------------------------------------------------
@@ -474,18 +485,23 @@ impl Machine {
 mod tests {
     use super::*;
 
+    // The view without the built-in ones, which are always there.
+    fn scripted(view: Value) -> Value {
+        Value::Array(view.as_array().unwrap().iter().filter(|w| w["builtIn"] == false).cloned().collect())
+    }
+
     #[test]
     fn a_script_puts_replaces_and_removes_its_widget() {
         let mut w = Widgets::default();
         let put = w.put(&json!({ "id": "weather", "label": "上海 · 多云", "value": "22°", "icon": "weather", "color": "#ffb340" }), 1_000).unwrap();
         assert_eq!((put.id.as_str(), put.nudge), ("weather", None));
         w.put(&json!({ "id": "weather", "label": "上海 · 晴", "value": "24°", "icon": "nope", "color": "red" }), 2_000).unwrap();
-        let view = w.view(2_000, &[], &[]);
+        let view = scripted(w.view(2_000, &[], &[]));
         assert_eq!(view.as_array().unwrap().len(), 1);
         assert_eq!((view[0]["label"].as_str(), view[0]["icon"].as_str(), view[0]["color"].as_str()), (Some("上海 · 晴"), Some("dot"), Some("")));
         assert_eq!(view[0]["leftMs"], 300_000);
         w.put(&json!({ "id": "weather", "remove": true }), 3_000).unwrap();
-        assert!(w.view(3_000, &[], &[]).as_array().unwrap().is_empty());
+        assert!(scripted(w.view(3_000, &[], &[])).as_array().unwrap().is_empty());
     }
 
     #[test]
@@ -515,22 +531,25 @@ mod tests {
     fn built_ins_stay_first_and_the_order_is_the_persons() {
         let mut w = Widgets::default();
         w.put(&json!({ "id": "a", "label": "A" }), 0).unwrap();
-        assert!(w.set_built_in("today", "today", "", json!({ "key": "widget.today" }), json!("1"), 0));
-        assert!(!w.set_built_in("today", "today", "", json!({ "key": "widget.today" }), json!("1"), 5));
+        assert!(w.set_built_in("sys", json!("1"), 0));
+        assert!(!w.set_built_in("sys", json!("1"), 5));
         let ids = |v: Value| v.as_array().unwrap().iter().map(|w| w["id"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        assert_eq!(ids(w.view(0, &[], &[])), ["today", "a"]);
-        assert_eq!(ids(w.view(0, &[], &["a".into()])), ["a", "today"]);
-        assert_eq!(w.view(0, &["a".into()], &[])[1]["on"], false);
+        // The ones not measured are listed too, without a value.
+        let all = w.view(0, &[], &[]);
+        assert_eq!(ids(all.clone()), ["sys", "today", "tokens", "net", "battery", "a"]);
+        assert_eq!((all[0]["value"].clone(), all[1]["value"].clone(), all[1]["icon"].clone()), (json!("1"), Value::Null, json!("today")));
+        assert_eq!(ids(w.view(0, &[], &["a".into()]))[0], "a");
+        assert_eq!(w.view(0, &["net".into()], &[])[3]["on"], false);
         // Built-in ones never go; a script's does.
         assert!(w.expire(u64::MAX));
-        assert_eq!(ids(w.view(0, &[], &[])), ["today"]);
+        assert_eq!(ids(w.view(0, &[], &[])), ["sys", "today", "tokens", "net", "battery"]);
     }
 
     #[test]
     fn private_widgets_say_so_and_rates_read_short() {
         let mut w = Widgets::default();
         w.put(&json!({ "id": "mail", "label": "王总：周五的方案", "value": "3 封未读", "private": true }), 0).unwrap();
-        assert_eq!(w.view(0, &[], &[])[0]["private"], true);
+        assert_eq!(scripted(w.view(0, &[], &[]))[0]["private"], true);
         assert_eq!(w.label_of("mail").map(|l| l.2), Some(true));
         assert_eq!((rate(80.0), rate(81_234.0), rate(1_234_567.0), rate(250_000_000.0)), ("80 B/s".into(), "81.2 KB/s".into(), "1.2 MB/s".into(), "250 MB/s".into()));
         // On this machine: a reading, or none, but never a panic.

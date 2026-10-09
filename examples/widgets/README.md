@@ -14,11 +14,13 @@
 | `countdown.ps1 -At '2026-10-10 18:00' -Title 交周报` | 交周报 还有 1 天 6 小时 | 也可以 `-File deadlines.txt`，一行一个；提前 1 小时和到点各提醒一次 |
 | `devserver.ps1 -Url http://localhost:3000,http://localhost:5173` | 开发服务器 3000 ✓ 5173 ✗ | 有响应就算在跑；在跑的停了就叫开灵动岛 |
 | `stock.ps1 -Symbol 600519.SS,USDCNY=X,BTC-USD -Name 茅台,美元,比特币` | 茅台 1,263 ▲0.58% | 股票、汇率、币价，Yahoo Finance 的图表数据（非官方接口） |
-| `weather.ps1 -City Shanghai` | Shanghai · 多云 22° | wttr.in，不用注册 |
+| `weather.ps1 -City Shanghai` | Shanghai · 多云 22° | Open-Meteo，不用注册；城市可以写中文 |
 | `stretch.ps1 -Minutes 50` | 坐久了，起来走走 12 分钟后 | 到点叫开灵动岛 |
 | `mail-imap.ps1 -Address you@qq.com` | 王总：周五的方案 3 封未读 | IMAP：QQ、163、126、Gmail、iCloud……见下面"邮件" |
 | `mail-microsoft.ps1 -ClientId <id>` | 同上 | Outlook.com、Hotmail、Microsoft 365 |
 | [Thunderbird 扩展](../../integrations/thunderbird) | 同上 | 用 Thunderbird 收信的，不用再登录 |
+
+设置的「插件」页也列着这些脚本，点「复制」就是运行它的命令（路径已经填好）。
 
 内置的（不用脚本，在设置的「插件」页开关）：今天（几轮、干了多久、批准几次）、今天的 token（Claude Code 和 Codex 的，读它们自己的记录）、CPU · 内存、网速、电池。
 

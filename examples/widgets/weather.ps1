@@ -1,35 +1,48 @@
 ﻿# A weather widget for Wakuwaku's island: the sky and the temperature in a
-# city, from wttr.in (no key needed), every 10 minutes.
+# city, from Open-Meteo (no key needed), every 10 minutes. The city can be
+# named in English or Chinese.
 #
 #   pwsh examples/widgets/weather.ps1 -City Shanghai
-#   pwsh examples/widgets/weather.ps1 -City Berlin -Once
+#   pwsh examples/widgets/weather.ps1 -City 杭州 -Once
+#   pwsh examples/widgets/weather.ps1 -City Berlin -Lang en
 param(
   [string]$City = 'Shanghai',
   [int]$Port = 47213,
   [int]$Minutes = 10,
-  [switch]$Once
+  [switch]$Once,
+  # zh or en: Chinese if Windows' language or its formats are.
+  [string]$Lang = $(if ((Get-UICulture).Name -like 'zh*' -or (Get-Culture).Name -like 'zh*') { 'zh' } else { 'en' })
 )
 
-# wttr.in's own Chinese words are often English: the common skies, by their code.
+# The sky by its WMO code, in Chinese and in English.
 $sky = @{
-  113 = '晴'; 116 = '多云'; 119 = '阴'; 122 = '阴'; 143 = '雾'; 248 = '雾'; 260 = '雾'
-  176 = '小雨'; 263 = '小雨'; 266 = '小雨'; 293 = '小雨'; 296 = '小雨'; 353 = '阵雨'
-  299 = '中雨'; 302 = '中雨'; 305 = '大雨'; 308 = '大雨'; 356 = '大雨'; 359 = '暴雨'
-  200 = '雷阵雨'; 386 = '雷阵雨'; 389 = '雷雨'
-  179 = '小雪'; 227 = '小雪'; 323 = '小雪'; 326 = '小雪'; 329 = '中雪'; 332 = '中雪'; 335 = '大雪'; 338 = '大雪'; 230 = '暴雪'
+  0 = '晴', 'Clear'; 1 = '晴', 'Mostly clear'; 2 = '多云', 'Partly cloudy'; 3 = '阴', 'Overcast'
+  45 = '雾', 'Fog'; 48 = '雾', 'Fog'
+  51 = '毛毛雨', 'Drizzle'; 53 = '毛毛雨', 'Drizzle'; 55 = '毛毛雨', 'Drizzle'; 56 = '冻雨', 'Freezing drizzle'; 57 = '冻雨', 'Freezing drizzle'
+  61 = '小雨', 'Light rain'; 63 = '中雨', 'Rain'; 65 = '大雨', 'Heavy rain'; 66 = '冻雨', 'Freezing rain'; 67 = '冻雨', 'Freezing rain'
+  71 = '小雪', 'Light snow'; 73 = '中雪', 'Snow'; 75 = '大雪', 'Heavy snow'; 77 = '雪粒', 'Snow grains'
+  80 = '阵雨', 'Showers'; 81 = '阵雨', 'Showers'; 82 = '强阵雨', 'Heavy showers'; 85 = '阵雪', 'Snow showers'; 86 = '阵雪', 'Snow showers'
+  95 = '雷阵雨', 'Thunderstorm'; 96 = '雷阵雨伴冰雹', 'Thunderstorm, hail'; 99 = '雷阵雨伴冰雹', 'Thunderstorm, hail'
 }
 
+# Where the city is: found once, again next time if the network was down.
+$place = $null
 while ($true) {
   try {
-    $now = (Invoke-RestMethod "https://wttr.in/$([uri]::EscapeDataString($City))?format=j1" -TimeoutSec 20).current_condition[0]
-    $words = $sky[[int]$now.weatherCode]
-    if (-not $words) { $words = $now.weatherDesc[0].value.Trim() }
+    if (-not $place) {
+      $found = Invoke-RestMethod "https://geocoding-api.open-meteo.com/v1/search?name=$([uri]::EscapeDataString($City))&count=1&language=$Lang" -TimeoutSec 20
+      $place = $found.results | Select-Object -First 1
+      if (-not $place) { throw "no city called $City" }
+    }
+    $now = (Invoke-RestMethod "https://api.open-meteo.com/v1/forecast?latitude=$($place.latitude)&longitude=$($place.longitude)&current=temperature_2m,weather_code" -TimeoutSec 20).current
+    $words = $sky[[int]$now.weather_code]
+    $words = if (-not $words) { '' } elseif ($Lang -eq 'zh') { $words[0] } else { $words[1] }
     $widget = @{
       id    = 'weather'
       icon  = 'weather'
       color = '#ffb340'
-      label = "$City · $words"
-      value = "$($now.temp_C)°"
+      label = "$City · $words".TrimEnd(' ', '·')
+      value = "$([Math]::Round([double]$now.temperature_2m))°"
       # A little longer than the wait, so it stays between two updates.
       ttl   = $Minutes * 60 + 120
     } | ConvertTo-Json -Compress

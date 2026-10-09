@@ -192,8 +192,9 @@ impl Shared {
         // then the island holds any prompt.
         now["islandTemp"] = json!(temp);
         now["settingsOpen"] = json!(settings_open);
-        // The widgets that are on, for the island while nothing needs you.
-        now["widgets"] = Value::Array(self.widgets_view().as_array().into_iter().flatten().filter(|w| w["on"] == true).cloned().collect());
+        // The widgets that are on and have something to say, for the island
+        // while nothing needs you.
+        now["widgets"] = Value::Array(self.widgets_view().as_array().into_iter().flatten().filter(|w| w["on"] == true && !w["value"].is_null()).cloned().collect());
         now
     }
 
@@ -299,7 +300,7 @@ impl Shared {
             today.save(&self.dir);
             today.words()
         };
-        if self.widgets.lock().unwrap().set_built_in("today", "today", "#34d27b", json!({ "key": "widget.today" }), words, now_ms()) {
+        if self.widgets.lock().unwrap().set_built_in("today", words, now_ms()) {
             self.redraw();
         }
     }
@@ -937,29 +938,32 @@ fn main() {
                     let now = now_ms();
                     let mut changed = watcher.widgets.lock().unwrap().expire(now);
                     // A built-in widget: its words while it is on, gone when off.
-                    let mut built_in = |id: &str, icon: &str, color: &str, words: Option<Value>| {
+                    let mut built_in = |id: &str, words: Option<Value>| {
                         let mut widgets = watcher.widgets.lock().unwrap();
                         changed |= match words {
-                            Some(value) => widgets.set_built_in(id, icon, color, json!({ "key": format!("widget.{id}") }), value, now),
+                            Some(value) => widgets.set_built_in(id, value, now),
                             None => widgets.remove_built_in(id),
                         };
                     };
+                    // Just turned on: read now, not at its next turn.
+                    let unread = |id: &str| watcher.is_widget_on(id) && watcher.widgets.lock().unwrap().label_of(id).is_none();
+                    let (battery_due, tokens_due) = (n % 10 == 0 || unread("battery"), n % (tokens::EVERY.as_secs() / 3) == 0 || unread("tokens"));
                     let sys = if watcher.is_widget_on("sys") { machine.words() } else { None };
-                    built_in("sys", "cpu", "#5e9bff", sys);
+                    built_in("sys", sys);
                     let net = if watcher.is_widget_on("net") { network.words() } else { None };
                     if net.is_some() || !watcher.is_widget_on("net") {
-                        built_in("net", "chart", "#64d2ff", net);
+                        built_in("net", net);
                     }
-                    if n % 10 == 0 {
+                    if battery_due {
                         let battery = if watcher.is_widget_on("battery") { widgets::battery_words() } else { None };
-                        built_in("battery", "battery", "#34d27b", battery);
+                        built_in("battery", battery);
                     }
-                    if n % (tokens::EVERY.as_secs() / 3) == 0 {
+                    if tokens_due {
                         let count = watcher.is_widget_on("tokens").then(|| {
                             tokens.update(&claude_dir, &codex_dir, widgets::local_midnight());
                             tokens::words(tokens.count())
                         });
-                        built_in("tokens", "code", "#ff9f0a", count);
+                        built_in("tokens", count);
                     }
                     // A new day: today's counts start again.
                     if watcher.today.lock().unwrap().date != widgets::local_date() {

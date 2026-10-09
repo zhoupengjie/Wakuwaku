@@ -46,6 +46,7 @@ pub fn snapshot(sh: &Shared) -> Value {
         "version": sh.app.package_info().version.to_string(),
         "fullscreenAvailable": fullscreen::AVAILABLE,
         "widgets": sh.widgets_view(),
+        "examples": data::examples().map(|d| d.to_string_lossy().into_owned()),
         "port": sh.port,
     })
 }

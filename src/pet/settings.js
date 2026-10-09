@@ -5,7 +5,7 @@
 //   pets      the pets downloaded, a download by link or id, the gallery
 //   look      her home (corner, island, bar), size, bubble, strolls, eyes, language
 //   alerts    how long endings stay, notifications, sound, prompts, quiet
-//   widgets   plugins in the island: on or off, their order, turns, nudges, and how to write one
+//   widgets   plugins in the island: on or off, their order, turns, nudges, the example scripts, and how to write one
 //   connect   how Claude Code and Codex reach her, start at login, the hooks, about
 //
 // What they show comes from main as a snapshot, again whenever it changes;
@@ -245,8 +245,37 @@
       </div>`
   }
 
+  // The example scripts (examples/widgets): file, icon, what to run it with.
+  // Their name and what they do are w.ex.<file> and w.ex.<file>.note.
+  const SCRIPTS = [
+    ['weather', 'weather', '-City Shanghai'],
+    ['stock', 'stock', '-Symbol 600519.SS,USDCNY=X,BTC-USD'],
+    ['pomodoro', 'timer', ''],
+    ['countdown', 'flag', ''],
+    ['stretch', 'bell', '-Minutes 50'],
+    ['ci', 'check', '-Repo zhoupengjie/wakuwaku -Prs'],
+    ['devserver', 'server', '-Url http://localhost:3000,http://localhost:5173'],
+    ['mail-imap', 'mail', '-Address you@qq.com -Setup'],
+    ['mail-microsoft', 'mail', '-ClientId YOUR-APP-ID -Setup'],
+    ['thunderbird', 'mail', null],
+    ['waku', 'terminal', 'npm run build'],
+  ]
+
+  // A script's command, for any terminal: Windows PowerShell is always there.
+  function scriptCommand(file, args) {
+    if (file === 'countdown') {
+      const d = new Date(Date.now() + 86400000)
+      const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      args = `-At "${day} 18:00" -Title ${T('w.ex.countdown.title')}`
+    }
+    // waku asks the port of WAKUWAKU_PORT; the others take -Port.
+    const port = snap.port !== 47213 && file !== 'waku' ? ` -Port ${snap.port}` : ''
+    return `powershell -ExecutionPolicy Bypass -File "${snap.examples}\\${file}.ps1" ${args}${port}`.trim()
+  }
+
   // Plugins in the island: each with its switch (and a step up), how they
-  // take turns, whether they may open the island, and how to write one.
+  // take turns, whether they may open the island, the example scripts, and
+  // how to write one.
   function pageWidgets() {
     const s = snap.settings
     const all = snap.widgets || []
@@ -255,7 +284,9 @@
       ? all
           .map((w, i) => {
             const { label, value } = Widgets.words(lang, w, s.details !== false)
-            const from = [w.builtIn ? T('w.builtIn') : T('w.script', { time: left(w.leftMs || 0) }), w.private ? T('w.private') : ''].filter(Boolean).join(' · ')
+            // A built-in one says what it shows; on, with nothing read, says so.
+            const builtIn = w.builtIn && [T('w.builtIn'), T(`w.about.${w.id}`), w.on && w.value == null ? T(w.id === 'battery' ? 'w.noBattery' : 'w.unread') : ''].filter(Boolean).join(' · ')
+            const from = builtIn || [T('w.script', { time: left(w.leftMs || 0) }), w.private ? T('w.private') : ''].filter(Boolean).join(' · ')
             const up = i > 0 ? `<button class="pbtn sm" data-wup="${esc(w.id)}" title="${esc(T('w.up'))}">↑</button>` : ''
             return `<div class="r"><span class="wi" style="color:${esc(w.color || COLOR.idle)}">${Widgets.icon(w.icon)}</span><div class="grow"><div class="ellip">${esc(label)}<span class="d"> ${esc(value)}</span></div><div class="d">${esc(from)}</div></div>${up}${sw('w:' + w.id, w.on)}</div>`
           })
@@ -263,7 +294,13 @@
       : `<div class="note">${esc(T('w.none'))}</div>`
     const spins = SPINS.map(n => [n, n ? T('settings.seconds', { n }) : T('w.spinOff')])
     const example = `Invoke-RestMethod -Method Post http://127.0.0.1:${snap.port}/widget -ContentType application/json -Body '{"id":"hello","label":"Hello","value":"42","icon":"star"}'`
+    const scripts = SCRIPTS.map(([file, icon, args]) => {
+      const copy = snap.examples && args != null ? `<button class="pbtn" data-copy="${esc(scriptCommand(file, args))}">${esc(T('home.copy'))}</button>` : ''
+      return `<div class="r"><span class="wi">${Widgets.icon(icon)}</span><div class="grow"><div>${esc(T(`w.ex.${file}`))}</div><div class="d">${esc(T(`w.ex.${file}.note`))}</div></div>${copy}</div>`
+    }).join('')
+    const where = snap.examples ? T('w.moreNote') : T('w.moreNoteNone')
     return `${sec(T('w.section'))}<div class="grp"><div class="note">${esc(T('w.note'))}</div>${rows}</div>
+      ${sec(T('w.more'))}<div class="grp"><div class="note">${esc(where)}</div>${scripts}</div>
       ${sec(T('w.show'))}<div class="grp">
         ${row(esc(T('w.spin')), '', seg('widgetSpin', spins, s.widgetSpin ?? 8))}
         ${row(esc(T('w.nudge')), esc(T('w.nudgeNote')), sw('widgetNudge', s.widgetNudge !== false))}

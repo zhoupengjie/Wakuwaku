@@ -199,10 +199,12 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 - `today`：今天开始了几轮（state 的 `Outcome.turns`）、结束的几轮一共用了多久（`Outcome.worked_ms`，几个会话同时跑会叠加）、在宠物上批准了几次（`pet_answer` 的 allow / always）。存在数据目录的 `today.json`，按本地日期换天。
 - `sys`：CPU（两次 `GetSystemTimes` 之差）和内存（`GlobalMemoryStatusEx`），3 秒一次，只在打开时算。默认关闭。
 - `net`：网速，两次 `GetIfTable` 之差，3 秒一次。只算开着的以太网和 Wi-Fi；Windows 会把一块网卡经过各层过滤器列好几遍，按 MAC 地址只算一次。计数是 32 位的，过 4 GB 会从头再来，按回绕相减。默认关闭。
-- `battery`：电量和充电中或还能用多久（`GetSystemPowerStatus`），30 秒一次；没有电池就不显示。默认关闭。
+- `battery`：电量和充电中或还能用多久（`GetSystemPowerStatus`），30 秒一次；没有电池就不显示（「插件」页说「这台电脑没有电池」）。默认关闭。
 - `tokens`（`tokens.rs`）：今天的 token，每分钟读一次。Claude Code：`<配置目录>/projects/**/*.jsonl` 里每条回复的 `message.usage`（输入 + 缓存写 + 缓存读 + 输出），同一个 `message.id` 会按片段写好几行，只算一次。Codex：`~/.codex/sessions/**/*.jsonl` 的 `token_count` 事件是这个会话到那时的总数，今天的用量 = 今天最后一个 − 今天之前最后一个。只读今天改过的文件，每个文件从上次读到的地方接着读，只读完整的行；换天从头算。默认打开。
 
 **设置**：`widgetsOff`（关掉的 id，默认 `["sys", "net", "battery"]`）、`widgetOrder`（显示顺序，「插件」页的 ↑ 改它）、`widgetSpin`（0 / 5 / 8 / 15）、`widgetNudge`。
+
+**「插件」页**：五个内置的一直列着（`widgets.rs` 的 `BUILT_IN`），关着的、或者开着还没读到的（比如台式机的电池）没有数值，岛上不显示它们（`main.rs` 发给岛的只有开着且有数值的）。刚打开的电池和 token 马上读一次，不等下一轮。下面「更多插件」列出 examples/widgets 的脚本，每个一个「复制」，复制的是一条 `powershell -ExecutionPolicy Bypass -File "…\weather.ps1" …` 命令（Windows PowerShell 哪台都有；端口不是 47213 时带上 `-Port`）。脚本目录（`data::examples`）：编译它的源码目录还在就用那里的，否则找 exe 旁边的 `examples/widgets`；都没有就只给 GitHub 地址。
 
 **邮件**：IMAP（`mail-imap.ps1`）、Microsoft Graph（`mail-microsoft.ps1`）、Thunderbird 扩展，都只往 `/widget` 发文字，账号和密码不经过宠物。找 IMAP 服务器照 Thunderbird 的顺序：内置的几家 → ISPDB（`autoconfig.thunderbird.net/v1.1/<域名>`）→ MX 记录所属域名的 ISPDB → `imap.<域名>:993`。网易的服务器要先收到 ID 命令（RFC 2971）才肯打开收件箱，登录前后各发一次。授权码和 Graph 的 refresh token 用 DPAPI（`ConvertFrom-SecureString`）加密存在 `%LOCALAPPDATA%\wakuwaku\secrets`。测试时 `mail-imap.ps1 -NoTls -Server 127.0.0.1` 配一个本地的假 IMAP 服务器，`mail-microsoft.ps1 -LoginBase/-GraphBase` 指向本地的假登录和 Graph。**注意 PowerShell 变量名不分大小写**：脚本里的 `$server` 和参数 `-Server` 是同一个变量。
 

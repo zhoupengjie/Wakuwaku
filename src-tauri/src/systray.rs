@@ -137,6 +137,7 @@ mod imp {
         fn DestroyIcon(icon: isize) -> i32;
         fn AllowSetForegroundWindow(pid: u32) -> i32;
         fn SetForegroundWindow(hwnd: Hwnd) -> i32;
+        fn GetForegroundWindow() -> Hwnd;
     }
 
     #[link(name = "kernel32")]
@@ -654,7 +655,15 @@ mod imp {
         // opened while its program is not in front does not close on a press
         // elsewhere, and some do not bring themselves there (WeChat's,
         // Voicemeeter's). It may come to the front after, too.
+        // Not when the program has the front already: what it opened on the
+        // press (QQ's menu, a window of its own) would lose it, and close.
         let allow = || {
+            let mut pid = 0;
+            // SAFETY: plain queries; our own out-parameter.
+            unsafe { GetWindowThreadProcessId(GetForegroundWindow(), &mut pid) };
+            if pid == i.pid {
+                return;
+            }
             // SAFETY: plain calls; they fail unless we may set the front ourselves.
             let allowed = unsafe { AllowSetForegroundWindow(i.pid) } != 0;
             let put = unsafe { SetForegroundWindow(hwnd_of(i.hwnd)) } != 0;

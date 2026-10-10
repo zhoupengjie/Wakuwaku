@@ -1195,7 +1195,7 @@
       return
     }
     const windows = app.windows || []
-    if (!windows.length) return window.pet.taskbar.app(app.path, 'launch')
+    if (!windows.length) return window.pet.taskbar.app(app.path, 'launch', app.id)
     closePop()
     if (windows.length === 1) return window.pet.taskbar.window(windows[0].id, 'press')
     // Several: all to the front, or all minimized when one is in front (the
@@ -1334,7 +1334,7 @@
     if (!act) return
     closePop()
     if (act === 'close') for (const w of app.windows || []) window.pet.taskbar.window(w.id, 'close')
-    else window.pet.taskbar.app(app.path, act)
+    else window.pet.taskbar.app(app.path, act, app.id)
   })
   pop.addEventListener('contextmenu', e => {
     e.preventDefault()

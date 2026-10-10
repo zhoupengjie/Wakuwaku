@@ -362,6 +362,11 @@ mod imp {
         }
     }
 
+    // A line for the log from elsewhere in the taskbar's doings (tasks.rs).
+    pub fn note(line: &str) {
+        log(line);
+    }
+
     fn work_bottom() -> i32 {
         let mut r = Rect::default();
         // SAFETY: our own struct, of the size the call writes.
@@ -599,17 +604,26 @@ mod imp {
         // with their titles, and in the lists above them.
         let size = (24.0 * sh.screens().primary.map_or(1.0, |a| a.sf)).round() as i32;
         let marks = MARKS.lock().unwrap().clone().unwrap_or_default();
-        let pinned: Vec<(String, String)> = sh
+        // Kept on the taskbar: its path, and the app id of one Windows only
+        // starts by it (a store app: Settings, Calculator).
+        let pinned: Vec<(String, Option<String>)> = sh
             .setting("taskbarPinned")
             .as_array()
-            .map(|all| all.iter().filter_map(|p| Some((p["path"].as_str()?.to_string(), p["name"].as_str().unwrap_or("").to_string()))).collect())
+            .map(|all| all.iter().filter_map(|p| Some((p["path"].as_str()?.to_string(), p["id"].as_str().filter(|s| !s.is_empty()).map(str::to_string)))).collect())
             .unwrap_or_default();
-        // (path, pinned, windows), the paths' case aside.
-        let mut apps: Vec<(String, bool, Vec<&tasks::Task>)> = pinned.iter().map(|(p, _)| (p.clone(), true, Vec::new())).collect();
+        // A button each: (key, path, app id, pinned, windows), the keys' case
+        // aside. A program by its file; one that only hosts what its windows
+        // show (a store app) by the app they say they are, so its frame, which
+        // first shows the app under ApplicationFrameHost.exe, and the app in it
+        // stay one button. One kept by its id takes those that say it.
+        let mut apps: Vec<(String, String, Option<String>, bool, Vec<&tasks::Task>)> =
+            pinned.iter().map(|(p, id)| (id.clone().unwrap_or_else(|| p.to_lowercase()), p.clone(), id.clone(), true, Vec::new())).collect();
         for t in order.iter().filter_map(|h| found.iter().find(|t| t.hwnd == *h)) {
-            match apps.iter_mut().find(|a| a.0.eq_ignore_ascii_case(&t.path)) {
-                Some(app) => app.2.push(t),
-                None => apps.push((t.path.clone(), false, vec![t])),
+            let id = hosts(&t.path).then(|| tasks::app_id(t.hwnd)).flatten();
+            let key = id.clone().unwrap_or_else(|| t.path.to_lowercase());
+            match apps.iter_mut().find(|a| a.0.eq_ignore_ascii_case(&key)) {
+                Some(app) => app.4.push(t),
+                None => apps.push((key, t.path.clone(), id, false, vec![t])),
             }
         }
         let list: Vec<Value> = {
@@ -621,7 +635,7 @@ mod imp {
             let mut file_pngs = FILE_PNGS.lock().unwrap();
             let file_pngs = file_pngs.get_or_insert_with(HashMap::new);
             apps.iter()
-                .map(|(path, is_pinned, windows)| {
+                .map(|(key, path, id, is_pinned, windows)| {
                     // The app each window says it is, and that app's icon as
                     // Windows' taskbar shows it (app_png): the button's, and a
                     // hosted window's own (a store app's frame shows a plain
@@ -657,8 +671,9 @@ mod imp {
                             })
                         })
                         .collect();
-                    let key = path.to_lowercase();
-                    let name = names.entry(key.clone()).or_insert_with(|| tasks::app_name(path)).clone();
+                    // An app by its id: its name as the Start menu has it (not
+                    // its frame's program's, "Application Frame Host").
+                    let name = names.entry(key.to_lowercase()).or_insert_with(|| id.as_deref().and_then(app_title).unwrap_or_else(|| tasks::app_name(path))).clone();
                     // As Windows' taskbar has it on a program's button: the
                     // app's icon by the id its windows give (Settings' grey cog,
                     // from its first moment); else the program's own icon (File
@@ -668,7 +683,7 @@ mod imp {
                     // one), and while it has none.
                     let window_png = windows.iter().find_map(|w| w["png"].as_str().filter(|p| !p.is_empty()).map(str::to_string));
                     let file_png = file_pngs
-                        .entry(key.clone())
+                        .entry(path.to_lowercase())
                         .or_insert_with(|| {
                             let icon = tasks::file_icon(path);
                             let png = if icon == 0 { String::new() } else { png_of(icon, size).unwrap_or_default() };
@@ -677,12 +692,13 @@ mod imp {
                         })
                         .clone();
                     let own = !file_png.is_empty() && !hosts(path) && file_png != plain_png(size);
-                    let png = match app_pngs.into_iter().flatten().next() {
+                    // One kept by its id with no window: its app's icon too.
+                    let png = match app_pngs.into_iter().flatten().next().or_else(|| id.as_deref().and_then(|id| app_png(id, size))) {
                         Some(app) => app,
                         None if own => file_png,
                         None => window_png.unwrap_or(file_png),
                     };
-                    json!({ "app": key, "path": path, "name": name, "pinned": is_pinned, "png": png, "windows": windows })
+                    json!({ "app": key, "path": path, "id": id, "name": name, "pinned": is_pinned, "png": png, "windows": windows })
                 })
                 .collect()
         };
@@ -770,17 +786,30 @@ mod imp {
 
     // A press on a program's button kept on the taskbar with no window: it
     // starts. Kept on the taskbar, or no longer.
-    pub fn app(sh: &Shared, what: &str, path: &str) -> bool {
+    // A program by its file, or an app (a store app) by its id: started as
+    // Windows starts it (its file would not start it), kept by its id.
+    pub fn app(sh: &Shared, what: &str, path: &str, id: Option<&str>) -> bool {
         let done = match what {
             "launch" => {
                 close_flyout();
-                tasks::launch(path)
+                match id {
+                    Some(id) => tasks::launch(&format!("shell:AppsFolder\\{id}")),
+                    None => tasks::launch(path),
+                }
             }
             "pin" | "unpin" => {
                 let mut kept: Vec<Value> = sh.setting("taskbarPinned").as_array().cloned().unwrap_or_default();
-                kept.retain(|p| !p["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(path)));
+                kept.retain(|p| match (id, p["id"].as_str()) {
+                    (Some(id), Some(theirs)) => !theirs.eq_ignore_ascii_case(id),
+                    (None, None) => !p["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(path)),
+                    _ => true,
+                });
                 if what == "pin" {
-                    kept.push(json!({ "path": path, "name": tasks::app_name(path) }));
+                    let name = id.and_then(app_title).unwrap_or_else(|| tasks::app_name(path));
+                    kept.push(match id {
+                        Some(id) => json!({ "path": path, "id": id, "name": name }),
+                        None => json!({ "path": path, "name": name }),
+                    });
                 }
                 crate::shared(&sh.app).change(json!({ "taskbarPinned": kept }));
                 true
@@ -1630,6 +1659,53 @@ mod imp {
 
     static APP_PNGS: Mutex<Option<HashMap<(String, i32), Option<String>>>> = Mutex::new(None);
 
+    // IShellItem's table, as far as its name.
+    #[repr(C)]
+    struct ItemVtbl {
+        _query_interface: usize,
+        _add_ref: usize,
+        release: extern "system" fn(*mut Item) -> u32,
+        _bind_to_handler: usize,
+        _get_parent: usize,
+        get_display_name: extern "system" fn(*mut Item, i32, *mut *mut u16) -> i32,
+    }
+
+    #[repr(C)]
+    struct Item {
+        vtbl: *const ItemVtbl,
+    }
+
+    #[link(name = "ole32")]
+    extern "system" {
+        fn CoTaskMemFree(p: *mut c_void);
+    }
+
+    const IID_SHELL_ITEM: KnownGuid = KnownGuid(0x4382_6D1E, 0xE718, 0x42EE, [0xBC, 0x55, 0xA1, 0xE2, 0x61, 0xC3, 0x7B, 0xFE]);
+    const SIGDN_NORMALDISPLAY: i32 = 0;
+
+    // An app's name as the shell's Apps folder (the Start menu) has it.
+    fn app_title(app_id: &str) -> Option<String> {
+        tasks::with_com();
+        // SAFETY: the shell's item, released; its name freed once read.
+        unsafe {
+            let mut item: *mut Item = std::ptr::null_mut();
+            if SHCreateItemInKnownFolder(&FOLDERID_APPS, 0, wide(app_id).as_ptr(), &IID_SHELL_ITEM, &mut item as *mut *mut Item as *mut *mut c_void) < 0 || item.is_null() {
+                return None;
+            }
+            let mut name: *mut u16 = std::ptr::null_mut();
+            let got = ((*(*item).vtbl).get_display_name)(item, SIGDN_NORMALDISPLAY, &mut name) >= 0 && !name.is_null();
+            let title = got.then(|| {
+                let n = (0..).take_while(|&i| *name.add(i) != 0).count();
+                String::from_utf16_lossy(std::slice::from_raw_parts(name, n))
+            });
+            if !name.is_null() {
+                CoTaskMemFree(name as *mut c_void);
+            }
+            ((*(*item).vtbl).release)(item);
+            title.filter(|t| !t.is_empty())
+        }
+    }
+
     fn app_png(app_id: &str, size: i32) -> Option<String> {
         let key = (app_id.to_string(), size);
         if let Some(known) = APP_PNGS.lock().unwrap().get_or_insert_with(HashMap::new).get(&key) {
@@ -1755,10 +1831,11 @@ mod imp {
         false
     }
     pub fn watch_presses(_on: bool) {}
+    pub fn note(_line: &str) {}
     pub fn window(_what: &str, _hwnd: isize) -> bool {
         false
     }
-    pub fn app(_sh: &Shared, _what: &str, _path: &str) -> bool {
+    pub fn app(_sh: &Shared, _what: &str, _path: &str, _id: Option<&str>) -> bool {
         false
     }
     pub fn thumbs(_items: Vec<(isize, (i32, i32, i32, i32))>) {}
@@ -1767,7 +1844,7 @@ mod imp {
     }
 }
 
-pub use imp::{explorer_room, give_back, resend, strip_moved, take, work_area_bottom};
+pub use imp::{explorer_room, give_back, note, resend, strip_moved, take, work_area_bottom};
 
 // RGBA pixels (sw × sh) made dw × dh smoothly: each pixel out the weighted
 // mean of those it covers, under a tent as wide as a pixel of the coarser
@@ -1914,8 +1991,8 @@ pub fn taskbar_thumbs(app: tauri::AppHandle, items: Vec<(i64, f64, f64, f64, f64
 // A program's button: launch (a program kept on the taskbar, not running;
 // or another of its windows), pin, unpin.
 #[tauri::command]
-pub fn taskbar_app(app: tauri::AppHandle, path: String, what: String) -> bool {
-    imp::app(&crate::shared(&app), &what, &path)
+pub fn taskbar_app(app: tauri::AppHandle, path: String, what: String, id: Option<String>) -> bool {
+    imp::app(&crate::shared(&app), &what, &path, id.as_deref().filter(|s| !s.is_empty()))
 }
 
 // A tray icon kept out on the taskbar or folded away (dragged there), by

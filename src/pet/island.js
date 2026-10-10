@@ -1756,6 +1756,12 @@
         if (at >= 0) turnWidget(at - (widgetAt % widgets.length))
         return
       }
+      // A word that points somewhere (an agent answered about a letter): there.
+      const open = isNudging() && nudge.widget?.open
+      if (open?.tab === 'mail') {
+        window.Settings?.openLetter?.({ account: open.account, uid: open.uid })
+        return window.pet.openSettings('mail')
+      }
       window.pet.openSettings()
     })
     // The wheel turns to the next widget, while the widgets have the island.

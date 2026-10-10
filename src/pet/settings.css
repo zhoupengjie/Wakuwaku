@@ -677,36 +677,161 @@
   margin-top: 8px;
 }
 
-#island-settings .m-sum {
+#island-settings .m-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Which inbox and which letters: the picker on the left, the filter on the right. */
+#island-settings .inbox .mail-tools {
+  padding: 8px 10px 8px 14px;
+}
+
+#island-settings .mail-tools .pick {
+  max-width: 260px;
+}
+
+/* A letter's star: hollow, filled amber when on. */
+#island-settings .star {
+  flex: none;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--g4);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#island-settings .star:hover {
+  color: var(--fg);
+}
+
+#island-settings .star.on {
+  color: #ffb340;
+}
+
+#island-settings .mail-bar .star {
+  font-size: 18px;
+}
+
+/* Whose a letter is, in every account's inbox. */
+#island-settings .letter .acct {
+  flex: none;
+  max-width: 150px;
+  color: var(--g4);
+  font-size: 11px;
+}
+
+/* The talk under a letter: the state and start over; the letter handed
+   over and what the agent did in small; my words to the right; its words
+   as it writes them; a box to ask more. */
+#island-settings .talk {
   margin-top: 10px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(52, 210, 123, 0.1);
-  color: #d6f5e3;
+  background: rgba(94, 155, 255, 0.08);
   user-select: text;
 }
 
-#island-settings .m-sum.run {
-  background: rgba(94, 155, 255, 0.12);
-  color: #cfe0ff;
+#island-settings .talk.failed {
+  background: rgba(255, 92, 108, 0.1);
 }
 
-#island-settings .m-sum.bad {
-  background: rgba(255, 92, 108, 0.12);
-  color: #ffc7cd;
-}
-
-#island-settings .m-sum-h {
-  margin-bottom: 4px;
-  color: #34d27b;
+#island-settings .talk-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: #8fb6ff;
   font-size: 11.5px;
   font-weight: 600;
 }
 
-#island-settings .m-sum-t,
-#island-settings .m-text {
+#island-settings .talk.failed .talk-h {
+  color: #ff8a96;
+}
+
+#island-settings .t-start,
+#island-settings .t-tool,
+#island-settings .t-wait {
+  color: var(--g4);
+  font-size: 11.5px;
+}
+
+#island-settings .t-tool {
+  padding-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#island-settings .t-wait {
+  margin-top: 4px;
+  animation: t-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes t-blink {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+#island-settings .t-me {
+  align-self: flex-end;
+  width: fit-content;
+  max-width: 85%;
+  margin: 8px 0 6px auto;
+  padding: 6px 10px;
+  border-radius: 12px 12px 4px 12px;
+  background: #0a84ff;
+  color: #fff;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+#island-settings .t-agent {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+
+#island-settings .t-agent code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: #000;
+  font-size: 12px;
+}
+
+#island-settings .md-h {
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+#island-settings .md-li {
+  display: flex;
+  gap: 6px;
+  padding-left: 4px;
+}
+
+#island-settings .md-li > span:first-child {
+  flex: none;
+  color: var(--g4);
+}
+
+#island-settings .md-q {
+  padding-left: 8px;
+  border-left: 2px solid var(--g3);
+  color: var(--g5);
+}
+
+#island-settings .md-gap {
+  height: 6px;
+}
+
+#island-settings .t-ask {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 #island-settings .m-text {

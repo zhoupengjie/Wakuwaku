@@ -7,7 +7,8 @@
 //                          [--want-id] [--log]
 //
 // The inbox is the folder's .eml files in name order (UID 1, 2, …); a name
-// with "-seen" in it starts read. A file added while it runs is new mail:
+// with "-seen" in it starts read, one with "-flagged" starred. A file added
+// while it runs is new mail:
 // a client in IDLE is told at once (* n EXISTS), others at their next
 // command. --want-id refuses to open a folder before ID, as 163 does;
 // --login-only offers LOGIN but no AUTHENTICATE PLAIN; --no-idle leaves
@@ -15,7 +16,8 @@
 //
 // Only what the pet asks for is understood: CAPABILITY, NOOP, LOGOUT, ID,
 // LOGIN, AUTHENTICATE PLAIN, LIST, SELECT, EXAMINE, CLOSE, UNSELECT,
-// [UID] SEARCH (ALL, SEEN, UNSEEN, UID set, a sequence set), [UID] FETCH
+// [UID] SEARCH (ALL, SEEN, UNSEEN, FLAGGED, UNFLAGGED, UID set, a sequence
+// set), [UID] FETCH
 // (UID, FLAGS, INTERNALDATE, RFC822.SIZE, BODY[…] and BODY.PEEK[…] whole,
 // HEADER, HEADER.FIELDS, TEXT), [UID] STORE ±FLAGS, IDLE.
 'use strict'
@@ -74,7 +76,7 @@ function scan() {
     box.files.add(name)
     // Lines end in CRLF however the file was saved.
     const raw = Buffer.from(fs.readFileSync(path.join(DIR, name)).toString('latin1').replace(/\r?\n/g, '\r\n'), 'latin1')
-    const flags = new Set(name.includes('-seen') ? ['\\Seen'] : [])
+    const flags = new Set([...(name.includes('-seen') ? ['\\Seen'] : []), ...(name.includes('-flagged') ? ['\\Flagged'] : [])])
     box.letters.push({ uid: box.next++, raw, flags, date: headerDate(raw) || fs.statSync(path.join(DIR, name)).mtime, name })
     added = true
   }
@@ -273,6 +275,8 @@ function serve(socket) {
       if (k === 'ALL') continue
       if (k === 'SEEN') all = all.filter(x => x.l.flags.has('\\Seen'))
       else if (k === 'UNSEEN') all = all.filter(x => !x.l.flags.has('\\Seen'))
+      else if (k === 'FLAGGED') all = all.filter(x => x.l.flags.has('\\Flagged'))
+      else if (k === 'UNFLAGGED') all = all.filter(x => !x.l.flags.has('\\Flagged'))
       else if (k === 'UID') {
         const set = new Set(pick(keys[++i], true).map(x => x.l.uid))
         all = all.filter(x => set.has(x.l.uid))

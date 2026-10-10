@@ -304,11 +304,18 @@ impl Shared {
     // The island opens for a widget, once: only in sight, when nudges are
     // allowed and the widget is on, and while no session needs you.
     pub fn nudge_widget(&self, id: &str, words: &str) {
+        self.nudge_widget_to(id, words, Value::Null);
+    }
+
+    // The same, and a click on the island while it says so opens what
+    // `open` names ({ tab, … }: a letter on the Mail page) instead of the
+    // settings as they were.
+    pub fn nudge_widget_to(&self, id: &str, words: &str, open: Value) {
         if !self.is_visible() || self.setting("widgetNudge") == false || !self.is_widget_on(id) || self.pet.lock().unwrap().wants_you() {
             return;
         }
         let Some((label, value, private)) = self.widgets.lock().unwrap().label_of(id) else { return };
-        self.to_pages("pet:nudge", json!({ "id": id, "words": words, "label": label, "value": value, "private": private }));
+        self.to_pages("pet:nudge", json!({ "id": id, "words": words, "label": label, "value": value, "private": private, "open": open }));
     }
 
     // Today's counts changed: kept, and the widget says so.
@@ -893,6 +900,8 @@ fn main() {
             mail::letters::mail_letters,
             mail::letters::mail_letter,
             mail::agent::mail_hand,
+            mail::agent::mail_say,
+            mail::letters::mail_flag,
             taskbar::taskbar_tray,
             taskbar::taskbar_open,
             taskbar::taskbar_tray_rects,

@@ -257,8 +257,8 @@ impl Watch {
 #[derive(Default)]
 pub struct Runner {
     watches: HashMap<String, (Account, Arc<Watch>)>,
-    // Letters handed to an agent in the background (agent.rs).
-    agents: agent::Runs,
+    // Talks with an agent about a letter (agent.rs).
+    talks: agent::Talks,
 }
 
 fn widget_id(account: &str) -> String {

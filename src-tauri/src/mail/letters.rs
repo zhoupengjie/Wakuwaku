@@ -1,15 +1,19 @@
-// The Mail page's inbox: the newest letters by their headers, and one letter
-// read whole. Opening a letter on the page marks it read, as any mail
-// program does; listing does not, nor does handing one to an agent. Each
-// asks over a connection of its own, signed in and gone again.
+// The Mail page's inbox: the newest letters by their headers (one account's,
+// or every account's as one; all, the unread or the starred), stars put on
+// and taken off, and one letter read whole. Opening a letter on the page
+// marks it read, as any mail program does; listing does not, nor does
+// handing one to an agent. Each asks over a connection of its own, signed
+// in and gone again.
 use std::borrow::Cow;
 
+use io_imap::types::flag::Flag;
+use io_imap::types::search::SearchKey;
 use mail_parser::{Address, Message, MessageParser, MimeHeaders};
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
 use super::imap::{session, Fail, Head};
-use super::{account, agent, password_of, Account, CONNECT};
+use super::{account, accounts, agent, password_of, Account, CONNECT};
 use crate::shared;
 
 // The header fields a list row is made of.
@@ -60,14 +64,16 @@ pub fn attachments(m: &Message) -> Vec<Value> {
         .collect()
 }
 
-// A row of the list.
-fn row(h: &Head) -> Value {
+// A row of the list, with whose it is.
+fn row(account: &str, h: &Head) -> Value {
     let m = parse(&h.header);
     let from = m.as_ref().map(|m| people(m.from())).unwrap_or_default();
     let first = from.first();
     let mixed = m.as_ref().and_then(|m| m.root_part().content_type()).is_some_and(|t| t.ctype().eq_ignore_ascii_case("multipart") && t.subtype().is_some_and(|s| s.eq_ignore_ascii_case("mixed")));
     json!({
+        "account": account,
         "uid": h.uid,
+        "flagged": h.flagged,
         "from": first.map_or("", |p| p["name"].as_str().filter(|n| !n.is_empty()).or(p["address"].as_str()).unwrap_or("")),
         "address": first.map_or("", |p| p["address"].as_str().unwrap_or("")),
         "subject": m.as_ref().and_then(|m| m.subject()).unwrap_or("").trim(),
@@ -79,24 +85,77 @@ fn row(h: &Head) -> Value {
     })
 }
 
-// The newest `count` letters, newest first, and how many there are.
-fn list(account: &Account, count: u32) -> Result<Value, Fail> {
-    let mut s = session(&account.server, &password_of(account)?, CONNECT)?;
-    let total = s.inbox(false)?;
-    let mut letters: Vec<Value> = if total == 0 {
-        Vec::new()
-    } else {
-        let first = total.saturating_sub(count.clamp(1, MOST)) + 1;
-        s.heads(&format!("{first}:{total}"), false, &FIELDS)?.iter().rev().map(row).collect()
-    };
-    // The newest that came in, newest sent first (they do not always come in order).
-    letters.sort_by_key(|l| std::cmp::Reverse(l["date"].as_i64().unwrap_or(0)));
-    s.logout();
-    Ok(json!({ "total": total, "letters": letters }))
+// Which letters the inbox shows: all, the unread, or the starred.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Filter {
+    All,
+    Unseen,
+    Flagged,
 }
 
-// A letter as it came, by UID; marked read when `mark`.
-pub fn fetch(account: &Account, uid: u32, mark: bool) -> Result<Option<Vec<u8>>, Fail> {
+impl Filter {
+    fn parse(s: &str) -> Filter {
+        match s {
+            "unseen" => Filter::Unseen,
+            "flagged" => Filter::Flagged,
+            _ => Filter::All,
+        }
+    }
+}
+
+// The newest that came in, newest sent first (they do not always come in order).
+fn newest_first(letters: &mut [Value]) {
+    letters.sort_by_key(|l| std::cmp::Reverse(l["date"].as_i64().unwrap_or(0)));
+}
+
+// The newest `count` letters the filter lets through, newest first, and how
+// many it lets through. All: the last by position. Unread or starred: the
+// server finds them (SEARCH), the newest of them by UID.
+fn list(account: &Account, count: u32, filter: Filter) -> Result<(u32, Vec<Value>), Fail> {
+    let count = count.clamp(1, MOST);
+    let mut s = session(&account.server, &password_of(account)?, CONNECT)?;
+    let exists = s.inbox(false)?;
+    let (total, heads) = match filter {
+        Filter::All if exists == 0 => (0, Vec::new()),
+        Filter::All => (exists, s.heads(&format!("{}:{exists}", exists.saturating_sub(count) + 1), false, &FIELDS)?),
+        Filter::Unseen | Filter::Flagged => {
+            let mut uids = s.search(if filter == Filter::Unseen { SearchKey::Unseen } else { SearchKey::Flagged })?;
+            uids.sort_unstable();
+            let total = uids.len() as u32;
+            let newest = &uids[uids.len().saturating_sub(count as usize)..];
+            let set = newest.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
+            (total, if newest.is_empty() { Vec::new() } else { s.heads(&set, true, &FIELDS)? })
+        }
+    };
+    s.logout();
+    let mut letters: Vec<Value> = heads.iter().map(|h| row(&account.id, h)).collect();
+    newest_first(&mut letters);
+    Ok((total, letters))
+}
+
+// Every account's newest, side by side (a thread each), as one inbox: the
+// newest `count` of them all, how many in all, and the accounts that could
+// not be asked, with why.
+fn list_all(all: Vec<Account>, count: u32, filter: Filter) -> Value {
+    let asked: Vec<_> = all.into_iter().map(|a| std::thread::spawn(move || (a.id.clone(), list(&a, count, filter)))).collect();
+    let (mut total, mut letters, mut errors) = (0, Vec::new(), Vec::new());
+    for got in asked {
+        match got.join() {
+            Ok((_, Ok((n, rows)))) => {
+                total += n;
+                letters.extend(rows);
+            }
+            Ok((id, Err(fail))) => errors.push(json!({ "account": id, "error": fail.json() })),
+            Err(_) => {}
+        }
+    }
+    newest_first(&mut letters);
+    letters.truncate(count.clamp(1, MOST) as usize);
+    json!({ "ok": true, "total": total, "letters": letters, "errors": errors })
+}
+
+// A letter as it came, by UID, and whether it is starred; marked read when `mark`.
+pub fn fetch(account: &Account, uid: u32, mark: bool) -> Result<Option<(Vec<u8>, bool)>, Fail> {
     let mut s = session(&account.server, &password_of(account)?, CONNECT)?;
     s.inbox(mark)?;
     let raw = s.letter(uid)?;
@@ -128,36 +187,62 @@ fn failed(fail: Fail) -> Value {
     json!({ "ok": false, "error": fail.json() })
 }
 
+// An inbox's newest letters: one account's, or ("*") every account's as one.
 #[tauri::command]
-pub async fn mail_letters(app: AppHandle, id: String, count: u32) -> Value {
-    let Some(account) = account(&shared(&app), &id) else { return json!({ "ok": false, "error": { "kind": "gone", "text": "" } }) };
-    let got = tauri::async_runtime::spawn_blocking(move || list(&account, count)).await.unwrap_or_else(|e| Err(Fail::Other(e.to_string())));
+pub async fn mail_letters(app: AppHandle, id: String, count: u32, filter: String) -> Value {
+    let sh = shared(&app);
+    let filter = Filter::parse(&filter);
+    if id == "*" {
+        let all = accounts(&sh);
+        return tauri::async_runtime::spawn_blocking(move || list_all(all, count, filter)).await.unwrap_or_else(|e| failed(Fail::Other(e.to_string())));
+    }
+    let Some(account) = account(&sh, &id) else { return json!({ "ok": false, "error": { "kind": "gone", "text": "" } }) };
+    let got = tauri::async_runtime::spawn_blocking(move || list(&account, count, filter)).await.unwrap_or_else(|e| Err(Fail::Other(e.to_string())));
     match got {
-        Ok(mut v) => {
-            v["ok"] = json!(true);
-            v
-        }
+        Ok((total, letters)) => json!({ "ok": true, "total": total, "letters": letters, "errors": [] }),
         Err(fail) => failed(fail),
     }
 }
 
-// A letter opened on the page: read whole and marked read; with what an
-// agent said of it before, if one did.
+// A letter starred, or not any more.
+#[tauri::command]
+pub async fn mail_flag(app: AppHandle, id: String, uid: u32, on: bool) -> Value {
+    let Some(account) = account(&shared(&app), &id) else { return json!({ "ok": false, "error": { "kind": "gone", "text": "" } }) };
+    let got = tauri::async_runtime::spawn_blocking(move || -> Result<(), Fail> {
+        let mut s = session(&account.server, &password_of(&account)?, CONNECT)?;
+        s.inbox(true)?;
+        s.set_flag(uid, Flag::Flagged, on)?;
+        s.logout();
+        Ok(())
+    })
+    .await
+    .unwrap_or_else(|e| Err(Fail::Other(e.to_string())));
+    match got {
+        Ok(()) => json!({ "ok": true }),
+        Err(fail) => failed(fail),
+    }
+}
+
+// A letter opened on the page: read whole and marked read; with its talk
+// with an agent, if there is one.
 #[tauri::command]
 pub async fn mail_letter(app: AppHandle, id: String, uid: u32) -> Value {
     let sh = shared(&app);
     let Some(account) = account(&sh, &id) else { return json!({ "ok": false, "error": { "kind": "gone", "text": "" } }) };
     let got = tauri::async_runtime::spawn_blocking(move || fetch(&account, uid, true)).await.unwrap_or_else(|e| Err(Fail::Other(e.to_string())));
-    let raw = match got {
-        Ok(Some(raw)) => raw,
+    let (raw, flagged) = match got {
+        Ok(Some((raw, flagged))) => (raw, flagged),
         Ok(None) => return json!({ "ok": false, "error": { "kind": "noLetter", "text": "" } }),
         Err(fail) => return failed(fail),
     };
     let Some(m) = parse(&raw) else { return json!({ "ok": false, "error": { "kind": "other", "text": "unreadable" } }) };
     let mut letter = view(&m);
     letter["uid"] = json!(uid);
-    letter["key"] = json!(agent::key(&id, uid, m.message_id()));
-    json!({ "ok": true, "letter": letter, "summary": agent::summary(&sh, &id, uid, m.message_id()) })
+    let key = agent::key(&id, uid, m.message_id());
+    letter["key"] = json!(key);
+    letter["account"] = json!(id);
+    letter["flagged"] = json!(flagged);
+    json!({ "ok": true, "letter": letter, "talk": agent::talk_view(&sh, &key) })
 }
 
 #[cfg(test)]
@@ -174,8 +259,8 @@ mod tests {
         assert_eq!(v["to"][1], json!({ "name": "Li", "address": "li@example.test" }));
         assert_eq!(v["attachments"][0]["name"], "notes.txt");
         assert_eq!(v["date"], 1_791_512_100_000i64);
-        let head = Head { uid: 4, seen: false, size: 9, received: None, header: raw.to_vec() };
-        let r = row(&head);
+        let head = Head { uid: 4, seen: false, flagged: true, size: 9, received: None, header: raw.to_vec() };
+        let r = row("a1", &head);
         assert_eq!((r["from"].as_str(), r["attached"].as_bool()), (Some("Zhang San"), Some(true)));
     }
 }

@@ -113,16 +113,19 @@
     },
     // Mail accounts (mail.rs): the server for an address, an account kept
     // once it signs in, one removed, one on or off, a server tried without
-    // signing in (Re-test); an inbox's newest
-    // letters, one letter opened (and marked read), one handed to an agent
-    // (agent claude | codex, how open | summary).
+    // signing in (Re-test); an inbox's newest letters (id "*" every
+    // account's; filter all | unseen | flagged), a star put on or off, one
+    // letter opened (and marked read), one handed to an agent (agent claude
+    // | codex, how talk | open), more asked in its talk.
     mail: {
       discover: address => invoke('mail_discover', { address: String(address || '') }),
       probe: (host, port, security) => invoke('mail_probe', { host: String(host || ''), port: String(port ?? ''), security: String(security || 'auto') }),
       save: (account, password) => invoke('mail_save', { account, password: String(password || '') }),
       remove: id => invoke('mail_remove', { id: String(id) }),
       switch: (id, on) => invoke('mail_switch', { id: String(id), on: on === true }),
-      letters: (id, count) => invoke('mail_letters', { id: String(id), count: Number(count) || 50 }),
+      letters: (id, count, filter) => invoke('mail_letters', { id: String(id), count: Number(count) || 50, filter: String(filter || 'all') }),
+      flag: (id, uid, on) => invoke('mail_flag', { id: String(id), uid: Number(uid), on: on === true }),
+      say: (key, text) => invoke('mail_say', { key: String(key), text: String(text || '') }),
       letter: (id, uid) => invoke('mail_letter', { id: String(id), uid: Number(uid) }),
       hand: (id, uid, agent, how) => invoke('mail_hand', { id: String(id), uid: Number(uid), agent: String(agent), how: String(how) }),
     },

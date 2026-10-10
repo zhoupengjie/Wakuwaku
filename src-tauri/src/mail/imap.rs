@@ -158,6 +158,8 @@ fn our_id() -> Vec<(IString<'static>, NString<'static>)> {
 pub struct Head {
     pub uid: u32,
     pub seen: bool,
+    // Starred (\Flagged).
+    pub flagged: bool,
     pub size: u32,
     // When the server got it (seconds), for letters whose Date says nothing.
     pub received: Option<i64>,
@@ -254,7 +256,12 @@ impl Session {
 
     // The unread letters' UIDs.
     pub fn unseen(&mut self) -> Result<Vec<u32>, Fail> {
-        let found = self.client.search(Vec1::from(SearchKey::Unseen), ImapMessageSearchOptions { uid: true }).map_err(fail)?;
+        self.search(SearchKey::Unseen)
+    }
+
+    // The UIDs of the letters a search key finds (unread, starred…).
+    pub fn search(&mut self, key: SearchKey<'static>) -> Result<Vec<u32>, Fail> {
+        let found = self.client.search(Vec1::from(key), ImapMessageSearchOptions { uid: true }).map_err(fail)?;
         Ok(found.into_iter().map(|n| n.get()).collect())
     }
 
@@ -279,7 +286,10 @@ impl Session {
                 for item in items {
                     match item {
                         MessageDataItem::Uid(n) => head.uid = n.get(),
-                        MessageDataItem::Flags(flags) => head.seen = flags.iter().any(|f| matches!(f, FlagFetch::Flag(Flag::Seen))),
+                        MessageDataItem::Flags(flags) => {
+                            head.seen = flags.iter().any(|f| matches!(f, FlagFetch::Flag(Flag::Seen)));
+                            head.flagged = flags.iter().any(|f| matches!(f, FlagFetch::Flag(Flag::Flagged)));
+                        }
                         MessageDataItem::Rfc822Size(n) => head.size = n,
                         MessageDataItem::InternalDate(d) => head.received = Some(d.as_ref().timestamp()),
                         MessageDataItem::BodyExt { data: NString(Some(s)), .. } => head.header = s.as_ref().to_vec(),
@@ -292,22 +302,33 @@ impl Session {
             .collect())
     }
 
-    // A letter whole, as it came, without marking it read; None when there
-    // is no such UID.
-    pub fn letter(&mut self, uid: u32) -> Result<Option<Vec<u8>>, Fail> {
+    // A letter whole, as it came, and whether it is starred, without marking
+    // it read; None when there is no such UID.
+    pub fn letter(&mut self, uid: u32) -> Result<Option<(Vec<u8>, bool)>, Fail> {
         let set = SequenceSet::try_from(uid.to_string().as_str()).map_err(|e| Fail::Other(e.to_string()))?;
-        let items = vec![MessageDataItemName::BodyExt { section: None, partial: None, peek: true }];
+        let items = vec![MessageDataItemName::Flags, MessageDataItemName::BodyExt { section: None, partial: None, peek: true }];
         let got = self.client.fetch(set, items.into(), ImapMessageFetchOptions { uid: true, ..Default::default() }).map_err(fail)?;
-        Ok(got.into_values().flatten().find_map(|item| match item {
-            MessageDataItem::BodyExt { section: None, data: NString(Some(s)), .. } => Some(s.as_ref().to_vec()),
-            _ => None,
-        }))
+        let (mut raw, mut flagged) = (None, false);
+        for item in got.into_values().flatten() {
+            match item {
+                MessageDataItem::BodyExt { section: None, data: NString(Some(s)), .. } => raw = Some(s.as_ref().to_vec()),
+                MessageDataItem::Flags(flags) => flagged = flags.iter().any(|f| matches!(f, FlagFetch::Flag(Flag::Flagged))),
+                _ => {}
+            }
+        }
+        Ok(raw.map(|r| (r, flagged)))
     }
 
     // A letter marked read (the inbox opened with write).
     pub fn mark_seen(&mut self, uid: u32) -> Result<(), Fail> {
+        self.set_flag(uid, Flag::Seen, true)
+    }
+
+    // A flag (read, starred) put on a letter or taken off (the inbox opened with write).
+    pub fn set_flag(&mut self, uid: u32, flag: Flag<'static>, on: bool) -> Result<(), Fail> {
         let set = SequenceSet::try_from(uid.to_string().as_str()).map_err(|e| Fail::Other(e.to_string()))?;
-        self.client.store(set, StoreType::Add, vec![Flag::Seen], ImapMessageStoreOptions { uid: true }).map_err(fail)?;
+        let how = if on { StoreType::Add } else { StoreType::Remove };
+        self.client.store(set, how, vec![flag], ImapMessageStoreOptions { uid: true }).map_err(fail)?;
         Ok(())
     }
 

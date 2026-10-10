@@ -55,7 +55,7 @@ pub fn snapshot(sh: &Shared) -> Value {
         "mailAgents": mail::agent::available(),
         // The models each can be asked for, with the efforts they take.
         "mailModels": mail::agent::models(),
-        "mailRuns": mail::agent::runs(sh),
+        "mailTalks": mail::agent::talks(sh),
         "waku": scripts::waku_path(sh).to_string_lossy(),
         "port": sh.port,
     })

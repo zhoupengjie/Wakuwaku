@@ -82,12 +82,12 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     }
     menu.append(&sizes)?;
 
-    for key in ["bubble", "walk", "look"] {
+    for key in ["walk", "look"] {
         menu.append(&CheckMenuItem::with_id(app, key, t(&format!("menu.{key}")), true, flag(key), None::<&str>)?)?;
     }
-    // Her home: the corner, the island, the bar or the taskbar.
+    // Her home: the island or the taskbar.
     let homes = Submenu::new(app, t("menu.home"), true)?;
-    for id in ["corner", "island", "bar", "taskbar"] {
+    for id in ["island", "taskbar"] {
         homes.append(&CheckMenuItem::with_id(app, format!("display:{id}"), t(&format!("menu.{id}")), true, home == id, None::<&str>)?)?;
     }
     menu.append(&homes)?;
@@ -112,7 +112,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
 pub fn on_menu(sh: &Arc<Shared>, id: &str) {
     match id {
         "toggle" => sh.set_hidden(sh.is_visible()),
-        "bubble" | "walk" | "look" | "dnd" => sh.change(json!({ id: !sh.flag(id) })),
+        "walk" | "look" | "dnd" => sh.change(json!({ id: !sh.flag(id) })),
         "out" => crate::set_out(sh, !sh.flag("out")),
         "corner" => crate::come_home(sh),
         "settings" => crate::island::open_settings(sh, None),

@@ -3,16 +3,14 @@
 // src/pet (her window and the island's), talking to this side through
 // src/pet/bridge.js.
 //
-// Where she is: her home (display) is a round portrait in a corner, the
-// island at the top centre, a bar along the top of the screen, or a taskbar
-// in place of Windows' own; she is in it, or out on the desktop (out). Out
-// from the corner she talks herself (bubble, panel); the island, the bar and
-// the taskbar stay up and talk for her. The settings grow out of her home;
-// with none up, one rises for them.
+// Where she is: her home (display) is the island at the top centre, or a
+// taskbar in place of Windows' own; she is in it, or out on the desktop
+// (out), and her home stays up and talks for her. The settings grow out of
+// her home; with none up, one rises for them.
 //
 //   pet.rs         her window: size, place, eyes, drags, being carried, walks
-//   island.rs      her home's window (corner, island, bar, taskbar), and the settings
-//   appbar.rs      the bar's and the taskbar's strip, kept from other windows
+//   island.rs      her home's window (island, taskbar), and the settings
+//   appbar.rs      the taskbar's strip, kept from other windows
 //   taskbar.rs     the taskbar's side of Windows: its own put away (shell.rs),
 //                  the tray taken over (systray.rs), the windows' buttons (tasks.rs),
 //                  the volume (audio.rs)
@@ -157,20 +155,12 @@ impl Shared {
         self.by_fullscreen.load(Ordering::SeqCst)
     }
 
-    // Her home: 'corner', 'island', 'bar' or 'taskbar' (island.rs).
+    // Her home: 'island' or 'taskbar' (island.rs).
     pub fn home(&self) -> &'static str {
         match self.setting("display").as_str() {
-            Some("corner") => "corner",
-            Some("bar") => "bar",
             Some("taskbar") => "taskbar",
             _ => "island",
         }
-    }
-
-    // Out from the corner, she does the talking herself (her bubble, her
-    // panel); the island and the bar talk for her when she is out.
-    pub fn she_talks(&self) -> bool {
-        self.home() == "corner" && self.flag("out")
     }
 
     pub fn own_window(&self, _win: &WebviewWindow) {
@@ -335,10 +325,9 @@ impl Shared {
         }
     }
 
-    // A chime from the window that is up, and a system notification if asked for.
+    // A chime from her home, and a system notification if asked for.
     fn alert(&self, mood: &str, project: &str) {
-        let front = if self.she_talks() { "pet" } else { "island" };
-        let _ = self.app.emit_to(front, "pet:alert", json!({ "mood": mood }));
+        let _ = self.app.emit_to("island", "pet:alert", json!({ "mood": mood }));
         let group = match mood {
             "waiting" => "waiting",
             "error" => "error",
@@ -370,7 +359,7 @@ impl Shared {
 
     pub fn change(self: &Arc<Self>, patch: Value) {
         let Value::Object(patch) = patch else { return };
-        let touches_visibility = ["dnd", "display", "out", "corner", "hideInFullscreen"].iter().any(|k| patch.contains_key(*k));
+        let touches_visibility = ["dnd", "display", "out", "hideInFullscreen"].iter().any(|k| patch.contains_key(*k));
         {
             let mut settings = self.settings.lock().unwrap();
             settings.extend(patch);
@@ -447,7 +436,7 @@ impl Shared {
 
 // --- Where she is -----------------------------------------------------------------
 
-// A new home: the corner, the island or the bar (she goes into it).
+// A new home: the island or the taskbar (she goes into it).
 pub fn set_display(sh: &Arc<Shared>, display: &str) {
     if sh.setting("display").as_str() == Some(display) && !sh.flag("out") {
         return;

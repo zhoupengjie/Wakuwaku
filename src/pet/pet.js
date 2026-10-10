@@ -8,7 +8,7 @@
 // Frames are drawn when they change, not on a fixed tick, so a pet at rest
 // costs next to nothing.
 const { CELL_W, CELL_H, CLIPS, MOOD_CLIP, REACTIONS, lookCell } = window.Sprite
-const { t, render: say } = window.I18n
+const { t } = window.I18n
 
 const COLOR = {
   idle: '#9aa4b2',
@@ -29,7 +29,7 @@ const bubble = document.getElementById('bubble')
 
 let lang = 'en'
 let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
-let config = { scale: 0.55, bubble: true, details: true, walk: true, look: true, sound: false, dnd: false }
+let config = { scale: 0.55, details: true, walk: true, look: true, sound: false, dnd: false }
 let spriteUrl = null
 // 2: the 11-row sheet; 1: the older 9-row one, without the look-around rows.
 let spriteVersion = 2
@@ -38,9 +38,8 @@ let spriteVersion = 2
 // island.js); in the island's, she is not drawn here.
 const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
 const isIsland = () => ROLE === 'island'
-// Out on the desktop, her home does the talking, unless her home is the
-// corner: out from it, she talks herself (her bubble, her panel).
-const isOutOfIsland = () => ROLE === 'pet' && !(config.display === 'corner' && config.out === true)
+// Out on the desktop she only acts: her home does the talking. Her bubble
+// speaks only while there is no pet at all, to say how to get one.
 
 let reaction = null // { clip, times, say, start }
 let dragged = null // { dir, at }
@@ -132,7 +131,7 @@ function kick() {
 
 // --- Bubble -------------------------------------------------------------------
 
-// The bubble's words: where the session is and for how long; and on a line
+// Her tooltip's words: where the session is and for how long; and on a line
 // of its own, another session that wants you, how this turn ended, or whose
 // this is (or '').
 function words() {
@@ -171,8 +170,6 @@ function fillBubble(lines, isSaying = false) {
   bubble.title = [lines.main, lines.more].filter(Boolean).join('\n')
 }
 
-let clockTimer
-
 function render() {
   const root = document.documentElement.style
   root.setProperty('--scale', config.scale)
@@ -181,7 +178,6 @@ function render() {
   root.setProperty('--sheet-h', `${spriteVersion === 2 ? 2288 : 1872}px`)
   drawn = ''
 
-  clearInterval(clockTimer)
   if (isIsland()) return
 
   // No sprite yet: say how to get one, and keep a box to right-click.
@@ -193,16 +189,9 @@ function render() {
   }
   sprite.classList.remove('empty')
 
-  if (reaction?.say) fillBubble({ main: say(lang, reaction.say) }, true)
-  else fillBubble(words())
-  bubble.classList.toggle('hidden', !config.bubble || isOutOfIsland() || (now.mood === 'idle' && !reaction?.say))
+  bubble.classList.add('hidden')
   const { main, more } = words()
   sprite.title = [main, more].filter(Boolean).join('\n')
-
-  // The running clocks in the bubble: the turn's, and the step's.
-  if (!reaction?.say && now.since && (now.mood === 'working' || now.mood === 'waiting')) {
-    clockTimer = setInterval(() => fillBubble(words()), 1000)
-  }
 }
 
 // --- Idle life: walk a little, glance around ---------------------------------------
@@ -314,17 +303,6 @@ function react({ react: name, say: text, times }) {
 }
 
 window.pet.onReact(react)
-
-// A widget asks for her attention: on her own, she waves and says it (the
-// island has it when it is up).
-window.pet.onNudge(n => {
-  if (isIsland() || isOutOfIsland()) return
-  const detailed = config.details !== false
-  const { label, value } = Widgets.words(lang, n, detailed)
-  const words = n.private && !detailed ? '' : n.words
-  // Long enough to read: six waves, about four seconds.
-  react({ react: 'wave', say: words || [label, value].filter(Boolean).join(' · '), times: 6 })
-})
 
 window.pet.onAlert(({ mood }) => chime(mood))
 

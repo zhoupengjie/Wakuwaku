@@ -215,15 +215,11 @@ pub fn create(sh: &Shared) -> tauri::Result<()> {
     Ok(())
 }
 
-// Her page has its listeners up: draw, show, and say hello if she is the
-// one talking (else her home says it).
+// Her page has its listeners up: draw and show (her home says hello).
 pub fn ready(sh: &Shared) {
     sh.log("pet: page ready");
     sh.win.lock().unwrap().ready = true;
     sh.redraw();
-    if sh.she_talks() {
-        sh.greet();
-    }
     apply_visibility(sh);
 }
 

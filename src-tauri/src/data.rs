@@ -74,10 +74,9 @@ fn defaults() -> Map<String, Value> {
         "lang": "auto",
         "pet": "claude-chan",
         "scale": 0.55,
-        // Her home: corner, island or bar; out, she is on the desktop.
-        "display": "corner",
-        "out": true,
-        "corner": "br",
+        // Her home: island or taskbar; out, she is on the desktop.
+        "display": "island",
+        "out": false,
         // The compact island's width: narrow, normal or wide (island.js WIDTHS).
         "islandWidth": "normal",
         // The taskbar's strip: mica (the desktop's picture through it, mica.js) or
@@ -87,7 +86,6 @@ fn defaults() -> Map<String, Value> {
         // middle of the screen or after her end (island.js alignApps).
         "taskbarButtons": "icons",
         "taskbarAlign": "center",
-        "bubble": true,
         "details": true,
         // Widgets (plugins in the island): which are off, their order, how
         // often the island turns to the next, whether they may open it.
@@ -121,15 +119,20 @@ pub fn load(dir: &Path) -> Map<String, Value> {
     if let Ok(Value::Object(saved)) = fs::read_to_string(dir.join("config.json")).map_err(|_| ()).and_then(|t| serde_json::from_str(&t).map_err(|_| ())) {
         settings.extend(saved);
     }
-    // The capsule of earlier versions is the island now.
-    // The pet on her own is now the corner's, with her out.
-    if settings.get("display").and_then(Value::as_str) == Some("pet") {
-        settings.insert("display".into(), json!("corner"));
-        settings.insert("out".into(), json!(true));
+    // The homes of earlier versions are the island now: the capsule, the
+    // corner and the top bar; the pet on her own too, with her out of it.
+    match settings.get("display").and_then(Value::as_str) {
+        Some("pet") => {
+            settings.insert("display".into(), json!("island"));
+            settings.insert("out".into(), json!(true));
+        }
+        Some("capsule" | "corner" | "bar") => {
+            settings.insert("display".into(), json!("island"));
+        }
+        _ => {}
     }
-    if settings.get("display").and_then(Value::as_str) == Some("capsule") {
-        settings.insert("display".into(), json!("island"));
-    }
+    settings.remove("corner");
+    settings.remove("bubble");
     adopt_monitor(&mut settings);
     settings
 }

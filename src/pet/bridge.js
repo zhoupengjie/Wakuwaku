@@ -102,6 +102,8 @@
     // Windows' look ({ mode: dark | light, accent: { base, light, dark } }),
     // for the taskbar to be as Windows' own is.
     onLook: on('taskbar:look'),
+    // Windows' Start menu opened or closed ({ open }), for the Start button.
+    onStart: on('taskbar:start'),
     settings: {
       get: () => invoke('settings_get'),
       set: patch => invoke('settings_set', { patch }),

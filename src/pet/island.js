@@ -720,14 +720,11 @@
     return faces
   }
 
-  // The settings: a cog (a ringed one read as the sun, as brightness).
+  // The settings: Windows' own settings cog, from its icon font (style.css .fi).
   function gearNode() {
     const gear = el('span', 'gear')
     gear.dataset.bar = 'settings'
-    gear.insertAdjacentHTML(
-      'afterbegin',
-      '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
-    )
+    gear.append(el('span', 'fi', ''))
     return gear
   }
 
@@ -745,8 +742,29 @@
   // clocks, the tray's icons would lose the pointer and blink.
   const startButton = el('span', 'start')
   startButton.dataset.bar = 'start'
+  // Windows 11's mark, drawn as it is: four panes in one blue running from
+  // light at the top left to deep at the bottom right (style.css .s0, .s1).
   startButton.innerHTML =
-    '<svg viewBox="0 0 16 16"><rect x="1" y="1" width="6.4" height="6.4" rx="1.2"/><rect x="8.6" y="1" width="6.4" height="6.4" rx="1.2"/><rect x="1" y="8.6" width="6.4" height="6.4" rx="1.2"/><rect x="8.6" y="8.6" width="6.4" height="6.4" rx="1.2"/></svg>'
+    '<svg viewBox="0 0 16 16"><defs><linearGradient id="start-blue" gradientUnits="userSpaceOnUse" x1="1" y1="1" x2="15" y2="15"><stop class="s0" offset="0"/><stop class="s1" offset="1"/></linearGradient></defs><g fill="url(#start-blue)"><rect x="1" y="1" width="6.65" height="6.65" rx="0.7"/><rect x="8.35" y="1" width="6.65" height="6.65" rx="0.7"/><rect x="1" y="8.35" width="6.65" height="6.65" rx="0.7"/><rect x="8.35" y="8.35" width="6.65" height="6.65" rx="0.7"/></g></svg>'
+  // As Windows 11's: its mark pressed in under the pointer and springing
+  // back; a bounce when Windows' Start menu opens by the Windows key, and
+  // lit while it is open (taskbar.rs taskbar:start). Pressed just now, the
+  // press was its bounce.
+  let startPressedAt = 0
+  startButton.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return
+    startButton.classList.add('down')
+    startPressedAt = Date.now()
+  })
+  for (const type of ['pointerup', 'pointerleave', 'pointercancel']) startButton.addEventListener(type, () => startButton.classList.remove('down'))
+  startButton.addEventListener('animationend', () => startButton.classList.remove('bounce'))
+  window.pet.onStart(({ open } = {}) => {
+    startButton.classList.toggle('open', !!open)
+    if (!open || Date.now() - startPressedAt < 800) return
+    startButton.classList.remove('bounce')
+    void startButton.offsetWidth
+    startButton.classList.add('bounce')
+  })
   const windowsBox = el('span', 'wins')
   const tagsBox = el('span', 'tags')
   const facesBox = el('span', 'faces')
@@ -823,7 +841,7 @@
   function fillTaskbar() {
     barRest.style.left = `${sizeOf('compact').width + (isCapsule() ? CAPSULE_X + 4 : 0)}px`
     if (!taskbarBuilt) {
-      barRest.replaceChildren(startButton, windowsBox, tagsBox, growNode, facesBox, trayBox, privBox, keysBox, quickBox, clockBox, taskGear, deskEdge, pop)
+      barRest.replaceChildren(glide, startButton, windowsBox, tagsBox, growNode, facesBox, trayBox, privBox, keysBox, quickBox, clockBox, taskGear, deskEdge, pop)
       taskbarBuilt = true
       trayDrawn = ''
       windowsDrawn = ''
@@ -865,8 +883,82 @@
   startButton.addEventListener('transitionend', e => {
     if (e.propertyName !== 'margin-left') return
     if (popFor) drawPop()
+    if (glideOn?.isConnected) glideTo(glideOn, true)
     requestAnimationFrame(sendTrayRects)
   })
+
+  // --- The pointer's glide --------------------------------------------------------
+
+  // Under the pointer, one highlight for all the taskbar's buttons that
+  // slides from one to the next as her island's drop moves: its leading
+  // edge first, the trailing one after, so it stretches and gathers, a
+  // little squashed on the way (style.css .hdrop). It comes and goes in
+  // place, jumps rather than slides a long way, and gives a little under a
+  // press. Not over what opens above the buttons, nor while a tray icon is
+  // being dragged.
+  const GLIDE_ON = '.start, .win, .tout .ticon, .tchev, .tpriv, .kbd .ime, .tquick, .tclock, .gear, .tag[data-jump]'
+  const GLIDE_FAR = 360
+  const glide = el('span', 'hdrop')
+  let glideOn = null
+  let glideTimer
+
+  function glideTo(node, still = false) {
+    clearTimeout(glideTimer)
+    const bar = barRest.getBoundingClientRect()
+    const r = node.getBoundingClientRect()
+    const left = r.left - bar.left
+    const right = bar.right - r.right
+    const was = glideOn && glide.classList.contains('on') ? parseFloat(glide.style.left) : null
+    glide.style.top = `${r.top - bar.top}px`
+    glide.style.height = `${r.height}px`
+    if (still || was === null || Math.abs(left - was) > GLIDE_FAR) {
+      glide.style.transition = 'none'
+      glide.style.left = `${left}px`
+      glide.style.right = `${right}px`
+      void glide.offsetWidth
+      glide.style.transition = ''
+    } else if (left !== was) {
+      const lead = left > was ? 'right' : 'left'
+      const trail = lead === 'right' ? 'left' : 'right'
+      glide.style.transition = `${lead} 0.22s cubic-bezier(0.3, 1.3, 0.5, 1), ${trail} 0.42s cubic-bezier(0.3, 1.45, 0.5, 1), opacity 0.16s ease, transform 0.3s cubic-bezier(0.3, 1.45, 0.5, 1)`
+      glide.style.left = `${left}px`
+      glide.style.right = `${right}px`
+      glide.classList.remove('squash')
+      void glide.offsetWidth
+      glide.classList.add('squash')
+    }
+    glide.classList.add('on')
+    glideOn = node
+  }
+
+  function glideOff() {
+    clearTimeout(glideTimer)
+    glideTimer = setTimeout(() => {
+      glide.classList.remove('on', 'down')
+      glideOn = null
+    }, 90)
+  }
+
+  const isGlideOn = node => node?.matches?.(GLIDE_ON) && !node.closest('.wpop, .tfly')
+  barRest.addEventListener(
+    'mouseenter',
+    e => {
+      if (!isOn() || home() !== 'taskbar' || !isGlideOn(e.target) || body.classList.contains('tray-dragging')) return
+      glideTo(e.target)
+    },
+    true,
+  )
+  barRest.addEventListener(
+    'mouseleave',
+    e => {
+      if (e.target === barRest || isGlideOn(e.target)) glideOff()
+    },
+    true,
+  )
+  barRest.addEventListener('pointerdown', e => {
+    if (e.button === 0 && glideOn && e.target.closest(GLIDE_ON) === glideOn) glide.classList.add('down')
+  })
+  window.addEventListener('pointerup', () => glide.classList.remove('down'))
   window.addEventListener('resize', () => isOn() && home() === 'taskbar' && alignApps())
 
   // A button for each program (taskbar.rs): those kept on the taskbar

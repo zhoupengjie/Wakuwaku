@@ -172,6 +172,11 @@ mod imp {
         path.rsplit('\\').next().unwrap_or(path).to_string()
     }
 
+    // Windows' Start menu, open: its window (StartMenuExperienceHost's) in front.
+    pub fn is_start(hwnd: isize) -> bool {
+        hwnd != 0 && file_name(&path_of(pid_of(hwnd as Hwnd))).eq_ignore_ascii_case("StartMenuExperienceHost.exe")
+    }
+
     // A program's name as it gives it (its file's description: "Google
     // Chrome", not chrome.exe), else its file's name without .exe.
     pub fn app_name(path: &str) -> String {
@@ -470,6 +475,9 @@ mod imp {
     pub fn in_use() -> [(&'static str, Vec<String>); 3] {
         [("mic", Vec::new()), ("cam", Vec::new()), ("loc", Vec::new())]
     }
+    pub fn is_start(_hwnd: isize) -> bool {
+        false
+    }
     pub fn file_name(path: &str) -> String {
         path.rsplit('/').next().unwrap_or(path).to_string()
     }
@@ -504,4 +512,4 @@ mod imp {
     }
 }
 
-pub use imp::{alive, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, keys, launch, list, net, press, toggle_native};
+pub use imp::{alive, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, is_start, keys, launch, list, net, press, toggle_native};

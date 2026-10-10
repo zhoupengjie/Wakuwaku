@@ -1230,13 +1230,8 @@ body {
   background: #2c2c2e;
 }
 
-#bar-rest .gear svg {
-  width: 15px;
-  height: 15px;
-  fill: none;
-  stroke: #d1d1d6;
-  stroke-width: 2;
-  stroke-linecap: round;
+#bar-rest .gear .fi {
+  font-size: 15px;
 }
 
 /* The taskbar: a strip along the bottom of the screen in place of Windows'
@@ -1402,10 +1397,8 @@ body {
   background: rgba(255, 255, 255, 0.11);
 }
 
-.home-taskbar #bar-rest .gear svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 1.6;
+.home-taskbar #bar-rest .gear .fi {
+  font-size: 16px;
 }
 
 /* Show the desktop: a sliver at the screen's right edge, its line showing
@@ -1477,7 +1470,6 @@ body {
 #bar-rest .start svg {
   width: 20px;
   height: 20px;
-  fill: #5e9bff;
 }
 
 /* Under the pointer (and the window in front): a light wash, as on the
@@ -2080,10 +2072,6 @@ body {
   color: #8a8a8a;
 }
 
-.tb-light #bar-rest .gear svg {
-  stroke: #1b1b1b;
-}
-
 .tb-light #bar-rest .start:hover,
 .tb-light #bar-rest .ticon:hover,
 .tb-light #bar-rest .tquick:hover,
@@ -2295,4 +2283,120 @@ body {
 .tb-light #bar-rest .ticon[data-mono='light'] img,
 body:not(.tb-light) #bar-rest .ticon[data-mono='dark'] img {
   filter: invert(1);
+}
+
+/* --- Start, as Windows 11's (island.js startButton) -------------------------------
+   Its mark's blue, light at the top left, deep at the bottom right (deeper
+   on the light taskbar); pressed in under the pointer and springing back;
+   bouncing once when the Start menu opens by the Windows key; lit while it
+   is open. */
+#bar-rest .start .s0 {
+  stop-color: #6ad3ff;
+}
+
+#bar-rest .start .s1 {
+  stop-color: #0b6fe0;
+}
+
+.tb-light #bar-rest .start .s0 {
+  stop-color: #2bb0f6;
+}
+
+.tb-light #bar-rest .start .s1 {
+  stop-color: #0056b8;
+}
+
+#bar-rest .start svg {
+  transition: transform 0.42s cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+
+#bar-rest .start.down svg {
+  transform: scale(0.8);
+  transition-duration: 0.08s;
+  transition-timing-function: ease-out;
+}
+
+#bar-rest .start.bounce svg {
+  animation: start-bounce 0.46s cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+
+@keyframes start-bounce {
+  30% {
+    transform: scale(0.78);
+  }
+}
+
+#bar-rest .start.open {
+  background: rgba(255, 255, 255, 0.17);
+}
+
+.tb-light #bar-rest .start.open {
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* --- The pointer's glide (island.js glideTo) --------------------------------------
+   One highlight under the pointer for all the taskbar's buttons, behind
+   them, sliding from one to the next with its edges at their own pace;
+   squashed a little on the way, giving a little under a press. Their own
+   hover colours give way to it (the window in front, and Start while its
+   menu is open, keep theirs). */
+.home-taskbar #bar-rest .hdrop {
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 100%;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.11);
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity 0.16s ease,
+    transform 0.3s cubic-bezier(0.3, 1.45, 0.5, 1);
+  pointer-events: none;
+}
+
+.home-taskbar #bar-rest .hdrop.on {
+  opacity: 1;
+  transform: none;
+}
+
+.home-taskbar #bar-rest .hdrop.on.down {
+  transform: scale(0.94);
+}
+
+.home-taskbar #bar-rest .hdrop.squash {
+  animation: drop-squash 0.42s ease;
+}
+
+@keyframes drop-squash {
+  30% {
+    scale: 1.03 0.82;
+  }
+  70% {
+    scale: 0.99 1.04;
+  }
+}
+
+.tb-light.home-taskbar #bar-rest .hdrop {
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.tray-dragging #bar-rest .hdrop {
+  opacity: 0;
+}
+
+.home-taskbar #bar-rest .start:not(.open):hover,
+.home-taskbar #bar-rest .win:not(.front):hover,
+.home-taskbar #bar-rest .tout .ticon:hover,
+.home-taskbar #bar-rest .tchev:hover,
+.home-taskbar #bar-rest .tpriv:hover,
+.home-taskbar #bar-rest .kbd .ime:hover,
+.home-taskbar #bar-rest .tquick:hover,
+.home-taskbar #bar-rest .tclock:hover,
+.home-taskbar #bar-rest .gear:hover,
+.home-taskbar #bar-rest .tag[data-jump]:hover {
+  background: transparent;
+  box-shadow: none;
 }

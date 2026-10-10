@@ -265,6 +265,7 @@ mod imp {
     const SPI_SETWORKAREA: u32 = 0x2F;
 
     const EVENT_OBJECT_SHOW: u32 = 0x8002;
+    const EVENT_SYSTEM_FOREGROUND: u32 = 0x0003;
     // What changes the buttons: a window made, shown, hidden, gone (0x8001
     // to 0x8003), renamed, cloaked or not (another desktop), brought to the
     // front, minimized or restored.
@@ -339,6 +340,8 @@ mod imp {
     // The live pictures' window's ground (COLORREF), as set last (thumbs_ground).
     static THUMBS_GROUND: AtomicU32 = AtomicU32::new(0x001E_1C1C);
     static LOOK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    // Windows' Start menu open, as told to the page last (start_seen).
+    static START_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -463,6 +466,7 @@ mod imp {
         *SENT_WINDOWS.lock().unwrap() = Value::Null;
         *PAPER.lock().unwrap() = Value::Null;
         *LOOK.lock().unwrap() = Value::Null;
+        START_OPEN.store(false, Ordering::SeqCst);
         *STRIP.lock().unwrap() = None;
         ORDER.lock().unwrap().clear();
         FLASHING.lock().unwrap().clear();
@@ -1068,7 +1072,22 @@ mod imp {
                 return;
             }
         }
+        if event == EVENT_SYSTEM_FOREGROUND {
+            start_seen(tasks::is_start(hwnd as isize));
+        }
         wake_tasks();
+    }
+
+    // Windows' Start menu opened or closed (its window came to the front,
+    // or another did): told to the page at once (taskbar:start), for the
+    // Start button to do as Windows' own does.
+    fn start_seen(open: bool) {
+        if START_OPEN.swap(open, Ordering::SeqCst) == open {
+            return;
+        }
+        if let Some(sh) = sh() {
+            let _ = sh.app.emit_to("island", "taskbar:start", json!({ "open": open }));
+        }
     }
 
     // The shell hook: a window flashing for attention (until it is in

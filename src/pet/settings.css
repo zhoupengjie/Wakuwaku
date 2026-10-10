@@ -357,6 +357,32 @@
   padding: 10px 14px;
 }
 
+/* A row whose control goes under its title: Windows' accent colours, the
+   one in use ringed in the text's colour (seen on dark and light alike). */
+#island-settings .r.col {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+#island-settings .accents {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 7px;
+}
+
+#island-settings .acc {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35);
+  cursor: pointer;
+}
+
+#island-settings .acc.on {
+  box-shadow:
+    0 0 0 2px var(--g1),
+    0 0 0 4px currentColor;
+}
+
 /* A widget's icon in its row. */
 #island-settings .wi {
   flex: none;

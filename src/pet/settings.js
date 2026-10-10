@@ -3,7 +3,8 @@
 // close them. Five pages:
 //   now       the sessions (a click on one goes to its window), and four quick switches
 //   pets      the pets downloaded, a download by link or id, the gallery
-//   look      her home (corner, island, bar), size, bubble, strolls, eyes, language
+//   look      her home (corner, island, bar, taskbar), size, bubble, strolls, eyes,
+//             language; Windows' own mode and accent colour
 //   alerts    how long endings stay, notifications, sound, prompts, quiet
 //   widgets   plugins: the built-in ones, those she runs for you (a switch, their settings folded under), their order, turns, nudges, waku, and how to write one
 //   mail      mail accounts, and setting one up as Thunderbird does: an address and a password, the server found or typed
@@ -274,7 +275,28 @@
         ${row(esc(T('s.walk')), esc(T('s.walkNote')), sw('walk', s.walk))}
         ${row(esc(T('s.look')), '', sw('look', s.look))}
       </div>
-      ${sec(T('s.general'))}<div class="grp">${row(esc(T('home.language')), '', seg('lang', [['auto', T('settings.languageAuto')], ['zh', '中文'], ['en', 'EN']], s.lang))}</div>`
+      ${sec(T('s.general'))}<div class="grp">${row(esc(T('home.language')), '', seg('lang', [['auto', T('settings.languageAuto')], ['zh', '中文'], ['en', 'EN']], s.lang))}</div>
+      ${pageWindows()}`
+  }
+
+  // Windows' own mode and accent colour, set as Settings → Personalization →
+  // Colors sets them (theme.rs): its 48 colours to pick from.
+  const ACCENTS = [
+    '#ffb900', '#ff8c00', '#f7630c', '#ca5010', '#da3b01', '#ef6950', '#d13438', '#ff4343',
+    '#e74856', '#e81123', '#ea005e', '#c30052', '#e3008c', '#bf0077', '#c239b3', '#9a0089',
+    '#0078d7', '#0063b1', '#8e8cd8', '#6b69d6', '#8764b8', '#744da9', '#b146c2', '#881798',
+    '#0099bc', '#2d7d9a', '#00b7c3', '#038387', '#00b294', '#018574', '#00cc6a', '#10893e',
+    '#7a7574', '#5d5a58', '#68768a', '#515c6b', '#567c73', '#486860', '#498205', '#107c10',
+    '#767676', '#4c4a48', '#69797e', '#4a5459', '#647c64', '#525e54', '#847545', '#7e735f',
+  ]
+  function pageWindows() {
+    const look = snap.winLook || {}
+    const accent = String(look.accent || '').toLowerCase()
+    const swatches = ACCENTS.map(c => `<span class="acc${c === accent ? ' on' : ''}" data-accent="${c}" style="background:${c}" title="${c}"></span>`).join('')
+    return `${sec(T('s.windows'))}<div class="grp">
+        ${row(esc(T('s.winMode')), esc(T('s.winModeNote')), seg('winMode', [['light', T('s.winMode.light')], ['dark', T('s.winMode.dark')]], look.light ? 'light' : 'dark'))}
+        <div class="r col"><div>${esc(T('s.winAccent'))}</div><div class="accents">${swatches}</div></div>
+      </div>`
   }
 
   function pageAlerts() {
@@ -1180,6 +1202,10 @@
     if (option) {
       const key = option.parentElement.dataset.seg
       const raw = option.dataset.value
+      if (key === 'winMode') {
+        if ((raw === 'light') === !!snap.winLook?.light) return
+        return window.pet.settings.winLook({ light: raw === 'light' }).then(got => ((snap = got), draw()))
+      }
       if (key === 'gallery') {
         if (gallery.sort === raw) return
         gallery.sort = raw
@@ -1202,6 +1228,8 @@
     }
     const mode = at('[data-mode]')
     if (mode) return mode.dataset.mode !== s.display && patch({ display: mode.dataset.mode })
+    const accent = at('[data-accent]')
+    if (accent) return window.pet.settings.winLook({ accent: accent.dataset.accent }).then(got => ((snap = got), draw()))
     const use = at('[data-use]')
     if (use) return patch({ pet: use.dataset.use })
     if (at('[data-fetch]')) {

@@ -1,0 +1,209 @@
+// Windows' own light or dark mode and accent colour, set from the settings
+// (settings.rs settings_win_look), as Settings → Personalization → Colors
+// sets them. The taskbar then follows (wallpaper.rs look, re-read on the
+// change Windows announces).
+//
+// The mode: Themes\Personalize's SystemUsesLightTheme (Windows: the taskbar,
+// Start) and AppsUseLightTheme (the programs), then "ImmersiveColorSet"
+// announced to every window. The accent: Windows' own call for it
+// (uxtheme's SetUserColorPreference, unnamed, ordinal 122, whose reading
+// twin, 120, gives Explorer\Accent's StartColorMenu and AccentColorMenu),
+// which works out the shades the rest of Windows uses. Should the shades
+// not follow, they are worked out here (palette) and written as Windows
+// keeps them.
+
+// Lighter and darker shades of a colour, as Windows keeps its accent's
+// (Explorer\Accent's AccentPalette, wallpaper.rs accent_of): Light3, Light2,
+// Light1, the colour, Dark1, Dark2, Dark3, and an eighth Windows keeps
+// there (an orange of its own), each red, green, blue and a zero.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn palette(rgb: [u8; 3]) -> [u8; 32] {
+    let (h, s, l) = to_hsl(rgb);
+    let shades = [l + (1.0 - l) * 0.62, l + (1.0 - l) * 0.38, l + (1.0 - l) * 0.14, l, l * 0.86, l * 0.6, l * 0.34];
+    let mut out = [0u8; 32];
+    for (i, l) in shades.iter().enumerate() {
+        let c = if i == 3 { rgb } else { from_hsl(h, s, l.clamp(0.0, 1.0)) };
+        out[i * 4..i * 4 + 3].copy_from_slice(&c);
+    }
+    out[28..31].copy_from_slice(&[0xF7, 0x63, 0x0C]);
+    out
+}
+
+fn to_hsl([r, g, b]: [u8; 3]) -> (f64, f64, f64) {
+    let (r, g, b) = (r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0);
+    let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+    let l = (max + min) / 2.0;
+    if max == min {
+        return (0.0, 0.0, l);
+    }
+    let d = max - min;
+    let s = if l > 0.5 { d / (2.0 - max - min) } else { d / (max + min) };
+    let h = if max == r { (g - b) / d + if g < b { 6.0 } else { 0.0 } } else if max == g { (b - r) / d + 2.0 } else { (r - g) / d + 4.0 };
+    (h / 6.0, s, l)
+}
+
+fn from_hsl(h: f64, s: f64, l: f64) -> [u8; 3] {
+    if s == 0.0 {
+        let v = (l * 255.0).round() as u8;
+        return [v, v, v];
+    }
+    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let p = 2.0 * l - q;
+    let hue = |t: f64| {
+        let t = t.rem_euclid(1.0);
+        let v = if t < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * t
+        } else if t < 0.5 {
+            q
+        } else if t < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - t) * 6.0
+        } else {
+            p
+        };
+        (v * 255.0).round().clamp(0.0, 255.0) as u8
+    };
+    [hue(h + 1.0 / 3.0), hue(h), hue(h - 1.0 / 3.0)]
+}
+
+// "#rrggbb" to its bytes.
+pub fn parse(hex: &str) -> Option<[u8; 3]> {
+    let hex = hex.strip_prefix('#')?;
+    if hex.len() != 6 {
+        return None;
+    }
+    let v = u32::from_str_radix(hex, 16).ok()?;
+    Some([(v >> 16) as u8, (v >> 8) as u8, v as u8])
+}
+
+#[cfg(windows)]
+mod imp {
+    use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
+    use winreg::{RegKey, RegValue};
+
+    // Its two colours, 0x00bbggrr each (the top byte as Windows keeps it, 0xff).
+    #[repr(C)]
+    struct ColorPreference {
+        start: u32,
+        accent: u32,
+    }
+
+    type SetUserColorPreference = extern "system" fn(*const ColorPreference, i32) -> i32;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn LoadLibraryW(name: *const u16) -> isize;
+        fn GetProcAddress(module: isize, name: *const u8) -> *const ();
+    }
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn SendMessageTimeoutW(hwnd: *mut std::ffi::c_void, msg: u32, wparam: usize, lparam: isize, flags: u32, ms: u32, result: *mut usize) -> isize;
+    }
+
+    // uxtheme's export 122, which has no name; None should it be missing.
+    fn set_user_color_preference() -> Option<SetUserColorPreference> {
+        let name: Vec<u16> = "uxtheme.dll".encode_utf16().chain(std::iter::once(0)).collect();
+        // SAFETY: a system library (loaded already in any program with
+        // windows), and an export asked for by its number, as Windows allows.
+        unsafe {
+            let module = LoadLibraryW(name.as_ptr());
+            if module == 0 {
+                return None;
+            }
+            let f = GetProcAddress(module, 122usize as *const u8);
+            (!f.is_null()).then(|| std::mem::transmute::<*const (), SetUserColorPreference>(f))
+        }
+    }
+
+    const HWND_BROADCAST: isize = 0xffff;
+    const WM_SETTINGCHANGE: u32 = 0x001A;
+    const SMTO_ABORTIFHUNG: u32 = 0x2;
+
+    // Every window told the colours changed, as Settings tells them.
+    fn announce() {
+        let what: Vec<u16> = "ImmersiveColorSet".encode_utf16().chain(std::iter::once(0)).collect();
+        let mut answer = 0usize;
+        // SAFETY: a string of our own, alive for the call.
+        unsafe { SendMessageTimeoutW(HWND_BROADCAST as *mut std::ffi::c_void, WM_SETTINGCHANGE, 0, what.as_ptr() as isize, SMTO_ABORTIFHUNG, 200, &mut answer) };
+    }
+
+    pub fn set_mode(light: bool) -> bool {
+        let Ok((key, _)) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") else { return false };
+        let v = light as u32;
+        let ok = key.set_value("SystemUsesLightTheme", &v).is_ok() && key.set_value("AppsUseLightTheme", &v).is_ok();
+        announce();
+        ok
+    }
+
+    fn abgr([r, g, b]: [u8; 3]) -> u32 {
+        0xff00_0000 | (b as u32) << 16 | (g as u32) << 8 | r as u32
+    }
+
+    pub fn set_accent(rgb: [u8; 3]) -> bool {
+        let shades = super::palette(rgb);
+        let shade = |i: usize| [shades[i * 4], shades[i * 4 + 1], shades[i * 4 + 2]];
+        // Not from the desktop's picture any more: this colour.
+        if let Ok(desktop) = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(r"Control Panel\Desktop", KEY_SET_VALUE) {
+            let _ = desktop.set_value("AutoColorization", &"0");
+        }
+        // Start's colour a shade darker than the accent, as Windows pairs them.
+        let pref = ColorPreference { start: abgr(shade(5)), accent: abgr(rgb) };
+        let set = set_user_color_preference().is_some_and(|f| f(&pref, 1) >= 0);
+        // Its shades as Windows keeps them, when they did not follow.
+        let user = RegKey::predef(HKEY_CURRENT_USER);
+        let followed = user
+            .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent")
+            .ok()
+            .and_then(|k| k.get_raw_value("AccentPalette").ok())
+            .is_some_and(|v| v.bytes.get(12..15) == Some(&rgb[..]));
+        if !followed {
+            if let Ok((accent, _)) = user.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent") {
+                let _ = accent.set_raw_value("AccentPalette", &RegValue { bytes: shades.to_vec().into(), vtype: winreg::enums::RegType::REG_BINARY });
+                let _ = accent.set_value("AccentColorMenu", &abgr(shade(4)));
+                let _ = accent.set_value("StartColorMenu", &abgr(shade(5)));
+            }
+            if let Ok((dwm, _)) = user.create_subkey(r"Software\Microsoft\Windows\DWM") {
+                let _ = dwm.set_value("AccentColor", &abgr(shade(4)));
+                let [r, g, b] = shade(4);
+                let _ = dwm.set_value("ColorizationColor", &(0xc400_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32));
+            }
+        }
+        announce();
+        set || !followed
+    }
+}
+
+#[cfg(not(windows))]
+mod imp {
+    pub fn set_mode(_light: bool) -> bool {
+        false
+    }
+    pub fn set_accent(_rgb: [u8; 3]) -> bool {
+        false
+    }
+}
+
+pub use imp::{set_accent, set_mode};
+
+#[cfg(test)]
+mod tests {
+    use super::{palette, parse};
+
+    #[test]
+    fn palette_keeps_the_colour_in_the_middle_and_shades_round_it() {
+        let rgb = parse("#0078d7").unwrap();
+        let p = palette(rgb);
+        assert_eq!(&p[12..15], &rgb);
+        let lum = |i: usize| p[i * 4] as u32 * 299 + p[i * 4 + 1] as u32 * 587 + p[i * 4 + 2] as u32 * 114;
+        // Lightest first, darkest last.
+        assert!((0..6).all(|i| lum(i) > lum(i + 1)));
+        assert_eq!(&p[28..31], &[0xF7, 0x63, 0x0C]);
+    }
+
+    #[test]
+    fn parse_takes_only_six_hex_digits() {
+        assert_eq!(parse("#ff8c00"), Some([0xff, 0x8c, 0x00]));
+        assert_eq!(parse("ff8c00"), None);
+        assert_eq!(parse("#fff"), None);
+    }
+}

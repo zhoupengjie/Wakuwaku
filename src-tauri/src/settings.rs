@@ -20,6 +20,7 @@ pub fn snapshot(sh: &Shared) -> Value {
         let pet = sh.pet.lock().unwrap();
         (pet.get(now_ms()), pet.list())
     };
+    let (win_light, win_accent) = crate::wallpaper::look();
     json!({
         "settings": Value::Object(sh.settings.lock().unwrap().clone()),
         "lang": sh.lang(),
@@ -43,6 +44,8 @@ pub fn snapshot(sh: &Shared) -> Value {
             "async": connection::codex_runs_async(),
         },
         "loginAtStart": connection::is_open_at_login(),
+        // Windows' own mode and accent colour (settings_win_look sets them).
+        "winLook": { "light": win_light, "accent": win_accent.map(|a| a.base) },
         "version": sh.app.package_info().version.to_string(),
         "fullscreenAvailable": fullscreen::AVAILABLE,
         "widgets": sh.widgets_view(),
@@ -165,6 +168,22 @@ pub async fn settings_closed(app: AppHandle, window: WebviewWindow) {
 pub async fn settings_show_pet(app: AppHandle, on: bool) -> Value {
     let sh = shared(&app);
     sh.set_hidden(!on);
+    snapshot(&sh)
+}
+
+// Windows' own light or dark mode, or its accent colour ("#rrggbb"), set
+// as Settings → Personalization → Colors sets them (theme.rs).
+#[tauri::command]
+pub async fn settings_win_look(app: AppHandle, light: Option<bool>, accent: Option<String>) -> Value {
+    let sh = shared(&app);
+    if let Some(light) = light {
+        let ok = crate::theme::set_mode(light);
+        sh.log(&format!("settings: Windows' mode set {}: {ok}", if light { "light" } else { "dark" }));
+    }
+    if let Some(rgb) = accent.as_deref().and_then(crate::theme::parse) {
+        let ok = crate::theme::set_accent(rgb);
+        sh.log(&format!("settings: Windows' accent set {}: {ok}", accent.unwrap_or_default()));
+    }
     snapshot(&sh)
 }
 

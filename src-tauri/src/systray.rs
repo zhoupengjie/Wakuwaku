@@ -85,8 +85,9 @@ mod imp {
     }
 
     // What Shell_NotifyIconGetRect hands the tray (asked twice: message 1
-    // for the left and top, 2 for the right and bottom). The window in 64
-    // bits here, whoever asks.
+    // for the left and top, 2 for the right and bottom): 40 bytes, the window
+    // in 32 bits (seen 2026-10-10: 23 34 75 34 | 02 00 00 00 | 20 00 00 00 |
+    // 00 00 00 00 | window | id | guid).
     #[repr(C)]
     #[derive(Clone, Copy)]
     struct RectQuestion {
@@ -94,7 +95,7 @@ mod imp {
         message: u32,
         size: u32,
         padding: u32,
-        hwnd: u64,
+        hwnd: u32,
         id: u32,
         guid: [u8; 16],
     }
@@ -135,6 +136,7 @@ mod imp {
         fn CopyIcon(icon: isize) -> isize;
         fn DestroyIcon(icon: isize) -> i32;
         fn AllowSetForegroundWindow(pid: u32) -> i32;
+        fn SetForegroundWindow(hwnd: Hwnd) -> i32;
     }
 
     #[link(name = "kernel32")]
@@ -403,7 +405,7 @@ mod imp {
     // packed as two 16-bit numbers. None for an icon not shown here.
     fn answer_rect(cds: &CopyData) -> Option<isize> {
         let n = (cds.size as usize).min(std::mem::size_of::<RectQuestion>());
-        if cds.ptr.is_null() || n < 28 {
+        if cds.ptr.is_null() || n < 24 {
             return None;
         }
         if RAW_NOTED.fetch_add(1, Ordering::SeqCst) < 2 {
@@ -419,7 +421,13 @@ mod imp {
         }
         let icons = ICONS.lock().unwrap();
         let by_guid = q.guid != [0; 16];
-        let icon = icons.iter().find(|i| if by_guid { i.guid == Some(q.guid) } else { i.hwnd as u64 == q.hwnd & 0xffff_ffff && i.id == q.id })?;
+        let icon = icons.iter().find(|i| if by_guid { i.guid == Some(q.guid) } else { i.hwnd == q.hwnd && i.id == q.id });
+        let Some(icon) = icon else {
+            if RAW_NOTED.fetch_add(1, Ordering::SeqCst) < 6 {
+                note(format!("tray: where-is for an icon not here: window {:#x} id {}", q.hwnd, q.id));
+            }
+            return None;
+        };
         let rects = RECTS.lock().unwrap();
         let (_, (l, t, r, b)) = rects.iter().find(|(k, _)| *k == icon.key)?;
         let (x, y) = if q.message == 2 { (*r, *b) } else { (*l, *t) };
@@ -642,11 +650,16 @@ mod imp {
             // SAFETY: the program's window and the message it asked for; no pointers.
             unsafe { SendNotifyMessageW(hwnd_of(i.hwnd), i.callback, w, l) };
         };
-        // What opens may come to the front (a menu has to, to close again).
+        // The program's window put in front, as the taskbar does: a menu
+        // opened while its program is not in front does not close on a press
+        // elsewhere, and some do not bring themselves there (WeChat's,
+        // Voicemeeter's). It may come to the front after, too.
         let allow = || {
-            // SAFETY: a plain call; it fails unless we may set the front ourselves.
-            if unsafe { AllowSetForegroundWindow(i.pid) } == 0 {
-                note(format!("tray: {} could not be let come to the front", i.exe));
+            // SAFETY: plain calls; they fail unless we may set the front ourselves.
+            let allowed = unsafe { AllowSetForegroundWindow(i.pid) } != 0;
+            let put = unsafe { SetForegroundWindow(hwnd_of(i.hwnd)) } != 0;
+            if !allowed || !put {
+                note(format!("tray: {} not put in front (let: {allowed}, put: {put})", i.exe));
             }
         };
         // Some open what they open on the press itself (Electron's), not on letting go.
@@ -699,6 +712,7 @@ mod imp {
             // NOTIFYICONDATAW in its 32-bit form, and SHELLTRAYDATA around it.
             assert_eq!(std::mem::size_of::<super::IconData>(), 956);
             assert_eq!(std::mem::size_of::<super::TrayData>(), 964);
+            assert_eq!(std::mem::size_of::<super::RectQuestion>(), 40);
         }
     }
 }

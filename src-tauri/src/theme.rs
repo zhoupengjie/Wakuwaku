@@ -12,7 +12,9 @@
 // take it (AccentColorMenu, the colour picked, unchanged), the shades are
 // worked out here (palette) and written as Windows keeps them. The windows'
 // frames' colour is DWM's, kept in its memory and written from there over
-// the registry: set through DWM (dwmapi's unnamed 131, read back by 127).
+// the registry: written to the registry before Windows' call (which reads
+// it there for DWM a moment later), then looked at in DWM (dwmapi's
+// unnamed 127) once Windows is done, and set through DWM (131) if it is not.
 
 // Lighter and darker shades of a colour, as Windows keeps its accent's
 // (Explorer\Accent's AccentPalette, wallpaper.rs accent_of): Light3, Light2,
@@ -203,14 +205,39 @@ mod imp {
         Some(format!("#{:02x}{:02x}{:02x}", v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff))
     }
 
-    // What came of it, for the log.
-    pub fn set_accent(rgb: [u8; 3]) -> String {
+    // The registry's DWM colours (its frames' and their afterglow, its
+    // accent), and its frames' as read there.
+    fn write_dwm_registry(rgb: [u8; 3], argb: u32) {
+        if let Ok((dwm, _)) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(r"Software\Microsoft\Windows\DWM") {
+            let _ = dwm.set_value("AccentColor", &abgr(rgb));
+            let _ = dwm.set_value("ColorizationColor", &argb);
+            let _ = dwm.set_value("ColorizationAfterglow", &argb);
+        }
+    }
+
+    fn dwm_registry() -> Option<u32> {
+        RegKey::predef(HKEY_CURRENT_USER).open_subkey(r"Software\Microsoft\Windows\DWM").ok()?.get_value("ColorizationColor").ok()
+    }
+
+    fn hex(c: Option<u32>) -> String {
+        c.map_or("none".to_string(), |c| format!("{c:#010x}"))
+    }
+
+    // What came of it, for the log; what came of the frames' colour a moment
+    // later told to `later`.
+    pub fn set_accent(rgb: [u8; 3], later: impl Fn(String) + Send + 'static) -> String {
         let shades = super::palette(rgb);
         let shade = |i: usize| [shades[i * 4], shades[i * 4 + 1], shades[i * 4 + 2]];
+        let [r, g, b] = rgb;
+        let argb = 0xc400_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32;
         // Not from the desktop's picture any more: this colour.
         if let Ok(desktop) = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(r"Control Panel\Desktop", KEY_SET_VALUE) {
             let _ = desktop.set_value("AutoColorization", &"0");
         }
+        // The windows' frames' colour first, where Windows' call goes on to
+        // read it for DWM, a moment after it returns: left as it was, DWM
+        // ended on the colour picked before (2026-10-10), every time.
+        write_dwm_registry(rgb, argb);
         // Start's colour a shade darker than the accent, as Windows pairs them.
         let pref = ColorPreference { start: abgr(shade(5)), accent: abgr(rgb) };
         let set = set_user_color_preference().is_some_and(|f| f(&pref, 1) >= 0);
@@ -226,31 +253,32 @@ mod imp {
                 std::thread::sleep(std::time::Duration::from_millis(30));
             }
         }
-        let user = RegKey::predef(HKEY_CURRENT_USER);
         if !taken {
-            if let Ok((accent, _)) = user.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent") {
+            if let Ok((accent, _)) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent") {
                 let _ = accent.set_raw_value("AccentPalette", &RegValue { bytes: shades.to_vec().into(), vtype: winreg::enums::RegType::REG_BINARY });
                 let _ = accent.set_value("AccentColorMenu", &abgr(rgb));
                 let _ = accent.set_value("StartColorMenu", &abgr(shade(5)));
             }
+            // Told round only when written here: Windows' call tells it itself.
+            announce();
         }
-        announce();
-        // The windows' frames' colour, which Windows' call can leave as it
-        // was: DWM keeps it in memory and writes its own over the registry
-        // (an orange came back after blue was written there, 2026-10-10), so
-        // it is set through DWM first. Nor does DWM write its new one down
-        // soon (the orange stayed there after it took blue): the registry's
-        // then, for the next sign-in, which DWM no longer writes over.
-        let [r, g, b] = rgb;
-        let argb = 0xc400_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32;
-        let frames = set_colorization(argb);
-        if let Ok((dwm, _)) = user.create_subkey(r"Software\Microsoft\Windows\DWM") {
-            let _ = dwm.set_value("AccentColor", &abgr(rgb));
-            let _ = dwm.set_value("ColorizationColor", &argb);
-            let _ = dwm.set_value("ColorizationAfterglow", &argb);
-        }
-        let frames = frames.map_or("none".to_string(), |c| format!("{c:#010x}"));
-        format!("called {set}, taken by Windows {taken}; frames (DWM) now {frames}, wanted {argb:#010x}")
+        let first = colorization().map(|c| c.color);
+        // DWM's, once Windows has done with it (it hands DWM the colour a
+        // while after): looked at again, and set through DWM should it be
+        // another, the registry's with it; looked at once more.
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(1200));
+            let seen = colorization().map(|c| c.color);
+            let mut note = format!("frames (DWM) 1.2 s on {}", hex(seen));
+            if seen != Some(argb) {
+                let _ = set_colorization(argb);
+                write_dwm_registry(rgb, argb);
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+                note += &format!(", set again, 1 s on {}", hex(colorization().map(|c| c.color)));
+            }
+            later(format!("{note}; registry's {}; wanted {argb:#010x}", hex(dwm_registry())));
+        });
+        format!("called {set}, taken by Windows {taken}; frames (DWM) right after {}, wanted {argb:#010x}", hex(first))
     }
 }
 
@@ -262,7 +290,7 @@ mod imp {
     pub fn current_accent() -> Option<String> {
         None
     }
-    pub fn set_accent(_rgb: [u8; 3]) -> String {
+    pub fn set_accent(_rgb: [u8; 3], _later: impl Fn(String) + Send + 'static) -> String {
         String::new()
     }
 }

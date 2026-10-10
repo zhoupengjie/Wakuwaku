@@ -159,20 +159,33 @@ mod imp {
         let pref = ColorPreference { start: abgr(shade(5)), accent: abgr(rgb) };
         let set = set_user_color_preference().is_some_and(|f| f(&pref, 1) >= 0);
         // Taken by Windows (its picked colour now this one, its shades worked
-        // out by it); else written here as Windows keeps them.
-        let taken = set && current_accent() == Some(format!("#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2]));
+        // out by it), which writes it down a moment after; else written here
+        // as Windows keeps them.
+        let want = format!("#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2]);
+        let asked = std::time::Instant::now();
+        let mut taken = false;
+        while set && !taken && asked.elapsed() < std::time::Duration::from_millis(600) {
+            taken = current_accent().as_deref() == Some(want.as_str());
+            if !taken {
+                std::thread::sleep(std::time::Duration::from_millis(30));
+            }
+        }
+        let user = RegKey::predef(HKEY_CURRENT_USER);
         if !taken {
-            let user = RegKey::predef(HKEY_CURRENT_USER);
             if let Ok((accent, _)) = user.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent") {
                 let _ = accent.set_raw_value("AccentPalette", &RegValue { bytes: shades.to_vec().into(), vtype: winreg::enums::RegType::REG_BINARY });
                 let _ = accent.set_value("AccentColorMenu", &abgr(rgb));
                 let _ = accent.set_value("StartColorMenu", &abgr(shade(5)));
             }
-            if let Ok((dwm, _)) = user.create_subkey(r"Software\Microsoft\Windows\DWM") {
-                let _ = dwm.set_value("AccentColor", &abgr(rgb));
-                let [r, g, b] = rgb;
-                let _ = dwm.set_value("ColorizationColor", &(0xc400_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32));
-            }
+        }
+        // The windows' frames' colour, which Windows' call leaves as it was
+        // (an orange stayed after blue was picked again): this one, either way.
+        if let Ok((dwm, _)) = user.create_subkey(r"Software\Microsoft\Windows\DWM") {
+            let [r, g, b] = rgb;
+            let argb = 0xc400_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32;
+            let _ = dwm.set_value("AccentColor", &abgr(rgb));
+            let _ = dwm.set_value("ColorizationColor", &argb);
+            let _ = dwm.set_value("ColorizationAfterglow", &argb);
         }
         announce();
         true

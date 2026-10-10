@@ -45,7 +45,7 @@ pub fn snapshot(sh: &Shared) -> Value {
         },
         "loginAtStart": connection::is_open_at_login(),
         // Windows' own mode and accent colour (settings_win_look sets them).
-        "winLook": { "light": win_light, "accent": win_accent.map(|a| a.base) },
+        "winLook": { "light": win_light, "accent": crate::theme::current_accent().or(win_accent.map(|a| a.base)) },
         "version": sh.app.package_info().version.to_string(),
         "fullscreenAvailable": fullscreen::AVAILABLE,
         "widgets": sh.widgets_view(),

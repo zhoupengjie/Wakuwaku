@@ -292,7 +292,9 @@
   function pageWindows() {
     const look = snap.winLook || {}
     const accent = String(look.accent || '').toLowerCase()
-    const swatches = ACCENTS.map(c => `<span class="acc${c === accent ? ' on' : ''}" data-accent="${c}" style="background:${c}" title="${c}"></span>`).join('')
+    // One picked outside these (its own colour in Windows' settings): last, ringed.
+    const colours = /^#[0-9a-f]{6}$/.test(accent) && !ACCENTS.includes(accent) ? [...ACCENTS, accent] : ACCENTS
+    const swatches = colours.map(c => `<span class="acc${c === accent ? ' on' : ''}" data-accent="${c}" style="background:${c}" title="${c}"></span>`).join('')
     return `${sec(T('s.windows'))}<div class="grp">
         ${row(esc(T('s.winMode')), esc(T('s.winModeNote')), seg('winMode', [['light', T('s.winMode.light')], ['dark', T('s.winMode.dark')]], look.light ? 'light' : 'dark'))}
         <div class="r col"><div>${esc(T('s.winAccent'))}</div><div class="accents">${swatches}</div></div>

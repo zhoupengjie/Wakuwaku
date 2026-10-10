@@ -8,9 +8,9 @@
 // announced to every window. The accent: Windows' own call for it
 // (uxtheme's SetUserColorPreference, unnamed, ordinal 122, whose reading
 // twin, 120, gives Explorer\Accent's StartColorMenu and AccentColorMenu),
-// which works out the shades the rest of Windows uses. Should the shades
-// not follow, they are worked out here (palette) and written as Windows
-// keeps them.
+// which works out the shades the rest of Windows uses. Should Windows not
+// take it (AccentColorMenu, the colour picked, unchanged), the shades are
+// worked out here (palette) and written as Windows keeps them.
 
 // Lighter and darker shades of a colour, as Windows keeps its accent's
 // (Explorer\Accent's AccentPalette, wallpaper.rs accent_of): Light3, Light2,
@@ -139,6 +139,15 @@ mod imp {
         0xff00_0000 | (b as u32) << 16 | (g as u32) << 8 | r as u32
     }
 
+    // The accent colour picked, as "#rrggbb": Explorer\Accent's
+    // AccentColorMenu (0xffbbggrr), not its palette's middle shade, which
+    // Windows makes a little off it (#0078d4 for the #0078d7 picked).
+    pub fn current_accent() -> Option<String> {
+        let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent").ok()?;
+        let v: u32 = key.get_value("AccentColorMenu").ok()?;
+        Some(format!("#{:02x}{:02x}{:02x}", v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff))
+    }
+
     pub fn set_accent(rgb: [u8; 3]) -> bool {
         let shades = super::palette(rgb);
         let shade = |i: usize| [shades[i * 4], shades[i * 4 + 1], shades[i * 4 + 2]];
@@ -149,27 +158,24 @@ mod imp {
         // Start's colour a shade darker than the accent, as Windows pairs them.
         let pref = ColorPreference { start: abgr(shade(5)), accent: abgr(rgb) };
         let set = set_user_color_preference().is_some_and(|f| f(&pref, 1) >= 0);
-        // Its shades as Windows keeps them, when they did not follow.
-        let user = RegKey::predef(HKEY_CURRENT_USER);
-        let followed = user
-            .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent")
-            .ok()
-            .and_then(|k| k.get_raw_value("AccentPalette").ok())
-            .is_some_and(|v| v.bytes.get(12..15) == Some(&rgb[..]));
-        if !followed {
+        // Taken by Windows (its picked colour now this one, its shades worked
+        // out by it); else written here as Windows keeps them.
+        let taken = set && current_accent() == Some(format!("#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2]));
+        if !taken {
+            let user = RegKey::predef(HKEY_CURRENT_USER);
             if let Ok((accent, _)) = user.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent") {
                 let _ = accent.set_raw_value("AccentPalette", &RegValue { bytes: shades.to_vec().into(), vtype: winreg::enums::RegType::REG_BINARY });
-                let _ = accent.set_value("AccentColorMenu", &abgr(shade(4)));
+                let _ = accent.set_value("AccentColorMenu", &abgr(rgb));
                 let _ = accent.set_value("StartColorMenu", &abgr(shade(5)));
             }
             if let Ok((dwm, _)) = user.create_subkey(r"Software\Microsoft\Windows\DWM") {
-                let _ = dwm.set_value("AccentColor", &abgr(shade(4)));
-                let [r, g, b] = shade(4);
+                let _ = dwm.set_value("AccentColor", &abgr(rgb));
+                let [r, g, b] = rgb;
                 let _ = dwm.set_value("ColorizationColor", &(0xc400_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32));
             }
         }
         announce();
-        set || !followed
+        true
     }
 }
 
@@ -178,12 +184,15 @@ mod imp {
     pub fn set_mode(_light: bool) -> bool {
         false
     }
+    pub fn current_accent() -> Option<String> {
+        None
+    }
     pub fn set_accent(_rgb: [u8; 3]) -> bool {
         false
     }
 }
 
-pub use imp::{set_accent, set_mode};
+pub use imp::{current_accent, set_accent, set_mode};
 
 #[cfg(test)]
 mod tests {

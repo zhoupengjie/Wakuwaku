@@ -172,9 +172,16 @@ mod imp {
         path.rsplit('\\').next().unwrap_or(path).to_string()
     }
 
-    // Windows' Start menu, open: its window (StartMenuExperienceHost's) in front.
+    // Windows' Start menu, open: its window in front. StartMenuExperienceHost's
+    // until Windows 11's new Start, which SearchHost holds (26200 on: the
+    // other still runs but never comes to the front). There Start and search
+    // are one window (typing in Start searches), so search counts as Start.
     pub fn is_start(hwnd: isize) -> bool {
-        hwnd != 0 && file_name(&path_of(pid_of(hwnd as Hwnd))).eq_ignore_ascii_case("StartMenuExperienceHost.exe")
+        if hwnd == 0 {
+            return false;
+        }
+        let name = file_name(&path_of(pid_of(hwnd as Hwnd)));
+        ["StartMenuExperienceHost.exe", "SearchHost.exe"].iter().any(|n| name.eq_ignore_ascii_case(n))
     }
 
     // A program's name as it gives it (its file's description: "Google

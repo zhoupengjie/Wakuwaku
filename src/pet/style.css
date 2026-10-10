@@ -546,7 +546,7 @@ body {
 /* As tall as what it says (island.js sizeOf), never shorter than her. */
 #island-expanded {
   min-height: 84px;
-  max-width: 440px;
+  max-width: 360px;
   min-width: 300px;
   gap: 14px;
   padding: 12px 22px 12px 18px;
@@ -555,7 +555,7 @@ body {
 /* With her whole self standing at the left. */
 .has-her #island-expanded {
   min-height: 116px;
-  max-width: 480px;
+  max-width: 420px;
   min-width: 320px;
   padding-left: 124px;
 }

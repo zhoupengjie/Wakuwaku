@@ -369,6 +369,13 @@
   align-items: stretch;
 }
 
+/* Buttons side by side at a row's end (the desktop's picture: picture, folder). */
+#island-settings .btns {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
 #island-settings .accents {
   display: grid;
   grid-template-columns: repeat(8, 1fr);

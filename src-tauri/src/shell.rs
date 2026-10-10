@@ -161,7 +161,7 @@ mod imp {
     }
 
     // When a process started (100 ns since 1601), or None when it is gone.
-    fn started(pid: u32) -> Option<u64> {
+    pub fn started(pid: u32) -> Option<u64> {
         // SAFETY: a handle we close; the times are written into our own structs.
         unsafe {
             let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid);
@@ -291,6 +291,9 @@ mod imp {
     pub fn explorer_tray() -> isize {
         0
     }
+    pub fn started(_pid: u32) -> Option<u64> {
+        None
+    }
     pub fn taskbars() -> Vec<isize> {
         Vec::new()
     }
@@ -319,7 +322,7 @@ mod imp {
     pub fn guard(_pid: u32, _file: &Path) {}
 }
 
-pub use imp::{explorer_tray, guard, hide, recover, rehide, restore, room, spawn_guard, taskbar_created, taskbars, visible};
+pub use imp::{explorer_tray, guard, hide, recover, rehide, restore, room, spawn_guard, started, taskbar_created, taskbars, visible};
 
 // The guard's arguments, when this process is one: its pid and file.
 pub fn guard_args(args: &[String]) -> Option<(u32, &Path)> {

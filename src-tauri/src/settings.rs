@@ -46,6 +46,8 @@ pub fn snapshot(sh: &Shared) -> Value {
         "loginAtStart": connection::is_open_at_login(),
         // Windows' own mode and accent colour (settings_win_look sets them).
         "winLook": { "light": win_light, "accent": crate::theme::current_accent().or(win_accent.map(|a| a.base)) },
+        // The desktop's picture as it is (paper.rs).
+        "winPaper": crate::paper::now(),
         "version": sh.app.package_info().version.to_string(),
         "fullscreenAvailable": fullscreen::AVAILABLE,
         "widgets": sh.widgets_view(),
@@ -185,6 +187,34 @@ pub async fn settings_win_look(app: AppHandle, light: Option<bool>, accent: Opti
         let (later_sh, later_picked) = (sh.clone(), picked.clone());
         let came = crate::theme::set_accent(rgb, move |note| later_sh.log(&format!("settings: Windows' accent {later_picked}: {note}")));
         sh.log(&format!("settings: Windows' accent set {picked}: {came}"));
+    }
+    snapshot(&sh)
+}
+
+// The desktop's picture (paper.rs): a picture or a folder picked in Windows'
+// file dialog ("picture", "folder"), how it is laid ("position"), the
+// folder's turns ("every", "shuffle"), the next picture now ("next").
+#[tauri::command]
+pub async fn settings_wallpaper(app: AppHandle, what: String, value: Option<String>) -> Value {
+    let sh = shared(&app);
+    let owner = crate::island::hwnd(&sh);
+    let lang = sh.lang();
+    let t = move |key: &str| crate::i18n::t(lang, key);
+    let what_done = what.clone();
+    let done = tauri::async_runtime::spawn_blocking(move || match what.as_str() {
+        "picture" => crate::paper::pick(false, &t("wallpaper.pickPicture"), &t("wallpaper.pictures"), owner).map(|p| (crate::paper::set_picture(&p), p)),
+        "folder" => crate::paper::pick(true, &t("wallpaper.pickFolder"), "", owner).map(|p| (crate::paper::set_folder(&p), p)),
+        "position" => value.map(|v| (crate::paper::set_position(&v), v)),
+        "every" => value.map(|v| (crate::paper::set_turns(v.parse().ok(), None), v)),
+        "shuffle" => value.map(|v| (crate::paper::set_turns(None, Some(v == "true")), v)),
+        "next" => Some((crate::paper::next(), String::new())),
+        _ => None,
+    })
+    .await
+    .ok()
+    .flatten();
+    if let Some((ok, value)) = done {
+        sh.log(&format!("settings: wallpaper {what_done} {value}: {ok}"));
     }
     snapshot(&sh)
 }

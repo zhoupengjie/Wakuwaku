@@ -45,6 +45,7 @@ mod island;
 mod jump;
 mod mail;
 mod notify;
+mod paper;
 mod pet;
 mod pointer;
 mod screen;
@@ -880,6 +881,7 @@ fn main() {
             settings::settings_show_pet,
             settings::settings_login,
             settings::settings_win_look,
+            settings::settings_wallpaper,
             settings::settings_hooks,
             settings::settings_codex_hooks,
             settings::settings_fetch,

@@ -349,6 +349,7 @@ mod win {
     // The tick from which to ask programs for their icons, once ours is first (0: asked).
     static ASK_AT: AtomicU32 = AtomicU32::new(0);
     static LAST_ASK: AtomicU32 = AtomicU32::new(0);
+    static QUICK_ASKS: AtomicU32 = AtomicU32::new(0);
     static LOG: Mutex<Option<File>> = Mutex::new(None);
 
     fn wide(s: &str) -> Vec<u16> {
@@ -794,10 +795,18 @@ mod win {
 
     // Explorer's window came first for a moment: what programs handed the
     // tray then went to it (an icon, its version). They are asked again once
-    // it settles, at most every ten seconds.
+    // it settles: at most every ten seconds, but right away (twice at most)
+    // when it came first while they were answering.
     fn ask_soon() {
-        let ticks = TICKS.load(Ordering::SeqCst);
-        if TRAY.load(Ordering::SeqCst) && ASK_AT.load(Ordering::SeqCst) == 0 && ticks >= LAST_ASK.load(Ordering::SeqCst) + 20 {
+        let (ticks, last) = (TICKS.load(Ordering::SeqCst), LAST_ASK.load(Ordering::SeqCst));
+        if !TRAY.load(Ordering::SeqCst) || ASK_AT.load(Ordering::SeqCst) != 0 {
+            return;
+        }
+        let answering = ticks <= last + 6;
+        if !answering {
+            QUICK_ASKS.store(0, Ordering::SeqCst);
+        }
+        if (answering && QUICK_ASKS.fetch_add(1, Ordering::SeqCst) < 2) || ticks >= last + 20 {
             ASK_AT.store(ticks + 3, Ordering::SeqCst);
             log("  tray: programs to be asked again once it settles");
         }

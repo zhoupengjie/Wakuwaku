@@ -200,6 +200,8 @@ mod imp {
     // Where each shown icon is on the screen (key, left, top, right, bottom), from the host.
     static RECTS: Mutex<Vec<(u64, (i32, i32, i32, i32))>> = Mutex::new(Vec::new());
     static RAW_NOTED: AtomicU32 = AtomicU32::new(0);
+    // When programs were last asked for their icons.
+    static ASKED: Mutex<Option<std::time::Instant>> = Mutex::new(None);
     static NOTIFY: AtomicIsize = AtomicIsize::new(0);
     static NOTIFY_MSG: AtomicU32 = AtomicU32::new(0);
     static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
@@ -450,10 +452,17 @@ mod imp {
                 data
             });
             let tray = tray.filter(|d| d.signature == SIGNATURE);
-            // An icon added again that ours has: Explorer has it too (it had
-            // the first), and an add it has refused can make it show the taskbar.
-            let known = tray.is_some_and(|d| d.message == NIM_ADD && ICONS.lock().unwrap().iter().any(|i| same(i, &d.nid)));
-            let answer = if known { Some(1) } else { hand_on(msg, wparam, lparam) };
+            // An icon added again: Explorer has it already (an icon ours has,
+            // or one coming in answer to ask_again), and an add it refuses can
+            // make it show the taskbar, and come first. An icon new to both
+            // in that moment: on stopping, every program is asked again.
+            let adding = tray.filter(|d| d.message == NIM_ADD);
+            let known = adding.is_some_and(|d| ICONS.lock().unwrap().iter().any(|i| same(i, &d.nid)));
+            let answering = adding.is_some() && ASKED.lock().unwrap().is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(3));
+            if answering && !known {
+                LOST.store(true, Ordering::SeqCst);
+            }
+            let answer = if known || answering { Some(1) } else { hand_on(msg, wparam, lparam) };
             if answer.is_none() {
                 LOST.store(true, Ordering::SeqCst);
             }
@@ -545,6 +554,7 @@ mod imp {
     // every window but the taskbar's, which, told too, shows itself, and
     // comes first while programs answer (2026-10-10: 3 times in 4).
     pub fn ask_again() {
+        *ASKED.lock().unwrap() = Some(std::time::Instant::now());
         // SAFETY: a name of our own; the callback sends only.
         unsafe {
             let msg = RegisterWindowMessageW(wide("TaskbarCreated").as_ptr());
@@ -568,6 +578,7 @@ mod imp {
             // SAFETY: our own window.
             unsafe { DestroyWindow(ours as Hwnd) };
         }
+        *ASKED.lock().unwrap() = None;
         for icon in ICONS.lock().unwrap().drain(..) {
             if icon.icon != 0 {
                 // SAFETY: our own copies.

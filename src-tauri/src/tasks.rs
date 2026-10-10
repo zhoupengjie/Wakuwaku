@@ -449,6 +449,16 @@ mod imp {
         crate::jump::bring_window(hwnd)
     }
 
+    #[link(name = "user32")]
+    extern "system" {
+        fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
+    }
+
+    const SWP_NOSIZE: u32 = 0x1;
+    const SWP_NOMOVE: u32 = 0x2;
+    const SWP_NOACTIVATE: u32 = 0x10;
+    const SWP_NOOWNERZORDER: u32 = 0x200;
+
     extern "system" fn stack(hwnd: Hwnd, param: isize) -> i32 {
         // SAFETY: param is the Vec in_stack() passed, alive for the enumeration.
         unsafe { (*(param as *mut Vec<isize>)).push(hwnd as isize) };
@@ -502,10 +512,19 @@ mod imp {
             }
             wait_for(&|| !windows.iter().any(|&h| IsIconic(h as Hwnd) != 0), 1500);
         }
-        for &h in windows.iter().rev().filter(|&&h| h != top) {
-            crate::jump::bring_window(h);
+        // The top one to the front, as a single window's button brings it;
+        // the others laid right under it, as they lay. Each brought to the
+        // front in turn, only the first came: the foreground then the
+        // program's, ours may not hand it on (2026-10-10). Where a window
+        // lies needs no foreground.
+        let brought = crate::jump::bring_window(top);
+        let mut under = top;
+        for &h in windows.iter().filter(|&&h| h != top) {
+            // SAFETY: a plain move in the stack of windows; a stale handle fails.
+            unsafe { SetWindowPos(h as Hwnd, under, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER) };
+            under = h;
         }
-        crate::jump::bring_window(top)
+        brought
     }
 
     // Asked to close, as its own ✕ does.

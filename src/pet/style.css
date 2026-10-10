@@ -1258,14 +1258,15 @@ body {
 /* OLED's guard (island.js oledShift): the island and the taskbar's parts a
    screen pixel or two off, by turns. The strip's ground (#island-row, the
    Mica) stays, and so does the show-desktop sliver, which meets the
-   screen's edge. */
-#island,
-#bar-rest {
-  translate: var(--oled-x, 0px) var(--oled-y, 0px);
+   screen's edge. Only while it is on: any translate, 0px too, makes a
+   stacking context and a frame for what is fixed inside. */
+.oled-shift #island,
+.oled-shift #bar-rest {
+  translate: var(--oled-x) var(--oled-y);
 }
 
-#bar-rest .tdesk {
-  translate: calc(-1 * var(--oled-x, 0px)) calc(-1 * var(--oled-y, 0px));
+.oled-shift #bar-rest .tdesk {
+  translate: calc(-1 * var(--oled-x)) calc(-1 * var(--oled-y));
 }
 
 #bar-rest .tdesk:hover {

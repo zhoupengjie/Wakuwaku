@@ -17,6 +17,7 @@
 // comes up for that while she is near.
 //
 // Sizes here are logical (the page's) unless they say physical.
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use serde_json::{json, Value};
@@ -204,13 +205,36 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
     Some((pos, size))
 }
 
+// One at a time: two at once took the taskbar twice (two tray threads, one
+// never stopped). Asked while one runs, it runs again after, with the last
+// ask: 1 give back, 2 keep.
+static SYNCING: AtomicBool = AtomicBool::new(false);
+static SYNC_ASK: AtomicU8 = AtomicU8::new(0);
+
+fn sync_bar(sh: &Shared, keep: bool) {
+    SYNC_ASK.store(1 + keep as u8, Ordering::SeqCst);
+    loop {
+        if SYNCING.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        while let ask @ 1..=2 = SYNC_ASK.swap(0, Ordering::SeqCst) {
+            sync_bar_now(sh, ask == 2);
+        }
+        SYNCING.store(false, Ordering::SeqCst);
+        // An ask that came between the last look and letting go.
+        if SYNC_ASK.load(Ordering::SeqCst) == 0 {
+            return;
+        }
+    }
+}
+
 // The strip, the bar's along the top or the taskbar's along the bottom:
 // asked of Windows while the home is one of those and keep (up; for the
 // taskbar, also while an app full screen hides its window: giving the strip
 // back would move every window), given back otherwise. Asked again only
 // when the display, the height or the home change. The taskbar's comes
 // with Windows' own put away first and goes with it given back (taskbar.rs).
-fn sync_bar(sh: &Shared, keep: bool) {
+fn sync_bar_now(sh: &Shared, keep: bool) {
     let home = sh.home();
     let edge = match home {
         "bar" => Some((appbar::Edge::Top, BAR_H)),
@@ -269,8 +293,13 @@ fn sync_bar(sh: &Shared, keep: bool) {
 }
 
 // Quitting, or the window going: the strip back to the other windows (and
-// Windows' own taskbar back, for the taskbar's).
+// Windows' own taskbar back, for the taskbar's). Waited for, so it is back
+// before she goes (should it take too long, the guard gives it back).
 pub fn release_bar(sh: &Shared) {
+    let t = std::time::Instant::now();
+    while SYNCING.load(Ordering::SeqCst) && t.elapsed() < std::time::Duration::from_secs(5) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     sync_bar(sh, false);
 }
 

@@ -169,6 +169,27 @@ mod imp {
         }
     }
 
+    // Shown as it was for a moment, then put away again: Explorer works the
+    // work area out afresh. Put away while an app was full screen, it kept
+    // the work area as for that (the whole display) after, and no bar's
+    // strip counted; set to hide itself again while kept hidden, it did not
+    // either (2026-10-10).
+    pub fn recycle() {
+        let main = tray();
+        if main == 0 {
+            return;
+        }
+        let state = appbar::taskbar_state();
+        appbar::set_taskbar_state(main, state & !appbar::ABS_AUTOHIDE);
+        for h in taskbars() {
+            // SAFETY: as in rehide().
+            unsafe { ShowWindow(h as Hwnd, SW_SHOWNA) };
+        }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        appbar::set_taskbar_state(main, state | appbar::ABS_AUTOHIDE);
+        rehide();
+    }
+
     // Its state set back and shown, and the file gone; false (the file kept)
     // when there was nothing to give back, or no Explorer to give it to.
     pub fn restore(file: &Path) -> bool {
@@ -255,6 +276,7 @@ mod imp {
         Ok(())
     }
     pub fn rehide() {}
+    pub fn recycle() {}
     pub fn restore(_file: &Path) -> bool {
         false
     }
@@ -267,7 +289,7 @@ mod imp {
     pub fn guard(_pid: u32, _file: &Path) {}
 }
 
-pub use imp::{guard, hide, recover, rehide, restore, spawn_guard, taskbar_created, taskbars, visible};
+pub use imp::{guard, hide, recover, recycle, rehide, restore, spawn_guard, taskbar_created, taskbars, visible};
 
 // The guard's arguments, when this process is one: its pid and file.
 pub fn guard_args(args: &[String]) -> Option<(u32, &Path)> {

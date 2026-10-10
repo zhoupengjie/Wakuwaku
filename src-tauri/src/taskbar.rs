@@ -300,11 +300,24 @@ mod imp {
 
     // The strip taken again, off this thread: the island's side waits on the
     // main thread, which may be waiting on this one (its app bar's messages
-    // come to the tray's window, here).
-    fn take_strip_again() {
-        if let Some(sh) = sh() {
-            std::thread::spawn(move || crate::island::take_strip_again(&sh));
-        }
+    // come to the tray's window, here). Recycled: Windows' taskbar shown for
+    // a moment and put away afresh first, so Explorer works the work area
+    // out again; the strip is taken once its room is free again.
+    fn take_strip_again(recycle: bool) {
+        let Some(sh) = sh() else { return };
+        let strip = *STRIP.lock().unwrap();
+        std::thread::spawn(move || {
+            if recycle {
+                shell::recycle();
+                let bottom = strip.map_or(0, |s| s.1 + s.3);
+                let t = Instant::now();
+                while work_bottom() != bottom && t.elapsed() < Duration::from_millis(1500) {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                log(&format!("recycled; work area free after {} ms", t.elapsed().as_millis()));
+            }
+            crate::island::take_strip_again(&sh);
+        });
     }
 
     // The tray's icons as last sent, for a page that has just come up.
@@ -485,7 +498,7 @@ mod imp {
             log(&format!("work area's bottom {bottom} is in the strip ({:?}): taken again", strip));
             LAST_TAKEN.store(ticks, Ordering::SeqCst);
             LOST_SINCE.store(0, Ordering::SeqCst);
-            take_strip_again();
+            take_strip_again(true);
         }
         systray::sweep();
         if systray::keep_first() {
@@ -511,7 +524,7 @@ mod imp {
         }
         log("Explorer started again");
         shell::rehide();
-        take_strip_again();
+        take_strip_again(false);
         systray::keep_first();
         ask_soon();
     }

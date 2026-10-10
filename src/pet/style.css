@@ -2253,3 +2253,11 @@ body {
 .tb-light.island #panel .btn.option .desc {
   color: #6e6e73;
 }
+
+/* A tray icon in one colour drawn for the other kind of taskbar (island.js
+   markMono): turned over to read, white to black on the light taskbar,
+   black to white on the dark. */
+.tb-light #bar-rest .ticon[data-mono='light'] img,
+body:not(.tb-light) #bar-rest .ticon[data-mono='dark'] img {
+  filter: invert(1);
+}

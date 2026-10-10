@@ -1155,8 +1155,46 @@
       img.src = i.png
       img.draggable = false
       slot.append(img)
+      markMono(slot, img)
     }
     return slot
+  }
+
+  // A tray icon in one colour only, white or black, as some programs and
+  // Windows' own (safely remove hardware, the microphone in use) draw them
+  // for one kind of taskbar whatever Windows' mode: marked (data-mono), so
+  // the other kind turns it over to read (style.css). Each picture looked at
+  // once.
+  const monoOf = new Map()
+  function markMono(slot, img) {
+    const mark = mono => {
+      if (mono) slot.dataset.mono = mono
+      else delete slot.dataset.mono
+    }
+    if (monoOf.has(img.src)) return mark(monoOf.get(img.src))
+    const look = () => {
+      const c = document.createElement('canvas')
+      c.width = img.naturalWidth
+      c.height = img.naturalHeight
+      const g = c.getContext('2d')
+      g.drawImage(img, 0, 0)
+      const d = g.getImageData(0, 0, c.width, c.height).data
+      let seen = 0
+      let grey = 0
+      let lum = 0
+      for (let p = 0; p < d.length; p += 4) {
+        if (d[p + 3] < 96) continue
+        seen++
+        lum += 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]
+        if (Math.max(d[p], d[p + 1], d[p + 2]) - Math.min(d[p], d[p + 1], d[p + 2]) < 24) grey++
+      }
+      const mono = seen && grey / seen > 0.9 ? (lum / seen > 200 ? 'light' : lum / seen < 60 ? 'dark' : '') : ''
+      if (monoOf.size > 300) monoOf.clear()
+      monoOf.set(img.src, mono)
+      mark(mono)
+    }
+    if (img.complete && img.naturalWidth) look()
+    else img.addEventListener('load', look, { once: true })
   }
 
   function drawTray() {

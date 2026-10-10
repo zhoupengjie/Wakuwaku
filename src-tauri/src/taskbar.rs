@@ -927,9 +927,18 @@ mod imp {
         let done = match what {
             "launch" => {
                 close_flyout();
-                match id {
-                    Some(id) => tasks::launch(&format!("shell:AppsFolder\\{id}")),
-                    None => tasks::launch(path),
+                // One taken from Windows' pins by its shortcut: started by it,
+                // as Windows' taskbar starts it (what the shortcut adds, a
+                // browser's profile), while it is there.
+                let lnk = sh
+                    .setting("taskbarPinned")
+                    .as_array()
+                    .and_then(|all| all.iter().find(|p| p["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(path)) && !path.is_empty()).and_then(|p| p["lnk"].as_str().map(str::to_string)))
+                    .filter(|l| std::path::Path::new(l).exists());
+                match (id, lnk) {
+                    (Some(id), _) => tasks::launch(&format!("shell:AppsFolder\\{id}")),
+                    (None, Some(lnk)) => tasks::launch(&lnk),
+                    (None, None) => tasks::launch(path),
                 }
             }
             "pin" | "unpin" => {

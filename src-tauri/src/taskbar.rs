@@ -990,6 +990,12 @@ mod imp {
             u: InputUnion { ki: KeybdInput { vk: VK_ESCAPE, scan: 0, flags: if up { KEYEVENTF_KEYUP } else { 0 }, time: 0, extra: 0 } },
         };
         let inputs = [key(false), key(true)];
+        // Esc goes to whatever is in front: looked at again right before it
+        // goes (telling the program took a moment), so it never lands in
+        // another (in a terminal it stops what runs there).
+        if tasks::front() != front {
+            return false;
+        }
         // SAFETY: an array of INPUTs of the size passed.
         unsafe { SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<Input>() as i32) };
         let asked = Instant::now();

@@ -289,6 +289,9 @@
     '#7a7574', '#5d5a58', '#68768a', '#515c6b', '#567c73', '#486860', '#498205', '#107c10',
     '#767676', '#4c4a48', '#69797e', '#4a5459', '#647c64', '#525e54', '#847545', '#7e735f',
   ]
+  // The accent colours held back for now: DWM's frames' colour does not yet
+  // follow them for sure (theme.rs set_accent), 2026-10-10.
+  const ACCENT_PICKER = false
   function pageWindows() {
     const look = snap.winLook || {}
     const accent = String(look.accent || '').toLowerCase()
@@ -297,7 +300,7 @@
     const swatches = colours.map(c => `<span class="acc${c === accent ? ' on' : ''}" data-accent="${c}" style="background:${c}" title="${c}"></span>`).join('')
     return `${sec(T('s.windows'))}<div class="grp">
         ${row(esc(T('s.winMode')), esc(T('s.winModeNote')), seg('winMode', [['light', T('s.winMode.light')], ['dark', T('s.winMode.dark')]], look.light ? 'light' : 'dark'))}
-        <div class="r col"><div>${esc(T('s.winAccent'))}</div><div class="accents">${swatches}</div></div>
+        ${ACCENT_PICKER ? `<div class="r col"><div>${esc(T('s.winAccent'))}</div><div class="accents">${swatches}</div></div>` : ''}
       </div>`
   }
 
@@ -1231,7 +1234,7 @@
     const mode = at('[data-mode]')
     if (mode) return mode.dataset.mode !== s.display && patch({ display: mode.dataset.mode })
     const accent = at('[data-accent]')
-    if (accent) return window.pet.settings.winLook({ accent: accent.dataset.accent }).then(got => ((snap = got), draw()))
+    if (accent && ACCENT_PICKER) return window.pet.settings.winLook({ accent: accent.dataset.accent }).then(got => ((snap = got), draw()))
     const use = at('[data-use]')
     if (use) return patch({ pet: use.dataset.use })
     if (at('[data-fetch]')) {

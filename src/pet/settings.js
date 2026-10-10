@@ -800,10 +800,21 @@
     return `${head.filter(Boolean).join('\n')}\n\n${l.text || ''}`
   }
 
-  // A letter begun: new (from the inbox shown, else the first account), a
-  // reply to the sender or to all (the letter quoted under it; words an
-  // agent wrote on top, if given), or one passed on (with its
-  // attachments). One half written is not thrown away for it: it shows.
+  // The account a new letter goes from: the one whose inbox shows, if it is
+  // on; else the first that is on and has an outgoing server, the first on,
+  // the first.
+  function fromAccount() {
+    const all = snap.mail || []
+    const shown = accountOf(inboxId())
+    if (shown?.on) return shown.id
+    return (all.find(a => a.on && a.smtp) || all.find(a => a.on) || all[0])?.id
+  }
+
+  // A letter begun: new (from the account fromAccount picks), a reply to
+  // the sender or to all (from the account it came to; the letter quoted
+  // under it, words an agent wrote on top, if given), or one passed on
+  // (with its attachments). One half written is not thrown away for it:
+  // it shows.
   function write(kind, l, words) {
     closeMenu()
     if (draft && (draft.touched || draft.files.length)) {
@@ -811,8 +822,7 @@
       writing = true
       return redrawMail()
     }
-    const all = snap.mail || []
-    const account = accountOf(l?.account)?.id || accountOf(inboxId())?.id || all[0]?.id
+    const account = accountOf(l?.account)?.id || fromAccount()
     if (!account) return
     const me = (accountOf(account)?.address || '').toLowerCase()
     const notMe = list => (list || []).filter(p => p.address && p.address.toLowerCase() !== me)

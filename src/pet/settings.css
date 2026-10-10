@@ -112,6 +112,14 @@
   color: #0f7b3f;
 }
 
+/* The button that does the thing (Send, Done, Hand to…): Windows' own
+   accent fill on light, white words. */
+.tb-light #island-settings .pbtn.al {
+  border-color: #005fb8;
+  background: #005fb8;
+  color: #ffffff;
+}
+
 .tb-light #island-settings .note.err,
 .tb-light #island-settings .pbtn.no,
 .tb-light #island-settings .chip.failed {

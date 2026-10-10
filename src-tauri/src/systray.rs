@@ -128,7 +128,6 @@ mod imp {
         fn DestroyWindow(hwnd: Hwnd) -> i32;
         fn DefWindowProcW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
         fn FindWindowW(class: *const u16, title: *const u16) -> Hwnd;
-        fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
         fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
         fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
         fn SendMessageTimeoutW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize, flags: u32, ms: u32, result: *mut usize) -> isize;
@@ -274,24 +273,9 @@ mod imp {
         }
     }
 
-    // Explorer's taskbar window: the first Shell_TrayWnd that is not ours.
+    // Explorer's taskbar window: never another copy's of ours (shell.rs).
     pub fn explorers() -> Hwnd {
-        let class = wide("Shell_TrayWnd");
-        let me = std::process::id();
-        let mut at: Hwnd = std::ptr::null_mut();
-        loop {
-            // SAFETY: a class name of our own; walking the top-level windows.
-            at = unsafe { FindWindowExW(std::ptr::null_mut(), at, class.as_ptr(), std::ptr::null()) };
-            if at.is_null() {
-                return at;
-            }
-            let mut pid = 0;
-            // SAFETY: our own out-parameter.
-            unsafe { GetWindowThreadProcessId(at, &mut pid) };
-            if pid != me {
-                return at;
-            }
-        }
+        crate::shell::explorer_tray() as Hwnd
     }
 
     // Whether programs reach ours first.

@@ -108,6 +108,8 @@ mod imp {
     const DWMWA_CLOAKED: u32 = 14;
     const WM_GETICON: u32 = 0x007F;
     const WM_CLOSE: u32 = 0x0010;
+    const WM_SYSCOMMAND: u32 = 0x0112;
+    const SC_MINIMIZE: usize = 0xF020;
     const ICON_SMALL: usize = 0;
     const ICON_BIG: usize = 1;
     const ICON_SMALL2: usize = 2;
@@ -325,7 +327,19 @@ mod imp {
         // SAFETY: plain calls about a window; a stale handle only makes them fail.
         unsafe {
             if GetForegroundWindow() == h && IsIconic(h) == 0 {
-                return ShowWindow(h, SW_MINIMIZE) != 0;
+                // Asked to minimize itself, as Windows' taskbar asks (a program
+                // drawing its own frame minimizes its own way, or to its tray
+                // icon); forced only once it has had its time (jump::bring).
+                PostMessageW(h, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+                let asked = std::time::Instant::now();
+                let up = || IsIconic(h) == 0 && IsWindowVisible(h) != 0;
+                while up() && asked.elapsed() < std::time::Duration::from_millis(1000) {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                if up() {
+                    ShowWindow(h, SW_MINIMIZE);
+                }
+                return true;
             }
         }
         crate::jump::bring_window(hwnd)

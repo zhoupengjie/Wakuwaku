@@ -723,7 +723,15 @@ mod imp {
     // A press on a window's button: to the front, or minimized; or closed.
     pub fn window(what: &str, hwnd: isize) -> bool {
         let done = match what {
-            "press" => tasks::press(hwnd),
+            // Off the page's thread: a window may take its time to come up
+            // or go down (tasks::press waits for it).
+            "press" => {
+                std::thread::spawn(move || {
+                    tasks::press(hwnd);
+                    wake_tasks();
+                });
+                true
+            }
             "close" => tasks::close(hwnd),
             _ => false,
         };

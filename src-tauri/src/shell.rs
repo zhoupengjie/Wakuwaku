@@ -69,6 +69,7 @@ mod imp {
         fn CloseHandle(handle: Handle) -> i32;
         fn WaitForSingleObject(handle: Handle, ms: u32) -> u32;
         fn GetProcessTimes(process: Handle, created: *mut FileTime, exited: *mut FileTime, kernel: *mut FileTime, user: *mut FileTime) -> i32;
+        fn QueryFullProcessImageNameW(process: Handle, flags: u32, name: *mut u16, size: *mut u32) -> i32;
     }
 
     const SW_HIDE: i32 = 0;
@@ -102,18 +103,36 @@ mod imp {
         1
     }
 
-    // The main display's taskbar, or 0 while Explorer is not up. Not ours of
-    // the same class (systray.rs), which programs are to find first.
-    fn tray() -> isize {
+    fn is_explorer(pid: u32) -> bool {
+        // SAFETY: a handle we close; the name goes into our own buffer.
+        unsafe {
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if process == 0 {
+                return false;
+            }
+            let mut name = [0u16; 512];
+            let mut size = 512u32;
+            let ok = QueryFullProcessImageNameW(process, 0, name.as_mut_ptr(), &mut size) != 0;
+            CloseHandle(process);
+            let path = String::from_utf16_lossy(&name[..size as usize]);
+            ok && path.rsplit('\\').next().is_some_and(|n| n.eq_ignore_ascii_case("explorer.exe"))
+        }
+    }
+
+    // The main display's taskbar, Explorer's, or 0 while Explorer is not up.
+    // Not one of the same class of ours (systray.rs), which programs are to
+    // find first, whichever of her processes made it: a guard of one copy
+    // once took another copy's for Explorer's and showed it, and two copies
+    // handed each other the tray's messages (2026-10-10).
+    pub fn explorer_tray() -> isize {
         let class = wide("Shell_TrayWnd");
-        let me = std::process::id();
         let mut at: Hwnd = std::ptr::null_mut();
         loop {
             // SAFETY: a class name of our own; walking the top-level windows.
             at = unsafe { FindWindowExW(std::ptr::null_mut(), at, class.as_ptr(), std::ptr::null()) };
             let mut pid = 0;
             // SAFETY: our own out-parameter.
-            if at.is_null() || unsafe { GetWindowThreadProcessId(at, &mut pid) } != 0 && pid != me {
+            if at.is_null() || unsafe { GetWindowThreadProcessId(at, &mut pid) } != 0 && is_explorer(pid) {
                 return at as isize;
             }
         }
@@ -122,7 +141,7 @@ mod imp {
     // Every display's taskbar: the main one first.
     pub fn taskbars() -> Vec<isize> {
         let mut list = Vec::new();
-        let main = tray();
+        let main = explorer_tray();
         if main != 0 {
             list.push(main);
         }
@@ -172,7 +191,7 @@ mod imp {
     }
 
     pub fn rehide() {
-        let main = tray();
+        let main = explorer_tray();
         let state = appbar::taskbar_state();
         if main != 0 && state & appbar::ABS_AUTOHIDE != 0 {
             appbar::set_taskbar_state(main, state & !appbar::ABS_AUTOHIDE);
@@ -200,7 +219,7 @@ mod imp {
     // when there was nothing to give back, or no Explorer to give it to.
     pub fn restore(file: &Path) -> bool {
         let Some(state) = read(file).and_then(|v| v["state"].as_u64()) else { return false };
-        let main = tray();
+        let main = explorer_tray();
         if main == 0 {
             return false;
         }
@@ -269,6 +288,9 @@ mod imp {
 mod imp {
     use std::path::Path;
 
+    pub fn explorer_tray() -> isize {
+        0
+    }
     pub fn taskbars() -> Vec<isize> {
         Vec::new()
     }
@@ -297,7 +319,7 @@ mod imp {
     pub fn guard(_pid: u32, _file: &Path) {}
 }
 
-pub use imp::{guard, hide, recover, rehide, restore, room, spawn_guard, taskbar_created, taskbars, visible};
+pub use imp::{explorer_tray, guard, hide, recover, rehide, restore, room, spawn_guard, taskbar_created, taskbars, visible};
 
 // The guard's arguments, when this process is one: its pid and file.
 pub fn guard_args(args: &[String]) -> Option<(u32, &Path)> {

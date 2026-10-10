@@ -110,6 +110,8 @@ mod imp {
         fn BringWindowToTop(hwnd: Hwnd) -> i32;
         fn AttachThreadInput(from: u32, to: u32, attach: i32) -> i32;
         fn GetAncestor(hwnd: Hwnd, flags: u32) -> Hwnd;
+        fn GetLastActivePopup(hwnd: Hwnd) -> Hwnd;
+        fn PostMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> i32;
     }
 
     #[link(name = "shell32")]
@@ -127,6 +129,8 @@ mod imp {
     const SW_RESTORE: i32 = 9;
     const SW_SHOWNORMAL: i32 = 1;
     const GA_ROOTOWNER: u32 = 3;
+    const WM_SYSCOMMAND: u32 = 0x0112;
+    const SC_RESTORE: usize = 0xF120;
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(Some(0)).collect()
@@ -323,8 +327,23 @@ mod imp {
         // SAFETY: a window handle just found; a stale one only makes the calls fail.
         unsafe {
             if IsIconic(h) != 0 {
-                ShowWindow(h, SW_RESTORE);
+                // Asked to restore itself, as Windows' taskbar and Win+Tab
+                // ask: a program drawing its own frame (WeGame, Xunyou) stays
+                // minimized when restored from outside. Some take a while
+                // (WeGame, past 300 ms), and a restore forced meanwhile undoes
+                // theirs: forced only once it has had its time.
+                PostMessageW(h, WM_SYSCOMMAND, SC_RESTORE, 0);
+                let asked = std::time::Instant::now();
+                while IsIconic(h) != 0 && asked.elapsed() < std::time::Duration::from_millis(1500) {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                if IsIconic(h) != 0 {
+                    ShowWindow(h, SW_RESTORE);
+                }
             }
+            // Its dialog, should one be open in it, as Windows' taskbar does.
+            let popup = GetLastActivePopup(h);
+            let h = if !popup.is_null() && IsWindowVisible(popup) != 0 { popup } else { h };
             // The switch itself may land a moment later: its answer is the one to go by.
             if SetForegroundWindow(h) != 0 {
                 return true;

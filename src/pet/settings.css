@@ -1615,7 +1615,8 @@
     border-radius 0.3s ease;
 }
 
-#island-settings .ilook-pv.light .cap {
+/* Its words as its ground is, light or dark (island.js setInk). */
+#island-settings .ilook-pv.ink-dark .cap {
   color: #1b1b1b;
 }
 

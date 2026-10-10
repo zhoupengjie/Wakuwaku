@@ -333,8 +333,11 @@
       ['mica', { bg: '#f6f6f6', op: 62, blur: 40, edge: 'line', bare: false }],
       ['ring', { bg: '#fbfbfb', op: 100, blur: 0, edge: 'ring', bare: false }],
       ['bare', { bg: '#f3f3f3', op: 100, blur: 0, edge: 'line', bare: true }],
+      ['black', { bg: '#000000', op: 100, blur: 0, edge: 'none', bare: false }],
     ],
   }
+  // The moods' colours on a light ground, as island.js has them (COLOR_LIGHT).
+  const COLOR_DEEP = { idle: '#6e6e73', working: '#0067c0', waiting: '#b25e00', done: '#0f7b3f', review: '#7346c9', error: '#c42b3c' }
   // Grounds to pick for each mode: as dark (or light) as its words need.
   const ILOOK_SWATCHES = {
     dark: ['#000000', '#1c1c1c', '#202020', '#2c2c2c', '#3a3a3a', '#1f2733', '#2a2433', '#1f2d27', '#33271f'],
@@ -360,24 +363,58 @@
     draw()
   }
 
-  // A ground kept on its mode's side of grey, its hue as picked: the words
-  // on it follow Windows' mode, light on dark, dark on light.
-  function ilookClamp(mode, hex) {
+  // A colour's relative luminance (WCAG), as island.js judges a ground:
+  // above 0.35, the words on it go dark.
+  function luminance(hex) {
+    const [r, g, b] = [1, 3, 5].map(i => {
+      const v = parseInt(hex.slice(i, i + 2), 16) / 255
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  const inkDarkOn = hex => luminance(hex) > 0.35
+
+  function toHsl(hex) {
     const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
     const max = Math.max(r, g, b)
     const min = Math.min(r, g, b)
     const l = (max + min) / 2
-    const [lo, hi] = mode === 'dark' ? [0, 0.3] : [0.86, 1]
-    if (l >= lo && l <= hi) return hex.toLowerCase()
     const d = max - min
     const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1))
     const h = d === 0 ? 0 : max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
-    const L = Math.min(hi, Math.max(lo, l))
-    const c = (1 - Math.abs(2 * L - 1)) * s
+    return [h, s, l]
+  }
+
+  function fromHsl(h, s, l) {
+    const c = (1 - Math.abs(2 * l - 1)) * s
     const x = c * (1 - Math.abs((h % 2) - 1))
-    const [r1, g1, b1] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][Math.floor(h) % 6]
-    const m = L - c / 2
-    return `#${[r1, g1, b1].map(v => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('')}`
+    const [r, g, b] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][Math.floor(h) % 6]
+    const m = l - c / 2
+    return `#${[r, g, b].map(v => Math.round(Math.min(1, Math.max(0, v + m)) * 255).toString(16).padStart(2, '0')).join('')}`
+  }
+
+  // A ground picked, any colour: the words on it go light or dark as it is
+  // (island.js), so only a mid one reads poorly either way (between 0.18
+  // and 0.36, under 4.5 to 1 with white words, and dark ones not yet):
+  // moved out to the nearer side, its hue kept.
+  function ilookSteer(hex) {
+    hex = hex.toLowerCase()
+    const y = luminance(hex)
+    if (y <= 0.18 || y >= 0.36) return hex
+    const [h, s, l] = toHsl(hex)
+    const darker = y - 0.18 < 0.36 - y
+    let [lo, hi] = darker ? [0, l] : [l, 1]
+    // The lightness where it crosses out of the middle, a little past it.
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2
+      const y2 = luminance(fromHsl(h, s, mid))
+      if (darker) {
+        if (y2 <= 0.175) lo = mid
+        else hi = mid
+      } else if (y2 >= 0.365) hi = mid
+      else lo = mid
+    }
+    return fromHsl(h, s, darker ? lo : hi)
   }
 
   // The island as the look makes it, on a strip over a desktop; big, it
@@ -385,11 +422,14 @@
   // it to blur: its ground alone, as on the taskbar).
   function ilookPreview(mode, look, big = false) {
     const [r, g, b] = [1, 3, 5].map(i => parseInt(look.bg.slice(i, i + 2), 16))
-    const ring = COLOR[snap.now?.mood] || COLOR.working
+    // Its words, and the moods' colours, as light or dark as its ground is.
+    const inkDark = inkDarkOn(look.bg)
+    const moods = inkDark ? COLOR_DEEP : COLOR
+    const ring = moods[snap.now?.mood] || moods.working
     const edge = look.edge === 'ring' ? `0 0 0 1.5px ${ring}, 0 0 12px ${ring}59` : look.edge === 'none' ? '0 0 0 0 transparent' : `0 0 0 1px ${mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`
     const style = `--pv-bg:rgba(${r},${g},${b},${look.op / 100});--pv-blur:${look.blur ? `blur(${look.blur}px) saturate(1.25)` : 'none'};--pv-edge:${edge};--pv-ring:${ring}`
     const more = big ? `<span class="more"><span>${esc(T('s.ilookSample2'))}</span><span>${esc(T('s.ilookSample3'))}</span></span>` : ''
-    return `<div class="ilook-pv ${mode}${look.bare ? ' bare' : ''}${big ? ' big' : ''}" style="${style}"><span class="cap"><span class="top"><i class="face"></i><span class="w">${esc(T('s.ilookSample'))}</span><span class="t">1:42</span></span>${more}</span></div>`
+    return `<div class="ilook-pv ${mode}${inkDark ? ' ink-dark' : ''}${look.bare ? ' bare' : ''}${big ? ' big' : ''}" style="${style}"><span class="cap"><span class="top"><i class="face"></i><span class="w">${esc(T('s.ilookSample'))}</span><span class="t">1:42</span></span>${more}</span></div>`
   }
 
   function ilookPanel() {
@@ -413,7 +453,7 @@
         ${mode === winMode() ? '' : `<div class="note">${esc(T('s.ilookOther'))}</div>`}
         ${ilookPreview(mode, look, true)}
         <div class="ilook-cards">${cards}</div>
-        ${row(esc(T('s.ilookBg')), esc(T(`s.ilookBgNote.${mode}`)), picker)}
+        ${row(esc(T('s.ilookBg')), esc(T('s.ilookBgNote')), picker)}
         ${row(esc(T('s.ilookOp')), '', range('op', 20, 100, '%'))}
         ${row(esc(T('s.ilookBlur')), esc(T('s.ilookBlurNote')), range('blur', 0, 60, 'px'))}
         ${row(esc(T('s.ilookEdge')), '', seg('ilookEdge', ['none', 'line', 'ring'].map(e => [e, T(`s.ilookEdge.${e}`)]), look.edge))}
@@ -421,12 +461,12 @@
       </div>`
   }
 
-  // A slider moved (shown here) or let go (kept); a colour picked, kept on
-  // its mode's side of grey.
+  // A slider moved (shown here) or let go (kept); a colour picked, moved
+  // out of the greys no words read on.
   function ilookInput(target, keep) {
     const mode = ilookFor()
     const key = target.dataset.ilook
-    const value = key === 'bg' ? ilookClamp(mode, target.value) : Number(target.value)
+    const value = key === 'bg' ? ilookSteer(target.value) : Number(target.value)
     if (key === 'bg' && value !== target.value.toLowerCase()) target.value = value
     ilookSave(mode, { ...ilookOf(mode), [key]: value }, keep)
   }

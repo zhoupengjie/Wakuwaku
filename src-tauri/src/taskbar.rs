@@ -1,0 +1,638 @@
+// The taskbar home's side of Windows (display 'taskbar'): Windows' own
+// taskbar put away while hers is up (shell.rs), and the tray's icons taken
+// over from Explorer (systray.rs). On a thread of their own, which runs the
+// message loop the tray's window needs, with a hidden window of its own that
+// hears:
+//   - Explorer started again (TaskbarCreated, from a new taskbar window):
+//     its taskbar put away again, the strip taken again (island.rs), the
+//     tray put first again and programs asked for their icons
+//   - Explorer's taskbar shown (a WinEvent): put away again at once
+//   - the tray's icons changing: drawn into PNGs and sent to the island's
+//     page (taskbar:tray)
+// Taken when the home takes its strip, given back when it gives the strip
+// back (island.rs sync_bar) and on quitting. A killed process cannot give
+// the taskbar back: shell.rs's guard does.
+//
+// Learnt in examples/taskbar_spike.rs (2026-10-10), where each of these was
+// tried first.
+use crate::Shared;
+
+#[cfg(windows)]
+mod imp {
+    use std::collections::HashMap;
+    use std::ffi::c_void;
+    use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::thread::JoinHandle;
+    use std::time::{Duration, Instant};
+
+    use base64::Engine;
+    use serde_json::{json, Value};
+    use tauri::Emitter;
+
+    use crate::systray::{self, Press};
+    use crate::{shell, Shared};
+
+    type Hwnd = *mut c_void;
+
+    #[repr(C)]
+    struct WndClassExW {
+        size: u32,
+        style: u32,
+        wndproc: extern "system" fn(Hwnd, u32, usize, isize) -> isize,
+        cls_extra: i32,
+        wnd_extra: i32,
+        instance: isize,
+        icon: isize,
+        cursor: isize,
+        background: isize,
+        menu_name: *const u16,
+        class_name: *const u16,
+        icon_sm: isize,
+    }
+
+    #[repr(C)]
+    #[derive(Default, Clone, Copy)]
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+
+    #[repr(C)]
+    struct Msg {
+        hwnd: Hwnd,
+        message: u32,
+        wparam: usize,
+        lparam: isize,
+        time: u32,
+        pt: Point,
+        private: u32,
+    }
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct Rect {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+
+    #[repr(C)]
+    struct BitmapInfoHeader {
+        size: u32,
+        width: i32,
+        height: i32,
+        planes: u16,
+        bit_count: u16,
+        compression: u32,
+        size_image: u32,
+        x_ppm: i32,
+        y_ppm: i32,
+        clr_used: u32,
+        clr_important: u32,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct KeybdInput {
+        vk: u16,
+        scan: u16,
+        flags: u32,
+        time: u32,
+        extra: usize,
+    }
+
+    // The union's largest member (MOUSEINPUT), so INPUT has the size Windows expects.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct MouseInput {
+        dx: i32,
+        dy: i32,
+        data: u32,
+        flags: u32,
+        time: u32,
+        extra: usize,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    union InputUnion {
+        mi: MouseInput,
+        ki: KeybdInput,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct Input {
+        kind: u32,
+        u: InputUnion,
+    }
+
+    type WinEventProc = extern "system" fn(isize, u32, Hwnd, i32, i32, u32, u32);
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn RegisterClassExW(class: *const WndClassExW) -> u16;
+        fn CreateWindowExW(ex: u32, class: *const u16, title: *const u16, style: u32, x: i32, y: i32, w: i32, h: i32, parent: Hwnd, menu: isize, instance: isize, param: *mut c_void) -> Hwnd;
+        fn DestroyWindow(hwnd: Hwnd) -> i32;
+        fn DefWindowProcW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
+        fn GetMessageW(msg: *mut Msg, hwnd: Hwnd, min: u32, max: u32) -> i32;
+        fn TranslateMessage(msg: *const Msg) -> i32;
+        fn DispatchMessageW(msg: *const Msg) -> isize;
+        fn PostMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> i32;
+        fn PostQuitMessage(code: i32);
+        fn SetTimer(hwnd: Hwnd, id: usize, ms: u32, func: *const c_void) -> usize;
+        fn KillTimer(hwnd: Hwnd, id: usize) -> i32;
+        fn SetWinEventHook(min: u32, max: u32, module: isize, func: WinEventProc, pid: u32, tid: u32, flags: u32) -> isize;
+        fn UnhookWinEvent(hook: isize) -> i32;
+        fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
+        fn IsWindowVisible(hwnd: Hwnd) -> i32;
+        fn SystemParametersInfoW(action: u32, param: u32, pv: *mut c_void, flags: u32) -> i32;
+        fn SendInput(count: u32, inputs: *const Input, size: i32) -> u32;
+        fn SetForegroundWindow(hwnd: Hwnd) -> i32;
+        fn GetCursorPos(pt: *mut Point) -> i32;
+        fn DrawIconEx(hdc: isize, x: i32, y: i32, icon: isize, w: i32, h: i32, step: u32, brush: isize, flags: u32) -> i32;
+    }
+
+    #[link(name = "gdi32")]
+    extern "system" {
+        fn CreateCompatibleDC(hdc: isize) -> isize;
+        fn CreateDIBSection(hdc: isize, info: *const BitmapInfoHeader, usage: u32, bits: *mut *mut u8, section: isize, offset: u32) -> isize;
+        fn SelectObject(hdc: isize, obj: isize) -> isize;
+        fn DeleteObject(obj: isize) -> i32;
+        fn DeleteDC(hdc: isize) -> i32;
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetModuleHandleW(name: *const u16) -> isize;
+    }
+
+    const WM_TIMER: u32 = 0x0113;
+    // Explorer's taskbar seen shown (the hook), lParam its window; the tray's
+    // icons changed (systray.rs); the thread asked to end.
+    const WM_TASKBAR_SHOWN: u32 = 0x8001;
+    const WM_TRAY_CHANGED: u32 = 0x8002;
+    const WM_STOP: u32 = 0x8003;
+    const WS_POPUP: u32 = 0x8000_0000;
+    const WS_EX_TOOLWINDOW: u32 = 0x80;
+    const SPI_GETWORKAREA: u32 = 0x30;
+    const EVENT_OBJECT_SHOW: u32 = 0x8002;
+    const OBJID_WINDOW: i32 = 0;
+    const KEYEVENTF_EXTENDEDKEY: u32 = 0x1;
+    const KEYEVENTF_KEYUP: u32 = 0x2;
+    const VK_LWIN: u16 = 0x5B;
+    const VK_TAB: u16 = 0x09;
+    const DI_NORMAL: u32 = 3;
+    // The ticks (half seconds) to wait before asking programs for their icons.
+    const SETTLE_TICKS: u32 = 3;
+
+    struct Host {
+        hwnd: isize,
+        thread: JoinHandle<()>,
+    }
+
+    static HOST: Mutex<Option<Host>> = Mutex::new(None);
+    static SH: Mutex<Option<Arc<Shared>>> = Mutex::new(None);
+    static OURS: AtomicIsize = AtomicIsize::new(0);
+    // Explorer's taskbar window: a new one means Explorer started again.
+    static EXPLORER: AtomicIsize = AtomicIsize::new(0);
+    static CREATED_MSG: AtomicU32 = AtomicU32::new(0);
+    static TICKS: AtomicU32 = AtomicU32::new(0);
+    // Asking programs for their icons: from this tick (0: asked), the last
+    // time, and how many times right after one.
+    static ASK_AT: AtomicU32 = AtomicU32::new(0);
+    static LAST_ASK: AtomicU32 = AtomicU32::new(0);
+    static QUICK_ASKS: AtomicU32 = AtomicU32::new(0);
+    // Each icon drawn: (key, its handle) to its PNG; the list sent last.
+    static PNGS: Mutex<Option<HashMap<u64, (isize, String)>>> = Mutex::new(None);
+    static SENT: Mutex<Value> = Mutex::new(Value::Null);
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    fn sh() -> Option<Arc<Shared>> {
+        SH.lock().unwrap().clone()
+    }
+
+    fn log(line: &str) {
+        if let Some(sh) = sh() {
+            sh.log(&format!("taskbar: {line}"));
+        }
+    }
+
+    fn work_bottom() -> i32 {
+        let mut r = Rect::default();
+        // SAFETY: our own struct, of the size the call writes.
+        unsafe { SystemParametersInfoW(SPI_GETWORKAREA, 0, &mut r as *mut Rect as *mut c_void, 0) };
+        r.bottom
+    }
+
+    pub fn is_up() -> bool {
+        HOST.lock().unwrap().is_some()
+    }
+
+    // Windows' taskbar put away and the tray taken, before the strip is
+    // taken (once the work area has lost the taskbar's room, so the strip
+    // goes to the bottom and not above its room). mon_bottom: the display's
+    // bottom, physical.
+    pub fn take(sh: &Shared, strip: (i32, i32, i32, i32), mon_bottom: i32) {
+        if is_up() {
+            return;
+        }
+        *SH.lock().unwrap() = Some(crate::shared(&sh.app));
+        let file = sh.dir.join("taskbar.json");
+        if let Err(e) = shell::hide(&file) {
+            sh.log(&format!("taskbar: could not write {}: {e}", file.display()));
+            return;
+        }
+        sh.log(&format!("taskbar: Windows' put away; guard started: {}", shell::spawn_guard(&file)));
+        let t = Instant::now();
+        while work_bottom() != mon_bottom && t.elapsed() < Duration::from_millis(3000) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        sh.log(&format!("taskbar: work area free after {} ms", t.elapsed().as_millis()));
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || run(strip, ready_tx));
+        match ready_rx.recv_timeout(Duration::from_secs(3)) {
+            Ok(hwnd) => *HOST.lock().unwrap() = Some(Host { hwnd, thread }),
+            Err(_) => sh.log("taskbar: its thread did not start"),
+        }
+    }
+
+    // The tray handed back to Explorer and its taskbar shown again.
+    pub fn give_back(sh: &Shared) {
+        let host = HOST.lock().unwrap().take();
+        if let Some(host) = host {
+            // SAFETY: the thread's own window; a posted message, no pointers.
+            unsafe { PostMessageW(host.hwnd as Hwnd, WM_STOP, 0, 0) };
+            let _ = host.thread.join();
+        }
+        let file = sh.dir.join("taskbar.json");
+        if file.exists() {
+            sh.log(&format!("taskbar: Windows' given back: {}", shell::restore(&file)));
+        }
+        *SENT.lock().unwrap() = Value::Null;
+    }
+
+    // Where the strip is now (physical): ours of the taskbar's class goes
+    // there too, for those who ask the taskbar's window where it is.
+    pub fn strip_moved(strip: (i32, i32, i32, i32)) {
+        if is_up() {
+            systray::place(strip);
+        }
+    }
+
+    // The tray's icons as last sent, for a page that has just come up.
+    pub fn resend(sh: &Shared) {
+        let sent = SENT.lock().unwrap().clone();
+        if !sent.is_null() {
+            let _ = sh.app.emit_to("island", "taskbar:tray", sent);
+        }
+    }
+
+    // A press on a tray icon in the page, told to its program. The press
+    // itself brings the home's window to the front first, as the taskbar
+    // comes there when pressed, so it may hand the front on (a menu not in
+    // front does not close when you press elsewhere).
+    pub fn press(sh: &Shared, key: u64, press: &str, home_hwnd: isize) -> bool {
+        let press = match press {
+            "leftDown" => Press::LeftDown,
+            "leftUp" => Press::LeftUp,
+            "rightDown" => Press::RightDown,
+            "rightUp" => Press::RightUp,
+            "double" => Press::Double,
+            "move" => Press::Move,
+            "in" => Press::HoverIn,
+            "out" => Press::HoverOut,
+            _ => return false,
+        };
+        if matches!(press, Press::LeftDown | Press::RightDown) && home_hwnd != 0 {
+            // SAFETY: our own window; the press is the input that lets it.
+            unsafe { SetForegroundWindow(home_hwnd as Hwnd) };
+        }
+        let mut at = Point::default();
+        // SAFETY: our own out-parameter.
+        unsafe { GetCursorPos(&mut at) };
+        let told = systray::tell(key, press, (at.x, at.y));
+        for line in systray::notes() {
+            sh.log(&format!("taskbar: {line}"));
+        }
+        told
+    }
+
+    // What the taskbar's own buttons open, by the keys that open them.
+    pub fn open(what: &str) -> bool {
+        let keys: &[u16] = match what {
+            "start" => &[VK_LWIN],
+            "search" => &[VK_LWIN, b'S' as u16],
+            "tasks" => &[VK_LWIN, VK_TAB],
+            "widgets" => &[VK_LWIN, b'W' as u16],
+            "desktop" => &[VK_LWIN, b'D' as u16],
+            "quick" => &[VK_LWIN, b'A' as u16],
+            "notifications" => &[VK_LWIN, b'N' as u16],
+            _ => return false,
+        };
+        let key = |vk: u16, up: bool| Input {
+            kind: 1,
+            u: InputUnion { ki: KeybdInput { vk, scan: 0, flags: if vk == VK_LWIN { KEYEVENTF_EXTENDEDKEY } else { 0 } | if up { KEYEVENTF_KEYUP } else { 0 }, time: 0, extra: 0 } },
+        };
+        let inputs: Vec<Input> = keys.iter().map(|&k| key(k, false)).chain(keys.iter().rev().map(|&k| key(k, true))).collect();
+        // SAFETY: a slice of INPUTs of the size passed.
+        unsafe { SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<Input>() as i32) == inputs.len() as u32 }
+    }
+
+    fn run(strip: (i32, i32, i32, i32), ready: std::sync::mpsc::Sender<isize>) {
+        // SAFETY: our own class and window, on this thread, which runs its loop.
+        unsafe {
+            let instance = GetModuleHandleW(std::ptr::null());
+            let class = wide("WakuwakuTaskbarHost");
+            let wc = WndClassExW {
+                size: std::mem::size_of::<WndClassExW>() as u32,
+                style: 0,
+                wndproc,
+                cls_extra: 0,
+                wnd_extra: 0,
+                instance,
+                icon: 0,
+                cursor: 0,
+                background: 0,
+                menu_name: std::ptr::null(),
+                class_name: class.as_ptr(),
+                icon_sm: 0,
+            };
+            RegisterClassExW(&wc);
+            // Top-level (not message-only): TaskbarCreated is broadcast to those.
+            let hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, class.as_ptr(), std::ptr::null(), WS_POPUP, 0, 0, 0, 0, std::ptr::null_mut(), 0, instance, std::ptr::null_mut());
+            if hwnd.is_null() {
+                return;
+            }
+            OURS.store(hwnd as isize, Ordering::SeqCst);
+            CREATED_MSG.store(shell::taskbar_created(), Ordering::SeqCst);
+            EXPLORER.store(shell::taskbars().first().copied().unwrap_or(0), Ordering::SeqCst);
+            let hook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, 0, on_event, 0, 0, 0);
+            SetTimer(hwnd, 1, 500, std::ptr::null());
+            TICKS.store(0, Ordering::SeqCst);
+            let tray = systray::start(strip, hwnd as isize, WM_TRAY_CHANGED);
+            ASK_AT.store(SETTLE_TICKS, Ordering::SeqCst);
+            log(&format!("up: show hook {}, tray {tray} (first: {})", hook != 0, systray::first()));
+            let _ = ready.send(hwnd as isize);
+
+            let mut msg: Msg = std::mem::zeroed();
+            while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            if hook != 0 {
+                UnhookWinEvent(hook);
+            }
+            KillTimer(hwnd, 1);
+            log(&format!("tray handed back; it was handed {}", systray::seen()));
+            systray::stop();
+            DestroyWindow(hwnd);
+            OURS.store(0, Ordering::SeqCst);
+            *PNGS.lock().unwrap() = None;
+        }
+    }
+
+    extern "system" fn on_event(_hook: isize, _event: u32, hwnd: Hwnd, object: i32, _child: i32, _thread: u32, _time: u32) {
+        if object != OBJID_WINDOW || hwnd.is_null() {
+            return;
+        }
+        let mut name = [0u16; 32];
+        // SAFETY: our own buffer, its size passed.
+        let n = unsafe { GetClassNameW(hwnd, name.as_mut_ptr(), 32) }.max(0) as usize;
+        let class = String::from_utf16_lossy(&name[..n]);
+        if class == "Shell_TrayWnd" || class == "Shell_SecondaryTrayWnd" {
+            // SAFETY: our own window, handled on its thread.
+            unsafe { PostMessageW(OURS.load(Ordering::SeqCst) as Hwnd, WM_TASKBAR_SHOWN, 0, hwnd as isize) };
+        }
+    }
+
+    fn put_away_again(how: &str) {
+        shell::rehide();
+        log(&format!("Windows' shown again ({how}): put away"));
+        if systray::keep_first() {
+            log("tray: Explorer's window had come first; ours put ahead again");
+            ask_soon();
+        }
+    }
+
+    // Explorer's window came first for a moment: what programs handed the
+    // tray then went to it. They are asked again once it settles: at most
+    // every ten seconds, but right away (twice at most) when it came first
+    // while they were answering.
+    fn ask_soon() {
+        let (ticks, last) = (TICKS.load(Ordering::SeqCst), LAST_ASK.load(Ordering::SeqCst));
+        if ASK_AT.load(Ordering::SeqCst) != 0 {
+            return;
+        }
+        let answering = ticks <= last + 6;
+        if !answering {
+            QUICK_ASKS.store(0, Ordering::SeqCst);
+        }
+        if (answering && QUICK_ASKS.fetch_add(1, Ordering::SeqCst) < 2) || ticks >= last + 20 {
+            ASK_AT.store(ticks + SETTLE_TICKS, Ordering::SeqCst);
+        }
+    }
+
+    fn tick() {
+        if shell::visible() {
+            put_away_again("seen by the timer");
+        }
+        systray::sweep();
+        if systray::keep_first() {
+            log("tray: Explorer's window had come first (timer); ours put ahead again");
+            ask_soon();
+        }
+        let ticks = TICKS.fetch_add(1, Ordering::SeqCst) + 1;
+        let ask = ASK_AT.load(Ordering::SeqCst);
+        if ask != 0 && ticks >= ask && systray::first() {
+            ASK_AT.store(0, Ordering::SeqCst);
+            LAST_ASK.store(ticks, Ordering::SeqCst);
+            systray::ask_again();
+            log("tray: programs asked for their icons");
+        }
+    }
+
+    // Explorer started again (a new taskbar window), or a program's asking
+    // (the same one: ours, or another tray's).
+    fn on_created() {
+        let now = shell::taskbars().first().copied().unwrap_or(0);
+        if now == EXPLORER.swap(now, Ordering::SeqCst) {
+            return;
+        }
+        log("Explorer started again");
+        shell::rehide();
+        if let Some(sh) = sh() {
+            crate::island::take_strip_again(&sh);
+        }
+        systray::keep_first();
+        ask_soon();
+    }
+
+    // The icons as the page draws them: each drawn once per handle.
+    fn send_icons() {
+        let Some(sh) = sh() else { return };
+        for line in systray::notes() {
+            sh.log(&format!("taskbar: {line}"));
+        }
+        let size = (16.0 * sh.screens().primary.map_or(1.0, |a| a.sf)).round() as i32;
+        let shown = systray::shown();
+        let list: Vec<Value> = {
+            let mut pngs = PNGS.lock().unwrap();
+            let pngs = pngs.get_or_insert_with(HashMap::new);
+            pngs.retain(|k, _| shown.iter().any(|s| s.key == *k));
+            shown
+                .iter()
+                .map(|s| {
+                    let png = if s.icon == 0 {
+                        String::new()
+                    } else {
+                        match pngs.get(&s.key) {
+                            Some((h, png)) if *h == s.icon => png.clone(),
+                            _ => {
+                                let png = png_of(s.icon, size).unwrap_or_default();
+                                pngs.insert(s.key, (s.icon, png.clone()));
+                                png
+                            }
+                        }
+                    };
+                    json!({ "key": s.key, "png": png, "tip": s.tip, "exe": s.exe })
+                })
+                .collect()
+        };
+        let list = Value::Array(list);
+        *SENT.lock().unwrap() = list.clone();
+        let _ = sh.app.emit_to("island", "taskbar:tray", list);
+    }
+
+    // An icon drawn as a PNG (a data: URL), size px across. Drawn twice, on
+    // black and on white: how much the white shows through is how clear each
+    // pixel is, for icons with an alpha channel and those with a mask alike.
+    fn png_of(icon: isize, size: i32) -> Option<String> {
+        if size <= 0 {
+            return None;
+        }
+        let n = (size * size) as usize;
+        let draw = |fill: u8| -> Option<Vec<u8>> {
+            // SAFETY: a DIB section of our own, drawn into and read, then deleted.
+            unsafe {
+                let dc = CreateCompatibleDC(0);
+                let info = BitmapInfoHeader { size: 40, width: size, height: -size, planes: 1, bit_count: 32, compression: 0, size_image: 0, x_ppm: 0, y_ppm: 0, clr_used: 0, clr_important: 0 };
+                let mut bits: *mut u8 = std::ptr::null_mut();
+                let bmp = CreateDIBSection(dc, &info, 0, &mut bits, 0, 0);
+                if bmp == 0 || bits.is_null() {
+                    DeleteDC(dc);
+                    return None;
+                }
+                let old = SelectObject(dc, bmp);
+                std::ptr::write_bytes(bits, fill, n * 4);
+                DrawIconEx(dc, 0, 0, icon, size, size, 0, 0, DI_NORMAL);
+                let pixels = std::slice::from_raw_parts(bits, n * 4).to_vec();
+                SelectObject(dc, old);
+                DeleteObject(bmp);
+                DeleteDC(dc);
+                Some(pixels)
+            }
+        };
+        let (black, white) = (draw(0)?, draw(255)?);
+        let mut rgba = vec![0u8; n * 4];
+        for i in 0..n {
+            let (b, w) = (&black[i * 4..i * 4 + 3], &white[i * 4..i * 4 + 3]);
+            let through = (0..3).map(|c| w[c].saturating_sub(b[c])).max().unwrap_or(255);
+            let alpha = 255 - through;
+            if alpha == 0 {
+                continue;
+            }
+            // On black, a pixel is its colour times its alpha (BGR to RGB).
+            for (c, from) in [(0, 2), (1, 1), (2, 0)] {
+                rgba[i * 4 + c] = ((b[from] as u32 * 255 + alpha as u32 / 2) / alpha as u32).min(255) as u8;
+            }
+            rgba[i * 4 + 3] = alpha;
+        }
+        let mut out = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut out, size as u32, size as u32);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().ok()?;
+            writer.write_image_data(&rgba).ok()?;
+        }
+        Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(out)))
+    }
+
+    extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
+        match msg {
+            WM_TIMER => tick(),
+            WM_TASKBAR_SHOWN => {
+                // SAFETY: a plain check of Explorer's window.
+                if unsafe { IsWindowVisible(lparam as Hwnd) } != 0 {
+                    put_away_again("its show event");
+                }
+            }
+            WM_TRAY_CHANGED => send_icons(),
+            // SAFETY: ending this thread's loop.
+            WM_STOP => unsafe { PostQuitMessage(0) },
+            _ if msg == CREATED_MSG.load(Ordering::SeqCst) && msg != 0 => on_created(),
+            // SAFETY: the default for the rest.
+            _ => return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+        }
+        0
+    }
+}
+
+#[cfg(not(windows))]
+mod imp {
+    use crate::Shared;
+
+    pub fn is_up() -> bool {
+        false
+    }
+    pub fn take(_sh: &Shared, _strip: (i32, i32, i32, i32), _mon_bottom: i32) {}
+    pub fn give_back(_sh: &Shared) {}
+    pub fn strip_moved(_strip: (i32, i32, i32, i32)) {}
+    pub fn resend(_sh: &Shared) {}
+    pub fn press(_sh: &Shared, _key: u64, _press: &str, _home_hwnd: isize) -> bool {
+        false
+    }
+    pub fn open(_what: &str) -> bool {
+        false
+    }
+}
+
+pub use imp::{give_back, resend, strip_moved, take};
+
+// At start: Windows' taskbar left put away by a run that is gone (its guard
+// gone too) is given back.
+pub fn recover(sh: &Shared) {
+    if crate::shell::recover(&sh.dir.join("taskbar.json")) {
+        sh.log("taskbar: Windows' taskbar was left put away: given back");
+    }
+}
+
+// From the page: a press on a tray icon (taskbar_tray), a button of the
+// taskbar's own (taskbar_open).
+#[tauri::command]
+pub fn taskbar_tray(app: tauri::AppHandle, key: u64, press: String) -> bool {
+    let sh = crate::shared(&app);
+    imp::press(&sh, key, &press, crate::island::hwnd(&sh))
+}
+
+#[tauri::command]
+pub fn taskbar_open(what: String) -> bool {
+    imp::open(&what)
+}
+
+// Where the page drew each tray icon (key, x, y, w, h in its own px), for
+// the programs that ask where theirs is (Shell_NotifyIconGetRect): WeChat
+// looks for the pointer over its icon by it, QQ opens its menu from it.
+#[tauri::command]
+pub fn taskbar_tray_rects(app: tauri::AppHandle, rects: Vec<(u64, f64, f64, f64, f64)>) {
+    let sh = crate::shared(&app);
+    let ((ox, oy), sf) = crate::island::origin(&sh);
+    let px = |v: f64| (v * sf).round() as i32;
+    crate::systray::set_rects(rects.into_iter().map(|(k, x, y, w, h)| (k, (ox + px(x), oy + px(y), ox + px(x + w), oy + px(y + h)))).collect());
+}

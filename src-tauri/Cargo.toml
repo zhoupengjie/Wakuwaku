@@ -23,6 +23,10 @@ io-imap = { version = "=0.7.1", default-features = false, features = ["client"] 
 # io-imap's parser (imap-codec) needs nom with alloc, which io-imap alone does
 # not turn on.
 nom = { version = "7", default-features = false, features = ["alloc"] }
+# The taskbar's tray icons, drawn into PNGs for its page (taskbar.rs); both
+# already in the tree, under Tauri.
+png = "0.17"
+base64 = "0.22"
 
 [features]
 default = ["custom-protocol"]

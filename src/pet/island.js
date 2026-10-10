@@ -1,9 +1,11 @@
 // Her home: by display, a round portrait in a corner of the screen (corner),
 // a black pill at the top centre after the iPhone's Dynamic Island (island),
-// or a strip along the top of the screen (bar), its left end hers and the
-// other sessions as tags along the rest. The same element in each, which
-// springs between three shapes (in a corner, away from the corner; in the
-// bar, hanging below it):
+// a strip along the top of the screen (bar), its left end hers and the
+// other sessions as tags along the rest, or a strip along the bottom in
+// place of Windows' taskbar (taskbar): the bar's, with the Start button, the
+// tray's icons (taskbar.rs) and the clock besides. The same element in
+// each, which springs between three shapes (in a corner, away from the
+// corner; in the bar, hanging below it; in the taskbar, growing up from it):
 //   compact   her round portrait, where the session is (or whose ending it
 //             is) and the clock
 //   expanded  hovered, or for a few seconds when something happens (a turn
@@ -97,6 +99,11 @@
   const CORNER_BASE = { width: 760, height: 440 }
   const BAR_H = 30
   const BAR_HEAD = 22
+  // The taskbar's strip, the room kept above it (both island.rs's), and her
+  // portrait in it.
+  const TASKBAR_H = 48
+  const TASKBAR_ROOM = 440
+  const TASK_HEAD = 30
   // A portrait px across is the sheet at this scale.
   const PER_PX = 0.00875
   // The settings' width.
@@ -194,7 +201,9 @@
   // This page draws her home in the home's window; her own window draws her.
   const isOn = () => ROLE === 'island'
   // Her home, and for the corner, which.
-  const home = () => (config.display === 'corner' || config.display === 'bar' ? config.display : 'island')
+  const home = () => (['corner', 'bar', 'taskbar'].includes(config.display) ? config.display : 'island')
+  // A strip across the screen (the bar, the taskbar): the other sessions have tags in it.
+  const isStrip = () => home() === 'bar' || home() === 'taskbar'
   const corner = () => (['br', 'bl', 'tr', 'tl'].includes(config.corner) ? config.corner : 'br')
   // In her seat: there is a pet to show, and she is not out on the desktop.
   const isHome = () => !!spriteUrl && (config.out !== true || isComingHome)
@@ -303,8 +312,8 @@
       value.style.color = COLOR[now.mood]
       key = `s:${now.id || ''}:${now.mood}`
     }
-    // In the bar the other sessions have their own tags.
-    const more = now.others > 0 && home() !== 'bar' ? el('span', 'more', `+${now.others}`) : null
+    // In the bar and the taskbar the other sessions have their own tags.
+    const more = now.others > 0 && !isStrip() ? el('span', 'more', `+${now.others}`) : null
     if (more) more.style.color = COLOR[second] || COLOR.working
     // What takes turns, together: it slides in when it is something else.
     const turning = el('span', 'turning')
@@ -485,6 +494,7 @@
     if (view === 'compact') {
       if (home() === 'corner') portrait(CIRCLE - 8, (CIRCLE - 8) * PER_PX, 4, 4)
       else if (home() === 'bar') portrait(BAR_HEAD, BAR_HEAD * PER_PX, 4, 4)
+      else if (home() === 'taskbar') portrait(TASK_HEAD, TASK_HEAD * PER_PX, (TASKBAR_H - TASK_HEAD) / 2, (TASKBAR_H - TASK_HEAD) / 2)
       else portrait(HEAD, HEAD_SCALE, 6, 6)
     } else if (view === 'settings') {
       portrait(SET_HEAD, SET_HEAD_SCALE, 16, 13)
@@ -516,8 +526,16 @@
 
   // --- Room: the window grows before the island does, and shrinks after ----------------
 
-  // The window with no extra room, by home: the bar is as wide as the screen.
-  const baseRoom = () => (home() === 'corner' ? CORNER_BASE : home() === 'bar' ? { width: innerWidth, height: BAR_H } : BASE)
+  // The window with no extra room, by home: the bar and the taskbar are as
+  // wide as the screen, the taskbar with its room above.
+  const baseRoom = () =>
+    home() === 'corner'
+      ? CORNER_BASE
+      : home() === 'bar'
+        ? { width: innerWidth, height: BAR_H }
+        : home() === 'taskbar'
+          ? { width: innerWidth, height: TASKBAR_H + TASKBAR_ROOM }
+          : BASE
 
   function roomFor(want) {
     if (home() === 'corner') {
@@ -528,6 +546,11 @@
     // The bar: whatever hangs below it (main keeps the width the screen's).
     if (home() === 'bar') {
       if (want.height <= BAR_H) return null
+      return { width: innerWidth, height: want.height + 12 }
+    }
+    // The taskbar: what grows up from it, past its room (the window then grows up too).
+    if (home() === 'taskbar') {
+      if (want.height + 12 <= TASKBAR_H + TASKBAR_ROOM) return null
       return { width: innerWidth, height: want.height + 12 }
     }
     const width = want.width + 48
@@ -553,10 +576,20 @@
   function setSize({ width, height }) {
     island.style.width = `${width}px`
     island.style.height = `${height}px`
-    // The bar's left end is square, and what hangs from it is rounded below;
-    // the corner's is a circle until it opens.
+    // The bar's left end is square, and what hangs from it is rounded below
+    // (what grows up from the taskbar, above); the corner's is a circle until it opens.
     island.style.borderRadius =
-      home() === 'bar' ? (view === 'compact' ? '0' : '0 0 22px 22px') : home() === 'corner' && view === 'compact' ? `${CIRCLE / 2}px` : `${height > 60 ? 30 : height / 2}px`
+      home() === 'bar'
+        ? view === 'compact'
+          ? '0'
+          : '0 0 22px 22px'
+        : home() === 'taskbar'
+          ? view === 'compact'
+            ? '0'
+            : '22px 22px 0 0'
+          : home() === 'corner' && view === 'compact'
+            ? `${CIRCLE / 2}px`
+            : `${height > 60 ? 30 : height / 2}px`
   }
 
   // --- Deciding ---------------------------------------------------------------
@@ -577,14 +610,15 @@
         : { width: Math.min(OPEN_BARE_MAX_W, Math.max(300, expanded.offsetWidth)), height: Math.max(84, expanded.offsetHeight) }
     }
     if (home() === 'corner') return { width: CIRCLE, height: CIRCLE }
-    return { width: compactWidth, height: home() === 'bar' ? BAR_H : 36 }
+    return { width: compactWidth, height: home() === 'bar' ? BAR_H : home() === 'taskbar' ? TASKBAR_H : 36 }
   }
 
-  // --- The bar's right part ---------------------------------------------------------
+  // --- The bar's right part (and the taskbar's) -------------------------------------
 
   // The other sessions as tags (a press goes to one's window), a widget, and
-  // the settings. Its left edge stays where the compact island ends, so what
-  // opens from the island hangs over it.
+  // the settings; in the taskbar, the Start button before them, the tray's
+  // icons and the clock after. Its left edge stays where the compact island
+  // ends, so what opens from the island hangs over it (grows up over it).
   const barRest = document.createElement('div')
   barRest.id = 'bar-rest'
   island.after(barRest)
@@ -592,11 +626,10 @@
   const cornerBadge = el('span')
   cornerBadge.id = 'corner-badge'
   island.append(cornerBadge)
-  function fillBar() {
-    if (home() !== 'bar') return
-    barRest.style.left = `${sizeOf('compact').width}px`
+
+  function sessionTags() {
     const detailed = isDetailed()
-    const tags = Status.othersOf(now.list, now).map(x => {
+    return Status.othersOf(now.list, now).map(x => {
       const tag = el('span', 'tag')
       if (x.jump && x.id) {
         tag.dataset.jump = x.id
@@ -609,11 +642,14 @@
       tag.append(dot, el('span', 'who', Status.nameOf(x, detailed)), el('span', 'what', Status.brief(lang, x, { detailed })), when)
       return tag
     })
-    const parts = [el('span', 'tags'), el('span', 'grow')]
-    parts[0].append(...tags)
+  }
+
+  // The widget shown, and the monitor, pinned: always there by the settings.
+  function widgetFaces() {
+    const faces = []
     const w = widgets.length ? widgets[widgetAt % widgets.length] : null
     if (w) {
-      const { label, value } = Widgets.words(lang, w, detailed)
+      const { label, value } = Widgets.words(lang, w, isDetailed())
       const face = el('span', 'face')
       face.insertAdjacentHTML('afterbegin', Widgets.icon(w.icon))
       face.firstChild.style.color = w.color || COLOR.idle
@@ -621,20 +657,158 @@
       v.style.color = w.color || COLOR.idle
       if (Widgets.partsOf(w)) v.innerHTML = Widgets.partsHTML(w)
       face.append(Widgets.partsOf(w) ? '' : label, v)
-      parts.push(face)
+      faces.push(face)
     }
-    // The monitor, pinned: always there by the settings.
     if (isPinned()) {
       const readings = el('span', 'face mon')
       readings.innerHTML = Widgets.partsHTML(monitor)
-      parts.push(readings)
+      faces.push(readings)
     }
+    return faces
+  }
+
+  function gearNode() {
     const gear = el('span', 'gear')
     gear.dataset.bar = 'settings'
     gear.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>')
-    parts.push(gear)
-    barRest.replaceChildren(...parts)
+    return gear
   }
+
+  function fillBar() {
+    if (home() === 'taskbar') return fillTaskbar()
+    if (home() !== 'bar') return
+    barRest.style.left = `${sizeOf('compact').width}px`
+    const parts = [el('span', 'tags'), el('span', 'grow')]
+    parts[0].append(...sessionTags())
+    barRest.replaceChildren(...parts, ...widgetFaces(), gearNode())
+    taskbarBuilt = false
+  }
+
+  // The taskbar's parts that stay put: rebuilt every second with the
+  // clocks, the tray's icons would lose the pointer and blink.
+  const startButton = el('span', 'start')
+  startButton.dataset.bar = 'start'
+  startButton.innerHTML =
+    '<svg viewBox="0 0 16 16"><rect x="1" y="1" width="6.4" height="6.4" rx="1.2"/><rect x="8.6" y="1" width="6.4" height="6.4" rx="1.2"/><rect x="1" y="8.6" width="6.4" height="6.4" rx="1.2"/><rect x="8.6" y="8.6" width="6.4" height="6.4" rx="1.2"/></svg>'
+  const tagsBox = el('span', 'tags')
+  const facesBox = el('span', 'faces')
+  const trayBox = el('span', 'tray')
+  const clockBox = el('span', 'tclock')
+  clockBox.dataset.bar = 'notifications'
+  const taskGear = gearNode()
+  let taskbarBuilt = false
+  // The tray's icons as last sent ({ key, png, tip, exe }), and as drawn.
+  let trayIcons = []
+  let trayDrawn = ''
+  let trayRectsSent = ''
+
+  function fillTaskbar() {
+    barRest.style.left = `${sizeOf('compact').width}px`
+    if (!taskbarBuilt) {
+      barRest.replaceChildren(startButton, tagsBox, el('span', 'grow'), facesBox, trayBox, clockBox, taskGear)
+      taskbarBuilt = true
+      trayDrawn = ''
+    }
+    startButton.title = t(lang, 'taskbar.start')
+    clockBox.title = t(lang, 'taskbar.clock')
+    tagsBox.replaceChildren(...sessionTags())
+    facesBox.replaceChildren(...widgetFaces())
+    drawTray()
+    tickClock()
+  }
+
+  // The time and the date, as Windows' taskbar has them.
+  function tickClock() {
+    const d = new Date()
+    const time = d.toLocaleTimeString(lang === 'zh' ? 'zh-CN' : undefined, { hour: '2-digit', minute: '2-digit' })
+    const date = d.toLocaleDateString(lang === 'zh' ? 'zh-CN' : undefined, { year: 'numeric', month: 'numeric', day: 'numeric' })
+    if (clockBox.dataset.at !== time + date) {
+      clockBox.dataset.at = time + date
+      clockBox.replaceChildren(el('b', '', time), el('i', '', date))
+    }
+  }
+  setInterval(() => isOn() && home() === 'taskbar' && tickClock(), 5000)
+
+  function drawTray() {
+    const drawn = JSON.stringify(trayIcons.map(i => [i.key, i.png.length, i.png.slice(-24), i.tip]))
+    if (drawn !== trayDrawn) {
+      trayDrawn = drawn
+      trayBox.replaceChildren(
+        ...trayIcons.map(i => {
+          const slot = el('span', 'ticon')
+          slot.dataset.tray = i.key
+          slot.title = i.tip || i.exe
+          if (i.png) {
+            const img = el('img')
+            img.src = i.png
+            img.draggable = false
+            slot.append(img)
+          }
+          return slot
+        }),
+      )
+    }
+    requestAnimationFrame(sendTrayRects)
+  }
+
+  // Where each icon is, for the programs that ask (taskbar.rs).
+  function sendTrayRects() {
+    if (home() !== 'taskbar') return
+    const rects = [...trayBox.querySelectorAll('[data-tray]')].map(s => {
+      const r = s.getBoundingClientRect()
+      return [Number(s.dataset.tray), r.left, r.top, r.width, r.height]
+    })
+    const sent = JSON.stringify(rects)
+    if (sent === trayRectsSent) return
+    trayRectsSent = sent
+    window.pet.taskbar.trayRects(rects)
+  }
+  window.addEventListener('resize', () => {
+    trayRectsSent = ''
+    requestAnimationFrame(sendTrayRects)
+  })
+
+  window.pet.onTray(list => {
+    trayIcons = Array.isArray(list) ? list : []
+    if (isOn() && home() === 'taskbar') drawTray()
+  })
+
+  // A press on a tray icon goes to its program, as Windows' taskbar tells it:
+  // the second press of a double one as a double press; the pointer coming,
+  // moving (at most every 100 ms) and going.
+  const trayKey = e => e.target.closest('[data-tray]')?.dataset.tray
+  let trayOver = null
+  let trayMovedAt = 0
+  trayBox.addEventListener('mousedown', e => {
+    const key = trayKey(e)
+    if (!key) return
+    e.stopPropagation()
+    if (e.button === 0) window.pet.taskbar.tray(key, e.detail === 2 ? 'double' : 'leftDown')
+    else if (e.button === 2) window.pet.taskbar.tray(key, 'rightDown')
+  })
+  trayBox.addEventListener('mouseup', e => {
+    const key = trayKey(e)
+    if (!key) return
+    e.stopPropagation()
+    if (e.button === 0) window.pet.taskbar.tray(key, 'leftUp')
+    else if (e.button === 2) window.pet.taskbar.tray(key, 'rightUp')
+  })
+  trayBox.addEventListener('mousemove', e => {
+    const key = trayKey(e) || null
+    if (key !== trayOver) {
+      if (trayOver) window.pet.taskbar.tray(trayOver, 'out')
+      if (key) window.pet.taskbar.tray(key, 'in')
+      trayOver = key
+    }
+    if (key && Date.now() - trayMovedAt > 100) {
+      trayMovedAt = Date.now()
+      window.pet.taskbar.tray(key, 'move')
+    }
+  })
+  trayBox.addEventListener('mouseleave', () => {
+    if (trayOver) window.pet.taskbar.tray(trayOver, 'out')
+    trayOver = null
+  })
 
   // A press on a tag goes to its session; on the gear, the settings.
   barRest.addEventListener('pointerdown', e => {
@@ -642,6 +816,17 @@
     const tag = e.target.closest('[data-jump]')
     if (tag) return jumpTo(tag.dataset.jump)
     if (e.target.closest('[data-bar="settings"]')) window.pet.openSettings()
+  })
+  // The taskbar's own buttons open what Windows' do: Start, and from the
+  // clock the notifications and the calendar (once the button is up).
+  barRest.addEventListener('click', e => {
+    const what = e.target.closest('[data-bar]')?.dataset.bar
+    if (what && what !== 'settings') window.pet.taskbar.open(what)
+  })
+  // A right press: a tray icon's program has it; elsewhere, her menu.
+  barRest.addEventListener('contextmenu', e => {
+    e.preventDefault()
+    if (!trayKey(e)) window.pet.menu()
   })
   // It takes the pointer while it is under it (the window lets clicks through elsewhere).
   barRest.addEventListener('mouseenter', () => window.pet.hover(true))
@@ -781,6 +966,7 @@
   function seatIn(r) {
     if (home() === 'corner') return [r.left + CIRCLE / 2, r.top + CIRCLE / 2]
     if (home() === 'bar') return [r.left + 15, r.top + 15]
+    if (home() === 'taskbar') return [r.left + TASKBAR_H / 2, r.top + TASKBAR_H / 2]
     return [r.left + 18, r.top + 18]
   }
 
@@ -814,8 +1000,9 @@
   function stretch(x, y) {
     const r = island.getBoundingClientRect()
     const cx = x
-    // From the top of the screen she can only come down; from a corner, any way.
-    const cy = home() === 'corner' ? y + 30 : Math.max(y + 30, r.bottom - 10)
+    // From the top of the screen she can only come down, from the taskbar
+    // only up; from a corner, any way.
+    const cy = home() === 'corner' ? y + 30 : home() === 'taskbar' ? Math.min(y + 30, r.top + 10) : Math.max(y + 30, r.bottom - 10)
     const [ax, ay] = edgeNear(r, cx, cy)
     const dist = Math.hypot(cx - ax, cy - ay)
     pull.broken = dist > BREAK_PX
@@ -998,7 +1185,7 @@
 
   function place() {
     body.classList.toggle('island', isOn())
-    body.classList.remove('home-corner', 'home-island', 'home-bar', 'at-br', 'at-bl', 'at-tr', 'at-tl')
+    body.classList.remove('home-corner', 'home-island', 'home-bar', 'home-taskbar', 'at-br', 'at-bl', 'at-tr', 'at-tl')
     if (isOn()) body.classList.add(`home-${home()}`, `at-${corner()}`)
     seatPanel()
     if (!isOn() && panel.parentElement !== stage) stage.prepend(panel)

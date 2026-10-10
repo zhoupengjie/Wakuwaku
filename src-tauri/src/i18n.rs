@@ -29,6 +29,7 @@ pub fn t(lang: &str, key: &str) -> String {
         "menu.home" => if zh { "她的家" } else { "Her home" },
         "menu.corner" => if zh { "角落头像" } else { "A corner" },
         "menu.bar" => if zh { "顶栏" } else { "The top bar" },
+        "menu.taskbar" => if zh { "任务栏（代替 Windows 的）" } else { "The taskbar (in place of Windows')" },
         "menu.dnd" => if zh { "勿扰" } else { "Do not disturb" },
         "menu.show" => if zh { "显示宠物" } else { "Show pet" },
         "menu.hide" => if zh { "隐藏宠物" } else { "Hide pet" },

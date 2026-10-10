@@ -61,9 +61,9 @@ pub fn menu(sh: &Shared, is_tray: bool) -> tauri::Result<Menu<Wry>> {
     for key in ["bubble", "walk", "look"] {
         menu.append(&CheckMenuItem::with_id(app, key, t(&format!("menu.{key}")), true, flag(key), None::<&str>)?)?;
     }
-    // Her home: the corner, the island or the bar.
+    // Her home: the corner, the island, the bar or the taskbar.
     let homes = Submenu::new(app, t("menu.home"), true)?;
-    for id in ["corner", "island", "bar"] {
+    for id in ["corner", "island", "bar", "taskbar"] {
         homes.append(&CheckMenuItem::with_id(app, format!("display:{id}"), t(&format!("menu.{id}")), true, home == id, None::<&str>)?)?;
     }
     menu.append(&homes)?;

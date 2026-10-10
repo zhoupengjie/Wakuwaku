@@ -71,6 +71,17 @@
     settingsClosed: () => send('settings_closed'),
     // To a session's window; true when there was one to go to.
     jump: id => invoke('session_jump', { id: String(id || '') }).catch(() => false),
+    // The taskbar (taskbar.rs): what its own buttons open (start, search,
+    // tasks, widgets, desktop, quick, notifications), a press on a tray icon
+    // (leftDown, leftUp, rightDown, rightUp, double, move, in, out; in order,
+    // so a press never overtakes the one before), where the page drew the
+    // tray's icons; the icons as they change.
+    taskbar: {
+      open: what => invoke('taskbar_open', { what: String(what) }).catch(() => false),
+      tray: (key, press) => send('taskbar_tray', { key: Number(key), press: String(press) }),
+      trayRects: rects => send('taskbar_tray_rects', { rects }),
+    },
+    onTray: on('taskbar:tray'),
     settings: {
       get: () => invoke('settings_get'),
       set: patch => invoke('settings_set', { patch }),

@@ -4,14 +4,17 @@
 // src/pet/bridge.js.
 //
 // Where she is: her home (display) is a round portrait in a corner, the
-// island at the top centre, or a bar along the top of the screen; she is in
-// it, or out on the desktop (out). Out from the corner she talks herself
-// (bubble, panel); the island and the bar stay up and talk for her. The
-// settings grow out of her home; with none up, one rises for them.
+// island at the top centre, a bar along the top of the screen, or a taskbar
+// in place of Windows' own; she is in it, or out on the desktop (out). Out
+// from the corner she talks herself (bubble, panel); the island, the bar and
+// the taskbar stay up and talk for her. The settings grow out of her home;
+// with none up, one rises for them.
 //
 //   pet.rs         her window: size, place, eyes, drags, being carried, walks
-//   island.rs      her home's window (corner, island, bar), and the settings
-//   appbar.rs      the bar's strip, kept from other windows
+//   island.rs      her home's window (corner, island, bar, taskbar), and the settings
+//   appbar.rs      the bar's and the taskbar's strip, kept from other windows
+//   taskbar.rs     the taskbar's side of Windows: its own put away (shell.rs),
+//                  the tray taken over (systray.rs)
 //   settings.rs    what the settings show and change
 //   pointer.rs     click-through, for both windows; screen.rs the work areas
 //   asks.rs        prompts answered on her or the island
@@ -48,7 +51,10 @@ mod screen;
 mod scripts;
 mod server;
 mod settings;
+mod shell;
 mod state;
+mod systray;
+mod taskbar;
 mod tokens;
 mod tray;
 mod widgets;
@@ -141,11 +147,17 @@ impl Shared {
             && !(self.flag("hideInFullscreen") && self.by_fullscreen.load(Ordering::SeqCst))
     }
 
-    // Her home: 'corner', 'island' or 'bar' (island.rs).
+    // Another app is full screen (watched while the setting asks, or the taskbar is her home).
+    pub fn is_fullscreen(&self) -> bool {
+        self.by_fullscreen.load(Ordering::SeqCst)
+    }
+
+    // Her home: 'corner', 'island', 'bar' or 'taskbar' (island.rs).
     pub fn home(&self) -> &'static str {
         match self.setting("display").as_str() {
             Some("corner") => "corner",
             Some("bar") => "bar",
+            Some("taskbar") => "taskbar",
             _ => "island",
         }
     }
@@ -812,6 +824,12 @@ fn codex_hook(port: u16) {
 }
 
 fn main() {
+    // Her exe again, as the taskbar's guard (shell.rs): it waits for her to
+    // end, and gives Windows' taskbar back if she could not.
+    let args: Vec<String> = std::env::args().collect();
+    if let Some((pid, file)) = shell::guard_args(&args) {
+        return shell::guard(pid, file);
+    }
     let port: u16 = std::env::var("WAKUWAKU_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(47213);
     if std::env::args().any(|a| a == connection::ENSURE_FLAG || a == connection::LEGACY_ENSURE_FLAG) {
         return ensure_running(port);
@@ -873,6 +891,9 @@ fn main() {
             mail::letters::mail_letters,
             mail::letters::mail_letter,
             mail::agent::mail_hand,
+            taskbar::taskbar_tray,
+            taskbar::taskbar_open,
+            taskbar::taskbar_tray_rects,
         ])
         .on_menu_event(|app, event| tray::on_menu(&shared(app), event.id().as_ref()))
         .setup(move |app| {
@@ -920,6 +941,7 @@ fn main() {
             });
             app.manage(sh.clone());
             sh.log(&format!("up on port {}, data in {}", sh.port, sh.dir.display()));
+            taskbar::recover(&sh);
 
             pet::create(&sh)?;
             island::apply_visibility(&sh);
@@ -1032,7 +1054,8 @@ fn main() {
                         }
                     }
                     if n % 3 == 0 {
-                        let watching = fullscreen::AVAILABLE && ticker.flag("hideInFullscreen");
+                        // The taskbar steps aside for an app full screen, as Windows' own does.
+                        let watching = fullscreen::AVAILABLE && (ticker.flag("hideInFullscreen") || ticker.home() == "taskbar");
                         let own = ticker.own.lock().unwrap().clone();
                         let is_full = if watching { fullscreen::check(&own) } else { Some(false) };
                         if let Some(is_full) = is_full {

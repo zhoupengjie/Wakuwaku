@@ -33,8 +33,8 @@
   const TAB_KEY = { now: 's.tabNow', pets: 's.tabPets', look: 's.tabLook', alerts: 's.tabAlerts', widgets: 's.tabWidgets', mail: 's.tabMail', connect: 's.tabConnect' }
   const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
   const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
-  const HOMES = ['corner', 'island', 'bar']
-  const HOME_KEY = { corner: 's.displayCorner', island: 's.displayIsland', bar: 's.displayBar' }
+  const HOMES = ['corner', 'island', 'bar', 'taskbar']
+  const HOME_KEY = { corner: 's.displayCorner', island: 's.displayIsland', bar: 's.displayBar', taskbar: 's.displayTaskbar' }
   const CORNERS = ['br', 'bl', 'tr', 'tl']
   const HOLDS = ['seen', 8, 30, 120]
   const WAITS = [30, 60, 120, 290]
@@ -260,7 +260,9 @@
         <div class="mode${s.display === 'corner' ? ' on' : ''}" data-mode="corner"><div class="pv"><b class="circle">${current ? thumb(24, current.url, current.version) : ''}</b></div><div class="l"><span class="rd"></span>${esc(T('s.displayCorner'))}</div></div>
         <div class="mode${s.display === 'island' ? ' on' : ''}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div></div>
         <div class="mode${s.display === 'bar' ? ' on' : ''}" data-mode="bar"><div class="pv"><u></u></div><div class="l"><span class="rd"></span>${esc(T('s.displayBar'))}</div></div>
+        <div class="mode${s.display === 'taskbar' ? ' on' : ''}" data-mode="taskbar"><div class="pv"><s></s></div><div class="l"><span class="rd"></span>${esc(T('s.displayTaskbar'))}</div></div>
       </div>
+      ${s.display === 'taskbar' ? `<div class="grp"><div class="note">${esc(T('s.taskbarNote'))}</div></div>` : ''}
       ${s.display === 'corner' ? `<div class="grp">${row(esc(T('s.corner')), '', seg('corner', CORNERS.map(c => [c, T(`s.corner.${c}`)]), s.corner || 'br'))}</div>` : ''}
       ${s.display !== 'corner' ? `<div class="grp">${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}</div>` : ''}
       ${sec(T('s.her'))}<div class="grp">

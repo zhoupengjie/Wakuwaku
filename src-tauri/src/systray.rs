@@ -624,6 +624,8 @@ mod imp {
         ICONS.lock().unwrap().iter().filter(|i| !i.hidden && i.had_icon).map(|i| Shown { key: i.key, icon: i.icon, tip: i.tip.clone(), exe: i.exe.clone() }).collect()
     }
 
+    // The spike writes it down (tray.txt); the pet only logs the icons as they come.
+    #[allow(dead_code)]
     pub fn describe() -> String {
         ICONS
             .lock()

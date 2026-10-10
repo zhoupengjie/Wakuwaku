@@ -52,8 +52,11 @@ mod imp {
     // island.rs). For ABN_FULLSCREENAPP, lParam is 1 when a full-screen
     // window opens on the bar's display and 0 when the last one goes.
     pub const CALLBACK: u32 = 0x8000 + 0x57;
+    #[allow(dead_code)]
     pub const ABN_STATECHANGE: usize = 0;
+    #[allow(dead_code)]
     pub const ABN_POSCHANGED: usize = 1;
+    #[allow(dead_code)]
     pub const ABN_FULLSCREENAPP: usize = 2;
     // The taskbar's state: hiding itself (ABS_AUTOHIDE), and always on top.
     pub const ABS_AUTOHIDE: u32 = 1;
@@ -104,6 +107,7 @@ mod imp {
     // Asked only, nothing taken: x, y, w, h. When another bar moves
     // (ABN_POSCHANGED), taking the strip again only if this changed keeps two
     // bars from waking each other, back and forth.
+    #[allow(dead_code)]
     pub fn query(hwnd: isize, mon: (i32, i32, i32, i32), edge: Edge, thickness: i32) -> (i32, i32, i32, i32) {
         rect(&ask(hwnd, mon, edge, thickness))
     }
@@ -114,10 +118,6 @@ mod imp {
         // SAFETY: as above.
         unsafe { SHAppBarMessage(ABM_SETPOS, &mut d) };
         rect(&d)
-    }
-
-    pub fn place_top(hwnd: isize, mon: (i32, i32, i32, i32), height: i32) -> (i32, i32, i32, i32) {
-        place(hwnd, mon, Edge::Top, height)
     }
 
     // Windows' own taskbar's state (ABS_*).
@@ -159,17 +159,17 @@ mod imp {
     pub fn query(hwnd: isize, mon: (i32, i32, i32, i32), edge: Edge, thickness: i32) -> (i32, i32, i32, i32) {
         place(hwnd, mon, edge, thickness)
     }
-    pub fn place_top(hwnd: isize, mon: (i32, i32, i32, i32), height: i32) -> (i32, i32, i32, i32) {
-        place(hwnd, mon, Edge::Top, height)
-    }
     pub fn taskbar_state() -> u32 {
         0
     }
     pub fn set_taskbar_state(_taskbar: isize, _state: u32) {}
 }
 
+// What a window that hears Windows about its bar uses (examples/taskbar_spike.rs
+// does; her home's window, a webview's, does not hear it).
 #[allow(unused_imports)]
-pub use imp::{place, place_top, query, register, remove, set_taskbar_state, taskbar_state, ABN_FULLSCREENAPP, ABN_POSCHANGED, ABN_STATECHANGE, ABS_AUTOHIDE, CALLBACK};
+pub use imp::{query, ABN_FULLSCREENAPP, ABN_POSCHANGED, ABN_STATECHANGE, CALLBACK};
+pub use imp::{place, register, remove, set_taskbar_state, taskbar_state, ABS_AUTOHIDE};
 
 #[cfg(all(test, windows, target_pointer_width = "64"))]
 mod tests {

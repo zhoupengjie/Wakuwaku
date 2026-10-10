@@ -4219,10 +4219,12 @@ dependencies = [
 name = "wakuwaku"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "io-imap",
  "mail-parser",
  "native-tls",
  "nom",
+ "png 0.17.16",
  "serde",
  "serde_json",
  "sys-locale",

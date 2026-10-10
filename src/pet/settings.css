@@ -854,10 +854,10 @@
   color: #000;
 }
 
-/* Her home: three pictures to pick from. */
+/* Her home: four pictures to pick from. */
 #island-settings .modes {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 
@@ -920,6 +920,26 @@
   height: 11px;
   background: #000;
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* The taskbar's strip along the bottom, her portrait at its left end. */
+#island-settings .mode .pv s {
+  position: absolute;
+  inset: auto 0 0;
+  height: 13px;
+  background: #000;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+#island-settings .mode .pv s::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #5e9bff;
 }
 
 #island-settings .mode .pv .thumb {

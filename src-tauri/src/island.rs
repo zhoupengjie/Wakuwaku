@@ -5,7 +5,11 @@
 //   island  a black pill at the top centre
 //   bar     a strip along the top of the screen whose height is kept from
 //           other windows, as the taskbar's is (appbar.rs)
-// The island and the bar stay up while she is out, and do the talking.
+//   taskbar a strip along the bottom in place of Windows' own, which is put
+//           away while it is up, its tray taken over (taskbar.rs); what
+//           opens grows up from it, into room kept above it
+// The island, the bar and the taskbar stay up while she is out, and do the
+// talking.
 //
 // Pulled out of her home, she becomes the pet window (carried under the
 // cursor while the button is still held on the home); brought close to it
@@ -21,7 +25,7 @@ use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, Webvie
 
 use crate::pointer::{ClickThrough, Mode};
 use crate::screen::Area;
-use crate::{appbar, Shared};
+use crate::{appbar, taskbar, Shared};
 
 // The window without extra room, by home (island.js BASE, CORNER_BASE): the
 // island as wide as pulling her out needs, so it only ever grows down; the
@@ -32,6 +36,14 @@ use crate::{appbar, Shared};
 const ISLAND: (f64, f64) = (760.0, 132.0);
 const CORNER: (f64, f64) = (760.0, 440.0);
 pub const BAR_H: f64 = 30.0;
+// The taskbar's strip (as high as Windows' own, so the Start menu and the
+// quick settings open just above it), and the room above it for what opens
+// (the corner's, for the same reason as the corner's: a window growing up
+// moves its top-left corner). The window is the two.
+pub const TASKBAR_H: f64 = 48.0;
+const TASKBAR_ROOM: f64 = 440.0;
+// The middle of her portrait at the taskbar's left end.
+const TASKBAR_SEAT_X: f64 = 24.0;
 // The island's top edge in the window, and its compact height.
 const TOP: f64 = 8.0;
 const COMPACT_H: f64 = 36.0;
@@ -66,10 +78,11 @@ pub struct Island {
     ct: ClickThrough,
     // The window, once made (for the app bar).
     hwnd: isize,
-    // The bar's strip, as Windows granted it (physical x, y, w, h), and what
-    // it was asked for (the display, the height): asked again only on a change.
+    // The bar's or the taskbar's strip, as Windows granted it (physical x,
+    // y, w, h), and what it was asked for (the display, the height, the
+    // home): asked again only on a change.
     bar: Option<(i32, i32, i32, i32)>,
-    bar_for: Option<((i32, i32, i32, i32), i32)>,
+    bar_for: Option<((i32, i32, i32, i32), i32, &'static str)>,
     // The button held on her (a pull, or carrying her out): the window keeps the pointer.
     holding: bool,
     reaching: bool,
@@ -88,19 +101,20 @@ impl Island {
         if self.sf > 0.0 { self.sf } else { 1.0 }
     }
 
-    // Physical. The bar is as wide as its display.
+    // Physical. The bar and the taskbar are as wide as their display.
     fn size_for(&self, home: &str, area: &Area) -> (i32, i32) {
         let sf = self.sf();
         let base = match home {
             "corner" => CORNER,
             "bar" => (area.mon.2 as f64 / sf, BAR_H),
+            "taskbar" => (area.mon.2 as f64 / sf, TASKBAR_H + TASKBAR_ROOM),
             _ => ISLAND,
         };
         let (w, h) = match self.room {
             Some((w, h)) => (w.max(base.0), h.max(base.1)),
             None => base,
         };
-        let w = if home == "bar" { base.0 } else { w };
+        let w = if home == "bar" || home == "taskbar" { base.0 } else { w };
         ((w * sf).round() as i32, (h * sf).round() as i32)
     }
 }
@@ -113,9 +127,23 @@ fn window(sh: &Shared) -> Option<WebviewWindow> {
 // her portrait while she does the talking); or risen for the settings; or
 // the settings open in it, whatever they just hid (she, do not disturb):
 // they never go from under the person, only once closed.
+// The taskbar is up whatever hides her (out of sight, do not disturb): it is
+// the person's taskbar; only an app full screen hides it, as Windows' own.
 pub fn is_shown(sh: &Shared) -> bool {
+    let up = if sh.home() == "taskbar" { !sh.is_fullscreen() } else { sh.is_visible() };
     let isl = sh.island.lock().unwrap();
-    sh.is_visible() || isl.temp || isl.settings_open
+    up || isl.temp || isl.settings_open
+}
+
+// Its window's handle, once made (0 before).
+pub fn hwnd(sh: &Shared) -> isize {
+    sh.island.lock().unwrap().hwnd
+}
+
+// Where its window is (physical) and its scale: the page's px to the screen's.
+pub fn origin(sh: &Shared) -> ((i32, i32), f64) {
+    let isl = sh.island.lock().unwrap();
+    (isl.pos, isl.sf())
 }
 
 fn set_ignore(sh: &Shared, ignore: Option<bool>) {
@@ -158,6 +186,8 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
         ),
         // The strip Windows granted, or the display's top until then.
         "bar" => isl.bar.map_or((area.mon.0, area.mon.1), |b| (b.0, b.1)),
+        // The window's foot on the strip's, the room above it.
+        "taskbar" => isl.bar.map_or((area.mon.0, area.mon.1 + area.mon.3 - size.1), |b| (b.0, b.1 + b.3 - size.1)),
         // The top centre, below a taskbar that sits at the top.
         _ => (area.x + (area.w - size.0) / 2, area.y),
     };
@@ -169,40 +199,88 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
     Some((pos, size))
 }
 
-// The bar's strip: asked of Windows while the home is the bar and up; given
-// back otherwise. Asked again only when the display or the height change.
-fn sync_bar(sh: &Shared, is_up: bool) {
-    let want = is_up && sh.home() == "bar";
-    let area = if want { area(sh) } else { None };
-    let mut isl = sh.island.lock().unwrap();
-    let hwnd = isl.hwnd;
+// The strip, the bar's along the top or the taskbar's along the bottom:
+// asked of Windows while the home is one of those and keep (up; for the
+// taskbar, also while an app full screen hides its window: giving the strip
+// back would move every window), given back otherwise. Asked again only
+// when the display, the height or the home change. The taskbar's comes
+// with Windows' own put away first and goes with it given back (taskbar.rs).
+fn sync_bar(sh: &Shared, keep: bool) {
+    let home = sh.home();
+    let edge = match home {
+        "bar" => Some((appbar::Edge::Top, BAR_H)),
+        "taskbar" => Some((appbar::Edge::Bottom, TASKBAR_H)),
+        _ => None,
+    };
+    let want = match (keep, edge) {
+        (true, Some((edge, h))) => area(sh).map(|a| (a, edge, (h * a.sf).round() as i32)),
+        _ => None,
+    };
+    let (hwnd, held) = {
+        let isl = sh.island.lock().unwrap();
+        (isl.hwnd, isl.bar_for)
+    };
     if hwnd == 0 {
         return;
     }
-    let Some(area) = area else {
-        if isl.bar_for.take().is_some() {
-            appbar::remove(hwnd);
-            isl.bar = None;
-            sh.log("island: bar strip given back");
-        }
-        return;
-    };
-    let ask = (area.mon, (BAR_H * area.sf).round() as i32);
-    if isl.bar_for == Some(ask) {
+    let ask = want.map(|(a, _, h)| (a.mon, h, home));
+    if held == ask {
         return;
     }
-    if isl.bar_for.is_none() && !appbar::register(hwnd) {
+    // Another home's strip (or none wanted): given back first.
+    if let Some((_, _, was)) = held.filter(|h| Some(h.2) != ask.map(|a| a.2)) {
+        appbar::remove(hwnd);
+        {
+            let mut isl = sh.island.lock().unwrap();
+            isl.bar = None;
+            isl.bar_for = None;
+        }
+        if was == "taskbar" {
+            taskbar::give_back(sh);
+        }
+        sh.log(&format!("island: {was} strip given back"));
+    }
+    let Some((area, edge, height)) = want else { return };
+    let mon_bottom = area.mon.1 + area.mon.3;
+    if home == "taskbar" {
+        // Windows' own away first: the strip then goes to the bottom, not above its room.
+        taskbar::take(sh, (area.mon.0, mon_bottom - height, area.mon.2, height), mon_bottom);
+    }
+    let registered = sh.island.lock().unwrap().bar_for.is_some();
+    if !registered && !appbar::register(hwnd) {
         sh.log("island: Windows would not take the bar");
         return;
     }
-    isl.bar = Some(appbar::place_top(hwnd, ask.0, ask.1));
-    isl.bar_for = Some(ask);
-    sh.log(&format!("island: bar strip {:?}", isl.bar));
+    let granted = appbar::place(hwnd, area.mon, edge, height);
+    {
+        let mut isl = sh.island.lock().unwrap();
+        isl.bar = Some(granted);
+        isl.bar_for = ask;
+    }
+    if home == "taskbar" {
+        taskbar::strip_moved(granted);
+    }
+    sh.log(&format!("island: {home} strip {granted:?}"));
 }
 
-// Quitting, or the window going: the bar's strip back to the other windows.
+// Quitting, or the window going: the strip back to the other windows (and
+// Windows' own taskbar back, for the taskbar's).
 pub fn release_bar(sh: &Shared) {
     sync_bar(sh, false);
+}
+
+// Explorer started again: it forgot the strip, which is asked for anew.
+pub fn take_strip_again(sh: &Shared) {
+    let hwnd = {
+        let mut isl = sh.island.lock().unwrap();
+        if isl.bar_for.take().is_none() {
+            return;
+        }
+        isl.hwnd
+    };
+    // Should it remember after all, a second registration would be refused.
+    appbar::remove(hwnd);
+    place(sh);
 }
 
 fn place(sh: &Shared) {
@@ -283,6 +361,7 @@ pub fn ready(sh: &Arc<Shared>) {
         isl.pending.take()
     };
     sh.redraw();
+    taskbar::resend(sh);
     if !sh.she_talks() {
         sh.greet();
     }
@@ -310,7 +389,8 @@ pub fn apply_visibility(sh: &Arc<Shared>) {
     if want {
         place(sh);
     } else {
-        sync_bar(sh, false);
+        // The taskbar keeps its strip while an app full screen hides it.
+        sync_bar(sh, sh.home() == "taskbar");
     }
     if want == shown {
         return;
@@ -402,7 +482,7 @@ pub fn set_holding(sh: &Shared, is_holding: bool) {
 // Where her home is on the screen, physical, whether it is up or not: what
 // she is reached for from and taken back into. The island: the middle of
 // its lower edge (compact); the corner: the circle's middle; the bar: under
-// her portrait at its left end.
+// her portrait at its left end; the taskbar: above it.
 pub fn seat(sh: &Shared) -> Option<(i32, i32)> {
     let (home, corner) = (sh.home(), corner(sh));
     let area = area(sh)?;
@@ -420,18 +500,24 @@ pub fn seat(sh: &Shared) -> Option<(i32, i32)> {
             let (x, y, _, h) = bar.unwrap_or((area.mon.0, area.mon.1, area.mon.2, px(BAR_H)));
             (x + px(BAR_SEAT_X), y + h)
         }
+        "taskbar" => {
+            let (x, y, _, _) = bar.unwrap_or((area.mon.0, area.mon.1 + area.mon.3 - px(TASKBAR_H), area.mon.2, px(TASKBAR_H)));
+            (x + px(TASKBAR_SEAT_X), y)
+        }
         _ => (area.x + area.w / 2, area.y + px(TOP + COMPACT_H)),
     })
 }
 
 // Where she flies to before her home takes her in: just under the island or
-// the bar, where the drop can take her; into the corner's circle itself.
+// the bar, just above the taskbar, where the drop can take her; into the
+// corner's circle itself.
 pub fn landing(sh: &Shared) -> Option<(i32, i32)> {
     let seat = seat(sh)?;
     let sf = area(sh).map_or(1.0, |a| a.sf);
     let below = match sh.home() {
         "corner" => 0.0,
         "bar" => 50.0,
+        "taskbar" => -70.0,
         _ => 70.0,
     };
     Some((seat.0, seat.1 + (below * sf) as i32))

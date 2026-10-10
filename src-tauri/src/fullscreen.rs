@@ -39,7 +39,8 @@ mod imp {
         fn GetMonitorInfoW(monitor: *mut c_void, info: *mut MonitorInfo) -> i32;
     }
 
-    const SKIP_CLASSES: [&str; 4] = ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"];
+    // The desktop, the taskbars, and task view and Alt+Tab (they cover the screen).
+    const SKIP_CLASSES: [&str; 5] = ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "XamlExplorerHostIslandWindow"];
     const GWL_STYLE: i32 = -16;
     const WS_CAPTION: isize = 0x00c0_0000;
     const MONITOR_DEFAULTTONEAREST: u32 = 2;

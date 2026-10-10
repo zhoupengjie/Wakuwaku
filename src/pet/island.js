@@ -630,7 +630,7 @@
   function sessionTags() {
     const detailed = isDetailed()
     // In the taskbar, a session marked on its window's button needs no tag.
-    const onButtons = new Set(home() === 'taskbar' ? taskWindows.flatMap(w => (w.sessions || []).map(s => s.id)) : [])
+    const onButtons = new Set(home() === 'taskbar' ? taskWindows.flatMap(a => (a.windows || []).flatMap(w => (w.sessions || []).map(s => s.id))) : [])
     return Status.othersOf(now.list, now)
       .filter(x => !onButtons.has(x.id))
       .map(x => {
@@ -720,7 +720,7 @@
   function fillTaskbar() {
     barRest.style.left = `${sizeOf('compact').width}px`
     if (!taskbarBuilt) {
-      barRest.replaceChildren(startButton, windowsBox, tagsBox, el('span', 'grow'), facesBox, trayBox, keysBox, clockBox, taskGear)
+      barRest.replaceChildren(startButton, windowsBox, tagsBox, el('span', 'grow'), facesBox, trayBox, keysBox, clockBox, taskGear, pop)
       taskbarBuilt = true
       trayDrawn = ''
       windowsDrawn = ''
@@ -734,33 +734,38 @@
     tickClock()
   }
 
-  // A button for each window, in the order they came: its icon and title, a
-  // line under it (longer for the one in front), lit while it flashes for
-  // attention, and a dot for each session in it, in its mood's colour.
+  // A button for each program (taskbar.rs): those kept on the taskbar
+  // first, then the others as their windows came. Its icon; the title of its
+  // one window, or its name and how many; none while it does not run. A line
+  // under it, longer for the one in front; lit while a window of it flashes
+  // for attention; a dot for each session in its windows, in its mood's colour.
   function drawWindows() {
-    const drawn = JSON.stringify([taskWindows.map(w => [w.id, w.title, w.png.length, w.png.slice(-24), w.front, w.min, w.flash, w.sessions]), lang])
+    const drawn = JSON.stringify([taskWindows, lang])
     if (drawn === windowsDrawn) return
     windowsDrawn = drawn
     windowsBox.replaceChildren(
-      ...taskWindows.map(w => {
+      ...taskWindows.map(app => {
+        const windows = app.windows || []
         const button = el('span', 'win')
-        button.dataset.win = w.id
-        button.title = w.title
-        button.classList.toggle('front', w.front)
-        button.classList.toggle('min', w.min)
-        button.classList.toggle('flash', w.flash)
-        if (w.png) {
+        button.dataset.app = app.app
+        button.classList.toggle('front', windows.some(w => w.front))
+        button.classList.toggle('min', windows.length > 0 && windows.every(w => w.min))
+        button.classList.toggle('flash', windows.some(w => w.flash))
+        button.classList.toggle('idle', !windows.length)
+        if (app.png) {
           const img = el('img')
-          img.src = w.png
+          img.src = app.png
           img.draggable = false
           button.append(img)
         } else {
-          button.append(el('span', 'letter', (w.exe || w.title || '?').slice(0, 1).toUpperCase()))
+          button.append(el('span', 'letter', (app.name || '?').slice(0, 1).toUpperCase()))
         }
-        button.append(el('span', 'wt', w.title))
-        if (w.sessions?.length) {
+        if (windows.length) button.append(el('span', 'wt', windows.length === 1 ? windows[0].title : app.name))
+        if (windows.length > 1) button.append(el('span', 'count', String(windows.length)))
+        const sessions = windows.flatMap(w => w.sessions || [])
+        if (sessions.length) {
           const marks = el('span', 'marks')
-          for (const s of w.sessions) {
+          for (const s of sessions) {
             const dot = el('i', s.mood === 'waiting' ? 'wants' : '')
             dot.style.background = COLOR[s.mood] || COLOR.idle
             marks.append(dot)
@@ -770,7 +775,131 @@
         return button
       }),
     )
+    if (popFor) drawPop()
   }
+
+  // Above a program's button: its windows to pick from (on a press with
+  // several, or the pointer resting on it), or what can be done with it (a
+  // right press): open another, keep it on the taskbar or no longer, close.
+  const pop = el('div', 'wpop')
+  pop.hidden = true
+  barRest.append(pop)
+  // { app, kind: 'list' | 'menu' } while open.
+  let popFor = null
+  let popTimer
+  const appOf = key => taskWindows.find(a => a.app === key)
+
+  function openPop(key, kind) {
+    clearTimeout(popTimer)
+    popFor = { app: key, kind }
+    drawPop()
+  }
+
+  function closePop() {
+    clearTimeout(popTimer)
+    popFor = null
+    pop.hidden = true
+  }
+
+  function drawPop() {
+    const app = popFor && appOf(popFor.app)
+    const button = app && windowsBox.querySelector(`[data-app="${CSS.escape(app.app)}"]`)
+    if (!app || !button) return closePop()
+    const windows = app.windows || []
+    const rows = []
+    if (popFor.kind === 'list') {
+      for (const w of windows) {
+        const row = el('div', w.front ? 'wrow front' : 'wrow')
+        row.dataset.win = w.id
+        if (w.png || app.png) {
+          const img = el('img')
+          img.src = w.png || app.png
+          row.append(img)
+        }
+        row.append(el('span', 'wt', w.title))
+        const x = el('span', 'wx', '✕')
+        x.dataset.close = w.id
+        row.append(x)
+        rows.push(row)
+      }
+    } else {
+      const item = (text, act) => {
+        const row = el('div', 'witem', text)
+        row.dataset.act = act
+        return row
+      }
+      const head = el('div', 'whead', app.name)
+      rows.push(head, item(t(lang, windows.length ? 'taskbar.newWindow' : 'taskbar.open'), 'launch'), item(t(lang, app.pinned ? 'taskbar.unpin' : 'taskbar.pin'), app.pinned ? 'unpin' : 'pin'))
+      if (windows.length) rows.push(item(t(lang, windows.length > 1 ? 'taskbar.closeAll' : 'taskbar.close'), 'close'))
+    }
+    if (!rows.length) return closePop()
+    pop.replaceChildren(...rows)
+    pop.classList.toggle('menu', popFor.kind === 'menu')
+    pop.hidden = false
+    // Over its button, kept within the screen.
+    const left = button.offsetLeft + button.offsetWidth / 2 - pop.offsetWidth / 2
+    pop.style.left = `${Math.max(4, Math.min(left, barRest.offsetWidth - pop.offsetWidth - 4))}px`
+  }
+
+  // A press on a program's button: one not running starts; one window goes
+  // to the front, or is minimized when in front; several to pick from.
+  windowsBox.addEventListener('click', e => {
+    const app = appOf(e.target.closest('[data-app]')?.dataset.app)
+    if (!app) return
+    e.stopPropagation()
+    const windows = app.windows || []
+    if (!windows.length) return window.pet.taskbar.app(app.path, 'launch')
+    if (windows.length === 1) {
+      closePop()
+      return window.pet.taskbar.window(windows[0].id, 'press')
+    }
+    if (popFor?.app === app.app && popFor.kind === 'list') closePop()
+    else openPop(app.app, 'list')
+  })
+  windowsBox.addEventListener('contextmenu', e => {
+    const app = appOf(e.target.closest('[data-app]')?.dataset.app)
+    if (!app) return
+    e.preventDefault()
+    e.stopPropagation()
+    openPop(app.app, 'menu')
+  })
+  // The pointer resting on a running program's button: its windows.
+  windowsBox.addEventListener('mouseover', e => {
+    const app = appOf(e.target.closest('[data-app]')?.dataset.app)
+    clearTimeout(popTimer)
+    if (!app || popFor?.kind === 'menu') return
+    if (popFor?.app === app.app) return
+    popTimer = setTimeout(() => (app.windows || []).length && openPop(app.app, 'list'), popFor ? 0 : 500)
+  })
+  // Gone from the button and the list a moment: it closes.
+  for (const node of [windowsBox, pop]) {
+    node.addEventListener('mouseleave', () => {
+      clearTimeout(popTimer)
+      popTimer = setTimeout(closePop, 400)
+    })
+    node.addEventListener('mouseenter', () => popFor && clearTimeout(popTimer))
+  }
+  pop.addEventListener('click', e => {
+    e.stopPropagation()
+    const app = popFor && appOf(popFor.app)
+    if (!app) return
+    const close = e.target.closest('[data-close]')
+    if (close) return window.pet.taskbar.window(close.dataset.close, 'close')
+    const row = e.target.closest('[data-win]')
+    if (row) {
+      closePop()
+      return window.pet.taskbar.window(row.dataset.win, 'press')
+    }
+    const act = e.target.closest('[data-act]')?.dataset.act
+    if (!act) return
+    closePop()
+    if (act === 'close') for (const w of app.windows || []) window.pet.taskbar.window(w.id, 'close')
+    else window.pet.taskbar.app(app.path, act)
+  })
+  pop.addEventListener('contextmenu', e => {
+    e.preventDefault()
+    e.stopPropagation()
+  })
 
   // The script's mark by the layout's language: its own and plain letters.
   const SCRIPTS = { 0x04: ['中', '英'], 0x11: ['あ', 'A'], 0x12: ['한', 'A'] }
@@ -983,9 +1112,6 @@
   // The taskbar's own buttons open what Windows' do: Start, and from the
   // clock the notifications and the calendar (once the button is up).
   barRest.addEventListener('click', e => {
-    // A window's button: to the front, or minimized when it is the one in front.
-    const win = e.target.closest('[data-win]')
-    if (win) return window.pet.taskbar.window(win.dataset.win, 'press')
     const what = e.target.closest('[data-bar]')?.dataset.bar
     if (what && what !== 'settings') window.pet.taskbar.open(what)
   })

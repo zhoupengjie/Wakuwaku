@@ -8,7 +8,9 @@
 pub struct Task {
     pub hwnd: isize,
     pub title: String,
-    pub exe: String,
+    // Its program's path (a store app's own, not its frame's): the button it
+    // goes on, one per program.
+    pub path: String,
     pub min: bool,
 }
 
@@ -36,6 +38,28 @@ mod imp {
         fn ImmGetDefaultIMEWnd(hwnd: Hwnd) -> Hwnd;
     }
 
+    #[repr(C)]
+    struct ShFileInfo {
+        icon: isize,
+        index: i32,
+        attributes: u32,
+        display_name: [u16; 260],
+        type_name: [u16; 80],
+    }
+
+    #[link(name = "shell32")]
+    extern "system" {
+        fn SHGetFileInfoW(path: *const u16, attributes: u32, info: *mut ShFileInfo, size: u32, flags: u32) -> usize;
+        fn ShellExecuteW(hwnd: Hwnd, op: *const u16, file: *const u16, params: *const u16, dir: *const u16, show: i32) -> isize;
+    }
+
+    #[link(name = "version")]
+    extern "system" {
+        fn GetFileVersionInfoSizeW(name: *const u16, handle: *mut u32) -> u32;
+        fn GetFileVersionInfoW(name: *const u16, handle: u32, len: u32, data: *mut c_void) -> i32;
+        fn VerQueryValueW(block: *const c_void, sub: *const u16, buffer: *mut *mut c_void, len: *mut u32) -> i32;
+    }
+
     #[link(name = "user32")]
     extern "system" {
         fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
@@ -55,6 +79,7 @@ mod imp {
         fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
         fn GetKeyboardLayout(thread: u32) -> isize;
         fn GetKeyState(vk: i32) -> i16;
+        fn DestroyIcon(icon: isize) -> i32;
     }
 
     #[link(name = "dwmapi")]
@@ -84,6 +109,9 @@ mod imp {
     const GCLP_HICONSM: i32 = -34;
     const SMTO_ABORTIFHUNG: u32 = 0x2;
     const SW_MINIMIZE: i32 = 6;
+    const SW_SHOWNORMAL: i32 = 1;
+    const SHGFI_ICON: u32 = 0x100;
+    const SHGFI_SMALLICON: u32 = 0x1;
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
     // The desktop and the taskbars themselves: shown, unowned, never buttons.
     const NOT_TASKS: [&str; 5] = ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "WakuwakuTaskbarHost"];
@@ -113,7 +141,8 @@ mod imp {
         pid
     }
 
-    fn exe_of(pid: u32) -> String {
+    // A process's program, its whole path.
+    fn path_of(pid: u32) -> String {
         // SAFETY: a handle we close; the name goes into our own buffer.
         unsafe {
             let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
@@ -127,9 +156,70 @@ mod imp {
             if ok == 0 {
                 return String::new();
             }
-            let path = String::from_utf16_lossy(&name[..size as usize]);
-            path.rsplit('\\').next().unwrap_or(&path).to_string()
+            String::from_utf16_lossy(&name[..size as usize])
         }
+    }
+
+    pub fn file_name(path: &str) -> String {
+        path.rsplit('\\').next().unwrap_or(path).to_string()
+    }
+
+    // A program's name as it gives it (its file's description: "Google
+    // Chrome", not chrome.exe), else its file's name without .exe.
+    pub fn app_name(path: &str) -> String {
+        let stem = || {
+            let name = file_name(path);
+            name.strip_suffix(".exe").or_else(|| name.strip_suffix(".EXE")).unwrap_or(&name).to_string()
+        };
+        let file = wide(path);
+        // SAFETY: a buffer of the size the call asks for; the values read
+        // point into it and are copied before it goes.
+        unsafe {
+            let size = GetFileVersionInfoSizeW(file.as_ptr(), std::ptr::null_mut());
+            if size == 0 {
+                return stem();
+            }
+            let mut data = vec![0u8; size as usize];
+            if GetFileVersionInfoW(file.as_ptr(), 0, size, data.as_mut_ptr() as *mut c_void) == 0 {
+                return stem();
+            }
+            let mut at: *mut c_void = std::ptr::null_mut();
+            let mut len = 0u32;
+            let translation = wide("\\VarFileInfo\\Translation");
+            if VerQueryValueW(data.as_ptr() as *const c_void, translation.as_ptr(), &mut at, &mut len) == 0 || len < 4 {
+                return stem();
+            }
+            let (lang, page) = (*(at as *const u16), *(at as *const u16).add(1));
+            let key = wide(&format!("\\StringFileInfo\\{lang:04x}{page:04x}\\FileDescription"));
+            if VerQueryValueW(data.as_ptr() as *const c_void, key.as_ptr(), &mut at, &mut len) == 0 || len <= 1 {
+                return stem();
+            }
+            let text = std::slice::from_raw_parts(at as *const u16, len as usize);
+            let name = String::from_utf16_lossy(text).trim_end_matches('\0').trim().to_string();
+            if name.is_empty() { stem() } else { name }
+        }
+    }
+
+    // A program file's small icon, ours to destroy (destroy_icon).
+    pub fn file_icon(path: &str) -> isize {
+        let mut info: ShFileInfo = unsafe { std::mem::zeroed() };
+        // SAFETY: our own struct, its size passed.
+        unsafe { SHGetFileInfoW(wide(path).as_ptr(), 0, &mut info, std::mem::size_of::<ShFileInfo>() as u32, SHGFI_ICON | SHGFI_SMALLICON) };
+        info.icon
+    }
+
+    pub fn destroy_icon(icon: isize) {
+        if icon != 0 {
+            // SAFETY: an icon of ours (file_icon's).
+            unsafe { DestroyIcon(icon) };
+        }
+    }
+
+    // A program started, as a double press in Explorer starts it.
+    pub fn launch(path: &str) -> bool {
+        let dir = path.rsplit_once('\\').map(|(d, _)| d.to_string()).unwrap_or_default();
+        // SAFETY: strings of our own, null-terminated.
+        unsafe { ShellExecuteW(std::ptr::null_mut(), wide("open").as_ptr(), wide(path).as_ptr(), std::ptr::null(), wide(&dir).as_ptr(), SW_SHOWNORMAL) > 32 }
     }
 
     // Cloaked: on another virtual desktop, or a store app's window not running.
@@ -164,17 +254,17 @@ mod imp {
 
     // A store app's frame (ApplicationFrameHost) is not the app: the app is
     // the process of the window inside it.
-    fn app_exe(hwnd: Hwnd, exe: String) -> String {
-        if !exe.eq_ignore_ascii_case("ApplicationFrameHost.exe") {
-            return exe;
+    fn app_path(hwnd: Hwnd, path: String) -> String {
+        if !file_name(&path).eq_ignore_ascii_case("ApplicationFrameHost.exe") {
+            return path;
         }
         // SAFETY: a class name of our own; looking among the frame's children.
         let core = unsafe { FindWindowExW(hwnd, std::ptr::null_mut(), wide("Windows.UI.Core.CoreWindow").as_ptr(), std::ptr::null()) };
         if core.is_null() {
-            return exe;
+            return path;
         }
-        let inner = exe_of(pid_of(core));
-        if inner.is_empty() { exe } else { inner }
+        let inner = path_of(pid_of(core));
+        if inner.is_empty() { path } else { inner }
     }
 
     // The windows with buttons, front to back.
@@ -189,7 +279,8 @@ mod imp {
                 let hwnd = h as Hwnd;
                 // SAFETY: a plain query.
                 let min = unsafe { IsIconic(hwnd) } != 0;
-                Task { hwnd: h, title: title_of(hwnd), exe: app_exe(hwnd, exe_of(pid_of(hwnd))), min }
+                let path = app_path(hwnd, path_of(pid_of(hwnd)));
+                Task { hwnd: h, title: title_of(hwnd), path, min }
             })
             .collect()
     }
@@ -304,6 +395,19 @@ mod imp {
     pub fn toggle_native() -> bool {
         false
     }
+    pub fn file_name(path: &str) -> String {
+        path.rsplit('/').next().unwrap_or(path).to_string()
+    }
+    pub fn app_name(path: &str) -> String {
+        file_name(path)
+    }
+    pub fn file_icon(_path: &str) -> isize {
+        0
+    }
+    pub fn destroy_icon(_icon: isize) {}
+    pub fn launch(_path: &str) -> bool {
+        false
+    }
 
     pub fn list() -> Vec<Task> {
         Vec::new()
@@ -325,4 +429,4 @@ mod imp {
     }
 }
 
-pub use imp::{alive, close, front, icon_of, keys, list, press, toggle_native};
+pub use imp::{alive, app_name, close, destroy_icon, file_icon, front, icon_of, keys, launch, list, press, toggle_native};

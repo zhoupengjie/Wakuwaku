@@ -243,6 +243,9 @@ mod imp {
     static WIN_PNGS: Mutex<Option<HashMap<isize, (isize, String)>>> = Mutex::new(None);
     static MARKS: Mutex<Option<HashMap<isize, Vec<Value>>>> = Mutex::new(None);
     static SENT_WINDOWS: Mutex<Value> = Mutex::new(Value::Null);
+    // Each program's name (tasks::app_name), and its file's icon drawn, by its path.
+    static APP_NAMES: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+    static FILE_PNGS: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
     static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
     // The keyboard's thread, and what it sent last.
     static KEYS: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
@@ -418,7 +421,12 @@ mod imp {
         *MARKS.lock().unwrap() = Some(marks);
     }
 
-    // The buttons as the page draws them, in the order the windows came.
+    // The buttons as the page draws them: one per program, as Windows' 11
+    // has them by default. The programs kept on the taskbar first, in the
+    // order they were kept (taskbarPinned: [{ path, name }]), whether they run
+    // or not; then the others in the order their first windows came. Each
+    // with its windows (each with the sessions in it), its name, its icon (its
+    // first window's, else its file's).
     fn send_windows(sh: &Shared) {
         let found = tasks::list();
         let front = tasks::front();
@@ -439,33 +447,66 @@ mod imp {
         };
         let size = (16.0 * sh.screens().primary.map_or(1.0, |a| a.sf)).round() as i32;
         let marks = MARKS.lock().unwrap().clone().unwrap_or_default();
+        let pinned: Vec<(String, String)> = sh
+            .setting("taskbarPinned")
+            .as_array()
+            .map(|all| all.iter().filter_map(|p| Some((p["path"].as_str()?.to_string(), p["name"].as_str().unwrap_or("").to_string()))).collect())
+            .unwrap_or_default();
+        // (path, pinned, windows), the paths' case aside.
+        let mut apps: Vec<(String, bool, Vec<&tasks::Task>)> = pinned.iter().map(|(p, _)| (p.clone(), true, Vec::new())).collect();
+        for t in order.iter().filter_map(|h| found.iter().find(|t| t.hwnd == *h)) {
+            match apps.iter_mut().find(|a| a.0.eq_ignore_ascii_case(&t.path)) {
+                Some(app) => app.2.push(t),
+                None => apps.push((t.path.clone(), false, vec![t])),
+            }
+        }
         let list: Vec<Value> = {
             let mut pngs = WIN_PNGS.lock().unwrap();
             let pngs = pngs.get_or_insert_with(HashMap::new);
             pngs.retain(|h, _| order.contains(h));
-            order
-                .iter()
-                .filter_map(|h| found.iter().find(|t| t.hwnd == *h))
-                .map(|t| {
-                    let icon = tasks::icon_of(t.hwnd);
-                    let png = match pngs.get(&t.hwnd) {
-                        Some((at, png)) if *at == icon => png.clone(),
-                        _ => {
-                            let png = if icon == 0 { String::new() } else { png_of(icon, size).unwrap_or_default() };
-                            pngs.insert(t.hwnd, (icon, png.clone()));
-                            png
-                        }
-                    };
-                    json!({
-                        "id": t.hwnd,
-                        "title": t.title,
-                        "exe": t.exe,
-                        "png": png,
-                        "front": t.hwnd == front,
-                        "min": t.min,
-                        "flash": flashing.contains(&t.hwnd),
-                        "sessions": marks.get(&t.hwnd).cloned().unwrap_or_default(),
-                    })
+            let mut names = APP_NAMES.lock().unwrap();
+            let names = names.get_or_insert_with(HashMap::new);
+            let mut file_pngs = FILE_PNGS.lock().unwrap();
+            let file_pngs = file_pngs.get_or_insert_with(HashMap::new);
+            apps.iter()
+                .map(|(path, is_pinned, windows)| {
+                    let windows: Vec<Value> = windows
+                        .iter()
+                        .map(|t| {
+                            let icon = tasks::icon_of(t.hwnd);
+                            let png = match pngs.get(&t.hwnd) {
+                                Some((at, png)) if *at == icon => png.clone(),
+                                _ => {
+                                    let png = if icon == 0 { String::new() } else { png_of(icon, size).unwrap_or_default() };
+                                    pngs.insert(t.hwnd, (icon, png.clone()));
+                                    png
+                                }
+                            };
+                            json!({
+                                "id": t.hwnd,
+                                "title": t.title,
+                                "png": png,
+                                "front": t.hwnd == front,
+                                "min": t.min,
+                                "flash": flashing.contains(&t.hwnd),
+                                "sessions": marks.get(&t.hwnd).cloned().unwrap_or_default(),
+                            })
+                        })
+                        .collect();
+                    let key = path.to_lowercase();
+                    let name = names.entry(key.clone()).or_insert_with(|| tasks::app_name(path)).clone();
+                    let png = windows.iter().find_map(|w| w["png"].as_str().filter(|p| !p.is_empty()).map(str::to_string)).unwrap_or_else(|| {
+                        file_pngs
+                            .entry(key.clone())
+                            .or_insert_with(|| {
+                                let icon = tasks::file_icon(path);
+                                let png = if icon == 0 { String::new() } else { png_of(icon, size).unwrap_or_default() };
+                                tasks::destroy_icon(icon);
+                                png
+                            })
+                            .clone()
+                    });
+                    json!({ "app": key, "path": path, "name": name, "pinned": is_pinned, "png": png, "windows": windows })
                 })
                 .collect()
         };
@@ -475,6 +516,26 @@ mod imp {
             *sent = list.clone();
             let _ = sh.app.emit_to("island", "taskbar:windows", list);
         }
+    }
+
+    // A press on a program's button kept on the taskbar with no window: it
+    // starts. Kept on the taskbar, or no longer.
+    pub fn app(sh: &Shared, what: &str, path: &str) -> bool {
+        let done = match what {
+            "launch" => tasks::launch(path),
+            "pin" | "unpin" => {
+                let mut kept: Vec<Value> = sh.setting("taskbarPinned").as_array().cloned().unwrap_or_default();
+                kept.retain(|p| !p["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(path)));
+                if what == "pin" {
+                    kept.push(json!({ "path": path, "name": tasks::app_name(path) }));
+                }
+                crate::shared(&sh.app).change(json!({ "taskbarPinned": kept }));
+                true
+            }
+            _ => false,
+        };
+        wake_tasks();
+        done
     }
 
     // A press on a window's button: to the front, or minimized; or closed.
@@ -946,6 +1007,9 @@ mod imp {
     pub fn window(_what: &str, _hwnd: isize) -> bool {
         false
     }
+    pub fn app(_sh: &Shared, _what: &str, _path: &str) -> bool {
+        false
+    }
     pub fn work_area_bottom() -> i32 {
         0
     }
@@ -978,6 +1042,13 @@ pub fn taskbar_open(what: String) -> bool {
 #[tauri::command]
 pub fn taskbar_window(id: i64, what: String) -> bool {
     imp::window(&what, id as isize)
+}
+
+// A program's button: launch (a program kept on the taskbar, not running;
+// or another of its windows), pin, unpin.
+#[tauri::command]
+pub fn taskbar_app(app: tauri::AppHandle, path: String, what: String) -> bool {
+    imp::app(&crate::shared(&app), &what, &path)
 }
 
 // A tray icon kept out on the taskbar or folded away (dragged there), by

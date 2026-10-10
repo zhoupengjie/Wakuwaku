@@ -1632,3 +1632,106 @@ body {
   opacity: 0.85;
   pointer-events: none;
 }
+
+/* A program kept on the taskbar, not running: its icon alone. Several
+   windows: how many, by the icon. */
+#bar-rest .win.idle {
+  flex: none;
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  justify-content: center;
+}
+
+#bar-rest .win.idle::after {
+  display: none;
+}
+
+#bar-rest .win .count {
+  flex: none;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  background: #3a3a3c;
+  color: #e5e5ea;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+}
+
+/* Above a program's button: its windows to pick from, or what can be done. */
+#bar-rest .wpop {
+  position: absolute;
+  bottom: 54px;
+  z-index: 3;
+  min-width: 200px;
+  max-width: 360px;
+  padding: 6px;
+  border-radius: 10px;
+  background: #1c1c1e;
+  color: #e5e5ea;
+  font-size: 12px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+#bar-rest .wpop[hidden] {
+  display: none;
+}
+
+#bar-rest .wpop .wrow,
+#bar-rest .wpop .witem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#bar-rest .wpop .wrow:hover,
+#bar-rest .wpop .witem:hover {
+  background: #2c2c2e;
+}
+
+#bar-rest .wpop .wrow.front {
+  box-shadow: inset 2px 0 0 #5e9bff;
+}
+
+#bar-rest .wpop .wrow img {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+#bar-rest .wpop .wrow .wt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#bar-rest .wpop .wx {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: #a1a1a6;
+  text-align: center;
+  line-height: 22px;
+}
+
+#bar-rest .wpop .wx:hover {
+  background: #ff5c6c;
+  color: #fff;
+}
+
+#bar-rest .wpop .whead {
+  padding: 6px 8px 4px;
+  color: #a1a1a6;
+  font-size: 11px;
+}

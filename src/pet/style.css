@@ -2272,3 +2272,88 @@ body:not(.tb-light) #bar-rest .ticon[data-mono='dark'] img {
   background: transparent;
   box-shadow: none;
 }
+
+/* --- The clear taskbar (island.js isClear, tb-clear) --------------------------------
+   The desktop itself through the strip, its words and glyphs shadowed a
+   little so they read on any picture; solid while a window is maximized on
+   its display (tb-solid) as the solid strip is, the change a short fade.
+   What opens above it stays as it is. */
+.tb-clear #island-row {
+  background: transparent;
+  box-shadow: none;
+  transition:
+    background-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.tb-clear.tb-solid #island-row {
+  background: #000;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.tb-light.tb-clear.tb-solid #island-row {
+  background: #eeeeee;
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.tb-clear:not(.tb-solid) #bar-rest {
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.7),
+    0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.tb-light.tb-clear:not(.tb-solid) #bar-rest {
+  text-shadow:
+    0 0 2px rgba(255, 255, 255, 0.85),
+    0 1px 3px rgba(255, 255, 255, 0.7);
+}
+
+/* The date as plain as the time: grey on a picture is lost. */
+.tb-clear:not(.tb-solid) #bar-rest .tclock i {
+  color: #e5e5ea;
+}
+
+.tb-light.tb-clear:not(.tb-solid) #bar-rest .tclock i {
+  color: #2b2b2b;
+}
+
+.tb-clear #bar-rest .wpop,
+.tb-clear #bar-rest .tfly {
+  text-shadow: none;
+}
+
+/* --- The windows' list moving (island.js slidePop, risePop) --------------------------
+   From one program's button to the next it slides over and takes its new
+   size, as Windows' own does, the new cards coming in from the side it
+   moves to; opening, it rises a little into place. The live pictures come
+   once it is there. */
+#bar-rest .wpop.sliding {
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+#bar-rest .wpop.sliding.list {
+  flex-wrap: nowrap;
+}
+
+#bar-rest .wpop.sliding .wcard {
+  animation: wcard-in 0.26s ease both;
+}
+
+@keyframes wcard-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--come, 0px));
+  }
+}
+
+#bar-rest .wpop.rising {
+  animation: wpop-rise 0.18s ease both;
+}
+
+@keyframes wpop-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}

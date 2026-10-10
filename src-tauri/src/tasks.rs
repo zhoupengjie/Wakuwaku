@@ -24,6 +24,9 @@ pub struct Keys {
     pub caps: bool,
 }
 
+// The clear taskbar (taskbar.rs): a window maximized on the strip's display.
+pub use imp::maximized;
+
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
@@ -150,6 +153,7 @@ mod imp {
         fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
         fn IsWindowVisible(hwnd: Hwnd) -> i32;
         fn IsIconic(hwnd: Hwnd) -> i32;
+        fn IsZoomed(hwnd: Hwnd) -> i32;
         fn IsWindow(hwnd: Hwnd) -> i32;
         fn GetWindow(hwnd: Hwnd, cmd: u32) -> Hwnd;
         fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
@@ -256,6 +260,12 @@ mod imp {
     // until Windows 11's new Start, which SearchHost holds (26200 on: the
     // other still runs but never comes to the front). There Start and search
     // are one window (typing in Start searches), so search counts as Start.
+    // Maximized (not minimized: one put away keeps its maximized state).
+    pub fn maximized(hwnd: isize) -> bool {
+        // SAFETY: plain queries.
+        unsafe { IsZoomed(hwnd as Hwnd) != 0 && IsIconic(hwnd as Hwnd) == 0 }
+    }
+
     pub fn is_start(hwnd: isize) -> bool {
         if hwnd == 0 {
             return false;
@@ -662,6 +672,9 @@ mod imp {
     }
     pub fn in_use() -> [(&'static str, Vec<String>); 3] {
         [("mic", Vec::new()), ("cam", Vec::new()), ("loc", Vec::new())]
+    }
+    pub fn maximized(_hwnd: isize) -> bool {
+        false
     }
     pub fn is_start(_hwnd: isize) -> bool {
         false

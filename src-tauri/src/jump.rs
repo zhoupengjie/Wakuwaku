@@ -459,6 +459,12 @@ pub fn bring_window(hwnd: isize) -> bool {
     imp::bring(hwnd)
 }
 
+// A web address opened in the default browser, as Windows opens one
+// (ShellExecute; no console of ours in between).
+pub fn open_url(url: &str) -> bool {
+    imp::open_url(url)
+}
+
 // The window a session runs in, while its own process still does (the
 // taskbar marks that window's button with the session).
 pub fn window_for(chain: &Chain, hints: &[&str]) -> Option<isize> {

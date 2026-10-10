@@ -1678,10 +1678,6 @@ body {
     0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-#bar-rest .wpop[hidden] {
-  display: none;
-}
-
 #bar-rest .wpop .wrow,
 #bar-rest .wpop .witem {
   display: flex;
@@ -1743,6 +1739,11 @@ body {
   flex-wrap: wrap;
   gap: 4px;
   max-width: 90vw;
+}
+
+/* After .list: closed, it is gone whichever kind it showed. */
+#bar-rest .wpop[hidden] {
+  display: none;
 }
 
 #bar-rest .wpop .wcard {

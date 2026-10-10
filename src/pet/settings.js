@@ -1382,11 +1382,14 @@
     foot.querySelector('.foot-text').textContent = T('s.foot')
     foot.querySelector('.ver').textContent = `v${snap.version}`
     tick()
-    // Never taller than the screen, nor than the home keeps room for (the
-    // taskbar's): the page scrolls inside instead.
+    // The same height on every page, however much it holds: the head and
+    // the tabs stay where they are from one page to the next (on the
+    // taskbar it grows up from the strip, and a shorter page would take
+    // them down from under the pointer). Never taller than the screen, nor
+    // than the home keeps room for (the taskbar's): a page scrolls inside.
     const rest = layer.offsetHeight - body.offsetHeight
     const most = window.Island?.settingsMax?.() ?? screen.availHeight - 56
-    body.style.maxHeight = `${Math.max(160, Math.min(460, most - rest))}px`
+    body.style.height = `${Math.max(160, Math.min(460, most - rest))}px`
     window.Island?.changed()
   }
 

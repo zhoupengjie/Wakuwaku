@@ -1408,9 +1408,10 @@ mod imp {
         }
         // A window to the front, or the one in front sized (full screen, or
         // no longer: a video, F11): looked at at once, not at the clock's
-        // next look (up to 1.5 s late). Once, however many come meanwhile.
+        // next look (up to 1.5 s late); on the look's own thread, not this
+        // one (main.rs, Shared::look_fullscreen).
         if event == EVENT_SYSTEM_FOREGROUND || (event == EVENT_OBJECT_LOCATIONCHANGE && tasks::front() == hwnd as isize) {
-            look_fullscreen_soon();
+            crate::fullscreen::ask();
         }
         // Moved or sized: only a window over the strip's display, or no
         // longer, changes the buttons (the strip clear but for one,
@@ -1432,24 +1433,6 @@ mod imp {
             start_seen(tasks::is_start(hwnd as isize));
         }
         wake_tasks();
-    }
-
-    // Asked of the host's loop (WM_LOOK_FULL), once until it has looked.
-    const WM_LOOK_FULL: u32 = 0x8012;
-    static FULL_ASKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-    fn look_fullscreen_soon() {
-        if !FULL_ASKED.swap(true, Ordering::SeqCst) {
-            // SAFETY: a posted message to the host's own window.
-            unsafe { PostMessageW(OURS.load(Ordering::SeqCst) as Hwnd, WM_LOOK_FULL, 0, 0) };
-        }
-    }
-
-    fn look_fullscreen() {
-        FULL_ASKED.store(false, Ordering::SeqCst);
-        if let Some(sh) = sh() {
-            sh.look_fullscreen();
-        }
     }
 
     // Windows' Start menu opened or closed (its window came to the front,
@@ -1945,7 +1928,6 @@ mod imp {
             }
             WM_WATCH_PRESSES => watch(wparam != 0),
             WM_PRESS_SEEN => press_seen(wparam as u32 as i32, lparam as i32),
-            WM_LOOK_FULL => look_fullscreen(),
             _ if msg == CREATED_MSG.load(Ordering::SeqCst) && msg != 0 => on_created(),
             _ if msg == SHELL_MSG.load(Ordering::SeqCst) && msg != 0 => on_shell(wparam, lparam),
             // SAFETY: the default for the rest.

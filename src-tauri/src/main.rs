@@ -68,7 +68,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
@@ -374,20 +374,37 @@ impl Shared {
     }
 
     // Another app full screen or no longer: she (and the taskbar, as Windows'
-    // own does) steps aside or comes back. Looked at by the clock (every 1.5
-    // s), and at once when a window comes to the front or the one in front
-    // changes its size (taskbar.rs, the taskbar's own hooks).
-    pub fn look_fullscreen(self: &Arc<Self>) {
+    // own does) steps aside or comes back. Looked at on a thread of its own
+    // (setup): at once when a window comes to the front or the one in front
+    // changes its size (fullscreen::ask, from the taskbar's hooks), else
+    // every 1.5 s. Never on the taskbar's thread: the strip shown again from
+    // there waited on the main thread while that waited on it, and coming
+    // back after an app full screen took 3.8 s (2026-10-10). Every look
+    // logged for 10 s after a change: asked how, and what it saw.
+    pub fn look_fullscreen(self: &Arc<Self>, asked: Option<Instant>) {
+        static CHANGED: Mutex<Option<Instant>> = Mutex::new(None);
         let watching = fullscreen::AVAILABLE && (self.flag("hideInFullscreen") || self.home() == "taskbar");
         let own = self.own.lock().unwrap().clone();
         let is_full = if watching { fullscreen::check(&own) } else { Some(false) };
-        if let Some(is_full) = is_full {
-            if self.by_fullscreen.swap(is_full, Ordering::SeqCst) != is_full {
-                let which = if is_full { format!(", {}", fullscreen::front()) } else { String::new() };
-                self.log(&format!("another app full screen: {is_full}{which}"));
-                self.apply_visibility();
+        let how = match asked {
+            Some(at) => format!("event, {} ms after", at.elapsed().as_millis()),
+            None => "timer".to_string(),
+        };
+        let changed = is_full.is_some_and(|f| self.by_fullscreen.swap(f, Ordering::SeqCst) != f);
+        if !changed {
+            if CHANGED.lock().unwrap().is_some_and(|at| at.elapsed() < Duration::from_secs(10)) {
+                let saw = is_full.map_or("one of hers in front".to_string(), |f| f.to_string());
+                self.log(&format!("full screen looked at ({how}): {saw}"));
             }
+            return;
         }
+        *CHANGED.lock().unwrap() = Some(Instant::now());
+        let is_full = is_full == Some(true);
+        let which = if is_full { format!(", {}", fullscreen::front()) } else { String::new() };
+        self.log(&format!("another app full screen: {is_full}{which} ({how})"));
+        let t = Instant::now();
+        self.apply_visibility();
+        self.log(&format!("full screen: {} in {} ms", if is_full { "stepped aside" } else { "back" }, t.elapsed().as_millis()));
     }
 
     pub fn apply_visibility(self: &Arc<Self>) {
@@ -1069,8 +1086,16 @@ fn main() {
                 }
             });
 
+            // Another app full screen, looked at on this thread alone
+            // (Shared::look_fullscreen).
+            let watcher = sh.clone();
+            std::thread::spawn(move || loop {
+                let asked = fullscreen::wait(Duration::from_millis(1500));
+                watcher.look_fullscreen(asked);
+            });
+
             // Endings held for a while; prompts out of time; sessions gone
-            // quiet; another app full screen; the windows on screen.
+            // quiet; the windows on screen.
             let ticker = sh.clone();
             std::thread::spawn(move || {
                 for n in 1u64.. {
@@ -1088,9 +1113,6 @@ fn main() {
                         if ticker.asks.lock().unwrap().expire(now) {
                             ticker.push_asks();
                         }
-                    }
-                    if n % 3 == 0 {
-                        ticker.look_fullscreen();
                     }
                     if n % 4 == 0 {
                         let screens = screen::read(&ticker.app);

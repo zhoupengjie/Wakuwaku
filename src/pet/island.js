@@ -124,9 +124,12 @@
   const BODY_W = Math.round(CELL_W * BODY_SCALE)
   const BODY_H = Math.round(CELL_H * BODY_SCALE)
   const OPEN_H = BODY_H + 12
-  // The open island's widest, with her and without; the other sessions it lists.
-  const OPEN_MAX_W = 480
-  const OPEN_BARE_MAX_W = 440
+  // The open island's widest, with her and without: a little over what its
+  // usual lines take (the monitor's row, the session's), so a long one (a
+  // letter's subject) ends in "…" rather than widening it. The other
+  // sessions it lists.
+  const OPEN_MAX_W = 420
+  const OPEN_BARE_MAX_W = 360
   const OTHERS_SHOWN = 3
   // Pulling her out: the room the window takes for it, how far the drop
   // stretches before it pinches off, and the drop's size.

@@ -116,11 +116,41 @@ mod imp {
         COM.with(|_| ());
     }
 
-    // The app a window says it is (its AppUserModelID; a store app's frame
-    // says its app's from the moment it shows), what Windows' taskbar takes a
-    // button's icon from (taskbar.rs app_png). None for a window that says
-    // nothing: a program is then known by its file.
+    // The app a window is (its AppUserModelID), what Windows' taskbar takes a
+    // button's icon from (taskbar.rs app_png): the one it says (a store app's
+    // frame says its app's from the moment it shows), else its program's
+    // own, a packaged one's (Windows Terminal says nothing on its windows:
+    // pinned by its id, its windows went to a button of their own,
+    // 2026-10-11). None for an unpackaged program's window that says
+    // nothing: it is known by its file.
     pub fn app_id(hwnd: isize) -> Option<String> {
+        window_app_id(hwnd).or_else(|| process_app_id(pid_of(hwnd as Hwnd)))
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetApplicationUserModelId(process: Handle, length: *mut u32, id: *mut u16) -> i32;
+    }
+
+    // A packaged program's app, as its package names it.
+    fn process_app_id(pid: u32) -> Option<String> {
+        // SAFETY: a handle we close; the id goes into our own buffer of the
+        // length passed.
+        unsafe {
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if process == 0 {
+                return None;
+            }
+            let mut id = [0u16; 256];
+            let mut len = id.len() as u32;
+            let done = GetApplicationUserModelId(process, &mut len, id.as_mut_ptr());
+            CloseHandle(process);
+            // Its length counts the closing 0.
+            (done == 0 && len > 1 && len as usize <= id.len()).then(|| String::from_utf16_lossy(&id[..len as usize - 1]))
+        }
+    }
+
+    fn window_app_id(hwnd: isize) -> Option<String> {
         with_com();
         // SAFETY: the window's property store, released; the value read
         // before it is cleared.
@@ -826,3 +856,16 @@ mod imp {
 }
 
 pub use imp::{alive, app_id, app_name, close, covered, destroy_icon, file_icon, front, icon_of, in_use, is_shell_flyout, is_start, keys, launch, list, net, plain_program_icon, press, press_all, raise_top, toggle_native, with_com};
+
+#[cfg(test)]
+mod tests {
+    // The windows with buttons and the app each is, changing nothing: run
+    // by hand (cargo test tasks::tests -- --ignored --nocapture).
+    #[test]
+    #[ignore]
+    fn windows_and_their_apps() {
+        for t in super::list() {
+            println!("{} | {:?} | {}", t.path, super::app_id(t.hwnd), t.title);
+        }
+    }
+}

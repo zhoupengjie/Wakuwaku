@@ -2163,7 +2163,7 @@
       pressed = { id: session ? session.dataset.jump : '', at: Date.now() }
     })
     target.addEventListener('contextmenu', e => {
-      if (e.target.matches('input')) return
+      if (e.target.matches('input, textarea')) return
       e.preventDefault()
       window.pet.menu()
     })

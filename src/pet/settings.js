@@ -82,6 +82,40 @@
   let handNote = null
   let handNoteTimer
   const AGENTS = { claude: 'Claude', codex: 'Codex' }
+  // The letter being written, one at a time: from which account, to whom,
+  // the subject and text, the letter it answers or passes on, files added;
+  // touched once typed in; sending, what went wrong. Kept until sent or
+  // thrown away, across a restart too (in the page's storage, its files
+  // left out). writing: it shows; else the inbox does, with a line to go
+  // back to it. A discard asked once: asked again, it goes.
+  const DRAFT_KEY = 'wakuwaku.mailDraft'
+  let draft = loadDraft()
+  let writing = false
+  let dropSure = false
+  let draftTimer
+  // The file picker is open: the focus it takes does not close the settings.
+  let picking = false
+  // The most a letter takes with it (as send.rs has it).
+  const MOST_FILES = 25 << 20
+
+  function loadDraft() {
+    try {
+      const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null')
+      return d && typeof d === 'object' && d.account ? { ...d, files: [], busy: false, error: null, note: null } : null
+    } catch {
+      return null
+    }
+  }
+
+  function keepDraft() {
+    clearTimeout(draftTimer)
+    draftTimer = setTimeout(() => {
+      try {
+        if (draft) localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...draft, files: [], busy: false, error: null, note: null }))
+        else localStorage.removeItem(DRAFT_KEY)
+      } catch {}
+    }, 300)
+  }
 
   const T = (key, vars) => t(lang, key, vars)
   const esc = value =>
@@ -123,6 +157,7 @@
     // A box's text, once typed in, is its own: set while it is not being typed in.
     if (from.nodeName === 'INPUT' && from !== document.activeElement && from.value !== (to.getAttribute('value') ?? '')) from.value = to.getAttribute('value') ?? ''
     morphChildren(from, to)
+    if (from.nodeName === 'TEXTAREA' && from !== document.activeElement && from.value !== to.textContent) from.value = to.textContent
   }
 
   function morphChildren(from, to) {
@@ -426,7 +461,7 @@
     const kind = err?.kind || 'other'
     const where = server ? `${server.host}:${server.port}` : ''
     // The server's own words, where they say why.
-    const detail = err?.text && ['login', 'refused', 'other'].includes(kind) ? (lang === 'zh' ? '：' : ': ') + err.text : ''
+    const detail = err?.text && ['login', 'refused', 'other', 'recipient'].includes(kind) ? (lang === 'zh' ? '：' : ': ') + err.text : ''
     return T(`mail.err.${kind}`, { where }) + detail
   }
 
@@ -456,21 +491,53 @@
   ]
   const labelOf = (list, value) => list.find(x => x[0] === value)?.[1] || value
 
-  // Setting an account up: the address and the password; then the server
-  // found (a line) or not; and, folded as Thunderbird's manual setup, the
-  // incoming server's every setting, with Re-test.
+  // Where a provider takes an app password (or a code) instead of the one
+  // its users sign in with, by its IMAP host; and where it makes one.
+  function providerOf(host) {
+    const h = String(host || '').toLowerCase()
+    if (/(^|\.)(gmail|googlemail)\.com$/.test(h)) return 'google'
+    if (/(^|\.)mail\.me\.com$/.test(h)) return 'apple'
+    if (/(^|\.)yahoo\.com$/.test(h)) return 'yahoo'
+    if (/(^|\.)qq\.com$/.test(h)) return 'qq'
+    if (/(^|\.)(163|126)\.com$|(^|\.)yeah\.net$/.test(h)) return 'netease'
+    return ''
+  }
+  const HINT_SITE = { google: 'googleAppPasswords', apple: 'appleAppPasswords', yahoo: 'yahooAppPasswords' }
+
+  function hintHTML(host) {
+    const p = providerOf(host)
+    if (!p) return ''
+    const site = HINT_SITE[p]
+    return `<div class="note">${esc(T(`mail.hint.${p}`))}${site ? ` <span class="link" data-site="${site}">${esc(T('mail.hint.open'))}</span>` : ''}</div>`
+  }
+
+  // The outgoing server's fields, from what was found (or none).
+  const outFields = o =>
+    o
+      ? { smtpHost: o.host, smtpPort: o.port, smtpSecurity: o.security, smtpAuth: o.auth || 'auto', smtpUser: o.username }
+      : { smtpHost: '', smtpPort: '', smtpSecurity: 'auto', smtpAuth: 'auto', smtpUser: '' }
+
+  // Setting an account up: the address, a name to send with, the password;
+  // then the servers found (a line each) or not, and what the provider
+  // wants for a password; and, folded as Thunderbird's manual setup, the
+  // incoming and the outgoing server's every setting, with Re-test.
   function mailFormHTML() {
     const f = mailForm
     const field = (key, label, attrs = '') =>
       `<label class="fr"><span class="fl">${esc(label)}</span><input class="in" data-mf="${key}" value="${esc(f[key] ?? '')}" spellcheck="false" ${attrs}></label>`
     const head = [
       field('address', T('mail.address'), `placeholder="you@example.com" autocomplete="off"${f.id ? ' disabled' : ''}`),
+      field('name', T('mail.name'), `placeholder="${esc(T('mail.namePlaceholder'))}" autocomplete="off"`),
       field('password', T('mail.password'), `type="password" autocomplete="off" placeholder="${esc(f.id ? T('mail.passwordKeep') : '')}"`),
       `<div class="note">${esc(T('mail.passwordNote'))}</div>`,
+      f.step === 'start' ? '' : hintHTML(f.host),
     ].join('')
+    const line = (proto, host, port, security, auth) => `${proto} · ${host}:${port} · ${labelOf(SECURITIES(), security)}${auth && auth !== 'auto' ? ` · ${labelOf(AUTHS(), auth)}` : ''}`
+    const out = f.smtpHost ? `<div class="ellip">${esc(line('SMTP', f.smtpHost, f.smtpPort, f.smtpSecurity, f.smtpAuth))}</div>` : ''
+    const noOut = f.smtpHost || f.findingOut ? '' : `<div class="note">${esc(T('mail.found.noOut'))}</div>`
     const found =
       f.step === 'found'
-        ? `<div class="r"><div class="grow"><div class="ellip">IMAP · ${esc(f.host)}:${esc(f.port)} · ${esc(labelOf(SECURITIES(), f.security))}${f.auth && f.auth !== 'auto' ? ` · ${esc(labelOf(AUTHS(), f.auth))}` : ''}</div>${f.source ? `<div class="d">${esc(T(`mail.source.${f.source}`))}</div>` : ''}</div></div>`
+        ? `<div class="r"><div class="grow"><div class="ellip">${esc(line('IMAP', f.host, f.port, f.security, f.auth))}</div>${out}${f.source ? `<div class="d">${esc(T(`mail.source.${f.source}`))}</div>` : ''}</div></div>${noOut}`
         : ''
     const notFound = f.step === 'manual' && f.notFound ? `<div class="note">${esc(T(f.oauth ? 'mail.oauth' : 'mail.notFound'))}</div>` : ''
     const adv = f.step === 'start' ? '' : advancedHTML(field)
@@ -485,9 +552,9 @@
       <div class="r">${remove}<span class="grow"></span><button class="pbtn" data-mail-cancel>${esc(T('mail.cancel'))}</button>${again}${retest}${go}</div></div>`
   }
 
-  // The fold: Thunderbird's manual setup for the incoming server (protocol,
-  // host name, port, connection security, authentication method, user name),
-  // what Re-test found, and the outgoing server, not here yet.
+  // The fold: Thunderbird's manual setup for the incoming server and the
+  // outgoing one (protocol, host name, port, connection security,
+  // authentication method, user name), what Re-test found of each.
   function advancedHTML(field) {
     const f = mailForm
     const toggle = `<button class="adv-h${f.advanced ? ' on' : ''}" data-mail-adv><span class="chev">›</span>${esc(T('mail.adv'))}</button>`
@@ -502,16 +569,24 @@
       `<div class="fr"><span class="fl">${esc(T('mail.adv.auth'))}</span>${pick('auth', AUTHS())}</div>`,
       field('username', T('mail.username'), `placeholder="${esc(f.address || 'you@example.com')}"`),
       f.security === 'plain' ? `<div class="note err">${esc(T('mail.adv.plainWarn'))}</div>` : '',
-      probedHTML(),
-      `<div class="adv-sec">${esc(T('mail.adv.out'))}</div><div class="note">${esc(T('mail.adv.outNote'))}</div>`,
+      probedHTML(f.probed),
+      `<div class="adv-sec">${esc(T('mail.adv.out'))}</div>`,
+      `<div class="fr"><span class="fl">${esc(T('mail.adv.protocol'))}</span><button class="pick" disabled>SMTP</button></div>`,
+      field('smtpHost', T('mail.adv.host'), 'placeholder="smtp.example.com"'),
+      field('smtpPort', T('mail.port'), `inputmode="numeric" placeholder="${esc(T('mail.auto'))}"`),
+      `<div class="fr"><span class="fl">${esc(T('mail.adv.security'))}</span>${pick('smtpSecurity', SECURITIES())}</div>`,
+      `<div class="fr"><span class="fl">${esc(T('mail.adv.auth'))}</span>${pick('smtpAuth', AUTHS())}</div>`,
+      field('smtpUser', T('mail.username'), `placeholder="${esc(f.username || f.address || 'you@example.com')}"`),
+      f.smtpHost && f.smtpSecurity === 'plain' ? `<div class="note err">${esc(T('mail.adv.plainWarn'))}</div>` : '',
+      probedHTML(f.probedOut),
+      `<div class="note">${esc(T('mail.adv.outNote'))}</div>`,
     ]
     return `<div class="adv on">${toggle}<div class="adv-b">${rows.join('')}</div></div>`
   }
 
   // What Re-test found: how it is reached, how it lets one sign in, and,
   // for a Windows domain's server (Exchange), what the user name may be.
-  function probedHTML() {
-    const p = mailForm.probed
+  function probedHTML(p) {
     if (!p) return ''
     const names = p.auths.map(a => {
       const [, label, off] = AUTHS().find(x => x[0] === a) || [a, a, true]
@@ -566,7 +641,7 @@
     const whose = every ? `<span class="acct ellip">${esc(accountOf(l.account)?.address || '')}</span>` : ''
     return `<div class="r letter${l.seen ? '' : ' unread'}" data-letter="${l.uid}" data-account="${esc(l.account)}"><span class="udot"></span>
       <div class="grow"><div class="lt"><span class="who ellip">${esc(l.from || l.address || '?')}</span><span class="when">${esc(mailDate(l.date))}</span></div>
-      <div class="lt"><span class="d ellip grow">${l.attached ? '📎 ' : ''}${esc(l.subject || T('mail.noSubject'))}</span>${whose}</div></div>${chip}${starHTML(l.account, l.uid, l.flagged)}</div>`
+      <div class="lt"><span class="d ellip grow">${l.answered ? `<span class="answered" title="${esc(T('mail.answered'))}">↩</span> ` : ''}${l.attached ? '📎 ' : ''}${esc(l.subject || T('mail.noSubject'))}</span>${whose}</div></div>${chip}${starHTML(l.account, l.uid, l.flagged)}</div>`
   }
 
   // Which inbox, as the picker names it: every account's (with all their
@@ -585,8 +660,12 @@
     const every = id === '*'
     const pick = all.length > 1 ? `<button class="pick" data-mail-box>${esc(boxName(id))} ▾</button>` : ''
     const filters = seg('mail.filter', [['all', T('mail.filter.all')], ['unseen', T('mail.filter.unseen')], ['flagged', T('mail.filter.flagged')]], inbox.filter)
-    const head = `<div class="sec row-sec"><span>${esc(T('mail.inbox'))}${inbox.total ? ` · ${inbox.total}` : ''}</span><span class="grow"></span><span class="link" data-mail-refresh>${esc(T(inbox.busy ? 'mail.loading' : 'mail.refresh'))}</span></div>`
+    const head = `<div class="sec row-sec"><span>${esc(T('mail.inbox'))}${inbox.total ? ` · ${inbox.total}` : ''}</span><span class="grow"></span><span class="link" data-w-new>${esc(T('mail.write'))}</span><span class="link" data-mail-refresh>${esc(T(inbox.busy ? 'mail.loading' : 'mail.refresh'))}</span></div>`
     const tools = `<div class="r mail-tools">${pick}<span class="grow"></span>${filters}</div>`
+    // The letter put aside, to go on with.
+    const kept = draft
+      ? `<div class="r draft-row" data-w-open><span class="chip">${esc(T('mail.w.draft'))}</span><div class="grow ellip">${esc(draft.subject || T('mail.noSubject'))}${draft.to ? ` · ${esc(draft.to)}` : ''}</div><span class="link">${esc(T('mail.w.goOn'))}</span></div>`
+      : ''
     const note = handNote ? `<div class="note${handNote.bad ? ' err' : ''}">${esc(handNote.text)}</div>` : ''
     // Accounts that could not be asked, in every account's.
     const missed = (inbox.errors || []).map(e => `<div class="note err">${esc(`${accountOf(e.account)?.address || ''}: ${mailError(e.error, accountOf(e.account))}`)}</div>`).join('')
@@ -597,7 +676,7 @@
     const left = inbox.total - inbox.letters.length
     const more = !inbox.error && left > 0 ? `<div class="r"><button class="pbtn wide" data-mail-more ${inbox.busy ? 'disabled' : ''}>${esc(T('mail.more', { n: Math.min(50, left) }))}</button></div>` : ''
     const agent = row(esc(T('mail.agent')), esc(T('mail.agentNote')), seg('mailAgent', [['claude', 'Claude Code'], ['codex', 'Codex']], firstAgent()))
-    return `${head}<div class="grp inbox">${tools}${note}${missed}${list}${more}</div><div class="grp agent-pick">${agent}</div>${agentOrder().map(agentConfHTML).join('')}`
+    return `${head}<div class="grp inbox">${tools}${kept}${note}${missed}${list}${more}</div><div class="grp agent-pick">${agent}</div>${agentOrder().map(agentConfHTML).join('')}`
   }
 
   // How a letter goes to each agent (mailAgentConf, agent.rs): how much its
@@ -649,10 +728,22 @@
   }
 
   // A little markdown, as agents write: lines, **bold**, `code`, headings,
-  // lists, quotes. The text is escaped first.
+  // lists, quotes, ``` blocks (a reply it wrote, often). The text is escaped
+  // first.
   function md(text) {
     let html = ''
+    let block = null
+    const pre = lines => `<pre class="md-pre">${lines.join('\n')}</pre>`
     for (const raw of esc(text).split('\n')) {
+      if (/^\s*```/.test(raw)) {
+        if (block) html += pre(block)
+        block = block ? null : []
+        continue
+      }
+      if (block) {
+        block.push(raw)
+        continue
+      }
       const line = raw.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')
       let m
       if ((m = /^\s*([-*•]|\d+[.)])\s+(.*)$/.exec(line))) html += `<div class="md-li"><span>${m[1] === '*' ? '•' : m[1]}</span><span>${m[2]}</span></div>`
@@ -660,7 +751,7 @@
       else if ((m = /^&gt;\s?(.*)$/.exec(line))) html += `<div class="md-q">${m[1] || '&nbsp;'}</div>`
       else html += line.trim() ? `<div>${line}</div>` : '<div class="md-gap"></div>'
     }
-    return html
+    return block ? html + pre(block) : html
   }
 
   // The talk under a letter: who with, how it is going, what was said (the
@@ -670,11 +761,13 @@
     const going = talk.state === 'running'
     const state = going ? T('mail.talk.going', { agent }) : talk.state === 'failed' ? T('mail.talk.failed', { agent, why: talk.error || '' }) : T('mail.talk.done', { agent })
     const turns = talk.turns
-      .map(t => {
+      .map((t, i) => {
         if (t.who === 'start') return `<div class="t-start">${esc(T('mail.talk.start', { agent }))}</div>`
         if (t.who === 'me') return `<div class="t-me">${esc(t.text)}</div>`
         if (t.who === 'tool') return `<div class="t-tool">· ${esc(t.text)}</div>`
-        return `<div class="t-agent">${md(t.text)}</div>`
+        // What it said, once said, to reply with.
+        const writing = going && i === talk.turns.length - 1
+        return `<div class="t-agent">${md(t.text)}</div>${writing ? '' : `<div class="t-use"><span class="link" data-w-use="${i}">${esc(T('mail.w.useReply'))}</span></div>`}`
       })
       .join('')
     const thinking = going && talk.turns.at(-1)?.who !== 'agent' ? `<div class="t-wait">${esc(T('mail.talk.thinking'))}</div>` : ''
@@ -682,13 +775,219 @@
     return `<div class="talk ${talk.state}"><div class="talk-h"><span class="grow">${esc(state)}</span>${going ? '' : `<span class="link" data-hand="${talk.agent}:talk">${esc(T('mail.talk.again'))}</span>`}</div>${turns}${thinking}${ask}</div>`
   }
 
-  // The buttons above an open letter: its star, hand it to the first agent
-  // (when no talk is there yet), and ⋯ for the rest.
+  // The buttons above an open letter: its star, reply, hand it to the first
+  // agent (when no talk is there yet), and ⋯ for the rest.
   function handButtons(l, talk) {
     const ag = firstAgent()
     const off = !(snap.mailAgents || {})[ag] ? 'disabled' : ''
     const give = talk ? '' : `<button class="pbtn sm al" data-hand="${ag}:talk" ${off}>${esc(T('mail.hand.talk', { agent: AGENTS[ag] }))}</button>`
-    return `${starHTML(l.account, l.uid, l.flagged)}${give}<button class="pbtn sm" data-mail-menu title="${esc(T('mail.hand.more'))}">⋯</button>`
+    const reply = `<button class="pbtn sm" data-w-reply="reply">${esc(T('mail.reply'))}</button>`
+    return `${starHTML(l.account, l.uid, l.flagged)}${reply}${give}<button class="pbtn sm" data-mail-menu title="${esc(T('mail.hand.more'))}">⋯</button>`
+  }
+
+  // --- Writing a letter ----------------------------------------------------------------------
+
+  const personLine = p => (p.name ? `${/[,;"<>]/.test(p.name) ? `"${p.name.replace(/"/g, '')}"` : p.name} <${p.address}>` : p.address)
+  const peopleLine = list => list.map(personLine).join(', ')
+  const samePerson = (a, b) => a.address.toLowerCase() === b.address.toLowerCase()
+  const eachOnce = list => list.filter((p, i) => p.address && list.findIndex(q => samePerson(p, q)) === i)
+  const quoted = text => String(text || '').split('\n').map(line => (line ? `> ${line}` : '>')).join('\n')
+
+  // The letter passed on, as mail programs write it under the new one.
+  function forwarded(l) {
+    const head = [
+      `---------- ${T('mail.w.fwdHead')} ----------`,
+      `${T('mail.w.from')}: ${people(l.from)}`,
+      `${T('mail.w.date')}: ${mailDate(l.date, true)}`,
+      `${T('mail.w.subject')}: ${l.subject || ''}`,
+      `${T('mail.to')}: ${people(l.to)}`,
+      l.cc.length ? `${T('mail.cc')}: ${people(l.cc)}` : '',
+    ]
+    return `${head.filter(Boolean).join('\n')}\n\n${l.text || ''}`
+  }
+
+  // A letter begun: new (from the inbox shown, else the first account), a
+  // reply to the sender or to all (the letter quoted under it; words an
+  // agent wrote on top, if given), or one passed on (with its
+  // attachments). One half written is not thrown away for it: it shows.
+  function write(kind, l, words) {
+    closeMenu()
+    if (draft && (draft.touched || draft.files.length)) {
+      draft.note = T('mail.w.unsent')
+      writing = true
+      return redrawMail()
+    }
+    const all = snap.mail || []
+    const account = accountOf(l?.account)?.id || accountOf(inboxId())?.id || all[0]?.id
+    if (!account) return
+    const me = (accountOf(account)?.address || '').toLowerCase()
+    const notMe = list => (list || []).filter(p => p.address && p.address.toLowerCase() !== me)
+    const d = { kind, account, to: '', cc: '', bcc: '', showCc: false, subject: '', text: '', reply: null, forward: null, files: [], touched: !!words, busy: false, error: null, note: null }
+    if (l && (kind === 'reply' || kind === 'all')) {
+      const back = l.replyTo?.length ? l.replyTo : l.from
+      const everyone = eachOnce([...notMe(back), ...notMe(l.to)])
+      const to = kind === 'all' && everyone.length ? everyone : back
+      d.to = peopleLine(to)
+      if (kind === 'all') d.cc = peopleLine(eachOnce(notMe(l.cc)).filter(p => !to.some(t => samePerson(t, p))))
+      d.showCc = !!d.cc
+      d.subject = /^\s*(re|aw|sv|回复|答复)\s*[:：]/i.test(l.subject || '') ? l.subject : `Re: ${l.subject || ''}`
+      d.text = `${words ? `${words}\n\n` : '\n\n'}${T('mail.w.wrote', { date: mailDate(l.date, true), who: people(l.from) })}\n${quoted(l.text)}`
+      d.reply = { account: l.account, uid: l.uid, messageId: l.messageId, references: l.references || [] }
+    }
+    if (l && kind === 'forward') {
+      d.subject = /^\s*(fwd?|wg|转发)\s*[:：]/i.test(l.subject || '') ? l.subject : `Fwd: ${l.subject || ''}`
+      d.text = `\n\n${forwarded(l)}`
+      d.forward = { account: l.account, uid: l.uid, files: (l.attachments || []).map((f, i) => ({ index: i, name: f.name, size: f.size })) }
+    }
+    draft = d
+    writing = true
+    dropSure = false
+    keepDraft()
+    draw(true)
+    relayout()
+    // The caret where one writes first: the people, or above the quote.
+    requestAnimationFrame(() => {
+      const box = body.querySelector(kind === 'reply' || kind === 'all' ? '[data-w="text"]' : '[data-w="to"]')
+      box?.focus()
+      if (box?.matches('textarea')) {
+        box.setSelectionRange(0, 0)
+        box.scrollTop = 0
+      }
+    })
+  }
+
+  // The same about a letter in the list: opened first (for its text).
+  async function writeAbout(kind, account, uid, words) {
+    if (!(reading?.letter && reading.account === account && reading.uid === uid)) await openLetter(account, uid)
+    if (reading?.letter && reading.account === account && reading.uid === uid) write(kind, reading.letter, words)
+  }
+
+  // The reply in an agent's words: the longest ``` block, if it wrote one; else all of it.
+  function replyIn(text) {
+    const blocks = [...String(text || '').matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map(m => m[1].trim())
+    return (blocks.sort((a, b) => b.length - a.length)[0] || String(text || '')).trim()
+  }
+
+  // The letter being written: back (it stays), discard, send; from
+  // (where there are several accounts), to, cc and bcc (when asked for),
+  // the subject, the text; the files, each with ×, and more.
+  function writeHTML() {
+    const d = draft
+    const all = snap.mail || []
+    const off = d.busy ? 'disabled' : ''
+    const back = d.reply || d.forward ? (reading?.letter ? 'mail.w.backLetter' : 'mail.inbox') : 'mail.inbox'
+    const bar = `<div class="mail-bar"><span class="link" data-w-back>‹ ${esc(T(back))}</span><span class="grow"></span>
+      <button class="pbtn sm" data-w-drop ${off}>${esc(T(dropSure ? 'mail.w.dropSure' : 'mail.w.drop'))}</button>
+      <button class="pbtn sm al" data-w-send title="${esc(T('mail.w.ctrlEnter'))}" ${off}>${esc(T(d.busy ? 'mail.w.sending' : 'mail.w.send'))}</button></div>`
+    const box = (key, label, extra = '') =>
+      `<div class="fr"><span class="fl">${esc(label)}</span><input class="in" data-w="${key}" value="${esc(d[key] ?? '')}" spellcheck="false" autocomplete="off" ${off}>${extra}</div>`
+    const address = accountOf(d.account)?.address || ''
+    const from =
+      all.length > 1
+        ? `<div class="fr"><span class="fl">${esc(T('mail.w.from'))}</span><button class="pick" data-w-from ${off}>${esc(address)} ▾</button></div>`
+        : `<div class="fr"><span class="fl">${esc(T('mail.w.from'))}</span><span class="d ellip">${esc(address)}</span></div>`
+    const ccLink = d.showCc ? '' : `<span class="link" data-w-cc>${esc(T('mail.w.ccBcc'))}</span>`
+    const files = [
+      ...(d.forward?.files || []).map((f, i) => ({ ...f, key: `o${i}` })),
+      ...d.files.map((f, i) => ({ ...f, key: `f${i}` })),
+    ]
+      .map(f => `<span class="chip">📎 ${esc(f.name || '?')} · ${mailSize(f.size || 0)}<button class="unfile" data-w-unfile="${f.key}" title="${esc(T('mail.w.unfile'))}" ${off}>×</button></span>`)
+      .join('')
+    const notes = [d.note ? `<div class="note">${esc(d.note)}</div>` : '', d.error ? `<div class="note err">${esc(d.error)}</div>` : ''].join('')
+    return `${bar}${sec(T(`mail.w.kind.${d.kind || 'new'}`))}<div class="grp mail-write">${notes}
+      ${from}
+      ${box('to', T('mail.to'), ccLink)}
+      ${d.showCc ? box('cc', T('mail.cc')) + box('bcc', T('mail.w.bcc')) : ''}
+      ${box('subject', T('mail.w.subject'))}
+      <textarea class="in ta" data-w="text" rows="10" spellcheck="false" ${off}>${esc(d.text)}</textarea>
+      <div class="w-files">${files}<button class="pbtn sm" data-w-attach ${off}>📎 ${esc(T('mail.w.attach'))}</button><input type="file" multiple hidden data-w-file></div>
+    </div>`
+  }
+
+  // Files picked, read for the letter; no more than it may take.
+  const readBase64 = file =>
+    new Promise((ok, no) => {
+      const r = new FileReader()
+      r.onload = () => ok(String(r.result).split(',')[1] || '')
+      r.onerror = () => no(r.error)
+      r.readAsDataURL(file)
+    })
+
+  async function addFiles(input) {
+    picking = false
+    const d = draft
+    const list = [...(input.files || [])]
+    input.value = ''
+    if (!d || !list.length) return
+    let total = [...d.files, ...(d.forward?.files || [])].reduce((n, f) => n + (f.size || 0), 0)
+    d.error = null
+    for (const file of list) {
+      if (total + file.size > MOST_FILES) {
+        d.error = T('mail.err.tooBig')
+        break
+      }
+      try {
+        d.files.push({ name: file.name, type: file.type || 'application/octet-stream', size: file.size, data: await readBase64(file) })
+        total += file.size
+      } catch {
+        d.error = T('mail.err.file', { what: file.name })
+      }
+    }
+    d.touched = true
+    redrawMail()
+  }
+
+  // Why a letter did not go, in words: the page's own reasons, or the
+  // outgoing server's.
+  function sendError(got) {
+    const err = got.error || {}
+    const own = ['address', 'noOne', 'tooMany', 'tooBig', 'tooLong', 'file', 'noSmtp', 'gone', 'noLetter']
+    if (own.includes(err.kind)) return T(`mail.err.${err.kind}`, { what: err.text || '' })
+    const a = accountOf(draft?.account)
+    if (!got.out) return mailError(err, a)
+    const hint = err.kind === 'login' && providerOf(a?.host) ? ` ${T(`mail.hint.${providerOf(a.host)}`)}` : ''
+    return T('mail.w.outPrefix') + mailError(err, a?.smtp || { host: '?', port: '' }) + hint
+  }
+
+  // Sent: the letter gone from here, back where one was, and what came of
+  // the copy in Sent.
+  async function sendDraft() {
+    const d = draft
+    if (!d || d.busy) return
+    if (!`${d.to}${d.cc}${d.bcc}`.trim()) {
+      d.error = T('mail.err.noOne')
+      return redrawMail('[data-w="to"]')
+    }
+    Object.assign(d, { busy: true, error: null, note: null })
+    dropSure = false
+    redrawMail()
+    const letter = {
+      account: d.account,
+      to: d.to,
+      cc: d.cc,
+      bcc: d.bcc,
+      subject: d.subject,
+      text: d.text,
+      reply: d.reply,
+      forward: d.forward ? { account: d.forward.account, uid: d.forward.uid, keep: d.forward.files.map(f => f.index) } : null,
+      files: d.files.map(f => ({ name: f.name, type: f.type, data: f.data })),
+    }
+    const got = await window.pet.mail.send(letter)
+    if (draft !== d) return
+    d.busy = false
+    if (!got.ok) {
+      d.error = sendError(got)
+      return redrawMail()
+    }
+    // The letter answered shows it.
+    const answered = d.reply && inbox.letters.find(l => l.account === d.reply.account && l.uid === d.reply.uid)
+    if (answered) answered.answered = true
+    draft = null
+    writing = false
+    keepDraft()
+    draw(true)
+    relayout()
+    noteFor({ text: T(`mail.w.sent.${got.kept || 'server'}`), bad: got.kept === 'failed' })
   }
 
   // A letter open: back to the inbox, its star and the hand-off, who, when,
@@ -716,6 +1015,7 @@
   // Mail: each account with its switch and setting one up; the inbox
   // (every account's, or one), and a letter open.
   function pageMail() {
+    if (writing && draft) return writeHTML()
     if (reading) return readingHTML()
     const accounts = snap.mail || []
     const rows = accounts
@@ -833,7 +1133,14 @@
     const terminals = agentOrder().map(ag => item(ag, 'open', T('mail.hand.open', { agent: AGENTS[ag] }))).join('')
     const l = inbox.letters.find(x => x.uid === uid && x.account === account) || (reading?.uid === uid ? reading.letter : null)
     const starItem = `<button class="mi" data-star="${esc(account)}" data-uid="${uid}">${esc(T(l?.flagged ? 'mail.unstar' : 'mail.star'))}</button>`
-    menuEl.innerHTML = `${talks}<div class="mi-sep"></div>${terminals}<div class="mi-sep"></div>${starItem}`
+    const replies = [
+      ['reply', 'mail.reply'],
+      ['all', 'mail.replyAll'],
+      ['forward', 'mail.forward'],
+    ]
+      .map(([kind, key]) => `<button class="mi" data-w-reply="${kind}" data-account="${esc(account)}" data-uid="${uid}">${esc(T(key))}</button>`)
+      .join('')
+    menuEl.innerHTML = `${replies}<div class="mi-sep"></div>${talks}<div class="mi-sep"></div>${terminals}<div class="mi-sep"></div>${starItem}`
     menuPick = null
     placeMenu(x, y)
   }
@@ -849,12 +1156,13 @@
   }
 
   // A menu of [value, label, off] under a button, the first (the agent's or
-  // server's own, autodetect, every account) apart; one that is off is there, greyed.
-  function openChoices(button, choices, value, onPick) {
+  // server's own, autodetect, every account) apart unless `together`; one
+  // that is off is there, greyed.
+  function openChoices(button, choices, value, onPick, together = false) {
     menuEl.innerHTML = choices
       .map(
         ([v, label, off], i) =>
-          `${i === 1 ? '<div class="mi-sep"></div>' : ''}<button class="mi${v === value ? ' on' : ''}" data-pick="${esc(v)}" ${off ? 'disabled' : ''}>${esc(label)}${off ? ` <span class="d">${esc(T('mail.unsupported'))}</span>` : ''}</button>`,
+          `${i === 1 && !together ? '<div class="mi-sep"></div>' : ''}<button class="mi${v === value ? ' on' : ''}" data-pick="${esc(v)}" ${off ? 'disabled' : ''}>${esc(label)}${off ? ` <span class="d">${esc(T('mail.unsupported'))}</span>` : ''}</button>`,
       )
       .join('')
     menuPick = onPick
@@ -986,8 +1294,10 @@
   // typed in (the download box, a plugin's setting) gets the focus and the
   // caret back.
   function drawBody(reset) {
-    const box = body.contains(document.activeElement) && document.activeElement.matches('input') ? document.activeElement : null
-    const which = box && (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : box.dataset.mf ? `[data-mf="${box.dataset.mf}"]` : null)
+    const box = body.contains(document.activeElement) && document.activeElement.matches('input, textarea') ? document.activeElement : null
+    const which =
+      box &&
+      (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : box.dataset.mf ? `[data-mf="${box.dataset.mf}"]` : box.dataset.w ? `[data-w="${box.dataset.w}"]` : null)
     const caret = which ? box.selectionStart : null
     const changed = setHTML(body, PAGES[tab]())
     if (reset) body.scrollTop = 0
@@ -1307,6 +1617,10 @@
       if (box && !box.disabled) say(box)
       return true
     }
+    // A letter written: begun (new, a reply, passed on, with an agent's
+    // words), put aside and taken up again, sent, thrown away; from whom,
+    // cc and bcc shown, files added or taken off.
+    if (handleWriting(at)) return true
     const more = at('[data-mail-menu]')
     if (more && reading) {
       const r = more.getBoundingClientRect()
@@ -1354,7 +1668,7 @@
       return true
     }
     if (at('[data-mail-add]')) {
-      mailForm = { id: '', address: '', password: '', host: '', port: 993, security: 'ssl', auth: 'auto', username: '', step: 'start', advanced: false, probed: null, busy: '', result: null }
+      mailForm = { id: '', address: '', name: '', password: '', host: '', port: 993, security: 'ssl', auth: 'auto', username: '', ...outFields(null), step: 'start', advanced: false, probed: null, probedOut: null, busy: '', result: null }
       mailDelete = ''
       redrawMail('[data-mf="address"]')
       return true
@@ -1362,7 +1676,11 @@
     const change = at('[data-mail-edit]')
     if (change) {
       const a = (snap.mail || []).find(x => x.id === change.dataset.mailEdit)
-      if (a) mailForm = { id: a.id, address: a.address, password: '', host: a.host, port: a.port, security: a.security, auth: a.auth || 'auto', username: a.username, step: 'found', source: '', advanced: true, probed: null, busy: '', result: null }
+      if (a) {
+        mailForm = { id: a.id, address: a.address, name: a.name || '', password: '', host: a.host, port: a.port, security: a.security, auth: a.auth || 'auto', username: a.username, ...outFields(a.smtp), step: 'found', source: '', advanced: true, probed: null, probedOut: null, busy: '', result: null }
+        // One from before the pet sent mail: its outgoing server looked up.
+        if (!a.smtp) findOutgoing(mailForm)
+      }
       mailDelete = ''
       redrawMail('[data-mf="password"]')
       return true
@@ -1382,18 +1700,22 @@
     if (mfpick && mailForm) {
       const f = mailForm
       const key = mfpick.dataset.mfpick
-      openChoices(mfpick, key === 'security' ? SECURITIES() : AUTHS(), f[key] || 'auto', value => {
+      const out = key.startsWith('smtp')
+      const isWay = /security$/i.test(key)
+      openChoices(mfpick, isWay ? SECURITIES() : AUTHS(), f[key] || 'auto', value => {
         f[key] = value
         // The usual port for the way, if the port was the other way's.
-        const usual = { ssl: 993, starttls: 143, plain: 143, auto: '' }
-        if (key === 'security' && ['993', '143', ''].includes(String(f.port))) f.port = usual[value]
-        f.probed = null
+        const usual = out ? { ssl: 465, starttls: 587, plain: 587, auto: '' } : { ssl: 993, starttls: 143, plain: 143, auto: '' }
+        const portKey = out ? 'smtpPort' : 'port'
+        if (isWay && (out ? ['465', '587', '25', ''] : ['993', '143', '']).includes(String(f[portKey] ?? ''))) f[portKey] = usual[value]
+        if (out) f.probedOut = null
+        else f.probed = null
         draw()
       })
       return true
     }
     if (at('[data-mail-probe]')) {
-      probeServer()
+      retest()
       return true
     }
     if (at('[data-mail-find]')) {
@@ -1420,6 +1742,93 @@
     return false
   }
 
+  function handleWriting(at) {
+    if (at('[data-w-new]')) {
+      write('new')
+      return true
+    }
+    const re = at('[data-w-reply]')
+    if (re) {
+      closeMenu()
+      writeAbout(re.dataset.wReply, re.dataset.account || reading?.account, Number(re.dataset.uid || reading?.uid))
+      return true
+    }
+    const use = at('[data-w-use]')
+    if (use && reading?.letter) {
+      const talk = talkOf(reading.letter.key) || reading.talk
+      const said = talk?.turns?.[Number(use.dataset.wUse)]?.text
+      if (said) write('reply', reading.letter, replyIn(said))
+      return true
+    }
+    if (at('[data-w-open]')) {
+      writing = true
+      draw(true)
+      relayout()
+      return true
+    }
+    if (!draft) return false
+    if (at('[data-w-back]')) {
+      writing = false
+      dropSure = false
+      draft.note = null
+      draw(true)
+      relayout()
+      return true
+    }
+    if (at('[data-w-drop]')) {
+      if (!dropSure) {
+        dropSure = true
+        draw()
+        return true
+      }
+      draft = null
+      writing = false
+      dropSure = false
+      keepDraft()
+      draw(true)
+      relayout()
+      return true
+    }
+    if (at('[data-w-send]')) {
+      sendDraft()
+      return true
+    }
+    const from = at('[data-w-from]')
+    if (from) {
+      const d = draft
+      openChoices(from, (snap.mail || []).map(a => [a.id, a.address]), d.account, v => {
+        d.account = v
+        keepDraft()
+        draw()
+      }, true)
+      return true
+    }
+    if (at('[data-w-cc]')) {
+      draft.showCc = true
+      redrawMail('[data-w="cc"]')
+      return true
+    }
+    if (at('[data-w-attach]')) {
+      const input = body.querySelector('[data-w-file]')
+      if (input) {
+        picking = true
+        input.click()
+      }
+      return true
+    }
+    const unfile = at('[data-w-unfile]')
+    if (unfile) {
+      const key = unfile.dataset.wUnfile
+      const list = key[0] === 'o' ? draft.forward?.files : draft.files
+      list?.splice(Number(key.slice(1)), 1)
+      draft.touched = true
+      keepDraft()
+      redrawMail()
+      return true
+    }
+    return false
+  }
+
   function redrawMail(focus) {
     draw()
     relayout()
@@ -1441,13 +1850,51 @@
     if (mailForm !== f) return
     f.busy = ''
     f.probed = null
+    f.probedOut = null
     if (got.ok && got.found) {
-      Object.assign(f, got.server, { step: 'found', source: got.source, notFound: false, oauth: false, advanced: false })
+      Object.assign(f, got.server, outFields(got.smtp), { step: 'found', source: got.source, notFound: false, oauth: false, advanced: false })
     } else {
       // Thunderbird's manual setup: the fold open, the way and port to be found.
-      Object.assign(f, { step: 'manual', notFound: true, oauth: !!got.oauth, advanced: true, host: '', port: '', security: 'auto', auth: 'auto', username: f.username || f.address.trim() })
+      Object.assign(f, outFields(null), { step: 'manual', notFound: true, oauth: !!got.oauth, advanced: true, host: '', port: '', security: 'auto', auth: 'auto', username: f.username || f.address.trim() })
     }
     redrawMail(f.step === 'manual' ? '[data-mf="host"]' : null)
+  }
+
+  // The outgoing server of an account from before the pet sent mail,
+  // looked up while its settings are open; filled in if none was typed.
+  async function findOutgoing(f) {
+    f.findingOut = true
+    const got = await window.pet.mail.discover(f.address)
+    f.findingOut = false
+    if (mailForm !== f) return
+    if (got.ok && got.smtp && !String(f.smtpHost || '').trim()) Object.assign(f, outFields(got.smtp), { smtpUser: f.username || got.smtp.username })
+    redrawMail()
+  }
+
+  // Re-test: both servers, the outgoing one where there is one.
+  async function retest() {
+    const f = mailForm
+    await probeServer()
+    if (mailForm === f && String(f.smtpHost || '').trim()) await probeOut()
+  }
+
+  // The outgoing server tried as the incoming one is below.
+  async function probeOut() {
+    const f = mailForm
+    f.busy = 'probe'
+    f.probedOut = null
+    redrawMail()
+    const got = await window.pet.mail.probe(String(f.smtpHost).trim(), String(f.smtpPort ?? '').trim(), f.smtpSecurity || 'auto', 'smtp')
+    if (mailForm !== f) return false
+    f.busy = ''
+    if (got.ok && got.found) {
+      Object.assign(f, { smtpSecurity: got.security, smtpPort: got.port })
+      f.probedOut = { security: got.security, port: got.port, auths: got.auths || [] }
+    } else {
+      f.result = { bad: true, text: T('mail.w.outPrefix') + mailError(got.error, { host: String(f.smtpHost).trim(), port: String(f.smtpPort || '').trim() || '465 / 587' }) }
+    }
+    redrawMail()
+    return !!f.probedOut
   }
 
   // Re-test: the server tried without signing in; the way and port, when
@@ -1487,11 +1934,19 @@
     }
     if ((f.security === 'auto' || !String(f.port ?? '').trim()) && !(await probeServer())) return
     if (mailForm !== f) return
+    const outHost = String(f.smtpHost || '').trim()
+    if (outHost && (f.smtpSecurity === 'auto' || !String(f.smtpPort ?? '').trim()) && !(await probeOut())) return
+    if (mailForm !== f) return
     f.busy = 'save'
     f.result = null
     redrawMail()
-    const account = { id: f.id, address: f.address.trim(), host: String(f.host).trim(), port: Number(f.port), security: f.security, auth: f.auth || 'auto', username: String(f.username || f.address).trim() }
-    const got = await window.pet.mail.save(account, f.password)
+    const username = String(f.username || f.address).trim()
+    const smtp = outHost ? { host: outHost, port: Number(f.smtpPort), security: f.smtpSecurity, auth: f.smtpAuth || 'auto', username: String(f.smtpUser || username).trim() } : null
+    const account = { id: f.id, address: f.address.trim(), name: String(f.name || '').trim(), host: String(f.host).trim(), port: Number(f.port), security: f.security, auth: f.auth || 'auto', username, smtp }
+    // Google's app password as it shows it, in fours: the spaces left out.
+    const typed = String(f.password || '')
+    const password = providerOf(account.host) === 'google' && /^[a-z]{4}(\s?[a-z]{4}){3}$/i.test(typed.trim()) ? typed.replace(/\s/g, '') : typed
+    const got = await window.pet.mail.save(account, password)
     if (mailForm !== f) return
     f.busy = ''
     if (got.ok) {
@@ -1499,13 +1954,20 @@
       snap = got.snapshot
     } else {
       const domain = got.error?.kind === 'login' && (got.auths || []).some(a => a === 'ntlm' || a === 'gssapi')
-      f.result = { bad: true, text: mailError(got.error, account) + (domain ? ` ${T('mail.adv.domain')}` : '') }
+      const where = got.out ? { host: outHost, port: f.smtpPort } : account
+      f.result = { bad: true, text: (got.out ? T('mail.w.outPrefix') : '') + mailError(got.error, where) + (domain ? ` ${T('mail.adv.domain')}` : '') }
     }
     redrawMail()
   }
 
   layer.addEventListener('input', e => {
     if (e.target.dataset.mf && mailForm) mailForm[e.target.dataset.mf] = e.target.value
+    if (e.target.dataset.w && draft) {
+      draft[e.target.dataset.w] = e.target.value
+      draft.touched = true
+      dropSure = false
+      keepDraft()
+    }
     if (e.target.id === 's-ref') typedRef = e.target.value
     if (e.target.dataset.field) drafts[e.target.dataset.field] = e.target.value
   })
@@ -1513,6 +1975,7 @@
   // A plugin's setting kept once typed (Enter, or leaving the box); a
   // number that is none goes back to what it was.
   layer.addEventListener('change', e => {
+    if (e.target.matches('[data-w-file]')) return addFiles(e.target)
     const key = e.target.dataset.field
     if (!key || !(key in drafts)) return
     const value = drafts[key].trim()
@@ -1537,6 +2000,11 @@
       return close('Esc')
     }
     if (e.target.matches?.('input, textarea')) {
+      // Ctrl+Enter sends the letter being written.
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.target.dataset.w) {
+        e.preventDefault()
+        return sendDraft()
+      }
       if (e.key === 'Enter' && e.target.id === 's-ref') layer.querySelector('[data-fetch]')?.click()
       if (e.key === 'Enter' && e.target.dataset.field) e.target.blur()
       if (e.key === 'Enter' && e.target.dataset.mf) layer.querySelector('[data-mail-find]:not([disabled]), [data-mail-save]:not([disabled])')?.click()
@@ -1560,8 +2028,11 @@
     snap = got
     draw()
   })
-  // The keyboard went elsewhere: a click outside the island.
-  window.pet.onBlur(() => close('blur'))
+  // The keyboard went elsewhere: a click outside the island; not the file
+  // picker, opened for a letter's files (its own window takes the focus).
+  window.pet.onBlur(() => !picking && close('blur'))
+  layer.addEventListener('cancel', e => e.target.matches?.('[data-w-file]') && (picking = false), true)
+  window.addEventListener('focus', () => setTimeout(() => (picking = false), 1000))
 
   window.Settings = {
     isOpen: () => isOpen,

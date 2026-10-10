@@ -1967,6 +1967,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
+name = "mail-builder"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccbc27cb02a58a311a404769a22f5abf63fe3173b290d80be7c534f9c7023151"
+
+[[package]]
 name = "mail-parser"
 version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4221,6 +4227,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "io-imap",
+ "mail-builder",
  "mail-parser",
  "native-tls",
  "nom",

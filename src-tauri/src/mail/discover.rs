@@ -1,38 +1,48 @@
-// Finding an address's IMAP server the way Thunderbird does: the few we
-// know ourselves, the domain's own autoconfig, Thunderbird's database
-// ISPDB, the database's entry for the provider of the domain's MX host,
-// then a guess where something answers as IMAP. And, for the settings'
-// "Re-test" as Thunderbird has it, a server tried without signing in: how
-// it is reached, and how it lets one sign in.
+// Finding an address's servers the way Thunderbird does, the IMAP one and
+// the outgoing (SMTP) one: the few we know ourselves, the domain's own
+// autoconfig, Thunderbird's database ISPDB, the database's entry for the
+// provider of the domain's MX host, then a guess where something answers.
+// And, for the settings' "Re-test" as Thunderbird has it, a server tried
+// without signing in: how it is reached, and how it lets one sign in.
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
 use super::imap::{Fail, Session};
+use super::smtp::Smtp;
 use super::{split, Auth, Security, Server};
 
 // Mailboxes the lookup cannot find, by the address's domain: the IMAP host,
-// port and way. TU Dresden: its own Exchange (msx), neither in ISPDB nor
-// with an autoconfig, its mail exchangers DFN's; the user name is the
-// address (ZIH's FAQ), the password the ZIH one.
-const KNOWN: [(&str, &str, u16, Security); 2] = [
-    ("tu-dresden.de", "msx.tu-dresden.de", 993, Security::Ssl),
-    ("mailbox.tu-dresden.de", "msx.tu-dresden.de", 993, Security::Ssl),
+// port and way, and the SMTP ones. TU Dresden: its own Exchange (msx),
+// neither in ISPDB nor with an autoconfig, its mail exchangers DFN's; the
+// user name is the address (ZIH's FAQ), the password the ZIH one; it takes
+// letters on 587 with STARTTLS (AUTH LOGIN once encrypted).
+type Known = (&'static str, (&'static str, u16, Security), (&'static str, u16, Security));
+const KNOWN: [Known; 2] = [
+    ("tu-dresden.de", ("msx.tu-dresden.de", 993, Security::Ssl), ("msx.tu-dresden.de", 587, Security::StartTls)),
+    ("mailbox.tu-dresden.de", ("msx.tu-dresden.de", 993, Security::Ssl), ("msx.tu-dresden.de", 587, Security::StartTls)),
 ];
 
-fn known(domain: &str, address: &str) -> Option<Server> {
-    let (_, host, port, security) = KNOWN.iter().find(|(d, ..)| *d == domain)?;
-    Some(Server { host: host.to_string(), port: *port, security: *security, username: address.into(), auth: Auth::Auto })
+fn known(domain: &str, address: &str) -> Option<(Server, Server)> {
+    let (_, imap, smtp) = KNOWN.iter().find(|(d, ..)| *d == domain)?;
+    let server = |(host, port, security): (&str, u16, Security)| Server { host: host.to_string(), port, security, username: address.into(), auth: Auth::Auto };
+    Some((server(*imap), server(*smtp)))
 }
 
-// What was found for an address: the server, and where it came from
+// Found: the IMAP server, the SMTP one where there is one, and where they
+// came from.
+fn found(source: &str, server: &Server, smtp: Option<Server>) -> Value {
+    json!({ "ok": true, "found": true, "source": source, "server": server.json(), "smtp": smtp.map(|s| s.json()) })
+}
+
+// What was found for an address: the servers, and where they came from
 // (builtin, autoconfig, wellknown, ispdb, mx, guess); oauth when the provider
 // takes only a browser sign-in for IMAP.
 pub fn discover(address: &str) -> Value {
     let Some((_, domain)) = split(address) else { return json!({ "ok": false, "error": "address" }) };
     let address = address.trim();
-    if let Some(server) = known(&domain, address) {
-        return json!({ "ok": true, "found": true, "source": "builtin", "server": server.json() });
+    if let Some((server, smtp)) = known(&domain, address) {
+        return found("builtin", &server, Some(smtp));
     }
     let agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(6))).build().new_agent();
     let get = |url: &str| -> Option<String> {
@@ -48,7 +58,7 @@ pub fn discover(address: &str) -> Value {
     for (source, url) in configs {
         if let Some(xml) = get(&url) {
             match from_config(&xml, address) {
-                Some(Ok(server)) => return json!({ "ok": true, "found": true, "source": source, "server": server.json() }),
+                Some(Ok(server)) => return found(source, &server, outgoing(&xml, address)),
                 Some(Err(())) => oauth = true,
                 None => {}
             }
@@ -64,7 +74,7 @@ pub fn discover(address: &str) -> Value {
         }
         if let Some(xml) = get(&format!("https://autoconfig.thunderbird.net/v1.1/{base}")) {
             match from_config(&xml, address) {
-                Some(Ok(server)) => return json!({ "ok": true, "found": true, "source": "mx", "server": server.json() }),
+                Some(Ok(server)) => return found("mx", &server, outgoing(&xml, address)),
                 Some(Err(())) => oauth = true,
                 None => {}
             }
@@ -73,29 +83,48 @@ pub fn discover(address: &str) -> Value {
     if oauth {
         return json!({ "ok": true, "found": false, "oauth": true });
     }
-    // A guess, where something answers as IMAP.
+    // A guess, where something answers as IMAP (and as SMTP).
     for host in [format!("imap.{domain}"), format!("mail.{domain}"), domain.clone()] {
-        if let Some((security, port)) = probe(&host) {
+        if let Some((security, port)) = probe(&host, false) {
             let server = Server { host, port, security, username: address.into(), auth: Auth::Auto };
-            return json!({ "ok": true, "found": true, "source": "guess", "server": server.json() });
+            return found("guess", &server, guess_outgoing(&domain, address));
         }
     }
     json!({ "ok": true, "found": false })
 }
 
+// The outgoing server for an address, looked up as above: for an account
+// set up before the pet sent mail.
+pub fn outgoing_for(address: &str) -> Option<Server> {
+    Server::from_json(&discover(address)["smtp"])
+}
+
 // The IMAP server in an autoconfig file: Some(Ok) one that takes a password,
 // Some(Err) when they all take only OAuth, None when there is none.
 fn from_config(xml: &str, address: &str) -> Option<Result<Server, ()>> {
+    server_in(xml, "incomingServer", "imap", address)
+}
+
+// Its SMTP server that takes a password, if it has one.
+fn outgoing(xml: &str, address: &str) -> Option<Server> {
+    server_in(xml, "outgoingServer", "smtp", address)?.ok()
+}
+
+// The first server of a kind in an autoconfig file that takes a password
+// and is encrypted, as from_config says.
+fn server_in(xml: &str, tag: &str, kind: &str, address: &str) -> Option<Result<Server, ()>> {
     let (local, domain) = split(address)?;
     let fill = |s: &str| s.replace("%EMAILADDRESS%", address).replace("%EMAILLOCALPART%", local).replace("%EMAILDOMAIN%", &domain);
+    let (open, close, of_kind) = (format!("<{tag}"), format!("</{tag}>"), format!("type=\"{kind}\""));
+    let (ssl_port, starttls_port) = if kind == "smtp" { (465, 587) } else { (993, 143) };
     let mut oauth_only = false;
     let mut rest = xml;
-    while let Some(at) = rest.find("<incomingServer") {
+    while let Some(at) = rest.find(&open) {
         let block = &rest[at..];
-        let end = block.find("</incomingServer>").unwrap_or(block.len());
+        let end = block.find(&close).unwrap_or(block.len());
         let (head, body) = block[..end].split_once('>').unwrap_or(("", ""));
         rest = &block[end..];
-        if !head.contains("type=\"imap\"") {
+        if !head.contains(&of_kind) {
             continue;
         }
         let auths: Vec<&str> = tags(body, "authentication");
@@ -110,7 +139,7 @@ fn from_config(xml: &str, address: &str) -> Option<Result<Server, ()>> {
             _ => continue,
         };
         let host = fill(tags(body, "hostname").first()?);
-        let port = tags(body, "port").first().and_then(|p| p.parse().ok()).unwrap_or(if security == Security::Ssl { 993 } else { 143 });
+        let port = tags(body, "port").first().and_then(|p| p.parse().ok()).unwrap_or(if security == Security::Ssl { ssl_port } else { starttls_port });
         let username = tags(body, "username").first().map(|u| fill(u)).unwrap_or_else(|| address.into());
         return Some(Ok(Server { host: host.to_ascii_lowercase(), port, security, username, auth: Auth::Auto }));
     }
@@ -140,17 +169,24 @@ fn base_domain(host: &str) -> String {
     labels[n.saturating_sub(keep)..].join(".").to_ascii_lowercase()
 }
 
-// Something answering as IMAP at a host: over TLS on 993, else with
-// STARTTLS on 143.
-fn probe(host: &str) -> Option<(Security, u16)> {
-    let try_one = |security, port| {
+// Something answering as IMAP at a host (over TLS on 993, else with
+// STARTTLS on 143), or as SMTP (465, else 587).
+fn probe(host: &str, smtp: bool) -> Option<(Security, u16)> {
+    tries(None, None, smtp).into_iter().find(|&(security, port)| {
         let server = Server { host: host.into(), port, security, username: String::new(), auth: Auth::Auto };
-        Session::open(&server, Duration::from_secs(4)).is_ok()
-    };
-    if try_one(Security::Ssl, 993) {
-        return Some((Security::Ssl, 993));
-    }
-    try_one(Security::StartTls, 143).then_some((Security::StartTls, 143))
+        if smtp {
+            Smtp::open(&server, Duration::from_secs(4)).map(Smtp::quit).is_ok()
+        } else {
+            Session::open(&server, Duration::from_secs(4)).map(Session::logout).is_ok()
+        }
+    })
+}
+
+// The outgoing server guessed, where something answers as SMTP.
+fn guess_outgoing(domain: &str, address: &str) -> Option<Server> {
+    [format!("smtp.{domain}"), format!("mail.{domain}"), domain.to_string()]
+        .into_iter()
+        .find_map(|host| probe(&host, true).map(|(security, port)| Server { host, port, security, username: address.into(), auth: Auth::Auto }))
 }
 
 // How a server lets one sign in, by what it can do, in Thunderbird's terms:
@@ -181,33 +217,55 @@ pub fn auths_of(caps: &[String]) -> Vec<&'static str> {
     out
 }
 
+// The same for an SMTP server, by AUTH's mechanisms as EHLO said them.
+pub fn smtp_auths(mechanisms: &[String]) -> Vec<&'static str> {
+    let has = |m: &str| mechanisms.iter().any(|x| x.eq_ignore_ascii_case(m));
+    let names = [("PLAIN", "plain"), ("LOGIN", "login"), ("CRAM-MD5", "cram"), ("GSSAPI", "gssapi"), ("NTLM", "ntlm")];
+    let mut out: Vec<&'static str> = names.iter().filter(|(m, _)| has(m)).map(|(_, n)| *n).collect();
+    if has("XOAUTH2") || has("OAUTHBEARER") {
+        out.push("oauth2");
+    }
+    out
+}
+
 // The ways to try a server, as Thunderbird's "Autodetect" would: the way
 // and port given, else the usual port for the way, else (no way given) TLS
-// before STARTTLS, never unencrypted.
-fn tries(port: Option<u16>, security: Option<Security>) -> Vec<(Security, u16)> {
-    let usual = |s: Security| if s == Security::Ssl { 993 } else { 143 };
+// before STARTTLS, never unencrypted. IMAP on 993 / 143, SMTP on 465 / 587
+// (or 25, with STARTTLS).
+fn tries(port: Option<u16>, security: Option<Security>, smtp: bool) -> Vec<(Security, u16)> {
+    let (ssl, starttls) = if smtp { (465, 587) } else { (993, 143) };
+    let usual = |s: Security| if s == Security::Ssl { ssl } else { starttls };
     match (security, port) {
         (Some(s), Some(p)) => vec![(s, p)],
         (Some(s), None) => vec![(s, usual(s))],
-        (None, Some(993)) => vec![(Security::Ssl, 993)],
-        (None, Some(143)) => vec![(Security::StartTls, 143)],
+        (None, Some(p)) if p == ssl => vec![(Security::Ssl, p)],
+        (None, Some(p)) if p == starttls || (smtp && p == 25) => vec![(Security::StartTls, p)],
         (None, Some(p)) => vec![(Security::Ssl, p), (Security::StartTls, p)],
-        (None, None) => vec![(Security::Ssl, 993), (Security::StartTls, 143)],
+        (None, None) => vec![(Security::Ssl, ssl), (Security::StartTls, starttls)],
     }
 }
 
-// A server tried without signing in: the first way that answers as IMAP,
-// and how it lets one sign in; else why not.
-pub fn probe_server(host: &str, port: Option<u16>, security: Option<Security>) -> Value {
+// A server tried without signing in: the first way that answers as IMAP
+// (or SMTP), and how it lets one sign in; else why not.
+pub fn probe_server(host: &str, port: Option<u16>, security: Option<Security>, smtp: bool) -> Value {
     let mut why = Fail::Connect("nothing to try".into());
-    for (security, port) in tries(port, security) {
+    for (security, port) in tries(port, security, smtp) {
         let server = Server { host: host.into(), port, security, username: String::new(), auth: Auth::Auto };
-        match Session::open(&server, Duration::from_secs(6)) {
-            Ok(s) => {
+        let opened = if smtp {
+            Smtp::open(&server, Duration::from_secs(6)).map(|s| {
+                let auths = smtp_auths(&s.auths());
+                s.quit();
+                auths
+            })
+        } else {
+            Session::open(&server, Duration::from_secs(6)).map(|s| {
                 let auths = auths_of(s.caps());
                 s.logout();
-                return json!({ "ok": true, "found": true, "security": security.name(), "port": port, "auths": auths });
-            }
+                auths
+            })
+        };
+        match opened {
+            Ok(auths) => return json!({ "ok": true, "found": true, "security": security.name(), "port": port, "auths": auths }),
             Err(fail) => why = fail,
         }
     }
@@ -298,23 +356,46 @@ mod tests {
     }
 
     #[test]
+    fn a_config_gives_its_smtp_server_too() {
+        let gmail = r#"<clientConfig><emailProvider id="googlemail.com">
+          <incomingServer type="imap"><hostname>imap.gmail.com</hostname><port>993</port><socketType>SSL</socketType><username>%EMAILADDRESS%</username><authentication>OAuth2</authentication><authentication>password-cleartext</authentication></incomingServer>
+          <outgoingServer type="smtp"><hostname>smtp.gmail.com</hostname><port>465</port><socketType>SSL</socketType><username>%EMAILADDRESS%</username><authentication>OAuth2</authentication><authentication>password-cleartext</authentication></outgoingServer>
+        </emailProvider></clientConfig>"#;
+        let smtp = outgoing(gmail, "me@gmail.com").unwrap();
+        assert_eq!((smtp.host.as_str(), smtp.port, smtp.security, smtp.username.as_str()), ("smtp.gmail.com", 465, Security::Ssl, "me@gmail.com"));
+        assert_eq!(from_config(gmail, "me@gmail.com").unwrap().unwrap().host, "imap.gmail.com");
+        // Unencrypted, none; no port said, the usual one for the way.
+        assert!(outgoing(&gmail.replace("<port>465</port><socketType>SSL</socketType>", "<port>25</port><socketType>plain</socketType>"), "me@gmail.com").is_none());
+        assert_eq!(outgoing(&gmail.replace("<port>465</port><socketType>SSL", "<socketType>STARTTLS"), "me@gmail.com").unwrap().port, 587);
+        assert!(outgoing(QQ, "me@qq.com").is_none());
+    }
+
+    #[test]
     fn some_mailboxes_are_known() {
-        let tud = known("tu-dresden.de", "vorname.name@tu-dresden.de").unwrap();
+        let (tud, out) = known("tu-dresden.de", "vorname.name@tu-dresden.de").unwrap();
         assert_eq!((tud.host.as_str(), tud.port, tud.security, tud.username.as_str()), ("msx.tu-dresden.de", 993, Security::Ssl, "vorname.name@tu-dresden.de"));
-        assert_eq!(known("mailbox.tu-dresden.de", "a.b@mailbox.tu-dresden.de").unwrap().host, "msx.tu-dresden.de");
+        assert_eq!((out.host.as_str(), out.port, out.security, out.username.as_str()), ("msx.tu-dresden.de", 587, Security::StartTls, "vorname.name@tu-dresden.de"));
+        assert_eq!(known("mailbox.tu-dresden.de", "a.b@mailbox.tu-dresden.de").unwrap().0.host, "msx.tu-dresden.de");
         assert!(known("tu-dresden.de.evil.example", "x@tu-dresden.de.evil.example").is_none());
         let found = discover("Vorname.Name@TU-Dresden.de");
-        assert_eq!((found["source"].as_str(), found["server"]["host"].as_str()), (Some("builtin"), Some("msx.tu-dresden.de")));
+        assert_eq!((found["source"].as_str(), found["server"]["host"].as_str(), found["smtp"]["port"].as_u64()), (Some("builtin"), Some("msx.tu-dresden.de"), Some(587)));
+        assert_eq!(outgoing_for("x@tu-dresden.de").map(|s| s.security), Some(Security::StartTls));
     }
 
     #[test]
     fn a_server_is_tried_as_autodetect_would() {
-        assert_eq!(tries(None, None), [(Security::Ssl, 993), (Security::StartTls, 143)]);
-        assert_eq!(tries(Some(993), None), [(Security::Ssl, 993)]);
-        assert_eq!(tries(Some(143), None), [(Security::StartTls, 143)]);
-        assert_eq!(tries(Some(1143), None), [(Security::Ssl, 1143), (Security::StartTls, 1143)]);
-        assert_eq!(tries(None, Some(Security::Plain)), [(Security::Plain, 143)]);
-        assert_eq!(tries(Some(14310), Some(Security::Plain)), [(Security::Plain, 14310)]);
+        assert_eq!(tries(None, None, false), [(Security::Ssl, 993), (Security::StartTls, 143)]);
+        assert_eq!(tries(Some(993), None, false), [(Security::Ssl, 993)]);
+        assert_eq!(tries(Some(143), None, false), [(Security::StartTls, 143)]);
+        assert_eq!(tries(Some(1143), None, false), [(Security::Ssl, 1143), (Security::StartTls, 1143)]);
+        assert_eq!(tries(None, Some(Security::Plain), false), [(Security::Plain, 143)]);
+        assert_eq!(tries(Some(14310), Some(Security::Plain), false), [(Security::Plain, 14310)]);
+        assert_eq!(tries(None, None, true), [(Security::Ssl, 465), (Security::StartTls, 587)]);
+        assert_eq!(tries(Some(25), None, true), [(Security::StartTls, 25)]);
+        assert_eq!(tries(None, Some(Security::StartTls), true), [(Security::StartTls, 587)]);
+        let mechs = |s: &str| s.split(' ').map(String::from).collect::<Vec<_>>();
+        assert_eq!(smtp_auths(&mechs("GSSAPI NTLM LOGIN")), ["login", "gssapi", "ntlm"]);
+        assert_eq!(smtp_auths(&mechs("PLAIN LOGIN XOAUTH2")), ["plain", "login", "oauth2"]);
         // TU Dresden's Exchange, as it answers on 993 and on 143.
         let caps = |s: &str| s.split(' ').map(String::from).collect::<Vec<_>>();
         assert_eq!(auths_of(&caps("IMAP4 IMAP4rev1 AUTH=PLAIN AUTH=NTLM AUTH=GSSAPI SASL-IR IDLE")), ["plain", "login", "gssapi", "ntlm"]);

@@ -258,10 +258,17 @@ pub async fn settings_gallery(app: AppHandle, page: Option<u64>, sort: Option<St
     }
 }
 
-// Only these two places, whatever the page asks: the project, or codex-pets.net.
+// Only these places, whatever the page asks: the project, codex-pets.net,
+// or where a mail provider makes app passwords (the Mail page's hint).
 #[tauri::command]
 pub async fn settings_open_site(app: AppHandle, place: String) {
-    let url = if place == "repo" { REPO } else { fetch::SITE };
+    let url = match place.as_str() {
+        "repo" => REPO,
+        "googleAppPasswords" => "https://myaccount.google.com/apppasswords",
+        "appleAppPasswords" => "https://account.apple.com/account/manage",
+        "yahooAppPasswords" => "https://login.yahoo.com/account/security",
+        _ => fetch::SITE,
+    };
     let mut command = std::process::Command::new("cmd");
     command.args(["/C", "start", "", url]);
     #[cfg(windows)]

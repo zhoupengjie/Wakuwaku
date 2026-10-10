@@ -11,12 +11,16 @@
 // settings.
 //
 // The Mail page also lists an inbox and reads a letter (letters.rs; opening
-// one marks it read, as any mail program does), and hands a letter to Claude
-// Code or Codex (agent.rs). IMAP is io-imap's (imap.rs), the library under
-// himalaya; finding the server is discover.rs.
+// one marks it read, as any mail program does), hands a letter to Claude
+// Code or Codex (agent.rs), and writes letters: new ones, replies, letters
+// passed on (send.rs, over SMTP: smtp.rs). IMAP is io-imap's (imap.rs), the
+// library under himalaya; finding the servers is discover.rs.
 //
-// Settings: "mail": [{ id, address, host, port, security: ssl | starttls |
-// plain, username, on }], changed only through the commands below;
+// Settings: "mail": [{ id, address, name, host, port, security: ssl |
+// starttls | plain, username, auth, smtp: { host, port, security, username,
+// auth } | null, on }], changed only through the commands below (smtp null:
+// one set up before the pet sent mail, or none to send with); one password
+// for both servers;
 // "mailAgent": "claude" | "codex", who a letter goes to first;
 // "mailAgentConf": { claude | codex: { access, model, effort, sumModel,
 // sumEffort } }, what a session may do and the models (agent.rs).
@@ -35,6 +39,8 @@ pub mod agent;
 mod discover;
 mod imap;
 pub mod letters;
+pub mod send;
+mod smtp;
 
 pub use discover::discover;
 use imap::{session, Fail};
@@ -141,7 +147,11 @@ impl Server {
 pub struct Account {
     pub id: String,
     pub address: String,
+    // The name letters from it go out with (may be empty).
+    pub name: String,
     pub server: Server,
+    // The outgoing server.
+    pub smtp: Option<Server>,
     pub on: bool,
 }
 
@@ -150,9 +160,16 @@ impl Account {
         let mut v = self.server.json();
         v["id"] = json!(self.id);
         v["address"] = json!(self.address);
+        v["name"] = json!(self.name);
+        v["smtp"] = self.smtp.as_ref().map_or(Value::Null, Server::json);
         v["on"] = json!(self.on);
         v
     }
+}
+
+// A name as one is written to go with an address: one line, not too long.
+fn name_of(v: &Value) -> String {
+    v.as_str().unwrap_or("").chars().filter(|c| !c.is_control()).take(100).collect::<String>().trim().to_string()
 }
 
 fn accounts(sh: &Shared) -> Vec<Account> {
@@ -164,7 +181,9 @@ fn accounts(sh: &Shared) -> Vec<Account> {
             Some(Account {
                 id: a["id"].as_str()?.into(),
                 address: a["address"].as_str()?.into(),
+                name: name_of(&a["name"]),
                 server: Server::from_json(a)?,
+                smtp: Server::from_json(&a["smtp"]),
                 on: a["on"] != false,
             })
         })
@@ -203,6 +222,20 @@ fn test(server: &Server, password: &str) -> Result<usize, (Fail, Vec<&'static st
         Ok(unseen) => {
             s.logout();
             Ok(unseen.len())
+        }
+        Err(fail) => Err((fail, auths)),
+    }
+}
+
+// The same for the outgoing server: reached, and signed in where it asks
+// one to.
+fn test_smtp(server: &Server, password: &str) -> Result<(), (Fail, Vec<&'static str>)> {
+    let mut s = smtp::Smtp::open(server, CONNECT).map_err(|f| (f, Vec::new()))?;
+    let auths = discover::smtp_auths(&s.auths());
+    match s.login(&server.username, password, server.auth) {
+        Ok(()) => {
+            s.quit();
+            Ok(())
         }
         Err(fail) => Err((fail, auths)),
     }
@@ -272,8 +305,10 @@ pub fn sync(sh: &Arc<Shared>) -> bool {
     let mut gone = Vec::new();
     {
         let mut r = sh.mail.lock().unwrap();
+        // A watch goes on while its inbox is as it was (its name or
+        // outgoing server changed, it is the same inbox).
         r.watches.retain(|id, (account, watch)| {
-            let keep = want.iter().any(|a| a == account);
+            let keep = want.iter().any(|a| a.id == account.id && a.address == account.address && a.server == account.server);
             if !keep {
                 watch.stop();
                 gone.push(id.clone());
@@ -434,18 +469,21 @@ pub async fn mail_discover(address: String) -> Value {
 }
 
 // "Re-test", as Thunderbird has it: the server tried without signing in,
-// the port and the way as given or (empty, "auto") found.
+// the port and the way as given or (empty, "auto") found; the incoming
+// one, or ("smtp") the outgoing.
 #[tauri::command]
-pub async fn mail_probe(host: Value, port: Value, security: String) -> Value {
+pub async fn mail_probe(host: Value, port: Value, security: String, kind: Option<String>) -> Value {
     let Some(host) = host_of(&host) else { return json!({ "ok": false, "error": { "kind": "fields", "text": "" } }) };
     let port = port_of(&port);
     let security = Security::parse(&security);
-    tauri::async_runtime::spawn_blocking(move || discover::probe_server(&host, port, security)).await.unwrap_or_else(|e| json!({ "ok": false, "error": { "kind": "other", "text": e.to_string() } }))
+    let smtp = kind.as_deref() == Some("smtp");
+    tauri::async_runtime::spawn_blocking(move || discover::probe_server(&host, port, security, smtp)).await.unwrap_or_else(|e| json!({ "ok": false, "error": { "kind": "other", "text": e.to_string() } }))
 }
 
-// An account added or changed: signed in once to see that it works, then
-// kept, its password in the Credential Manager. An empty password keeps the
-// one kept before.
+// An account added or changed: signed in once on each server to see that
+// it works (both at once), then kept, its password in the Credential
+// Manager. An empty password keeps the one kept before. What went wrong
+// with the outgoing server says so ("out").
 #[tauri::command]
 pub async fn mail_save(app: AppHandle, account: Value, password: String) -> Value {
     let sh = shared(&app);
@@ -453,18 +491,40 @@ pub async fn mail_save(app: AppHandle, account: Value, password: String) -> Valu
     let Some(server) = Server::from_json(&account).filter(|_| split(&address).is_some()) else {
         return json!({ "ok": false, "error": { "kind": "fields", "text": "" } });
     };
+    // The outgoing server: none (no host), or one whole.
+    let out = &account["smtp"];
+    let smtp = Server::from_json(out);
+    if smtp.is_none() && !out["host"].as_str().unwrap_or("").trim().is_empty() {
+        return json!({ "ok": false, "out": true, "error": { "kind": "fields", "text": "" } });
+    }
     // One being changed: its id, and the password kept for it.
     let known = account["id"].as_str().filter(|id| accounts(&sh).iter().any(|a| a.id == *id)).map(String::from);
     let password = if password.is_empty() { known.as_deref().and_then(secret::read).unwrap_or_default() } else { password };
     if password.is_empty() {
         return json!({ "ok": false, "error": { "kind": "password", "text": "" } });
     }
-    let (s, p) = (server.clone(), password.clone());
-    let tried = tauri::async_runtime::spawn_blocking(move || test(&s, &p)).await.unwrap_or_else(|e| Err((Fail::Other(e.to_string()), Vec::new())));
-    let unread = match tried {
+    let (s, o, p) = (server.clone(), smtp.clone(), password.clone());
+    let tried = tauri::async_runtime::spawn_blocking(move || {
+        let sending = o.map(|o| {
+            let p = p.clone();
+            std::thread::spawn(move || test_smtp(&o, &p))
+        });
+        let receiving = test(&s, &p);
+        (receiving, sending.map(|t| t.join().unwrap_or_else(|_| Err((Fail::Other("the try stopped".into()), Vec::new())))))
+    })
+    .await;
+    let (receiving, sending) = match tried {
+        Ok(both) => both,
+        Err(e) => return json!({ "ok": false, "error": Fail::Other(e.to_string()).json() }),
+    };
+    let unread = match receiving {
         Ok(n) => n,
         Err((fail, auths)) => return json!({ "ok": false, "error": fail.json(), "auths": auths }),
     };
+    if let Some(Err((fail, auths))) = sending {
+        return json!({ "ok": false, "out": true, "error": fail.json(), "auths": auths });
+    }
+    let name = name_of(&account["name"]);
     // Kept against the accounts as they are now, others saved meanwhile included.
     {
         let _editing = EDITING.lock().unwrap();
@@ -473,7 +533,7 @@ pub async fn mail_save(app: AppHandle, account: Value, password: String) -> Valu
         if let Err(e) = secret::write(&id, &password) {
             return json!({ "ok": false, "error": { "kind": "keep", "text": e } });
         }
-        let kept = Account { id: id.clone(), address, server, on: true };
+        let kept = Account { id: id.clone(), address, name, server, smtp, on: true };
         match all.iter_mut().find(|a| a.id == id) {
             Some(a) => *a = kept,
             None => all.push(kept),
@@ -627,7 +687,7 @@ mod tests {
         for _ in 0..2000 {
             let id = new_id(&all);
             assert!(id.len() == 8 && !all.iter().any(|a: &Account| a.id == id), "{id}");
-            all.push(Account { id, address: "a@b.c".into(), server: server.clone(), on: true });
+            all.push(Account { id, address: "a@b.c".into(), name: String::new(), server: server.clone(), smtp: None, on: true });
         }
     }
 
@@ -639,6 +699,12 @@ mod tests {
         assert!(Server::from_json(&json!({ "host": "a.b", "port": 0, "username": "x" })).is_none());
         assert_eq!(split("x@TU-Dresden.de").map(|(_, d)| d), Some("tu-dresden.de".into()));
         assert!(split("no-at-sign").is_none());
+        // An account as kept: its name and outgoing server, or none.
+        let kept = json!({ "id": "a1", "address": "me@example.com", "name": " Me\n ", "host": "imap.example.com", "port": 993, "security": "ssl", "username": "me", "smtp": { "host": "smtp.example.com", "port": 587, "security": "starttls", "username": "me" } });
+        let a = Account { id: "a1".into(), address: "me@example.com".into(), name: name_of(&kept["name"]), server: Server::from_json(&kept).unwrap(), smtp: Server::from_json(&kept["smtp"]), on: true };
+        assert_eq!((a.name.as_str(), a.smtp.as_ref().map(|s| s.port)), ("Me", Some(587)));
+        assert_eq!(a.json()["smtp"]["security"], "starttls");
+        assert!(Server::from_json(&json!(null)).is_none());
     }
 
     #[cfg(windows)]

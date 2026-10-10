@@ -74,6 +74,7 @@ fn row(account: &str, h: &Head) -> Value {
         "account": account,
         "uid": h.uid,
         "flagged": h.flagged,
+        "answered": h.answered,
         "from": first.map_or("", |p| p["name"].as_str().filter(|n| !n.is_empty()).or(p["address"].as_str()).unwrap_or("")),
         "address": first.map_or("", |p| p["address"].as_str().unwrap_or("")),
         "subject": m.as_ref().and_then(|m| m.subject()).unwrap_or("").trim(),
@@ -174,6 +175,8 @@ fn view(m: &Message) -> Value {
         "from": people(m.from()),
         "to": people(m.to()),
         "cc": people(m.cc()),
+        "replyTo": people(m.reply_to()),
+        "references": m.references().as_text_list().map(|l| l.iter().map(|r| r.trim()).filter(|r| !r.is_empty()).collect::<Vec<_>>()).unwrap_or_default(),
         "subject": m.subject().unwrap_or("").trim(),
         "date": when(Some(m), None),
         "messageId": m.message_id().unwrap_or(""),
@@ -258,9 +261,12 @@ mod tests {
         assert_eq!(v["subject"], "合同");
         assert_eq!(v["to"][1], json!({ "name": "Li", "address": "li@example.test" }));
         assert_eq!(v["attachments"][0]["name"], "notes.txt");
+        assert_eq!((v["replyTo"].as_array().map(Vec::len), v["references"].as_array().map(Vec::len)), (Some(0), Some(0)));
+        let replied = parse(b"From: a@b.test\r\nReply-To: List <list@b.test>\r\nReferences: <r1@x> <r2@x>\r\nSubject: s\r\n\r\nhi\r\n").unwrap();
+        assert_eq!((view(&replied)["replyTo"][0]["address"].as_str(), view(&replied)["references"].clone()), (Some("list@b.test"), json!(["r1@x", "r2@x"])));
         assert_eq!(v["date"], 1_791_512_100_000i64);
-        let head = Head { uid: 4, seen: false, flagged: true, size: 9, received: None, header: raw.to_vec() };
+        let head = Head { uid: 4, seen: false, flagged: true, answered: true, size: 9, received: None, header: raw.to_vec() };
         let r = row("a1", &head);
-        assert_eq!((r["from"].as_str(), r["attached"].as_bool()), (Some("Zhang San"), Some(true)));
+        assert_eq!((r["from"].as_str(), r["attached"].as_bool(), r["answered"].as_bool()), (Some("Zhang San"), Some(true), Some(true)));
     }
 }

@@ -1048,10 +1048,11 @@
 
   // Windows' accent colour (taskbar.rs), the lighter one as its own dark
   // taskbar draws with: the monitor's icons, the line under the window in
-  // front (style.css --accent; its own blue until it comes).
+  // front (style.css --win-accent; its own blue until it comes). Not
+  // --accent: that is her mood's colour (pet.js).
   window.pet.onAccent(a => {
-    if (a?.light) document.documentElement.style.setProperty('--accent', a.light)
-    else document.documentElement.style.removeProperty('--accent')
+    if (a?.light) document.documentElement.style.setProperty('--win-accent', a.light)
+    else document.documentElement.style.removeProperty('--win-accent')
   })
   window.addEventListener('resize', drawMica)
 

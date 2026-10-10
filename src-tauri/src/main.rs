@@ -361,6 +361,7 @@ impl Shared {
     pub fn change(self: &Arc<Self>, patch: Value) {
         let Value::Object(patch) = patch else { return };
         let touches_visibility = ["dnd", "display", "out", "hideInFullscreen"].iter().any(|k| patch.contains_key(*k));
+        let touches_top = ["settingsPin", "settingsTop"].iter().any(|k| patch.contains_key(*k));
         {
             let mut settings = self.settings.lock().unwrap();
             settings.extend(patch);
@@ -370,6 +371,9 @@ impl Shared {
         tray::refresh_menu(self);
         if touches_visibility {
             self.apply_visibility();
+        }
+        if touches_top {
+            island::keep_on_top(self);
         }
     }
 

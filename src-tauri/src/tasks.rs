@@ -484,6 +484,61 @@ mod imp {
         all.into_iter().filter(|h| hwnds.contains(h)).collect()
     }
 
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetWindowRect(hwnd: Hwnd, rect: *mut WinRect) -> i32;
+    }
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct WinRect {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+
+    const HWND_TOPMOST: isize = -1;
+    const WS_EX_TRANSPARENT: isize = 0x20;
+
+    fn rect_of(hwnd: Hwnd) -> WinRect {
+        let mut r = WinRect::default();
+        // SAFETY: our own struct, of the size the call writes.
+        unsafe { GetWindowRect(hwnd, &mut r) };
+        r
+    }
+
+    // Another window over this one where it is, in sight (not one of hers,
+    // nor one the pointer passes through): another program's own "on top"
+    // window that came over it, say.
+    pub fn covered(hwnd: isize, own: &[isize]) -> bool {
+        let me = rect_of(hwnd as Hwnd);
+        let mut at = hwnd as Hwnd;
+        for _ in 0..2000 {
+            // SAFETY: plain queries about windows above this one.
+            unsafe {
+                at = GetWindow(at, GW_HWNDPREV);
+                if at.is_null() {
+                    return false;
+                }
+                if own.contains(&(at as isize)) || IsWindowVisible(at) == 0 || GetWindowLongPtrW(at, GWL_EXSTYLE) & WS_EX_TRANSPARENT != 0 || is_cloaked(at) {
+                    continue;
+                }
+            }
+            let r = rect_of(at);
+            if r.right > r.left && r.bottom > r.top && r.left < me.right && me.left < r.right && r.top < me.bottom && me.top < r.bottom {
+                return true;
+            }
+        }
+        false
+    }
+
+    // To the top of the windows kept on top, the keyboard where it is.
+    pub fn raise_top(hwnd: isize) {
+        // SAFETY: a window handle and flags; nothing is pointed to.
+        unsafe { SetWindowPos(hwnd as Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) };
+    }
+
     // A press on the button of a program with several windows: all of them
     // to the front (restored if minimized), the one on top of them on top
     // still; all minimized when one of them is the one in front, as a
@@ -713,6 +768,10 @@ mod imp {
     pub fn is_shell_flyout(_hwnd: isize) -> bool {
         false
     }
+    pub fn covered(_hwnd: isize, _own: &[isize]) -> bool {
+        false
+    }
+    pub fn raise_top(_hwnd: isize) {}
     pub fn in_use() -> [(&'static str, Vec<String>); 3] {
         [("mic", Vec::new()), ("cam", Vec::new()), ("loc", Vec::new())]
     }
@@ -766,4 +825,4 @@ mod imp {
     }
 }
 
-pub use imp::{alive, app_id, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, is_shell_flyout, is_start, keys, launch, list, net, plain_program_icon, press, press_all, toggle_native, with_com};
+pub use imp::{alive, app_id, app_name, close, covered, destroy_icon, file_icon, front, icon_of, in_use, is_shell_flyout, is_start, keys, launch, list, net, plain_program_icon, press, press_all, raise_top, toggle_native, with_com};

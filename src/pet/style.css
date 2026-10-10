@@ -1993,7 +1993,7 @@ body {
 /* --- The taskbar in Windows' light mode (island.js tb-light: as Windows'
    own taskbar is, SystemUsesLightTheme, which taskbar.rs sends) ---------------
    The strip and what opens from it light, her island too (a capsule in
-   it, island.js isCapsule; the settings stay dark). The programs draw
+   it, island.js isCapsule; its settings too). The programs draw
    their tray icons for the light taskbar themselves. Under the pointer
    and in front: a white wash, as on Windows' own. */
 .tb-light #island-row {
@@ -2114,9 +2114,9 @@ body {
 
 /* Her island, light as Windows' own flyouts are: the capsule a light pill
    in the strip, what it grows into a light card, the prompt's parts light;
-   the moods in their deeper colours (island.js COLOR_LIGHT). The settings,
-   which stand in the island too, stay dark. */
-.tb-light #island:not([data-view='settings']) {
+   the moods in their deeper colours (island.js COLOR_LIGHT); the settings
+   in it light as well (settings.css). */
+.tb-light #island {
   background: #fbfbfb;
   color: #1b1b1b;
 }

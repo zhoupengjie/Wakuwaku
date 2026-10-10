@@ -365,7 +365,9 @@
       ? T('s.paperNowFolder', { name: lastPart(paper.folder) || T('s.paperUnknown') })
       : T('s.paperNowPicture', { name: lastPart(paper.file) || T('s.paperUnknown') })
     const every = PAPER_EVERY.map(ms => [ms, ms >= 86400000 ? T('s.paperDay') : ms >= 3600000 ? T('s.paperHours', { n: ms / 3600000 }) : T('settings.minutes', { n: ms / 60000 })])
-    const pick = `<span class="btns"><button class="pbtn sm" data-paper="picture" ${pickingPaper ? 'disabled' : ''}>${esc(T('s.paperPicture'))}</button><button class="pbtn sm" data-paper="folder" ${pickingPaper ? 'disabled' : ''}>${esc(T('s.paperFolder'))}</button></span>`
+    const button = (what, label) => `<button class="pbtn sm" data-paper="${what}" ${pickingPaper ? 'disabled' : ''}>${esc(T(label))}</button>`
+    // Back to the picture before the last change made here, while there is one.
+    const pick = `<span class="btns">${button('picture', 's.paperPicture')}${button('folder', 's.paperFolder')}${paper.canUndo ? button('undo', 's.paperUndo') : ''}</span>`
     return `${sec(T('s.wallpaper'))}<div class="grp">
         ${row(esc(T('s.paperNow')), esc(now), pick)}
         ${row(esc(T('s.paperFit')), '', seg('paperPosition', PAPER_POSITIONS.map(p => [p, T(`s.paperPos.${p}`)]), paper.position))}
@@ -373,7 +375,7 @@
           paper.slideshow
             ? `${row(esc(T('s.paperEvery')), '', seg('paperEvery', every, paper.every))}
         ${row(esc(T('s.paperShuffle')), '', sw('paperShuffle', paper.shuffle))}
-        ${row(esc(T('s.paperNext')), '', `<button class="pbtn sm" data-paper="next">${esc(T('s.paperNextButton'))}</button>`)}`
+        ${row(esc(T('s.paperNext')), '', `<span class="btns">${button('previous', 's.paperPrevButton')}${button('next', 's.paperNextButton')}</span>`)}`
             : ''
         }
       </div>`

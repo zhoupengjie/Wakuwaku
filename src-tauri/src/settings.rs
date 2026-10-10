@@ -193,7 +193,8 @@ pub async fn settings_win_look(app: AppHandle, light: Option<bool>, accent: Opti
 
 // The desktop's picture (paper.rs): a picture or a folder picked in Windows'
 // file dialog ("picture", "folder"), how it is laid ("position"), the
-// folder's turns ("every", "shuffle"), the next picture now ("next").
+// folder's turns ("every", "shuffle"), the next or the one before ("next",
+// "previous"); a change of these undone ("undo").
 #[tauri::command]
 pub async fn settings_wallpaper(app: AppHandle, what: String, value: Option<String>) -> Value {
     let sh = shared(&app);
@@ -201,13 +202,20 @@ pub async fn settings_wallpaper(app: AppHandle, what: String, value: Option<Stri
     let lang = sh.lang();
     let t = move |key: &str| crate::i18n::t(lang, key);
     let what_done = what.clone();
+    // What changes the picture is kept to be undone ("undo"), once picked.
+    let changed = |done: bool| {
+        crate::paper::remember();
+        done
+    };
     let done = tauri::async_runtime::spawn_blocking(move || match what.as_str() {
-        "picture" => crate::paper::pick(false, &t("wallpaper.pickPicture"), &t("wallpaper.pictures"), owner).map(|p| (crate::paper::set_picture(&p), p)),
-        "folder" => crate::paper::pick(true, &t("wallpaper.pickFolder"), "", owner).map(|p| (crate::paper::set_folder(&p), p)),
-        "position" => value.map(|v| (crate::paper::set_position(&v), v)),
+        "picture" => crate::paper::pick(false, &t("wallpaper.pickPicture"), &t("wallpaper.pictures"), owner).map(|p| (changed(true) && crate::paper::set_picture(&p), p)),
+        "folder" => crate::paper::pick(true, &t("wallpaper.pickFolder"), "", owner).map(|p| (changed(true) && crate::paper::set_folder(&p), p)),
+        "position" => value.map(|v| (changed(true) && crate::paper::set_position(&v), v)),
         "every" => value.map(|v| (crate::paper::set_turns(v.parse().ok(), None), v)),
         "shuffle" => value.map(|v| (crate::paper::set_turns(None, Some(v == "true")), v)),
-        "next" => Some((crate::paper::next(), String::new())),
+        "next" => Some((changed(true) && crate::paper::next(), String::new())),
+        "previous" => Some((changed(true) && crate::paper::previous(), String::new())),
+        "undo" => Some((crate::paper::undo(), String::new())),
         _ => None,
     })
     .await

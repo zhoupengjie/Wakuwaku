@@ -19,6 +19,7 @@ pub const EVERY: [u32; 6] = [60_000, 600_000, 1_800_000, 3_600_000, 21_600_000, 
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
+    use std::sync::Mutex;
 
     use serde_json::{json, Value};
 
@@ -41,6 +42,7 @@ mod imp {
     const SPIF_SENDCHANGE: u32 = 0x2;
     const DSS_SLIDESHOW: i32 = 0x2;
     const DSO_SHUFFLEIMAGES: u32 = 0x1;
+    const DSD_BACKWARD: i32 = 1;
     const FOS_PICKFOLDERS: u32 = 0x20;
     const FOS_FORCEFILESYSTEM: u32 = 0x40;
     const FOS_FILEMUSTEXIST: u32 = 0x1000;
@@ -153,14 +155,124 @@ mod imp {
         (f(item, SIGDN_FILESYSPATH, &mut name) >= 0).then(|| take(name)).filter(|p| !p.is_empty())
     }
 
-    // What the desktop shows now, for the settings: a slideshow or one
-    // picture, its file (the slideshow's of the moment), the slideshow's
-    // folder, how it is laid, the turns.
+    // What the desktop shows: a slideshow or one picture, its file (the
+    // slideshow's of the moment), the slideshow's folder, how it is laid,
+    // the turns.
+    struct State {
+        slideshow: bool,
+        file: String,
+        folder: Option<String>,
+        position: &'static str,
+        every: u32,
+        shuffle: bool,
+    }
+
+    // The desktop as it was before each change made here, the latest last:
+    // undo walks back through them. And the slideshow's pictures as seen,
+    // for stepping back should Windows not.
+    static BEFORE: Mutex<Vec<State>> = Mutex::new(Vec::new());
+    static SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+    fn seen(file: &str) {
+        let mut seen = SEEN.lock().unwrap();
+        if !file.is_empty() && seen.last().map(String::as_str) != Some(file) {
+            seen.push(file.to_string());
+            if seen.len() > 50 {
+                seen.remove(0);
+            }
+        }
+    }
+
+    // For the settings: the desktop now, and whether a change of ours can be
+    // undone.
     pub fn now() -> Value {
+        let Some(s) = state() else { return Value::Null };
+        if s.slideshow {
+            seen(&s.file);
+        }
+        json!({
+            "slideshow": s.slideshow,
+            "file": s.file,
+            "folder": s.folder,
+            "position": s.position,
+            "every": s.every,
+            "shuffle": s.shuffle,
+            "canUndo": !BEFORE.lock().unwrap().is_empty(),
+        })
+    }
+
+    // The desktop as it is, kept before a change (picked, laid, stepped).
+    pub fn remember() {
+        if let Some(s) = state() {
+            if s.slideshow {
+                seen(&s.file);
+            }
+            let mut before = BEFORE.lock().unwrap();
+            before.push(s);
+            if before.len() > 20 {
+                before.remove(0);
+            }
+        }
+    }
+
+    // Back to how it was before the last change made here: its picture, or
+    // its folder's slideshow (on another of its pictures), laid as it was.
+    pub fn undo() -> bool {
+        let Some(s) = BEFORE.lock().unwrap().pop() else { return false };
+        let back = match (s.slideshow, s.folder.as_deref()) {
+            (true, Some(folder)) => set_folder(folder) && set_turns(Some(s.every), Some(s.shuffle)),
+            _ => !s.file.is_empty() && set_picture(&s.file),
+        };
+        back && set_position(s.position)
+    }
+
+    // The slideshow's picture before this one: Windows' own step back; should
+    // it not take one (the same picture a second after), the one seen before
+    // this set as the slideshow's (the seen after it let go, so another step
+    // goes further back).
+    pub fn previous() -> bool {
+        let Some(now) = state() else { return false };
+        seen(&now.file);
+        // SAFETY: a COM object of our own, released.
+        let stepped = with_com(|| unsafe {
+            let Some(w) = wallpaper() else { return false };
+            let f: extern "system" fn(*mut Obj, *const u16, i32) -> i32 = method(w, ADVANCE_SLIDESHOW);
+            let done = f(w, std::ptr::null(), DSD_BACKWARD) >= 0;
+            release(w);
+            done
+        });
+        let asked = std::time::Instant::now();
+        while stepped && asked.elapsed() < std::time::Duration::from_millis(1000) {
+            if state().is_some_and(|s| s.file != now.file) {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let earlier = {
+            let mut seen = SEEN.lock().unwrap();
+            let at = seen.iter().rposition(|f| f.eq_ignore_ascii_case(&now.file)).filter(|&i| i > 0);
+            at.map(|i| {
+                seen.truncate(i);
+                seen[i - 1].clone()
+            })
+        };
+        // SAFETY: a COM object of our own, released; the path alive for the call.
+        earlier.is_some_and(|file| {
+            with_com(|| unsafe {
+                let Some(w) = wallpaper() else { return false };
+                let put: extern "system" fn(*mut Obj, *const u16, *const u16) -> i32 = method(w, SET_WALLPAPER);
+                let done = put(w, std::ptr::null(), wide(&file).as_ptr()) >= 0;
+                release(w);
+                done
+            })
+        })
+    }
+
+    fn state() -> Option<State> {
         // SAFETY: COM objects of our own, released once read; each
         // out-parameter ours, of the size the call writes.
         with_com(|| unsafe {
-            let Some(w) = wallpaper() else { return Value::Null };
+            let w = wallpaper()?;
             let mut status = 0i32;
             let f: extern "system" fn(*mut Obj, *mut i32) -> i32 = method(w, GET_STATUS);
             f(w, &mut status);
@@ -187,13 +299,13 @@ mod imp {
                 release(items);
             }
             release(w);
-            json!({
-                "slideshow": status & DSS_SLIDESHOW != 0,
-                "file": file,
-                "folder": folder,
-                "position": POSITIONS.get(position as usize).copied().unwrap_or("fill"),
-                "every": tick,
-                "shuffle": options & DSO_SHUFFLEIMAGES != 0,
+            Some(State {
+                slideshow: status & DSS_SLIDESHOW != 0,
+                file,
+                folder,
+                position: POSITIONS.get(position as usize).copied().unwrap_or("fill"),
+                every: tick,
+                shuffle: options & DSO_SHUFFLEIMAGES != 0,
             })
         })
     }
@@ -351,6 +463,13 @@ mod imp {
     pub fn set_turns(_every: Option<u32>, _shuffle: Option<bool>) -> bool {
         false
     }
+    pub fn remember() {}
+    pub fn undo() -> bool {
+        false
+    }
+    pub fn previous() -> bool {
+        false
+    }
     pub fn next() -> bool {
         false
     }
@@ -359,7 +478,7 @@ mod imp {
     }
 }
 
-pub use imp::{next, now, pick, set_folder, set_picture, set_position, set_turns};
+pub use imp::{next, now, pick, previous, remember, set_folder, set_picture, set_position, set_turns, undo};
 
 #[cfg(test)]
 mod tests {

@@ -430,8 +430,9 @@
       if (others.length > OTHERS_SHOWN) list.append(el('span', 'other rest', t(lang, 'status.moreSessions', { n: others.length - OTHERS_SHOWN })))
       lines.append(list)
     }
-    // Nothing from the sessions: the monitor, and the widgets, the one shown lit.
-    if (isQuiet() && (widgets.length || monitor) && !(isNudging() && nudge.widget)) {
+    // The monitor, and the widgets, the one shown lit: under the sessions too,
+    // a session at work not all the island says (2026-10-10).
+    if ((widgets.length || monitor) && !(isNudging() && nudge.widget)) {
       const list = el('span', 'wlist')
       const shown = shownWidget()
       if (isPinned()) list.append(widgetRow(monitor, false))

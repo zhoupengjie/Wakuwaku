@@ -6,7 +6,9 @@
 // was seen, Explorer restarting, the screens changing, sleep, full screen.
 //
 //   taskbar_spike            take the taskbar's place (Ctrl+Alt+Shift+R, or
-//                            the bar's last button: give it back and quit)
+//                            the bar's last button: give it back and quit),
+//                            and the tray's icons (systray.rs; their list in
+//                            tray.txt); --no-tray leaves the tray to Explorer
 //   taskbar_spike --probe    with one running: press Win, Win+S, Win+A, ...
 //                            one at a time and note what opened, where, and
 //                            whether the taskbar came back (probe.log, and a
@@ -20,6 +22,8 @@
 mod appbar;
 #[path = "../src/shell.rs"]
 mod shell;
+#[path = "../src/systray.rs"]
+mod systray;
 
 #[cfg(windows)]
 fn main() {
@@ -41,6 +45,7 @@ mod win {
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
+    use crate::systray::{self, Press};
     use crate::{appbar, shell};
 
     type Hwnd = *mut c_void;
@@ -145,6 +150,14 @@ mod win {
     }
 
     #[repr(C)]
+    struct TrackMouse {
+        size: u32,
+        flags: u32,
+        hwnd: Hwnd,
+        hover: u32,
+    }
+
+    #[repr(C)]
     struct BitmapInfoHeader {
         size: u32,
         width: i32,
@@ -199,6 +212,8 @@ mod win {
         fn InvalidateRect(hwnd: Hwnd, rect: *const Rect, erase: i32) -> i32;
         fn FillRect(hdc: isize, rect: *const Rect, brush: isize) -> i32;
         fn DrawTextW(hdc: isize, text: *const u16, len: i32, rect: *mut Rect, format: u32) -> i32;
+        fn DrawIconEx(hdc: isize, x: i32, y: i32, icon: isize, w: i32, h: i32, step: u32, brush: isize, flags: u32) -> i32;
+        fn TrackMouseEvent(track: *mut TrackMouse) -> i32;
         fn SetTimer(hwnd: Hwnd, id: usize, ms: u32, func: *const c_void) -> usize;
         fn RegisterHotKey(hwnd: Hwnd, id: i32, mods: u32, vk: u32) -> i32;
         fn SendInput(count: u32, inputs: *const Input, size: i32) -> u32;
@@ -267,6 +282,15 @@ mod win {
     const WM_HOTKEY: u32 = 0x0312;
     // The taskbar seen shown (from the event hook), lParam its window.
     const WM_TASKBAR_SHOWN: u32 = 0x8001;
+    // The tray's icons changed (from systray.rs).
+    const WM_TRAY_CHANGED: u32 = 0x8002;
+    const WM_MOUSEMOVE: u32 = 0x0200;
+    const WM_LBUTTONDOWN: u32 = 0x0201;
+    const WM_LBUTTONDBLCLK: u32 = 0x0203;
+    const WM_RBUTTONDOWN: u32 = 0x0204;
+    const WM_RBUTTONUP: u32 = 0x0205;
+    const WM_MOUSELEAVE: u32 = 0x02A3;
+    const CS_DBLCLKS: u32 = 0x8;
     const MA_NOACTIVATE: isize = 3;
     const WS_POPUP: u32 = 0x8000_0000;
     const WS_EX_TOPMOST: u32 = 0x8;
@@ -314,6 +338,14 @@ mod win {
     static LAST: Mutex<String> = Mutex::new(String::new());
     // What the bar last showed: it is drawn again only when this changes.
     static PAINTED: Mutex<String> = Mutex::new(String::new());
+    // The tray: on or not, the icon under the pointer and its tip, Explorer's taskbar window.
+    static TRAY: AtomicBool = AtomicBool::new(false);
+    static HOVERED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    static HOVER_TIP: Mutex<String> = Mutex::new(String::new());
+    static EXPLORER: AtomicIsize = AtomicIsize::new(0);
+    static TICKS: AtomicU32 = AtomicU32::new(0);
+    // The tick from which to ask programs for their icons, once ours is first (0: asked).
+    static ASK_AT: AtomicU32 = AtomicU32::new(0);
     static LOG: Mutex<Option<File>> = Mutex::new(None);
 
     fn wide(s: &str) -> Vec<u16> {
@@ -539,6 +571,61 @@ mod win {
         (out, Rect { left: x + px(8), top: client.top, right: r - px(8), bottom: client.bottom })
     }
 
+    // The tray's icons at the right of the room left, and the room left after them.
+    fn slots(rest: Rect, dpi: u32) -> (Vec<(Rect, u64)>, Rect) {
+        let px = |v: i32| v * dpi as i32 / 96;
+        let mut r = rest.right;
+        let mut out = Vec::new();
+        for icon in systray::shown().into_iter().rev() {
+            out.push((Rect { left: r - px(30), top: rest.top + px(6), right: r, bottom: rest.bottom - px(6) }, icon.key));
+            r -= px(30);
+        }
+        out.reverse();
+        (out, Rect { right: r - px(8), ..rest })
+    }
+
+    fn slot_at(hwnd: Hwnd, x: i32) -> Option<u64> {
+        let (_, rest) = layout(client_of(hwnd), dpi());
+        slots(rest, dpi()).0.into_iter().find(|(r, _)| x >= r.left && x < r.right).map(|(_, k)| k)
+    }
+
+    fn cursor() -> (i32, i32) {
+        let mut p = Point::default();
+        // SAFETY: our own out-parameter.
+        unsafe { GetCursorPos(&mut p) };
+        (p.x, p.y)
+    }
+
+    // The icon under the pointer: told when it comes and goes.
+    fn hover(hwnd: Hwnd, key: Option<u64>) {
+        let was = HOVERED.swap(key.unwrap_or(0), Ordering::SeqCst);
+        if was == key.unwrap_or(0) {
+            return;
+        }
+        if was != 0 {
+            systray::tell(was, Press::HoverOut, cursor());
+        }
+        if let Some(k) = key {
+            systray::tell(k, Press::HoverIn, cursor());
+            let mut track = TrackMouse { size: std::mem::size_of::<TrackMouse>() as u32, flags: 2, hwnd, hover: 0 };
+            // SAFETY: our own struct, about our own window.
+            unsafe { TrackMouseEvent(&mut track) };
+        }
+        *HOVER_TIP.lock().unwrap() = key.and_then(|k| systray::shown().into_iter().find(|s| s.key == k)).map(|s| format!("{}（{}）", s.tip, s.exe)).unwrap_or_default();
+        // SAFETY: our own window.
+        unsafe { InvalidateRect(hwnd, std::ptr::null(), 0) };
+    }
+
+    // The tray's list, written down whenever it changes.
+    fn tray_changed(hwnd: Hwnd) {
+        for line in systray::notes() {
+            log(&line);
+        }
+        let _ = std::fs::write(dir().join("tray.txt"), systray::describe());
+        // SAFETY: our own window.
+        unsafe { InvalidateRect(hwnd, std::ptr::null(), 0) };
+    }
+
     fn client_of(hwnd: Hwnd) -> Rect {
         let mut r = Rect::default();
         // SAFETY: our own struct.
@@ -558,6 +645,10 @@ mod win {
 
     fn status_text() -> String {
         let t = now();
+        let tip = HOVER_TIP.lock().unwrap().clone();
+        if !tip.is_empty() {
+            return format!("{:02}:{:02}  ·  {tip}", t.hour, t.minute);
+        }
         format!(
             "{:02}:{:02}  ·  原生任务栏{}  ·  冒出来 {} 次{}  ·  {}  ·  Ctrl+Alt+Shift+R 还原",
             t.hour,
@@ -589,11 +680,23 @@ mod win {
             let old = SelectObject(hdc, font);
             SetBkMode(hdc, 1);
             SetTextColor(hdc, 0x00ee_eeee);
-            let (buttons, mut rest) = layout(client, dpi);
+            let (buttons, rest) = layout(client, dpi);
             for (r, b) in buttons {
                 FillRect(hdc, &r, if b == Button::Quit { quit } else { btn });
                 let mut r = r;
                 DrawTextW(hdc, wide(b.label()).as_ptr(), -1, &mut r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            }
+            let (icons, mut rest) = slots(rest, dpi);
+            let shown = systray::shown();
+            let size = 16 * dpi as i32 / 96;
+            let hovered = HOVERED.load(Ordering::SeqCst);
+            for (r, key) in icons {
+                if key == hovered {
+                    FillRect(hdc, &r, btn);
+                }
+                if let Some(s) = shown.iter().find(|s| s.key == key) {
+                    DrawIconEx(hdc, (r.left + r.right - size) / 2, (r.top + r.bottom - size) / 2, s.icon, size, size, 0, 0, 3);
+                }
             }
             let status = status_text();
             SetTextColor(hdc, 0x00b0_b0b0);
@@ -629,6 +732,8 @@ mod win {
         let after = if FULLSCREEN.load(Ordering::SeqCst) { HWND_BOTTOM } else { HWND_TOPMOST };
         // SAFETY: our own window.
         unsafe { SetWindowPos(hwnd, after, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW) };
+        // Ours of the taskbar's class where the taskbar is, for those who ask its window.
+        systray::place((x, y, w, h));
         log(&format!("bar placed at ({x},{y}) {w}x{h}; {}", state_now()));
     }
 
@@ -646,11 +751,18 @@ mod win {
         let t = Instant::now();
         shell::rehide();
         log(&format!("  put away in {} ms; {}", t.elapsed().as_millis(), state_now()));
+        if systray::keep_first() {
+            log("  tray: Explorer's window had come first; ours put ahead again");
+        }
     }
 
     fn give_back(why: &str) {
         if RESTORED.swap(true, Ordering::SeqCst) {
             return;
+        }
+        if TRAY.load(Ordering::SeqCst) {
+            log(&format!("tray: handing back; it was handed {}", systray::seen()));
+            systray::stop();
         }
         let bar = BAR.load(Ordering::SeqCst);
         if bar != 0 {
@@ -681,8 +793,40 @@ mod win {
                 }
                 WM_ERASEBKGND => return 1,
                 WM_MOUSEACTIVATE => return MA_NOACTIVATE,
+                WM_MOUSEMOVE => {
+                    let key = slot_at(hwnd, (lparam & 0xffff) as i16 as i32);
+                    hover(hwnd, key);
+                    if let Some(k) = key {
+                        systray::tell(k, Press::Move, cursor());
+                    }
+                    return 0;
+                }
+                WM_MOUSELEAVE => {
+                    hover(hwnd, None);
+                    return 0;
+                }
+                WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_RBUTTONUP | WM_LBUTTONDBLCLK => {
+                    if let Some(k) = slot_at(hwnd, (lparam & 0xffff) as i16 as i32) {
+                        let press = match msg {
+                            WM_LBUTTONDOWN => Press::LeftDown,
+                            WM_RBUTTONDOWN => Press::RightDown,
+                            WM_RBUTTONUP => Press::RightUp,
+                            _ => Press::Double,
+                        };
+                        let told = systray::tell(k, press, cursor());
+                        if press != Press::LeftDown && press != Press::RightDown {
+                            note(&format!("tray: {press:?} on {} (told: {told})", HOVER_TIP.lock().unwrap()));
+                        }
+                    }
+                    return 0;
+                }
                 WM_LBUTTONUP => {
                     let x = (lparam & 0xffff) as i16 as i32;
+                    if let Some(k) = slot_at(hwnd, x) {
+                        let told = systray::tell(k, Press::LeftUp, cursor());
+                        note(&format!("tray: LeftUp on {} (told: {told})", HOVER_TIP.lock().unwrap()));
+                        return 0;
+                    }
                     let (buttons, _) = layout(client_of(hwnd), dpi());
                     if let Some((_, b)) = buttons.into_iter().find(|(r, _)| x >= r.left && x < r.right) {
                         if b == Button::Quit {
@@ -709,6 +853,26 @@ mod win {
                     if status_text() != *PAINTED.lock().unwrap() {
                         InvalidateRect(hwnd, std::ptr::null(), 0);
                     }
+                    if TRAY.load(Ordering::SeqCst) {
+                        systray::sweep();
+                        if systray::keep_first() {
+                            log("tray: Explorer's window had come first (timer); ours put ahead again");
+                        }
+                        let ticks = TICKS.fetch_add(1, Ordering::SeqCst) + 1;
+                        let ask = ASK_AT.load(Ordering::SeqCst);
+                        if ask != 0 && ticks >= ask && systray::first() {
+                            ASK_AT.store(0, Ordering::SeqCst);
+                            systray::ask_again();
+                            log("tray: ours first and settled: programs asked to add their icons again");
+                        }
+                        if ticks % 120 == 0 {
+                            log(&format!("tray: handed so far {}", systray::seen()));
+                        }
+                    }
+                    return 0;
+                }
+                WM_TRAY_CHANGED => {
+                    tray_changed(hwnd);
                     return 0;
                 }
                 WM_TASKBAR_SHOWN => {
@@ -773,11 +937,24 @@ mod win {
                 _ => {}
             }
             if msg == CREATED_MSG.load(Ordering::SeqCst) && msg != 0 {
+                // Sent by Explorer when it starts, and by the tray asking programs again (ours,
+                // or another's): only a new taskbar window means Explorer started.
+                let now_explorer = shell::taskbars().first().copied().unwrap_or(0);
+                if now_explorer == EXPLORER.load(Ordering::SeqCst) {
+                    log("TaskbarCreated, Explorer the same (the tray asking programs again)");
+                    return 0;
+                }
+                EXPLORER.store(now_explorer, Ordering::SeqCst);
                 note("Explorer (re)started: TaskbarCreated");
                 log(&format!("  before: {}", state_now()));
                 shell::rehide();
                 appbar::register(hwnd as isize);
                 place(hwnd, true);
+                if TRAY.load(Ordering::SeqCst) {
+                    systray::keep_first();
+                    ASK_AT.store(TICKS.load(Ordering::SeqCst) + 3, Ordering::SeqCst);
+                    log("  tray: ours put ahead again; programs to be asked again once it settles");
+                }
                 return 0;
             }
             if msg == appbar::CALLBACK {
@@ -810,9 +987,9 @@ mod win {
         }
     }
 
-    fn run() {
+    fn run(tray: bool) {
         open_log("spike.log");
-        log("=== start ===");
+        log(&format!("=== start{} ===", if tray { "" } else { " (no tray)" }));
         log(&format!("before: {}", state_now()));
         if shell::recover(&file()) {
             log(&format!("an earlier run had left it put away: given back; {}", state_now()));
@@ -827,7 +1004,7 @@ mod win {
             let class = wide(CLASS);
             let wc = WndClassExW {
                 size: std::mem::size_of::<WndClassExW>() as u32,
-                style: 0,
+                style: CS_DBLCLKS,
                 wndproc,
                 cls_extra: 0,
                 wnd_extra: 0,
@@ -881,6 +1058,14 @@ mod win {
             let hook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, 0, on_event, 0, 0, 0);
             SetTimer(hwnd, 1, 500, std::ptr::null());
             log(&format!("hotkey Ctrl+Alt+Shift+R: {hotkey}; show hook: {}", hook != 0));
+            EXPLORER.store(shell::taskbars().first().copied().unwrap_or(0), Ordering::SeqCst);
+            if tray {
+                let rect = GRANTED.lock().unwrap().unwrap_or((mon.left, mon.bottom - BAR_H, mon.right - mon.left, BAR_H));
+                let started = systray::start(rect, hwnd as isize, WM_TRAY_CHANGED);
+                TRAY.store(started, Ordering::SeqCst);
+                ASK_AT.store(3, Ordering::SeqCst);
+                log(&format!("tray: ours made: {started}; programs reach it first: {}; they are asked for their icons once it settles", systray::first()));
+            }
             note("ready");
 
             let mut msg: Msg = std::mem::zeroed();
@@ -1048,7 +1233,7 @@ mod win {
                     log(&format!("--restore: nothing written down; shown; {}", state_now()));
                 }
             }
-            _ => run(),
+            _ => run(!args.iter().any(|a| a == "--no-tray")),
         }
     }
 }

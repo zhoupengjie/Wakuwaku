@@ -40,7 +40,8 @@ mod imp {
 
     #[link(name = "user32")]
     extern "system" {
-        fn FindWindowW(class: *const u16, title: *const u16) -> Hwnd;
+        fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
+        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
         fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
         fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
         fn IsWindowVisible(hwnd: Hwnd) -> i32;
@@ -87,10 +88,21 @@ mod imp {
         1
     }
 
-    // The main display's taskbar, or 0 while Explorer is not up.
+    // The main display's taskbar, or 0 while Explorer is not up. Not ours of
+    // the same class (systray.rs), which programs are to find first.
     fn tray() -> isize {
-        // SAFETY: a class name of our own, null-terminated.
-        unsafe { FindWindowW(wide("Shell_TrayWnd").as_ptr(), std::ptr::null()) as isize }
+        let class = wide("Shell_TrayWnd");
+        let me = std::process::id();
+        let mut at: Hwnd = std::ptr::null_mut();
+        loop {
+            // SAFETY: a class name of our own; walking the top-level windows.
+            at = unsafe { FindWindowExW(std::ptr::null_mut(), at, class.as_ptr(), std::ptr::null()) };
+            let mut pid = 0;
+            // SAFETY: our own out-parameter.
+            if at.is_null() || unsafe { GetWindowThreadProcessId(at, &mut pid) } != 0 && pid != me {
+                return at as isize;
+            }
+        }
     }
 
     // Every display's taskbar: the main one first.

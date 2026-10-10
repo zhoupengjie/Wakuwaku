@@ -81,9 +81,18 @@
   background: #ffffff;
 }
 
+.tb-light #island-settings .inbox .letter.child {
+  background: rgba(0, 0, 0, 0.025);
+}
+
 .tb-light #island-settings .letter.open,
-.tb-light #island-settings .letter.open:hover {
+.tb-light #island-settings .letter.open:hover,
+.tb-light #island-settings .inbox .letter.child.open {
   background: rgba(0, 95, 184, 0.1);
+}
+
+.tb-light #island-settings .letter.unread .twisty {
+  color: #0067c0;
 }
 
 .tb-light #island-settings .md-pre {
@@ -791,6 +800,56 @@
   color: var(--g4);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
+}
+
+/* A conversation, as Thunderbird's cards show one: › to fold it out (blue
+   while a letter of it is unread), how many letters; folded out, its letters
+   under it, each indented by how deep it answers, the start of its text. */
+#island-settings .twisty {
+  flex: none;
+  width: 7px;
+  color: var(--g4);
+  font-size: 15px;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+#island-settings .twisty.out {
+  transform: rotate(90deg);
+}
+
+#island-settings .letter.unread .twisty {
+  color: #5e9bff;
+}
+
+#island-settings .letter .cnt {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--g2);
+  color: var(--g5);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+#island-settings .inbox .letter.child {
+  padding: 6px 14px 6px calc(30px + var(--depth, 0) * 14px);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+#island-settings .inbox .letter.child.open {
+  background: rgba(94, 155, 255, 0.16);
+}
+
+#island-settings .letter.child .who {
+  font-size: 12.5px;
+}
+
+#island-settings .letter.child .d {
+  color: var(--g4);
+  font-size: 11.5px;
 }
 
 #island-settings .chip {

@@ -2,19 +2,22 @@
 // Thunderbird does it: an address and a password, then the server looked up
 // (the domain's own autoconfig, Thunderbird's database ISPDB, the database's
 // entry for the provider of the domain's MX host, then a guess) or typed in.
-// Each account that is on is watched over IMAP by a thread of its own: the
-// unread count and the newest unread letter (who, what about) as a widget,
-// and the island opened for a new one, at once where the server pushes
-// (IDLE), else every minute. The watch reads only: the inbox is EXAMINEd and
-// headers are read with BODY.PEEK, so nothing is marked read. Passwords are
-// kept in Windows' Credential Manager ("Wakuwaku mail <id>"), never in the
-// settings.
+// Each account that is on is kept on this computer, as Thunderbird keeps
+// an account offline (store.rs: its inbox and Sent folder, headers and
+// whole letters), by a thread of its own that syncs it with the server and
+// then waits for it to say something changed (sync.rs; IDLE where it can,
+// else every minute): the unread count and the newest unread letter (who,
+// what about) as a widget, and the island opened for a new one. The sync
+// reads only: folders are EXAMINEd and letters PEEKed, so nothing is marked
+// read. Passwords are kept in Windows' Credential Manager ("Wakuwaku mail
+// <id>"), never in the settings.
 //
-// The Mail page also lists an inbox and reads a letter (letters.rs; opening
-// one marks it read, as any mail program does), hands a letter to Claude
-// Code or Codex (agent.rs), and writes letters: new ones, replies, letters
-// passed on (send.rs, over SMTP: smtp.rs). IMAP is io-imap's (imap.rs), the
-// library under himalaya; finding the servers is discover.rs.
+// The Mail page lists the inbox as conversations from what is kept
+// (letters.rs, threads.rs) and reads a letter (opening one marks it read,
+// as any mail program does), hands a letter to Claude Code or Codex
+// (agent.rs), and writes letters: new ones, replies, letters passed on
+// (send.rs, over SMTP: smtp.rs). IMAP is io-imap's (imap.rs), the library
+// under himalaya; finding the servers is discover.rs.
 //
 // Settings: "mail": [{ id, address, name, host, port, security: ssl |
 // starttls | plain, username, auth, smtp: { host, port, security, username,
@@ -43,9 +46,12 @@ mod imap;
 pub mod letters;
 pub mod send;
 mod smtp;
+mod store;
+mod sync;
+mod threads;
 
 pub use discover::discover;
-use imap::{session, Fail};
+use imap::Fail;
 
 // How long a connection may take, how long the server may be quiet while it
 // pushes (then the push is asked for again), how often one that cannot push
@@ -201,13 +207,6 @@ fn split(address: &str) -> Option<(&str, String)> {
     (ok && ok_domain).then_some((local, domain))
 }
 
-// A header block's sender (the name, else the address) and subject, its
-// encoded words and charsets read.
-fn from_and_subject(head: &[u8]) -> (String, String) {
-    let Some(message) = mail_parser::MessageParser::default().parse(head) else { return (String::new(), String::new()) };
-    let from = message.from().and_then(|a| a.first()).and_then(|a| a.name().or(a.address())).unwrap_or("").trim().to_string();
-    (from, message.subject().unwrap_or("").trim().to_string())
-}
 
 // A try before an account is kept: signed in, the inbox opened read-only,
 // and the unread counted; or what went wrong, with how the server lets one
@@ -253,11 +252,13 @@ fn account(sh: &Shared, id: &str) -> Option<Account> {
     accounts(sh).into_iter().find(|a| a.id == id)
 }
 
-// --- Watching an inbox ------------------------------------------------------------------------
+// --- Keeping an account's mail (sync.rs) ------------------------------------------------------------
 
 #[derive(Default)]
 struct Watch {
     stop: AtomicBool,
+    // Asked to look again at once (a letter was sent: its Sent folder).
+    kick: AtomicBool,
     // The connection's socket, shut down to stop at once.
     socket: Mutex<Option<TcpStream>>,
     // connecting | ok | error, the unread count, what went wrong.
@@ -276,10 +277,10 @@ impl Watch {
         self.stop.load(Ordering::SeqCst)
     }
 
-    // A rest that ends early when stopped.
+    // A rest that ends early when stopped, or kicked.
     fn rest(&self, d: Duration) {
         let until = Instant::now() + d;
-        while !self.stopped() && Instant::now() < until {
+        while !self.stopped() && !self.kick.load(Ordering::SeqCst) && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(250));
         }
     }
@@ -294,6 +295,62 @@ pub struct Runner {
     watches: HashMap<String, (Account, Arc<Watch>)>,
     // Talks with an agent about a letter (agent.rs).
     talks: agent::Talks,
+    // The mail kept on this computer (store.rs).
+    stores: store::Stores,
+}
+
+// The mail kept changed (the page asks for its list again when it did).
+pub fn rev() -> u64 {
+    store::rev()
+}
+
+// An account's sync to look again at once.
+fn kick(sh: &Shared, id: &str) {
+    if let Some((_, w)) = sh.mail.lock().unwrap().watches.get(id) {
+        w.kick.store(true, Ordering::SeqCst);
+    }
+}
+
+// Refresh on the page: an account's sync (every one's: "*") looks at the
+// server now; the list follows as the store changes.
+#[tauri::command]
+pub fn mail_kick(app: AppHandle, id: String) {
+    let sh = shared(&app);
+    let ids: Vec<String> = sh.mail.lock().unwrap().watches.keys().filter(|k| id == "*" || **k == id).cloned().collect();
+    for id in ids {
+        kick(&sh, &id);
+    }
+}
+
+// The letter being written on the Mail page, kept in the data folder: each
+// copy of the pet its own (the page's storage is every copy's on this
+// machine, a test copy's draft would show in the one in use). As the page
+// sent it, its files left out; none, and the file goes.
+fn draft_path(sh: &Shared) -> std::path::PathBuf {
+    sh.dir.join("mail-draft.json")
+}
+
+#[tauri::command]
+pub fn mail_draft(app: AppHandle) -> Value {
+    std::fs::read(draft_path(&shared(&app))).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null)
+}
+
+#[tauri::command]
+pub fn mail_keep_draft(app: AppHandle, draft: Value) {
+    let path = draft_path(&shared(&app));
+    match serde_json::to_vec(&draft) {
+        Ok(bytes) if draft.is_object() && bytes.len() <= 4 << 20 => {
+            let _ = std::fs::write(path, bytes);
+        }
+        _ => {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+// How an account's sync is going (null when it is off).
+fn status_of(sh: &Shared, id: &str) -> Value {
+    sh.mail.lock().unwrap().watches.get(id).map_or(Value::Null, |(_, w)| w.status.lock().unwrap().clone())
 }
 
 fn widget_id(account: &str) -> String {
@@ -324,7 +381,7 @@ pub fn sync(sh: &Arc<Shared>) -> bool {
             let watch = Arc::new(Watch::default());
             watch.set(json!({ "state": "connecting" }));
             let (sh, a, w) = (sh.clone(), account.clone(), watch.clone());
-            std::thread::spawn(move || watch_inbox(&sh, &a, &w));
+            std::thread::spawn(move || sync::run(&sh, &a, &w));
             r.watches.insert(account.id.clone(), (account, watch));
         }
     }
@@ -338,62 +395,6 @@ pub fn stop_all(sh: &Shared) {
     }
 }
 
-fn watch_inbox(sh: &Arc<Shared>, account: &Account, watch: &Watch) {
-    let mut failures = 0u32;
-    // The newest unread letter seen: one newer is new mail.
-    let mut newest_seen: Option<u32> = None;
-    while !watch.stopped() {
-        let result = (|| -> Result<(), Fail> {
-            let mut conn = session(&account.server, &password_of(account)?, CONNECT)?;
-            *watch.socket.lock().unwrap() = conn.socket.try_clone().ok();
-            if watch.stopped() {
-                return Ok(());
-            }
-            conn.inbox(false)?;
-            failures = 0;
-            loop {
-                let unseen = conn.unseen()?;
-                let newest = unseen.iter().max().copied();
-                let letter = match newest {
-                    Some(uid) => conn.heads(&uid.to_string(), true, &["FROM", "SUBJECT"])?.first().map(|h| from_and_subject(&h.header)),
-                    None => None,
-                };
-                let is_new = matches!((newest, newest_seen), (Some(n), Some(seen)) if n > seen);
-                if newest > newest_seen || newest_seen.is_none() {
-                    newest_seen = newest.or(Some(0));
-                }
-                show(sh, account, Some(unseen.len()), letter.as_ref(), is_new);
-                watch.set(json!({ "state": "ok", "unread": unseen.len() }));
-                if watch.stopped() {
-                    return Ok(());
-                }
-                if conn.has("IDLE") {
-                    conn.idle(IDLE_FOR)?;
-                } else {
-                    watch.rest(POLL);
-                    if watch.stopped() {
-                        return Ok(());
-                    }
-                    conn.noop()?;
-                }
-            }
-        })();
-        watch.socket.lock().unwrap().take();
-        let Err(fail) = result else { break };
-        if watch.stopped() {
-            break;
-        }
-        failures += 1;
-        sh.log(&format!("mail {}: {:?} ({} in a row)", account.id, fail, failures));
-        watch.set(json!({ "state": "error", "error": fail.json() }));
-        if failures >= 2 {
-            show(sh, account, None, None, false);
-        }
-        // A password said no: not again soon, or the account may be locked.
-        let wait = if matches!(fail, Fail::Login(_)) { 300 } else { [15, 30, 60, 120, 300][(failures as usize - 1).min(4)] };
-        watch.rest(Duration::from_secs(wait));
-    }
-}
 
 // The account's widget: the newest unread letter (private: who and what
 // about) and how many; "can't get mail" when it keeps failing. A new
@@ -553,6 +554,7 @@ pub async fn mail_remove(app: AppHandle, id: String) -> Value {
         let all: Vec<Account> = accounts(&sh).into_iter().filter(|a| a.id != id).collect();
         secret::delete(&id);
         keep_accounts(&sh, &all);
+        store::forget(&sh, &id);
     }
     settings::snapshot(&sh)
 }
@@ -678,8 +680,8 @@ mod tests {
     #[test]
     fn a_letter_says_who_and_what_about() {
         let head = "From: =?UTF-8?B?546L5oC7?= <boss@example.com>\r\nSubject: =?GBK?B?1tzO5bXEt72wuA==?=\r\n\r\n";
-        assert_eq!(from_and_subject(head.as_bytes()), ("王总".into(), "周五的方案".into()));
-        assert_eq!(from_and_subject(b"From: boss@example.com\r\n\r\n").0, "boss@example.com");
+        let e = store::Entry::from_head(1, (false, false, false), 0, None, head.as_bytes());
+        assert_eq!((e.from.name.as_str(), e.from.address.as_str(), e.subject.as_str()), ("王总", "boss@example.com", "周五的方案"));
     }
 
     #[test]

@@ -1,26 +1,26 @@
-// The Mail page's inbox: the newest letters by their headers (one account's,
-// or every account's as one; all, the unread or the starred), stars put on
-// and taken off, and one letter read whole. Opening a letter on the page
-// marks it read, as any mail program does; listing does not, nor does
-// handing one to an agent. Each asks over a connection of its own, signed
-// in and gone again.
+// The Mail page's inbox, from the mail kept on this computer (store.rs),
+// with no wait for the server: conversations (threads.rs), one account's or
+// every account's as one; all, the unread or the starred. A letter read
+// whole: as kept, else from the server (then kept). Opening one on the page
+// marks it read, as any mail program does (here at once, on the server just
+// after); listing does not, nor does handing one to an agent. A star the
+// same way, back as it was when the server says no.
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use io_imap::types::flag::Flag;
-use io_imap::types::search::SearchKey;
 use mail_parser::{Address, Message, MessageParser, MimeHeaders};
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
-use super::imap::{session, Fail, Head};
-use super::{account, accounts, agent, password_of, Account, CONNECT};
-use crate::shared;
+use super::imap::{self, session, Fail};
+use super::store::{self, Folder};
+use super::{account, accounts, agent, password_of, status_of, threads, Account, CONNECT};
+use crate::{shared, Shared};
 
-// The header fields a list row is made of.
-const FIELDS: [&str; 5] = ["FROM", "SUBJECT", "DATE", "MESSAGE-ID", "CONTENT-TYPE"];
-// The most letters asked for at once, and the most of a letter's text sent
-// to the page.
-const MOST: u32 = 200;
+// The most conversations at once, and the most of a letter's text sent to
+// the page.
+const MOST: u32 = 2000;
 const MOST_TEXT: usize = 100_000;
 
 pub fn parse(raw: &[u8]) -> Option<Message<'_>> {
@@ -32,9 +32,9 @@ pub fn people(list: Option<&Address>) -> Vec<Value> {
     list.map(|a| a.iter().map(|p| json!({ "name": p.name().unwrap_or("").trim(), "address": p.address().unwrap_or("").trim() })).collect()).unwrap_or_default()
 }
 
-// When it was sent (ms), else when the server got it.
-fn when(m: Option<&Message>, received: Option<i64>) -> Option<i64> {
-    m.and_then(|m| m.date()).map(|d| d.to_timestamp()).or(received).map(|s| s * 1000)
+// When it was sent (ms).
+fn when(m: &Message) -> Option<i64> {
+    m.date().map(|d| d.to_timestamp() * 1000)
 }
 
 // A letter's text: its plain part, else its HTML made plain; lines ending
@@ -64,29 +64,8 @@ pub fn attachments(m: &Message) -> Vec<Value> {
         .collect()
 }
 
-// A row of the list, with whose it is.
-fn row(account: &str, h: &Head) -> Value {
-    let m = parse(&h.header);
-    let from = m.as_ref().map(|m| people(m.from())).unwrap_or_default();
-    let first = from.first();
-    let mixed = m.as_ref().and_then(|m| m.root_part().content_type()).is_some_and(|t| t.ctype().eq_ignore_ascii_case("multipart") && t.subtype().is_some_and(|s| s.eq_ignore_ascii_case("mixed")));
-    json!({
-        "account": account,
-        "uid": h.uid,
-        "flagged": h.flagged,
-        "answered": h.answered,
-        "from": first.map_or("", |p| p["name"].as_str().filter(|n| !n.is_empty()).or(p["address"].as_str()).unwrap_or("")),
-        "address": first.map_or("", |p| p["address"].as_str().unwrap_or("")),
-        "subject": m.as_ref().and_then(|m| m.subject()).unwrap_or("").trim(),
-        "date": when(m.as_ref(), h.received),
-        "seen": h.seen,
-        "size": h.size,
-        "attached": mixed,
-        "messageId": m.as_ref().and_then(|m| m.message_id()).unwrap_or(""),
-    })
-}
-
-// Which letters the inbox shows: all, the unread, or the starred.
+// Which conversations the inbox shows: all, those with a letter unread, or
+// with one starred.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Filter {
     All,
@@ -104,67 +83,82 @@ impl Filter {
     }
 }
 
-// The newest that came in, newest sent first (they do not always come in order).
-fn newest_first(letters: &mut [Value]) {
-    letters.sort_by_key(|l| std::cmp::Reverse(l["date"].as_i64().unwrap_or(0)));
+// The accounts' conversations as kept, newest first (by their newest
+// letter): the first `count`, how many there are, how many letters the
+// inbox holds; the accounts that cannot be reached, with why; whether a
+// first sync is still under way.
+fn list(sh: &Shared, all: Vec<Account>, count: u32, filter: Filter) -> Value {
+    let statuses: Vec<(Account, Value)> = all
+        .into_iter()
+        .map(|a| {
+            let status = status_of(sh, &a.id);
+            (a, status)
+        })
+        .collect();
+    let (mut threads, mut letters, mut errors, mut syncing) = (Vec::new(), 0, Vec::new(), false);
+    for (a, status) in &statuses {
+        let st = store::of(sh, a);
+        let s = st.lock().unwrap();
+        threads.extend(threads::build(a, &s, filter));
+        letters += s.inbox.letters.len();
+        if status["state"] == "error" {
+            errors.push(json!({ "account": a.id, "error": status["error"] }));
+        } else if a.on && !s.synced[0] {
+            syncing = true;
+        }
+    }
+    threads.sort_by_key(|t| std::cmp::Reverse(t["latest"].as_i64().unwrap_or(0)));
+    let total = threads.len();
+    threads.truncate(count.clamp(1, MOST) as usize);
+    json!({ "ok": true, "total": total, "letters": letters, "threads": threads, "errors": errors, "syncing": syncing })
 }
 
-// The newest `count` letters the filter lets through, newest first, and how
-// many it lets through. All: the last by position. Unread or starred: the
-// server finds them (SEARCH), the newest of them by UID.
-fn list(account: &Account, count: u32, filter: Filter) -> Result<(u32, Vec<Value>), Fail> {
-    let count = count.clamp(1, MOST);
-    let mut s = session(&account.server, &password_of(account)?, CONNECT)?;
-    let exists = s.inbox(false)?;
-    let (total, heads) = match filter {
-        Filter::All if exists == 0 => (0, Vec::new()),
-        Filter::All => (exists, s.heads(&format!("{}:{exists}", exists.saturating_sub(count) + 1), false, &FIELDS)?),
-        Filter::Unseen | Filter::Flagged => {
-            let mut uids = s.search(if filter == Filter::Unseen { SearchKey::Unseen } else { SearchKey::Flagged })?;
-            uids.sort_unstable();
-            let total = uids.len() as u32;
-            let newest = &uids[uids.len().saturating_sub(count as usize)..];
-            let set = newest.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
-            (total, if newest.is_empty() { Vec::new() } else { s.heads(&set, true, &FIELDS)? })
-        }
+// A letter whole: as kept, else from the server (then kept).
+pub fn raw(sh: &Shared, account: &Account, folder: Folder, uid: u32) -> Result<Option<Vec<u8>>, Fail> {
+    let st = store::of(sh, account);
+    let (kept, name) = {
+        let s = st.lock().unwrap();
+        (s.body(folder, uid), s.get(folder).mailbox.clone())
     };
-    s.logout();
-    let mut letters: Vec<Value> = heads.iter().map(|h| row(&account.id, h)).collect();
-    newest_first(&mut letters);
-    Ok((total, letters))
-}
-
-// Every account's newest, side by side (a thread each), as one inbox: the
-// newest `count` of them all, how many in all, and the accounts that could
-// not be asked, with why.
-fn list_all(all: Vec<Account>, count: u32, filter: Filter) -> Value {
-    let asked: Vec<_> = all.into_iter().map(|a| std::thread::spawn(move || (a.id.clone(), list(&a, count, filter)))).collect();
-    let (mut total, mut letters, mut errors) = (0, Vec::new(), Vec::new());
-    for got in asked {
-        match got.join() {
-            Ok((_, Ok((n, rows)))) => {
-                total += n;
-                letters.extend(rows);
-            }
-            Ok((id, Err(fail))) => errors.push(json!({ "account": id, "error": fail.json() })),
-            Err(_) => {}
-        }
+    if kept.is_some() {
+        return Ok(kept);
     }
-    newest_first(&mut letters);
-    letters.truncate(count.clamp(1, MOST) as usize);
-    json!({ "ok": true, "total": total, "letters": letters, "errors": errors })
-}
-
-// A letter as it came, by UID, and whether it is starred; marked read when `mark`.
-pub fn fetch(account: &Account, uid: u32, mark: bool) -> Result<Option<(Vec<u8>, bool)>, Fail> {
+    let mailbox = imap::mailbox(&name).ok_or_else(|| Fail::Other("no such folder".into()))?;
     let mut s = session(&account.server, &password_of(account)?, CONNECT)?;
-    s.inbox(mark)?;
-    let raw = s.letter(uid)?;
-    if mark && raw.is_some() {
-        s.mark_seen(uid)?;
-    }
+    s.folder(mailbox, false)?;
+    let got = s.letter(uid)?;
     s.logout();
-    Ok(raw)
+    if let Some((raw, _)) = &got {
+        let mut s = st.lock().unwrap();
+        s.keep_body(folder, uid, raw);
+        s.save();
+    }
+    Ok(got.map(|(raw, _)| raw))
+}
+
+// A flag put on a letter or taken off: here at once, then on the server;
+// back as it was when the server says no.
+pub fn set_flag(sh: &Shared, account: &Account, folder: Folder, uid: u32, flag: Flag<'static>, what: &str, on: bool) -> Result<(), Fail> {
+    let st = store::of(sh, account);
+    let name = {
+        let mut s = st.lock().unwrap();
+        s.set_flag(folder, uid, what, on);
+        s.get(folder).mailbox.clone()
+    };
+    let told = (|| -> Result<(), Fail> {
+        let mailbox = imap::mailbox(&name).ok_or_else(|| Fail::Other("no such folder".into()))?;
+        let mut s = session(&account.server, &password_of(account)?, CONNECT)?;
+        s.folder(mailbox, true)?;
+        s.set_flag(uid, flag, on)?;
+        s.logout();
+        Ok(())
+    })();
+    let mut s = st.lock().unwrap();
+    if told.is_err() {
+        s.set_flag(folder, uid, what, !on);
+    }
+    s.save();
+    told
 }
 
 // A letter for the page.
@@ -178,7 +172,7 @@ fn view(m: &Message) -> Value {
         "replyTo": people(m.reply_to()),
         "references": m.references().as_text_list().map(|l| l.iter().map(|r| r.trim()).filter(|r| !r.is_empty()).collect::<Vec<_>>()).unwrap_or_default(),
         "subject": m.subject().unwrap_or("").trim(),
-        "date": when(Some(m), None),
+        "date": when(m),
         "messageId": m.message_id().unwrap_or(""),
         "text": cut,
         "cut": cut.len() < text.len(),
@@ -190,60 +184,70 @@ fn failed(fail: Fail) -> Value {
     json!({ "ok": false, "error": fail.json() })
 }
 
-// An inbox's newest letters: one account's, or ("*") every account's as one.
+fn gone() -> Value {
+    json!({ "ok": false, "error": { "kind": "gone", "text": "" } })
+}
+
+// The inbox's conversations: one account's, or ("*") every account's as one.
 #[tauri::command]
 pub async fn mail_letters(app: AppHandle, id: String, count: u32, filter: String) -> Value {
     let sh = shared(&app);
     let filter = Filter::parse(&filter);
-    if id == "*" {
-        let all = accounts(&sh);
-        return tauri::async_runtime::spawn_blocking(move || list_all(all, count, filter)).await.unwrap_or_else(|e| failed(Fail::Other(e.to_string())));
+    let all: Vec<Account> = accounts(&sh).into_iter().filter(|a| id == "*" || a.id == id).collect();
+    if all.is_empty() && id != "*" {
+        return gone();
     }
-    let Some(account) = account(&sh, &id) else { return json!({ "ok": false, "error": { "kind": "gone", "text": "" } }) };
-    let got = tauri::async_runtime::spawn_blocking(move || list(&account, count, filter)).await.unwrap_or_else(|e| Err(Fail::Other(e.to_string())));
-    match got {
-        Ok((total, letters)) => json!({ "ok": true, "total": total, "letters": letters, "errors": [] }),
-        Err(fail) => failed(fail),
-    }
+    tauri::async_runtime::spawn_blocking(move || list(&sh, all, count, filter)).await.unwrap_or_else(|e| failed(Fail::Other(e.to_string())))
 }
 
 // A letter starred, or not any more.
 #[tauri::command]
-pub async fn mail_flag(app: AppHandle, id: String, uid: u32, on: bool) -> Value {
-    let Some(account) = account(&shared(&app), &id) else { return json!({ "ok": false, "error": { "kind": "gone", "text": "" } }) };
-    let got = tauri::async_runtime::spawn_blocking(move || -> Result<(), Fail> {
-        let mut s = session(&account.server, &password_of(&account)?, CONNECT)?;
-        s.inbox(true)?;
-        s.set_flag(uid, Flag::Flagged, on)?;
-        s.logout();
-        Ok(())
-    })
-    .await
-    .unwrap_or_else(|e| Err(Fail::Other(e.to_string())));
+pub async fn mail_flag(app: AppHandle, id: String, uid: u32, on: bool, folder: Option<String>) -> Value {
+    let sh = shared(&app);
+    let Some(account) = account(&sh, &id) else { return gone() };
+    let folder = Folder::parse(folder.as_deref().unwrap_or(""));
+    let got = tauri::async_runtime::spawn_blocking(move || set_flag(&sh, &account, folder, uid, Flag::Flagged, "flagged", on)).await.unwrap_or_else(|e| Err(Fail::Other(e.to_string())));
     match got {
         Ok(()) => json!({ "ok": true }),
         Err(fail) => failed(fail),
     }
 }
 
-// A letter opened on the page: read whole and marked read; with its talk
-// with an agent, if there is one.
+// A letter opened on the page: read whole (as kept, or from the server) and
+// marked read (here at once, on the server just after); with its talk with
+// an agent, if there is one.
 #[tauri::command]
-pub async fn mail_letter(app: AppHandle, id: String, uid: u32) -> Value {
+pub async fn mail_letter(app: AppHandle, id: String, uid: u32, folder: Option<String>) -> Value {
     let sh = shared(&app);
-    let Some(account) = account(&sh, &id) else { return json!({ "ok": false, "error": { "kind": "gone", "text": "" } }) };
-    let got = tauri::async_runtime::spawn_blocking(move || fetch(&account, uid, true)).await.unwrap_or_else(|e| Err(Fail::Other(e.to_string())));
-    let (raw, flagged) = match got {
-        Ok(Some((raw, flagged))) => (raw, flagged),
+    let Some(account) = account(&sh, &id) else { return gone() };
+    let folder = Folder::parse(folder.as_deref().unwrap_or(""));
+    let (sh2, a) = (sh.clone(), account.clone());
+    let got = tauri::async_runtime::spawn_blocking(move || raw(&sh2, &a, folder, uid)).await.unwrap_or_else(|e| Err(Fail::Other(e.to_string())));
+    let raw = match got {
+        Ok(Some(raw)) => raw,
         Ok(None) => return json!({ "ok": false, "error": { "kind": "noLetter", "text": "" } }),
         Err(fail) => return failed(fail),
     };
     let Some(m) = parse(&raw) else { return json!({ "ok": false, "error": { "kind": "other", "text": "unreadable" } }) };
+    let (seen, flagged) = {
+        let st = store::of(&sh, &account);
+        let s = st.lock().unwrap();
+        s.get(folder).letters.get(&uid).map_or((false, false), |e| (e.seen, e.flagged))
+    };
+    if !seen {
+        let (sh2, a) = (Arc::clone(&sh), account.clone());
+        std::thread::spawn(move || {
+            if let Err(fail) = set_flag(&sh2, &a, folder, uid, Flag::Seen, "seen", true) {
+                sh2.log(&format!("mail {}: letter {uid} not marked read: {fail:?}", a.id));
+            }
+        });
+    }
     let mut letter = view(&m);
     letter["uid"] = json!(uid);
     let key = agent::key(&id, uid, m.message_id());
     letter["key"] = json!(key);
     letter["account"] = json!(id);
+    letter["folder"] = json!(folder.name());
     letter["flagged"] = json!(flagged);
     json!({ "ok": true, "letter": letter, "talk": agent::talk_view(&sh, &key) })
 }
@@ -265,8 +269,5 @@ mod tests {
         let replied = parse(b"From: a@b.test\r\nReply-To: List <list@b.test>\r\nReferences: <r1@x> <r2@x>\r\nSubject: s\r\n\r\nhi\r\n").unwrap();
         assert_eq!((view(&replied)["replyTo"][0]["address"].as_str(), view(&replied)["references"].clone()), (Some("list@b.test"), json!(["r1@x", "r2@x"])));
         assert_eq!(v["date"], 1_791_512_100_000i64);
-        let head = Head { uid: 4, seen: false, flagged: true, answered: true, size: 9, received: None, header: raw.to_vec() };
-        let r = row("a1", &head);
-        assert_eq!((r["from"].as_str(), r["attached"].as_bool(), r["answered"].as_bool()), (Some("Zhang San"), Some(true), Some(true)));
     }
 }

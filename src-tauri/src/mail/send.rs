@@ -3,7 +3,8 @@
 // wanted). Made into MIME by mail-builder, handed to the account's outgoing
 // server (smtp.rs); then, on its incoming one, a copy kept in the Sent
 // folder (not where the server keeps one itself: Gmail) and the letter
-// replied to marked answered. An account set up before the pet sent mail
+// replied to marked answered; the copy kept here too (store.rs), so the
+// conversation has it at once. An account set up before the pet sent mail
 // gets the outgoing server the lookup finds, kept once a letter went
 // through it. Only the page sends, when Send is pressed; an agent never
 // does.
@@ -17,8 +18,9 @@ use mail_parser::MimeHeaders;
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
-use super::imap::{session, Fail};
-use super::{account, accounts, discover, keep_accounts, letters, password_of, smtp, split, Account, Server, CONNECT, EDITING};
+use super::imap::{self, session, Fail};
+use super::store::{self, Folder};
+use super::{account, accounts, discover, keep_accounts, kick, letters, password_of, smtp, split, Account, Server, CONNECT, EDITING};
 use crate::{now_ms, shared, Shared};
 
 // The most a letter may take with it (attachments, before encoding), how
@@ -81,11 +83,11 @@ struct Draft {
     subject: String,
     text: String,
     // A reply: the letter's Message-ID and its References, and which it is
-    // (account, UID) to mark answered.
+    // (account, folder, UID) to mark answered.
     reply: Option<(String, Vec<String>)>,
-    answered: Option<(String, u32)>,
+    answered: Option<(String, Folder, u32)>,
     // Passed on: whose, which, and the attachments of it still wanted.
-    forward: Option<(Account, u32, Vec<usize>)>,
+    forward: Option<(Account, Folder, u32, Vec<usize>)>,
     // Name, type, contents.
     files: Vec<(String, String, Vec<u8>)>,
 }
@@ -130,13 +132,13 @@ fn draft_of(sh: &Shared, v: &Value) -> Result<Draft, Value> {
         let refs: Vec<String> = r["references"].as_array().into_iter().flatten().filter_map(Value::as_str).filter(|x| is_id(x) && *x != id).map(String::from).collect();
         (id.to_string(), refs[refs.len().saturating_sub(20)..].to_vec())
     });
-    let answered = r["account"].as_str().zip(r["uid"].as_u64()).map(|(a, uid)| (a.to_string(), uid as u32));
+    let answered = r["account"].as_str().zip(r["uid"].as_u64()).map(|(a, uid)| (a.to_string(), Folder::parse(r["folder"].as_str().unwrap_or("")), uid as u32));
     let f = &v["forward"];
     let forward = match (f["account"].as_str(), f["uid"].as_u64()) {
         (Some(a), Some(uid)) => {
             let whose = super::account(sh, a).ok_or_else(|| refused("gone", ""))?;
             let keep = f["keep"].as_array().into_iter().flatten().filter_map(Value::as_u64).map(|i| i as usize).collect();
-            Some((whose, uid as u32, keep))
+            Some((whose, Folder::parse(f["folder"].as_str().unwrap_or("")), uid as u32, keep))
         }
         _ => None,
     };
@@ -219,36 +221,37 @@ fn keep_outgoing(sh: &Arc<Shared>, id: &str, server: Server) {
 }
 
 // After it went, on the incoming server: a copy in Sent (kept, or the
-// server's own, or no Sent folder), and the letter it answers marked
-// answered where it is this account's. What came of the copy.
-fn afterwards(account: &Account, password: &str, copy: &[u8], answered: Option<u32>) -> Result<&'static str, Fail> {
-    let mut s = session(&account.server, password, CONNECT)?;
-    let kept = if keeps_sent_itself(&account.server.host) {
-        "server"
-    } else {
-        match s.sent_box()? {
-            Some(sent) => {
-                s.append(sent, copy)?;
-                "kept"
-            }
-            None => "none",
-        }
-    };
-    if let Some(uid) = answered {
-        s.inbox(true)?;
-        s.set_flag(uid, Flag::Answered, true)?;
+// server's own, or no Sent folder). What came of the copy, and where it
+// went (the Sent folder's name, its UID there where the server says).
+fn afterwards(account: &Account, password: &str, copy: &[u8]) -> Result<(&'static str, Option<(String, u32)>), Fail> {
+    if keeps_sent_itself(&account.server.host) {
+        return Ok(("server", None));
     }
+    let mut s = session(&account.server, password, CONNECT)?;
+    let kept = match s.sent_box()? {
+        Some(sent) => {
+            let name = imap::name_of(&sent);
+            let uid = s.append(sent, copy)?;
+            ("kept", uid.map(|uid| (name, uid)))
+        }
+        None => ("none", None),
+    };
     s.logout();
     Ok(kept)
 }
 
-// A letter answered on another account's server.
-fn mark_answered(account: &Account, uid: u32) -> Result<(), Fail> {
-    let mut s = session(&account.server, &password_of(account)?, CONNECT)?;
-    s.inbox(true)?;
-    s.set_flag(uid, Flag::Answered, true)?;
-    s.logout();
-    Ok(())
+// The copy kept in Sent, kept here too (with its UID there), so the
+// conversation has it at once.
+fn keep_copy(sh: &Shared, account: &Account, mailbox: &str, uid: u32, copy: &[u8]) {
+    let st = store::of(sh, account);
+    let mut s = st.lock().unwrap();
+    if s.sent.mailbox != mailbox {
+        return;
+    }
+    let size = copy.len() as u32;
+    s.add(Folder::Sent, store::Entry::from_head(uid, (true, false, false), size, Some(now_ms() as i64 / 1000), copy));
+    s.keep_body(Folder::Sent, uid, copy);
+    s.save();
 }
 
 fn send(sh: &Arc<Shared>, mut d: Draft) -> Value {
@@ -257,10 +260,10 @@ fn send(sh: &Arc<Shared>, mut d: Draft) -> Value {
         Err(fail) => return json!({ "ok": false, "error": fail.json() }),
     };
     // A letter passed on takes its attachments still wanted.
-    if let Some((whose, uid, keep)) = d.forward.take() {
+    if let Some((whose, folder, uid, keep)) = d.forward.take() {
         if !keep.is_empty() {
-            let raw = match letters::fetch(&whose, uid, false) {
-                Ok(Some((raw, _))) => raw,
+            let raw = match letters::raw(sh, &whose, folder, uid) {
+                Ok(Some(raw)) => raw,
                 Ok(None) => return refused("noLetter", ""),
                 Err(fail) => return json!({ "ok": false, "error": fail.json() }),
             };
@@ -299,19 +302,24 @@ fn send(sh: &Arc<Shared>, mut d: Draft) -> Value {
     if found {
         keep_outgoing(sh, &d.account.id, server);
     }
-    let (own, other) = match d.answered.take() {
-        Some((a, uid)) if a == d.account.id => (Some(uid), None),
-        Some((a, uid)) => (None, account(sh, &a).map(|a| (a, uid))),
-        None => (None, None),
-    };
-    let kept = afterwards(&d.account, &password, &message(&d, &id, date, true), own);
-    if let Some((a, uid)) = other {
-        if let Err(fail) = mark_answered(&a, uid) {
-            sh.log(&format!("mail {}: not marked answered: {:?}", a.id, fail));
+    // The letter answered, marked so (here and on its server).
+    if let Some((a, folder, uid)) = d.answered.take() {
+        if let Some(a) = account(sh, &a) {
+            if let Err(fail) = letters::set_flag(sh, &a, folder, uid, Flag::Answered, "answered", true) {
+                sh.log(&format!("mail {}: not marked answered: {:?}", a.id, fail));
+            }
         }
     }
+    let copy = message(&d, &id, date, true);
+    let kept = afterwards(&d.account, &password, &copy);
+    if let Ok((_, Some((mailbox, uid)))) = &kept {
+        keep_copy(sh, &d.account, mailbox, *uid, &copy);
+    }
+    // Its sync looks at the Sent folder again (Gmail's own copy, or one
+    // whose UID the server did not say).
+    kick(sh, &d.account.id);
     match kept {
-        Ok(kept) => json!({ "ok": true, "kept": kept }),
+        Ok((kept, _)) => json!({ "ok": true, "kept": kept }),
         Err(fail) => {
             sh.log(&format!("mail {}: no copy in Sent: {:?}", d.account.id, fail));
             json!({ "ok": true, "kept": "failed", "error": fail.json() })
@@ -320,9 +328,9 @@ fn send(sh: &Arc<Shared>, mut d: Draft) -> Value {
 }
 
 // A letter sent, as the page wrote it: { account, to, cc, bcc (each a line
-// of people), subject, text, reply: { account, uid, messageId, references },
-// forward: { account, uid, keep: [attachment numbers] }, files: [{ name,
-// type, data (base64) }] }.
+// of people), subject, text, reply: { account, folder, uid, messageId,
+// references }, forward: { account, folder, uid, keep: [attachment
+// numbers] }, files: [{ name, type, data (base64) }] }.
 #[tauri::command]
 pub async fn mail_send(app: AppHandle, letter: Value) -> Value {
     let sh = shared(&app);
@@ -360,7 +368,7 @@ mod tests {
             subject: "Re: 合同第 8 条".into(),
             text: "好的，周五前回复。\n\n> 原信\n.end".into(),
             reply: Some(("c4@vendor.example".into(), vec!["c1@vendor.example".into()])),
-            answered: Some(("a1".into(), 4)),
+            answered: Some(("a1".into(), Folder::Inbox, 4)),
             forward: None,
             files: vec![("notes.txt".into(), "text/plain".into(), b"abc".to_vec())],
         }

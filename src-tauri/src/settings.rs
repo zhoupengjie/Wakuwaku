@@ -288,12 +288,13 @@ pub async fn settings_fetch(app: AppHandle, reference: String) -> Value {
 }
 
 #[tauri::command]
-pub async fn settings_gallery(app: AppHandle, page: Option<u64>, sort: Option<String>) -> Value {
+pub async fn settings_gallery(app: AppHandle, page: Option<u64>, sort: Option<String>, query: Option<String>) -> Value {
     let sh = shared(&app);
     let sort = sort.unwrap_or_default();
-    let got = tauri::async_runtime::spawn_blocking(move || fetch::gallery(page.unwrap_or(1), &sort)).await;
+    let query = query.unwrap_or_default();
+    let got = tauri::async_runtime::spawn_blocking(move || fetch::gallery(page.unwrap_or(1), &sort, &query)).await;
     match got {
-        Ok(Ok(page)) => json!({ "ok": true, "items": page["items"], "page": page["page"], "totalPages": page["totalPages"] }),
+        Ok(Ok(page)) => json!({ "ok": true, "items": page["items"], "page": page["page"], "totalPages": page["totalPages"], "total": page["total"] }),
         Ok(Err(e)) => json!({ "ok": false, "error": fetch::describe(sh.lang(), &e) }),
         Err(e) => json!({ "ok": false, "error": e.to_string() }),
     }

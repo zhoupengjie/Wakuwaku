@@ -121,7 +121,7 @@
       hooks: action => invoke('settings_hooks', { action }),
       codexHooks: action => invoke('settings_codex_hooks', { action }),
       fetch: reference => invoke('settings_fetch', { reference: String(reference || '') }),
-      gallery: (page, sort) => invoke('settings_gallery', { page, sort }),
+      gallery: (page, sort, query) => invoke('settings_gallery', { page, sort, query }),
       openSite: place => invoke('settings_open_site', { place }),
     },
     // Mail accounts (mail.rs): the server for an address, an account kept

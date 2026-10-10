@@ -7,9 +7,11 @@
 //   here), letters no longer there gone, letters not kept yet asked for by
 //   their header fields, newest first, a hundred at a time (the page shows
 //   them as they come).
-// - Then every letter not yet kept whole comes down (BODY.PEEK[]), newest
-//   first, twenty seconds at a time, with a look for new mail in between
-//   (and every two minutes the inbox's flags again).
+// - Then every letter to be kept offline (store.rs Offline, the setting
+//   mailOffline: the last year by default) not yet kept whole comes down
+//   (BODY.PEEK[]), newest first, twenty seconds at a time, with a look for
+//   new mail in between (and every two minutes the inbox's flags again);
+//   ones that came down ahead and are no longer to be kept, let go.
 // - Then it waits on the inbox: IDLE where the server pushes, else a look
 //   every minute; when the server says anything, all again. The Sent folder
 //   every ten minutes, or at once when a letter was sent (kick).
@@ -25,9 +27,9 @@ use io_imap::types::mailbox::Mailbox;
 use serde_json::json;
 
 use super::imap::{self, session, Fail, Session};
-use super::store::{self, Entry, Folder, Store};
+use super::store::{self, Entry, Folder, Offline, Store};
 use super::{password_of, show, Account, Watch, CONNECT, IDLE_FOR, POLL};
-use crate::Shared;
+use crate::{now_ms, Shared};
 
 // The header fields a letter is kept by.
 pub const FIELDS: [&str; 9] = ["FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES", "CONTENT-TYPE"];
@@ -62,13 +64,19 @@ pub fn run(sh: &Arc<Shared>, account: &Account, watch: &Watch) {
                     sync_sent(sh, &mut conn, &st)?;
                     sent_at = Some(Instant::now());
                 }
+                // Letters come down ahead and no longer to be kept (older
+                // now, or kept for less): let go.
+                let gone = st.lock().unwrap().prune(offline(sh), now());
+                if gone > 0 {
+                    sh.log(&format!("mail {}: {gone} letters no longer kept offline", account.id));
+                }
                 save(&st);
                 tell(sh, account, watch, &st, "ok", &mut newest_seen);
                 // Whole letters, a while at a time; new mail between, and
                 // now and then the inbox's flags.
                 let mut flags_at = Instant::now();
                 while !watch.stopped() && !watch.kick.load(Ordering::SeqCst) {
-                    let left = download(&mut conn, &st, watch, &mut skip)?;
+                    let left = download(sh, &mut conn, &st, watch, &mut skip)?;
                     save(&st);
                     let came = if flags_at.elapsed() >= FLAGS_EVERY {
                         flags_at = Instant::now();
@@ -123,6 +131,15 @@ pub fn run(sh: &Arc<Shared>, account: &Account, watch: &Watch) {
     }
 }
 
+// How much is kept whole ahead (the setting mailOffline), and now (ms).
+fn offline(sh: &Shared) -> Offline {
+    Offline::of(&sh.setting("mailOffline"))
+}
+
+fn now() -> i64 {
+    now_ms() as i64
+}
+
 fn save(st: &Mutex<Store>) {
     st.lock().unwrap().save();
 }
@@ -136,7 +153,7 @@ fn tell(sh: &Shared, account: &Account, watch: &Watch, st: &Mutex<Store>, state:
         let unseen: Vec<&Entry> = s.inbox.letters.values().filter(|e| !e.seen).collect();
         let newest = unseen.last().map(|e| e.uid);
         let letter = unseen.last().map(|e| (if e.from.name.is_empty() { e.from.address.clone() } else { e.from.name.clone() }, e.subject.clone()));
-        (unseen.len(), newest, letter, s.offline())
+        (unseen.len(), newest, letter, s.offline(offline(sh), now()))
     };
     let first = state == "ok" && newest_seen.is_none();
     let is_new = state == "ok" && matches!((newest, *newest_seen), (Some(n), Some(seen)) if n > seen);
@@ -205,8 +222,8 @@ fn sync_sent(sh: &Shared, conn: &mut Session, st: &Mutex<Store>) -> Result<(), F
 
 // Letters kept whole, newest first, for a while (or until stopped or
 // kicked); how many are still to come.
-fn download(conn: &mut Session, st: &Mutex<Store>, watch: &Watch, skip: &mut HashSet<(Folder, u32)>) -> Result<usize, Fail> {
-    let todo: Vec<(Folder, u32)> = st.lock().unwrap().missing().into_iter().filter(|x| !skip.contains(x)).collect();
+fn download(sh: &Shared, conn: &mut Session, st: &Mutex<Store>, watch: &Watch, skip: &mut HashSet<(Folder, u32)>) -> Result<usize, Fail> {
+    let todo: Vec<(Folder, u32)> = st.lock().unwrap().missing(offline(sh), now()).into_iter().filter(|x| !skip.contains(x)).collect();
     let started = Instant::now();
     let mut open: Option<Folder> = None;
     let mut done = 0;
@@ -221,7 +238,7 @@ fn download(conn: &mut Session, st: &Mutex<Store>, watch: &Watch, skip: &mut Has
             open = Some(folder);
         }
         match conn.letter(uid) {
-            Ok(Some((raw, _))) => st.lock().unwrap().keep_body(folder, uid, &raw),
+            Ok(Some((raw, _))) => st.lock().unwrap().keep_body(folder, uid, &raw, false),
             Ok(None) | Err(Fail::Refused(_)) => {
                 skip.insert((folder, uid));
             }

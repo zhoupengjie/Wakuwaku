@@ -418,7 +418,9 @@ impl Session {
     pub fn idle(&mut self, wait: Duration, kick: &AtomicBool) -> Result<bool, Fail> {
         let done = Arc::new(AtomicBool::new(false));
         let mut idle = ImapIdle::new(done.clone(), ImapIdleOptions { timeout: Some(wait) });
-        let _ = self.socket.set_read_timeout(Some(IDLE_WAKE.min(wait)));
+        // On the stream read from: one set through the copy of the socket
+        // does not hold on Windows (it waited IO_WAIT).
+        let _ = self.client.stream.set_read_timeout(Some(IDLE_WAKE.min(wait)));
         let mut buf = vec![0u8; 16 * 1024];
         let mut got: Option<usize> = None;
         let mut changed = false;
@@ -449,7 +451,7 @@ impl Session {
                 ImapCoroutineState::Complete(Err(e)) => break Err(Fail::Other(e.to_string())),
             }
         };
-        let _ = self.socket.set_read_timeout(Some(IO_WAIT));
+        let _ = self.client.stream.set_read_timeout(Some(IO_WAIT));
         result
     }
 

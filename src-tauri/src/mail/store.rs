@@ -77,9 +77,13 @@ pub struct Entry {
     pub parent: String,
     pub refs: Vec<String>,
     pub attached: bool,
-    // The whole letter is kept (<folder>/<uid>.eml), and the start of its text.
+    // The whole letter is kept (<folder>/<uid>.eml), and the start of its
+    // text; opened on the page (kept whatever is to be kept offline).
     pub body: bool,
     pub snippet: String,
+    pub opened: bool,
+    // The bytes its file takes (0 when not kept).
+    pub kept: u64,
 }
 
 fn person(a: Option<&mail_parser::Addr>) -> Person {
@@ -170,6 +174,39 @@ pub struct Store {
 // Whose the letters are: another server, user or way, other letters.
 fn server_key(s: &Server) -> String {
     format!("{}:{}:{}", s.host, s.port, s.username.to_lowercase())
+}
+
+// How much comes down ahead (the setting mailOffline): the last 90 days
+// or the last year (none over 20 MB), all, or only what is opened. Headers
+// always; a letter not kept comes down when it is opened, and stays.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Offline {
+    Days(i64),
+    All,
+    Opened,
+}
+
+const BIG: u32 = 20 << 20;
+const DAY_MS: i64 = 24 * 3600 * 1000;
+
+impl Offline {
+    pub fn of(v: &serde_json::Value) -> Offline {
+        match v.as_str() {
+            Some("90d") => Offline::Days(90),
+            Some("all") => Offline::All,
+            Some("opened") => Offline::Opened,
+            _ => Offline::Days(365),
+        }
+    }
+
+    // Whether a letter is to be kept whole ahead.
+    pub fn wants(self, e: &Entry, now: i64) -> bool {
+        match self {
+            Offline::All => true,
+            Offline::Opened => false,
+            Offline::Days(n) => e.size <= BIG && e.date.or(e.received.map(|s| s * 1000)).is_some_and(|d| d >= now - n * DAY_MS),
+        }
+    }
 }
 
 // Bumped whenever any store changes: the page asks for the list again.
@@ -293,8 +330,9 @@ impl Store {
         bump();
     }
 
-    // A whole letter, kept beside its entry.
-    pub fn keep_body(&mut self, folder: Folder, uid: u32, raw: &[u8]) {
+    // A whole letter, kept beside its entry; opened on the page, or come
+    // down ahead (offline).
+    pub fn keep_body(&mut self, folder: Folder, uid: u32, raw: &[u8], opened: bool) {
         let path = self.body_path(folder, uid);
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
@@ -305,8 +343,19 @@ impl Store {
         let kept = self.kept(folder);
         if let Some(e) = kept.letters.get_mut(&uid) {
             e.read_body(raw);
+            e.opened |= opened;
+            e.kept = raw.len() as u64;
             kept.dirty = true;
             bump();
+        }
+    }
+
+    // A letter opened on the page (kept, whatever is to be kept offline).
+    pub fn opened(&mut self, folder: Folder, uid: u32) {
+        let kept = self.kept(folder);
+        if let Some(e) = kept.letters.get_mut(&uid).filter(|e| !e.opened) {
+            e.opened = true;
+            kept.dirty = true;
         }
     }
 
@@ -316,19 +365,55 @@ impl Store {
         std::fs::read(self.body_path(folder, uid)).ok()
     }
 
-    // The letters still to come down, newest first, the inbox's before Sent's.
-    pub fn missing(&self) -> Vec<(Folder, u32)> {
+    // The letters still to come down as `offline` says, newest first, the
+    // inbox's before Sent's.
+    pub fn missing(&self, offline: Offline, now: i64) -> Vec<(Folder, u32)> {
         let mut out = Vec::new();
         for folder in [Folder::Inbox, Folder::Sent] {
-            out.extend(self.get(folder).letters.values().rev().filter(|e| !e.body).map(|e| (folder, e.uid)));
+            out.extend(self.get(folder).letters.values().rev().filter(|e| !e.body && offline.wants(e, now)).map(|e| (folder, e.uid)));
         }
         out
     }
 
-    // How much is kept whole: letters, of how many, and bytes.
-    pub fn offline(&self) -> (usize, usize, u64) {
+    // Letters that came down ahead and are no longer to be kept (older now,
+    // or kept for less): their files gone, their entries kept. Ones opened
+    // on the page stay. How many.
+    pub fn prune(&mut self, offline: Offline, now: i64) -> usize {
+        let mut gone = 0;
+        for folder in [Folder::Inbox, Folder::Sent] {
+            let uids: Vec<u32> = self.get(folder).letters.values().filter(|e| e.body && !e.opened && !offline.wants(e, now)).map(|e| e.uid).collect();
+            for uid in &uids {
+                let _ = std::fs::remove_file(self.body_path(folder, *uid));
+            }
+            let kept = self.kept(folder);
+            for uid in &uids {
+                if let Some(e) = kept.letters.get_mut(uid) {
+                    e.body = false;
+                    e.kept = 0;
+                }
+            }
+            if !uids.is_empty() {
+                kept.dirty = true;
+                gone += uids.len();
+            }
+        }
+        if gone > 0 {
+            bump();
+        }
+        gone
+    }
+
+    // How much is kept whole: of the letters to be kept offline, how many
+    // are and how many in all; the bytes the account's folder takes (every
+    // letter kept, opened ones too, and the indexes).
+    pub fn offline(&self, offline: Offline, now: i64) -> (usize, usize, u64) {
+        let index: u64 = ["inbox.json", "sent.json"].iter().filter_map(|f| std::fs::metadata(self.dir.join(f)).ok()).map(|m| m.len()).sum();
         let all = self.inbox.letters.values().chain(self.sent.letters.values());
-        all.fold((0, 0, 0), |(have, total, bytes), e| (have + e.body as usize, total + 1, bytes + if e.body { e.size as u64 } else { 0 }))
+        all.fold((0, 0, index), |(have, total, bytes), e| {
+            let wanted = offline.wants(e, now) as usize;
+            let file = if !e.body { 0 } else if e.kept > 0 { e.kept } else { e.size as u64 };
+            (have + (e.body as usize) * wanted, total + wanted, bytes + file)
+        })
     }
 
     // What changed, written down (each folder's index as a whole, by way of
@@ -413,16 +498,49 @@ mod tests {
         assert_eq!(e.from, Person { name: "Zhang San".into(), address: "zs@vendor.example".into() });
         s.add(Folder::Inbox, e);
         let body = [HEAD, b"--b\r\nContent-Type: text/plain\r\n\r\nline one\r\n\r\nline   two\r\n--b--\r\n"].concat();
-        s.keep_body(Folder::Inbox, 4, &body);
+        s.keep_body(Folder::Inbox, 4, &body, false);
         s.save();
         let again = Store::load(dir.clone(), &server("me"));
         let e = &again.inbox.letters[&4];
         assert_eq!((again.inbox.validity, e.flagged, e.body, e.snippet.as_str()), (7, true, true, "line one line two"));
         assert_eq!(again.body(Folder::Inbox, 4).unwrap(), body);
-        assert_eq!(again.missing(), []);
+        assert_eq!(again.missing(Offline::All, 0), []);
         // Another user's: begun again, files gone.
         let other = Store::load(dir.clone(), &server("you"));
         assert!(other.inbox.letters.is_empty() && !dir.join("inbox").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_so_much_is_kept_ahead_and_what_ages_out_goes() {
+        let dir = std::env::temp_dir().join(format!("wakuwaku-offline-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut s = Store::load(dir.clone(), &server("me"));
+        let now = 400 * DAY_MS;
+        let at = |days_ago: i64| Some(now - days_ago * DAY_MS);
+        // New, small; 200 days old; 2 years old; new and big; 2 years old but opened.
+        for (uid, date, size) in [(1, at(1), 1000), (2, at(200), 1000), (3, at(730), 1000), (4, at(1), BIG + 1), (5, at(730), 1000)] {
+            s.add(Folder::Inbox, Entry { uid, date, size, ..Default::default() });
+        }
+        assert_eq!(s.missing(Offline::Days(365), now), [(Folder::Inbox, 2), (Folder::Inbox, 1)]);
+        assert_eq!(s.missing(Offline::Days(90), now), [(Folder::Inbox, 1)]);
+        assert_eq!(s.missing(Offline::All, now).len(), 5);
+        assert!(s.missing(Offline::Opened, now).is_empty());
+        // All of them kept, number 5 opened on the page.
+        for uid in 1..=5 {
+            s.keep_body(Folder::Inbox, uid, b"Subject: s\r\n\r\nx\r\n", uid == 5);
+        }
+        assert_eq!(s.offline(Offline::Days(365), now).0, 2);
+        // The bytes are the files' (the sizes said were made up).
+        s.save();
+        let index: u64 = std::fs::metadata(dir.join("inbox.json")).unwrap().len();
+        assert_eq!(s.offline(Offline::Days(365), now).2, index + 5 * 17);
+        // A year kept: the two-year-old one and the big one go, the opened one stays.
+        assert_eq!(s.prune(Offline::Days(365), now), 2);
+        let kept: Vec<u32> = s.inbox.letters.values().filter(|e| e.body).map(|e| e.uid).collect();
+        assert_eq!(kept, [1, 2, 5]);
+        assert!(!s.body_path(Folder::Inbox, 3).exists() && s.body_path(Folder::Inbox, 5).exists());
+        assert_eq!(Offline::of(&serde_json::Value::Null), Offline::Days(365));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

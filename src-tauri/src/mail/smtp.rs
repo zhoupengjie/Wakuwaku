@@ -5,10 +5,10 @@
 // from a library: a few lines each way, over the connection IMAP uses
 // (imap.rs).
 use std::io::{Read, Write};
-use std::net::TcpStream;
 use std::time::Duration;
 
 use base64::Engine;
+use io_imap::client::ImapStream;
 
 use super::imap::{connect, io_fail, tls, Fail, Stream};
 use super::{Auth, Security, Server};
@@ -38,8 +38,6 @@ impl Reply {
 
 pub struct Smtp {
     stream: Stream,
-    // The same socket, for its read timeout.
-    socket: TcpStream,
     // What came and is not yet read as a line.
     got: Vec<u8>,
     // What it can do, as EHLO said: a keyword and its parameters a line.
@@ -49,8 +47,8 @@ pub struct Smtp {
 impl Smtp {
     // Connected, encrypted as asked, greeted, and what it can do.
     pub fn open(server: &Server, timeout: Duration) -> Result<Smtp, Fail> {
-        let (stream, socket) = connect(server, timeout)?;
-        let mut s = Smtp { stream, socket, got: Vec::new(), exts: Vec::new() };
+        let (stream, _) = connect(server, timeout)?;
+        let mut s = Smtp { stream, got: Vec::new(), exts: Vec::new() };
         let hello = s.reply()?;
         if hello.code != 220 {
             return Err(Fail::Refused(hello.text()));
@@ -229,7 +227,9 @@ impl Smtp {
             return Err(Fail::Refused(r.text()));
         }
         self.write(&dot_stuffed(letter))?;
-        let _ = self.socket.set_read_timeout(Some(DATA_WAIT));
+        // On the stream read from (one set through a copy of the socket does
+        // not hold on Windows).
+        let _ = ImapStream::set_read_timeout(&self.stream, Some(DATA_WAIT));
         let r = self.reply()?;
         if r.code != 250 {
             return Err(Fail::Refused(r.text()));

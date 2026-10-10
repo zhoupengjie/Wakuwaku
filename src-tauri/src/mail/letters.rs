@@ -130,7 +130,7 @@ pub fn raw(sh: &Shared, account: &Account, folder: Folder, uid: u32) -> Result<O
     s.logout();
     if let Some((raw, _)) = &got {
         let mut s = st.lock().unwrap();
-        s.keep_body(folder, uid, raw);
+        s.keep_body(folder, uid, raw, true);
         s.save();
     }
     Ok(got.map(|(raw, _)| raw))
@@ -231,7 +231,9 @@ pub async fn mail_letter(app: AppHandle, id: String, uid: u32, folder: Option<St
     let Some(m) = parse(&raw) else { return json!({ "ok": false, "error": { "kind": "other", "text": "unreadable" } }) };
     let (seen, flagged) = {
         let st = store::of(&sh, &account);
-        let s = st.lock().unwrap();
+        let mut s = st.lock().unwrap();
+        // Opened: kept, whatever is kept offline.
+        s.opened(folder, uid);
         s.get(folder).letters.get(&uid).map_or((false, false), |e| (e.seen, e.flagged))
     };
     if !seen {

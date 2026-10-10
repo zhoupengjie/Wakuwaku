@@ -28,7 +28,9 @@
 // "mailAgentConf": { claude | codex: { access, model, effort, sumModel,
 // sumEffort } }, what a session may do and the models (agent.rs);
 // "mailPanes": "two" | "one", the Mail page as list and letter side by side
-// (the default), or one under the other (settings.js).
+// (the default), or one under the other (settings.js);
+// "mailOffline": "year" (the default) | "90d" | "all" | "opened", how much
+// is kept whole on this computer ahead (store.rs Offline).
 use std::collections::HashMap;
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -319,6 +321,13 @@ pub fn mail_kick(app: AppHandle, id: String) {
     let ids: Vec<String> = sh.mail.lock().unwrap().watches.keys().filter(|k| id == "*" || **k == id).cloned().collect();
     for id in ids {
         kick(&sh, &id);
+    }
+}
+
+// Every account's sync at it now (how much is kept offline changed).
+pub fn kick_all(sh: &Shared) {
+    for (_, w) in sh.mail.lock().unwrap().watches.values() {
+        w.kick.store(true, Ordering::SeqCst);
     }
 }
 

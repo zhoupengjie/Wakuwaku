@@ -15,8 +15,11 @@
 // their next command. A flag one client changes, the others in IDLE on that
 // folder are told (* n FETCH (FLAGS …)). --sent-from fills Sent from a
 // folder of .eml files (read); --many adds n letters made up (every fifth
-// answering the one before), to try a big inbox. --want-id refuses to open
-// a folder before ID, as 163 does;
+// answering the one before, sent over the last three years, the newest
+// now), to try a big inbox and how much is kept offline; --big k says every
+// k-th of them is 25 MB (RFC822.SIZE; the letter itself stays small), as a
+// file whose name has "-big" in it does. --want-id refuses to open a folder
+// before ID, as 163 does;
 // --login-only offers LOGIN but no AUTHENTICATE PLAIN; --no-idle leaves
 // IDLE out, so the pet polls. --sent writes each letter put into a folder
 // there too (sent-1.eml…); --unmarked-sent lists Sent without \Sent, as
@@ -49,6 +52,9 @@ const SENT_DIR = opt('sent', '') ? path.resolve(opt('sent', '')) : ''
 const UNMARKED_SENT = !!opt('unmarked-sent')
 const SENT_FROM = opt('sent-from', '') ? path.resolve(opt('sent-from', '')) : ''
 const MANY = Number(opt('many', '0')) || 0
+const BIG_EVERY = Number(opt('big', '0')) || 0
+// The size a "big" letter says it is.
+const BIG = 25 << 20
 
 const CAPS = ['IMAP4rev1', 'ID', 'UIDPLUS', ...(IDLE ? ['IDLE'] : []), ...(LOGIN_ONLY ? [] : ['AUTH=PLAIN', 'SASL-IR'])]
 // Its UIDs last as long as it runs: another UIDVALIDITY each start, as a
@@ -113,18 +119,21 @@ function scan(boxName = 'INBOX', dir = DIR, seen = false) {
   return added
 }
 
-// Letters made up, many: every fifth answers the one before.
+// Letters made up, many: every fifth answers the one before; sent over the
+// last three years, evenly, the newest now; every --big-th says it is big.
 function many(n) {
   const box = boxes.INBOX
-  const start = Date.UTC(2026, 0, 1)
+  const span = 3 * 365 * 24 * 3600 * 1000
+  const now = Date.now()
   for (let i = 1; i <= n; i++) {
-    const date = new Date(start + i * 3600 * 1000)
+    const date = new Date(now - Math.round(((n - i) / Math.max(1, n - 1)) * span))
     const answers = i % 5 === 0 ? `In-Reply-To: <many-${i - 1}@example.com>\r\nReferences: <many-${i - 1}@example.com>\r\n` : ''
     const raw = Buffer.from(
       `From: Person ${i % 37} <p${i % 37}@example.com>\r\nTo: me@example.test\r\nSubject: ${i % 5 === 0 ? 'Re: ' : ''}Letter ${i % 5 === 0 ? i - 1 : i}\r\nDate: ${date.toUTCString().replace('GMT', '+0000')}\r\nMessage-ID: <many-${i}@example.com>\r\n${answers}Content-Type: text/plain; charset=utf-8\r\n\r\nLetter number ${i}, made up to try a big inbox.\r\n`,
       'utf8',
     )
-    box.letters.push({ uid: box.next++, raw, flags: new Set(i % 3 ? ['\\Seen'] : []), date, name: `many-${i}` })
+    const size = BIG_EVERY && i % BIG_EVERY === 0 ? BIG : undefined
+    box.letters.push({ uid: box.next++, raw, flags: new Set(i % 3 ? ['\\Seen'] : []), date, name: `many-${i}`, size })
   }
 }
 
@@ -356,7 +365,7 @@ function serve(socket) {
     if (n === 'UID') return [`UID ${letter.uid}`]
     if (n === 'FLAGS') return [`FLAGS (${[...letter.flags].join(' ')})`]
     if (n === 'INTERNALDATE') return [`INTERNALDATE "${imapDate(letter.date)}"`]
-    if (n === 'RFC822.SIZE') return [`RFC822.SIZE ${letter.raw.length}`]
+    if (n === 'RFC822.SIZE') return [`RFC822.SIZE ${letter.size ?? (letter.name.includes('-big') ? BIG : letter.raw.length)}`]
     const body = /^BODY(\.PEEK)?\[([^\]]*)\](<\d+(\.\d+)?>)?$/i.exec(name)
     if (!body) throw new Error(`fetch item ${name} not supported`)
     if (!body[1] && !c.readOnly && !letter.flags.has('\\Seen')) {

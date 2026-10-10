@@ -35,7 +35,8 @@ use super::{Auth, Security, Server};
 // How long a read or a write may wait once connected; in IDLE, how often
 // the wait wakes (to refresh it when it is due).
 const IO_WAIT: Duration = Duration::from_secs(20);
-const IDLE_WAKE: Duration = Duration::from_secs(60);
+// (and to see whether it is asked to stop waiting, idle's `kick`).
+const IDLE_WAKE: Duration = Duration::from_secs(5);
 
 #[derive(Debug, PartialEq)]
 pub enum Fail {
@@ -266,8 +267,48 @@ impl Session {
 
     // The inbox opened, read-only or not; how many letters it holds.
     pub fn inbox(&mut self, write: bool) -> Result<u32, Fail> {
-        let opened = if write { self.client.select(Mailbox::Inbox, Default::default()) } else { self.client.examine(Mailbox::Inbox, Default::default()) };
-        Ok(opened.map_err(fail)?.exists.unwrap_or(0))
+        Ok(self.folder(Mailbox::Inbox, write)?.exists)
+    }
+
+    // A folder opened, read-only (EXAMINE) or not (SELECT): how many letters
+    // it holds, and its UIDVALIDITY (another one, and its UIDs are not the
+    // ones kept: store.rs starts it again).
+    pub fn folder(&mut self, mailbox: Mailbox<'static>, write: bool) -> Result<Opened, Fail> {
+        let opened = if write { self.client.select(mailbox, Default::default()) } else { self.client.examine(mailbox, Default::default()) };
+        let data = opened.map_err(fail)?;
+        Ok(Opened { exists: data.exists.unwrap_or(0), validity: data.uid_validity.map_or(0, |v| v.get()) })
+    }
+
+    // Every letter of the folder open: its UID and flags (UID FETCH 1:*).
+    pub fn flags_all(&mut self) -> Result<Vec<Flags>, Fail> {
+        let set = SequenceSet::try_from("1:*").map_err(|e| Fail::Other(e.to_string()))?;
+        let items = vec![MessageDataItemName::Uid, MessageDataItemName::Flags];
+        let got = self.client.fetch(set, items.into(), ImapMessageFetchOptions { uid: true, ..Default::default() }).map_err(fail)?;
+        Ok(got
+            .into_values()
+            .map(|items| {
+                let mut f = Flags::default();
+                for item in items {
+                    match item {
+                        MessageDataItem::Uid(n) => f.uid = n.get(),
+                        MessageDataItem::Flags(flags) => {
+                            let has = |want: Flag| flags.iter().any(|x| matches!(x, FlagFetch::Flag(f) if *f == want));
+                            (f.seen, f.flagged, f.answered) = (has(Flag::Seen), has(Flag::Flagged), has(Flag::Answered));
+                        }
+                        _ => {}
+                    }
+                }
+                f
+            })
+            .filter(|f| f.uid > 0)
+            .collect())
+    }
+
+    // The UIDs above one (letters come in since).
+    pub fn newer(&mut self, after: u32) -> Result<Vec<u32>, Fail> {
+        let set = SequenceSet::try_from(format!("{}:*", after.saturating_add(1)).as_str()).map_err(|e| Fail::Other(e.to_string()))?;
+        // "n:*" finds the last letter when there is none above n.
+        Ok(self.search(SearchKey::Uid(set))?.into_iter().filter(|&uid| uid > after).collect())
     }
 
     // The unread letters' UIDs.
@@ -336,11 +377,6 @@ impl Session {
         Ok(raw.map(|r| (r, flagged)))
     }
 
-    // A letter marked read (the inbox opened with write).
-    pub fn mark_seen(&mut self, uid: u32) -> Result<(), Fail> {
-        self.set_flag(uid, Flag::Seen, true)
-    }
-
     // A flag (read, starred) put on a letter or taken off (the inbox opened with write).
     pub fn set_flag(&mut self, uid: u32, flag: Flag<'static>, on: bool) -> Result<(), Fail> {
         let set = SequenceSet::try_from(uid.to_string().as_str()).map_err(|e| Fail::Other(e.to_string()))?;
@@ -364,11 +400,12 @@ impl Session {
         Ok(SENT_NAMES.iter().find_map(|name| open.iter().find(|m| leaf(m).eq_ignore_ascii_case(name))).map(|m| (*m).clone()))
     }
 
-    // A letter put into a folder, marked read.
-    pub fn append(&mut self, mailbox: Mailbox<'static>, raw: &[u8]) -> Result<(), Fail> {
+    // A letter put into a folder, marked read; its UID there, where the
+    // server says (UIDPLUS's APPENDUID).
+    pub fn append(&mut self, mailbox: Mailbox<'static>, raw: &[u8]) -> Result<Option<u32>, Fail> {
         let opts = ImapMessageAppendOptions { flags: vec![Flag::Seen], ..Default::default() };
-        self.client.append(mailbox, raw, opts).map_err(fail)?;
-        Ok(())
+        let (_, uid) = self.client.append(mailbox, raw, opts).map_err(fail)?;
+        Ok(uid.map(|(_, uid)| uid))
     }
 
     pub fn noop(&mut self) -> Result<(), Fail> {
@@ -376,9 +413,9 @@ impl Session {
     }
 
     // Waits for the server to say something changed (true), or `wait` to
-    // pass (false); the IDLE ended either way. A socket shut down from
-    // elsewhere ends it at once, as a failure.
-    pub fn idle(&mut self, wait: Duration) -> Result<bool, Fail> {
+    // pass, or `kick` to be set (false); the IDLE ended either way. A socket
+    // shut down from elsewhere ends it at once, as a failure.
+    pub fn idle(&mut self, wait: Duration, kick: &AtomicBool) -> Result<bool, Fail> {
         let done = Arc::new(AtomicBool::new(false));
         let mut idle = ImapIdle::new(done.clone(), ImapIdleOptions { timeout: Some(wait) });
         let _ = self.socket.set_read_timeout(Some(IDLE_WAKE.min(wait)));
@@ -399,8 +436,13 @@ impl Session {
                 ImapCoroutineState::Yielded(ImapIdleYield::WantsRead) => match self.client.stream.read(&mut buf) {
                     Ok(0) => break Err(Fail::Other("the server closed the connection".into())),
                     Ok(n) => got = Some(n),
-                    // Quiet a while: a chance to refresh the IDLE when it is due.
-                    Err(e) if matches!(e.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) => {}
+                    // Quiet a while: a chance to refresh the IDLE when it is
+                    // due, or to stop when asked to.
+                    Err(e) if matches!(e.kind(), io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock) => {
+                        if kick.load(Ordering::SeqCst) {
+                            done.store(true, Ordering::SeqCst);
+                        }
+                    }
                     Err(e) => break Err(io_fail(e)),
                 },
                 ImapCoroutineState::Complete(Ok(())) => break Ok(changed),
@@ -420,6 +462,36 @@ impl Session {
 // English ones (Gmail's "[Gmail]/Sent Mail", Exchange's "Sent Items", QQ's
 // "Sent Messages"), German (Exchange's), Chinese (163, 126).
 const SENT_NAMES: [&str; 9] = ["Sent", "Sent Items", "Sent Messages", "Sent Mail", "Gesendete Elemente", "Gesendete Objekte", "Gesendet", "已发送", "已发送邮件"];
+
+// A folder opened: how many letters, its UIDVALIDITY.
+pub struct Opened {
+    pub exists: u32,
+    pub validity: u32,
+}
+
+// A letter's UID and flags.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Flags {
+    pub uid: u32,
+    pub seen: bool,
+    pub flagged: bool,
+    pub answered: bool,
+}
+
+// A folder by its whole name (as LIST gave it, kept in the store), and back.
+pub fn mailbox(name: &str) -> Option<Mailbox<'static>> {
+    if name.eq_ignore_ascii_case("INBOX") {
+        return Some(Mailbox::Inbox);
+    }
+    Mailbox::try_from(name.to_string()).ok()
+}
+
+pub fn name_of(m: &Mailbox) -> String {
+    match m {
+        Mailbox::Inbox => "INBOX".into(),
+        Mailbox::Other(o) => String::from_utf8_lossy(o.as_ref()).into_owned(),
+    }
+}
 
 // A folder's own name, the part after its parents (INBOX.Sent is Sent).
 fn leaf(m: &Mailbox) -> String {

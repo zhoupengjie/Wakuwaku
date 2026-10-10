@@ -2167,7 +2167,7 @@
       // A word that points somewhere (an agent answered about a letter): there.
       const open = isNudging() && nudge.widget?.open
       if (open?.tab === 'mail') {
-        window.Settings?.openLetter?.({ account: open.account, uid: open.uid })
+        window.Settings?.openLetter?.({ account: open.account, uid: open.uid, folder: open.folder || 'inbox' })
         return window.pet.openSettings('mail')
       }
       window.pet.openSettings()

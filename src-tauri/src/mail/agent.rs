@@ -33,7 +33,8 @@ use mail_parser::{Message, MimeHeaders};
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
-use super::letters::{attachments, fetch, parse, people, text};
+use super::letters::{attachments, parse, people, raw as raw_letter, text};
+use super::store::Folder;
 use super::{account, widget_id, Account};
 use crate::scripts::job::Job;
 use crate::{shared, Shared};
@@ -94,6 +95,8 @@ struct Turn {
 pub struct Talk {
     agent: Agent,
     account: String,
+    // Which folder of the account the letter is in (inbox, sent).
+    mailbox: &'static str,
     uid: u32,
     subject: String,
     folder: PathBuf,
@@ -112,6 +115,7 @@ impl Talk {
             "key": key,
             "agent": self.agent.id(),
             "account": self.account,
+            "mailbox": self.mailbox,
             "uid": self.uid,
             "state": self.state,
             "error": self.error,
@@ -121,7 +125,7 @@ impl Talk {
 
     // Kept beside the letter, as it stands after a turn.
     fn save(&self) {
-        let v = json!({ "agent": self.agent.id(), "session": self.session, "account": self.account, "uid": self.uid, "subject": self.subject, "turns": self.json("")["turns"] });
+        let v = json!({ "agent": self.agent.id(), "session": self.session, "account": self.account, "mailbox": self.mailbox, "uid": self.uid, "subject": self.subject, "turns": self.json("")["turns"] });
         let _ = std::fs::write(self.folder.join("talk.json"), serde_json::to_string_pretty(&v).unwrap_or_default());
     }
 
@@ -131,6 +135,7 @@ impl Talk {
         Some(Talk {
             agent: Agent::parse(v["agent"].as_str()?)?,
             account: v["account"].as_str().unwrap_or("").into(),
+            mailbox: Folder::parse(v["mailbox"].as_str().unwrap_or("")).name(),
             uid: v["uid"].as_u64().unwrap_or(0) as u32,
             subject: v["subject"].as_str().unwrap_or("").into(),
             folder: folder.to_path_buf(),
@@ -790,17 +795,17 @@ fn run_turn(sh: &Arc<Shared>, key: String, exe: &Path, args: Vec<String>, stdin:
                 talk.streamed = false;
                 talk.save();
                 let first = !talk.turns.iter().any(|t| t.who == "me");
-                (talk.agent, talk.account.clone(), talk.uid, talk.subject.clone(), talk.state, first)
+                (talk.agent, talk.account.clone(), talk.mailbox, talk.uid, talk.subject.clone(), talk.state, first)
             })
         };
         sh.push_settings();
-        if let Some((agent, account, uid, subject, state, first)) = told {
+        if let Some((agent, account, mailbox, uid, subject, state, first)) = told {
             if state == "failed" {
                 sh.log(&format!("mail: {} talk on {key} failed", agent.id()));
             }
             let words = if state == "failed" { "mail.handFailed" } else if first { "mail.talkDone" } else { "mail.talkReplied" };
             let words = crate::i18n::t(sh.lang(), words).replace("{agent}", agent.name()).replace("{what}", &tame(&subject, 40));
-            sh.nudge_widget_to(&widget_id(&account), &words.chars().take(60).collect::<String>(), json!({ "tab": "mail", "account": account, "uid": uid }));
+            sh.nudge_widget_to(&widget_id(&account), &words.chars().take(60).collect::<String>(), json!({ "tab": "mail", "account": account, "folder": mailbox, "uid": uid }));
         }
     });
     Ok(())
@@ -858,15 +863,16 @@ fn fail(kind: &str, text: &str) -> Value {
 // before on that letter is begun again), or a session "open" in a
 // terminal. The letter is read without being marked read.
 #[tauri::command]
-pub async fn mail_hand(app: AppHandle, id: String, uid: u32, agent: String, how: String) -> Value {
+pub async fn mail_hand(app: AppHandle, id: String, uid: u32, agent: String, how: String, folder: Option<String>) -> Value {
     let sh = shared(&app);
     let Some(account) = account(&sh, &id) else { return fail("gone", "") };
     let Some(agent) = Agent::parse(&agent) else { return fail("agent", "") };
     let Some(exe) = find(agent.id()) else { return fail("noAgent", agent.name()) };
-    let a = account.clone();
-    let got = tauri::async_runtime::spawn_blocking(move || fetch(&a, uid, false)).await;
+    let mailbox = Folder::parse(folder.as_deref().unwrap_or(""));
+    let (sh2, a) = (sh.clone(), account.clone());
+    let got = tauri::async_runtime::spawn_blocking(move || raw_letter(&sh2, &a, mailbox, uid)).await;
     let raw = match got {
-        Ok(Ok(Some((raw, _)))) => raw,
+        Ok(Ok(Some(raw))) => raw,
         Ok(Ok(None)) => return fail("noLetter", ""),
         Ok(Err(f)) => return json!({ "ok": false, "error": f.json() }),
         Err(e) => return fail("other", &e.to_string()),
@@ -896,7 +902,7 @@ pub async fn mail_hand(app: AppHandle, id: String, uid: u32, agent: String, how:
     }
     let dir = home(&sh).join(&folder);
     let session = if agent == Agent::Claude { new_session_id() } else { String::new() };
-    let talk = Talk { agent, account: id.clone(), uid, subject: subject.clone(), folder: dir.clone(), session: session.clone(), turns: vec![Turn { who: "start".into(), text: String::new() }], state: "running", error: String::new(), streamed: false };
+    let talk = Talk { agent, account: id.clone(), mailbox: mailbox.name(), uid, subject: subject.clone(), folder: dir.clone(), session: session.clone(), turns: vec![Turn { who: "start".into(), text: String::new() }], state: "running", error: String::new(), streamed: false };
     let mut args = args_for(&sh, agent, &session, true);
     args.push(prompt(&folder, &subject, true, zh));
     let letter: String = with_text_attachments(&dir).chars().take(MOST_STDIN).collect();
@@ -1022,7 +1028,7 @@ mod tests {
     }
 
     fn talk(agent: Agent) -> Talk {
-        Talk { agent, account: "a".into(), uid: 1, subject: "s".into(), folder: PathBuf::new(), session: String::new(), turns: vec![Turn { who: "start".into(), text: String::new() }], state: "running", error: String::new(), streamed: false }
+        Talk { agent, account: "a".into(), mailbox: "inbox", uid: 1, subject: "s".into(), folder: PathBuf::new(), session: String::new(), turns: vec![Turn { who: "start".into(), text: String::new() }], state: "running", error: String::new(), streamed: false }
     }
 
     #[test]

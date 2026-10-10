@@ -1,18 +1,22 @@
 // A small IMAP server on 127.0.0.1 for trying the pet's mail without a real
 // account: no TLS (set the account up with security "plain"), one user, an
-// inbox read from a folder of .eml files, and a Sent folder that is empty
-// until a letter is put in it (APPEND).
+// inbox read from a folder of .eml files, and a Sent folder (empty, or read
+// from another folder) that letters can be put in (APPEND).
 //
 //   node test/fake-imap.js [--port 14300] [--dir test/fixtures/mail]
 //                          [--password test] [--no-idle] [--login-only]
 //                          [--want-id] [--sent <folder>] [--unmarked-sent]
-//                          [--log]
+//                          [--sent-from <folder>] [--many <n>] [--log]
 //
 // The inbox is the folder's .eml files in name order (UID 1, 2, …); a name
 // with "-seen" in it starts read, one with "-flagged" starred. A file added
-// while it runs is new mail:
-// a client in IDLE is told at once (* n EXISTS), others at their next
-// command. --want-id refuses to open a folder before ID, as 163 does;
+// while it runs is new mail, a file taken away a letter deleted (EXPUNGE):
+// a client in IDLE is told at once (* n EXISTS, * n EXPUNGE), others at
+// their next command. A flag one client changes, the others in IDLE on that
+// folder are told (* n FETCH (FLAGS …)). --sent-from fills Sent from a
+// folder of .eml files (read); --many adds n letters made up (every fifth
+// answering the one before), to try a big inbox. --want-id refuses to open
+// a folder before ID, as 163 does;
 // --login-only offers LOGIN but no AUTHENTICATE PLAIN; --no-idle leaves
 // IDLE out, so the pet polls. --sent writes each letter put into a folder
 // there too (sent-1.eml…); --unmarked-sent lists Sent without \Sent, as
@@ -43,9 +47,13 @@ const WANT_ID = !!opt('want-id')
 const LOG = !!opt('log')
 const SENT_DIR = opt('sent', '') ? path.resolve(opt('sent', '')) : ''
 const UNMARKED_SENT = !!opt('unmarked-sent')
+const SENT_FROM = opt('sent-from', '') ? path.resolve(opt('sent-from', '')) : ''
+const MANY = Number(opt('many', '0')) || 0
 
 const CAPS = ['IMAP4rev1', 'ID', 'UIDPLUS', ...(IDLE ? ['IDLE'] : []), ...(LOGIN_ONLY ? [] : ['AUTH=PLAIN', 'SASL-IR'])]
-const UIDVALIDITY = 1700000000
+// Its UIDs last as long as it runs: another UIDVALIDITY each start, as a
+// server that numbered its letters anew would say.
+const UIDVALIDITY = Math.floor(Date.now() / 1000)
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 // --- The mailboxes ---------------------------------------------------------------------------------
@@ -73,20 +81,51 @@ function headerDate(raw) {
   return d && !isNaN(d) ? d : null
 }
 
-// The files not seen yet, as new letters; true when there were any.
-function scan() {
-  const box = boxes.INBOX
+// A folder's .eml files read in as letters of a box; true when there were
+// new ones. Files gone since are letters deleted: clients in IDLE on the
+// box told (EXPUNGE).
+function scan(boxName = 'INBOX', dir = DIR, seen = false) {
+  const box = boxes[boxName]
   let added = false
-  for (const name of fs.readdirSync(DIR).filter(n => n.endsWith('.eml')).sort()) {
+  const names = fs.readdirSync(dir).filter(n => n.endsWith('.eml')).sort()
+  for (const name of names) {
     if (box.files.has(name)) continue
     box.files.add(name)
     // Lines end in CRLF however the file was saved.
-    const raw = Buffer.from(fs.readFileSync(path.join(DIR, name)).toString('latin1').replace(/\r?\n/g, '\r\n'), 'latin1')
-    const flags = new Set([...(name.includes('-seen') ? ['\\Seen'] : []), ...(name.includes('-flagged') ? ['\\Flagged'] : [])])
-    box.letters.push({ uid: box.next++, raw, flags, date: headerDate(raw) || fs.statSync(path.join(DIR, name)).mtime, name })
+    const raw = Buffer.from(fs.readFileSync(path.join(dir, name)).toString('latin1').replace(/\r?\n/g, '\r\n'), 'latin1')
+    const flags = new Set([...(seen || name.includes('-seen') ? ['\\Seen'] : []), ...(name.includes('-flagged') ? ['\\Flagged'] : [])])
+    box.letters.push({ uid: box.next++, raw, flags, date: headerDate(raw) || fs.statSync(path.join(dir, name)).mtime, name })
     added = true
   }
+  const there = new Set(names)
+  for (let i = box.letters.length - 1; i >= 0; i--) {
+    const l = box.letters[i]
+    if (!box.files.has(l.name) || there.has(l.name)) continue
+    box.files.delete(l.name)
+    box.letters.splice(i, 1)
+    console.log(`EXPUNGE ${boxName} ${l.name}`)
+    for (const c of clients) {
+      if (c.box !== boxName || i >= c.told) continue
+      c.told--
+      if (c.idle) c.line(`* ${i + 1} EXPUNGE`)
+    }
+  }
   return added
+}
+
+// Letters made up, many: every fifth answers the one before.
+function many(n) {
+  const box = boxes.INBOX
+  const start = Date.UTC(2026, 0, 1)
+  for (let i = 1; i <= n; i++) {
+    const date = new Date(start + i * 3600 * 1000)
+    const answers = i % 5 === 0 ? `In-Reply-To: <many-${i - 1}@example.com>\r\nReferences: <many-${i - 1}@example.com>\r\n` : ''
+    const raw = Buffer.from(
+      `From: Person ${i % 37} <p${i % 37}@example.com>\r\nTo: me@example.test\r\nSubject: ${i % 5 === 0 ? 'Re: ' : ''}Letter ${i % 5 === 0 ? i - 1 : i}\r\nDate: ${date.toUTCString().replace('GMT', '+0000')}\r\nMessage-ID: <many-${i}@example.com>\r\n${answers}Content-Type: text/plain; charset=utf-8\r\n\r\nLetter number ${i}, made up to try a big inbox.\r\n`,
+      'utf8',
+    )
+    box.letters.push({ uid: box.next++, raw, flags: new Set(i % 3 ? ['\\Seen'] : []), date, name: `many-${i}` })
+  }
 }
 
 // --- One connection -----------------------------------------------------------------------------------
@@ -362,8 +401,10 @@ function serve(socket) {
       if (kind.startsWith('+')) list.forEach(f => l.flags.add(f))
       else if (kind.startsWith('-')) list.forEach(f => l.flags.delete(f))
       else l.flags = new Set(list)
-      if (LOG || list.includes('\\Answered')) console.log(`STORE ${c.box} ${l.name}: ${[...l.flags].join(' ')}`)
+      console.log(`STORE ${c.box} ${l.name}: ${[...l.flags].join(' ')}`)
       if (!kind.endsWith('.SILENT')) line(`* ${seq} FETCH (${uid ? `UID ${l.uid} ` : ''}FLAGS (${[...l.flags].join(' ')}))`)
+      // The others waiting on this folder are told.
+      for (const other of clients) if (other !== c && other.idle && other.box === c.box && seq <= other.told) other.line(`* ${seq} FETCH (FLAGS (${[...l.flags].join(' ')}))`)
     }
     line(`${tag} OK STORE completed`)
   }
@@ -435,6 +476,8 @@ function tokens(parts) {
 const str = t => String(t ?? '')
 
 scan()
+if (SENT_FROM) scan('Sent', SENT_FROM, true)
+if (MANY) many(MANY)
 setInterval(() => {
   if (!scan()) return
   for (const c of clients) if (c.idle) c.tellNew()

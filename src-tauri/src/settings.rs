@@ -61,6 +61,8 @@ pub fn snapshot(sh: &Shared) -> Value {
         // The models each can be asked for, with the efforts they take.
         "mailModels": mail::agent::models(),
         "mailTalks": mail::agent::talks(sh),
+        // The mail kept changed: the Mail page asks for its list again.
+        "mailRev": mail::rev(),
         "waku": scripts::waku_path(sh).to_string_lossy(),
         "port": sh.port,
     })

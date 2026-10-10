@@ -86,7 +86,12 @@
   // many there are, how many asked for, busy, what went wrong. The letter
   // open ({ uid, busy | letter, summary | error }), null while the list
   // shows. What came of handing one to an agent, for a few seconds.
-  const inbox = { id: '', for: '', filter: 'all', letters: [], total: 0, count: 50, busy: false, error: null, errors: [] }
+  // threads: its conversations as kept (threads.rs), each with its letters;
+  // total: how many there are; letters: how many letters the inbox holds;
+  // rev: the store's revision they are of (a newer one, asked again);
+  // syncing: a first sync still under way. The conversations folded out.
+  const inbox = { id: '', for: '', filter: 'all', threads: [], total: 0, letters: 0, count: 50, busy: false, error: null, errors: [], rev: 0, syncing: false }
+  const expanded = new Set()
   // A letter to open once the Mail page shows (a click on the island's word that an agent answered).
   let letterToOpen = null
   let reading = null
@@ -96,11 +101,11 @@
   // The letter being written, one at a time: from which account, to whom,
   // the subject and text, the letter it answers or passes on, files added;
   // touched once typed in; sending, what went wrong. Kept until sent or
-  // thrown away, across a restart too (in the page's storage, its files
-  // left out). writing: it shows; else the inbox does, with a line to go
-  // back to it. A discard asked once: asked again, it goes.
-  const DRAFT_KEY = 'wakuwaku.mailDraft'
-  let draft = loadDraft()
+  // thrown away, across a restart too (in the data folder, mail.rs
+  // mail_draft: each copy of the pet its own, which the page's storage is
+  // not; its files left out). writing: it shows; else the inbox does, with
+  // a line to go back to it. A discard asked once: asked again, it goes.
+  let draft = null
   let writing = false
   let dropSure = false
   let draftTimer
@@ -110,23 +115,16 @@
   // The most a letter takes with it (as send.rs has it).
   const MOST_FILES = 25 << 20
 
-  function loadDraft() {
-    try {
-      const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null')
-      return d && typeof d === 'object' && d.account ? { ...d, files: [], busy: false, error: null, note: null } : null
-    } catch {
-      return null
-    }
-  }
+  // The letter left being written, as kept (none begun meanwhile).
+  window.pet.mail.draft().then(d => {
+    if (draft || !d || typeof d !== 'object' || !d.account) return
+    draft = { ...d, files: [], busy: false, error: null, note: null }
+    if (isOpen) draw()
+  })
 
   function keepDraft() {
     clearTimeout(draftTimer)
-    draftTimer = setTimeout(() => {
-      try {
-        if (draft) localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...draft, files: [], busy: false, error: null, note: null }))
-        else localStorage.removeItem(DRAFT_KEY)
-      } catch {}
-    }, 300)
+    draftTimer = setTimeout(() => window.pet.mail.keepDraft(draft ? { ...draft, files: [], busy: false, error: null, note: null } : null), 300)
   }
 
   const T = (key, vars) => t(lang, key, vars)
@@ -540,7 +538,10 @@
   function mailNote(a) {
     if (!a.on) return { text: T('mail.off') }
     const st = a.status || {}
-    if (st.state === 'ok') return { text: st.unread ? T('mail.unread', { n: st.unread }) : T('mail.none') }
+    // How much is kept whole on this computer, while it is still coming down.
+    const off = st.offline || {}
+    const down = off.total && off.have < off.total ? ` · ${T('mail.offline', { have: off.have, total: off.total })}` : ''
+    if (st.state === 'ok') return { text: (st.unread ? T('mail.unread', { n: st.unread }) : T('mail.none')) + down }
     if (st.state === 'error') return { text: mailError(st.error, a), bad: true }
     return { text: T('mail.connecting') }
   }
@@ -702,19 +703,58 @@
 
   const mailSize = n => (n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`)
   const people = list => (list || []).map(p => (p.name ? `${p.name} <${p.address}>` : p.address)).join(', ')
-  const starHTML = (account, uid, on) => `<button class="star${on ? ' on' : ''}" data-star="${esc(account)}" data-uid="${uid}" title="${esc(T(on ? 'mail.unstar' : 'mail.star'))}">${on ? '★' : '☆'}</button>`
+  const starHTML = (account, uid, on, folder = 'inbox') =>
+    `<button class="star${on ? ' on' : ''}" data-star="${esc(account)}" data-folder="${folder}" data-uid="${uid}" title="${esc(T(on ? 'mail.unstar' : 'mail.star'))}">${on ? '★' : '☆'}</button>`
 
-  // A letter's line in the inbox: unread or not, who, when, what about, its
+  // A letter by where it is: its account, its folder (inbox, sent), its UID
+  // there (the inbox's and Sent's UIDs are their own).
+  const isLetter = (l, account, folder, uid) => !!l && l.account === account && (l.folder || 'inbox') === (folder || 'inbox') && l.uid === uid
+  const isReading = (account, folder, uid) => isLetter(reading, account, folder, uid)
+  const listed = (account, folder, uid) => inbox.threads.flatMap(t => t.letters).find(l => isLetter(l, account, folder, uid)) || null
+  const where = l => `data-letter="${l.uid}" data-folder="${l.folder || 'inbox'}" data-account="${esc(l.account)}"`
+  const whoOf = l => (l.me ? T('mail.me') : l.from || l.address || '?')
+  const chipOf = l => {
+    const talk = talkOf(letterKey(l))
+    return talk ? `<span class="chip ${talk.state}">${esc(T(`mail.chip.${talk.state}`, { agent: AGENTS[talk.agent] || 'Agent' }))}</span>` : ''
+  }
+  const marks = l => `${l.answered ? `<span class="answered" title="${esc(T('mail.answered'))}">↩</span> ` : ''}${l.attached ? '📎 ' : ''}`
+
+  // A letter's card in the inbox: unread or not, who, when, what about, its
   // star, whose (in every account's), and whether an agent is on it.
   function letterRow(l, every) {
-    const talk = talkOf(letterKey(l))
-    const chip = talk ? `<span class="chip ${talk.state}">${esc(T(`mail.chip.${talk.state}`, { agent: AGENTS[talk.agent] || 'Agent' }))}</span>` : ''
     const whose = every ? `<span class="acct ellip">${esc(accountOf(l.account)?.address || '')}</span>` : ''
-    // The one open beside the list (two panes).
-    const open = reading && reading.account === l.account && reading.uid === l.uid ? ' open' : ''
-    return `<div class="r letter${l.seen ? '' : ' unread'}${open}" data-letter="${l.uid}" data-account="${esc(l.account)}"><span class="udot"></span>
-      <div class="grow"><div class="lt"><span class="who ellip">${esc(l.from || l.address || '?')}</span><span class="when">${esc(mailDate(l.date))}</span></div>
-      <div class="lt"><span class="d ellip grow">${l.answered ? `<span class="answered" title="${esc(T('mail.answered'))}">↩</span> ` : ''}${l.attached ? '📎 ' : ''}${esc(l.subject || T('mail.noSubject'))}</span>${whose}</div></div>${chip}${starHTML(l.account, l.uid, l.flagged)}</div>`
+    const open = isReading(l.account, l.folder, l.uid) ? ' open' : ''
+    return `<div class="r letter${l.seen ? '' : ' unread'}${open}" ${where(l)}><span class="udot"></span>
+      <div class="grow"><div class="lt"><span class="who ellip">${esc(whoOf(l))}</span><span class="when">${esc(mailDate(l.date))}</span></div>
+      <div class="lt"><span class="d ellip grow">${marks(l)}${esc(l.subject || T('mail.noSubject'))}</span>${whose}</div></div>${chipOf(l)}${starHTML(l.account, l.uid, l.flagged, l.folder)}</div>`
+  }
+
+  // A conversation, as Thunderbird's cards show one: who wrote (oneself as
+  // me), how many letters, when the newest came, what about; folded out, its
+  // letters under it in the order they answer one another, each indented by
+  // how deep it is, with the start of its text. A click on it opens its
+  // newest unread letter (else its newest) and folds it out; › folds it.
+  function threadHTML(t, every) {
+    const out = expanded.has(t.key)
+    const target = t.letters.find(l => isLetter(l, t.account, t.open?.folder, t.open?.uid)) || t.letters.at(-1)
+    const open = !out && t.letters.some(l => isReading(l.account, l.folder, l.uid)) ? ' open' : ''
+    const who = t.people.map(p => (p.me ? T('mail.me') : p.name)).join(', ')
+    const whose = every ? `<span class="acct ellip">${esc(accountOf(t.account)?.address || '')}</span>` : ''
+    const any = { answered: t.letters.some(l => l.answered), attached: t.attached }
+    const head = `<div class="r letter thread${t.unseen ? ' unread' : ''}${open}" data-thread="${esc(t.key)}" ${where(target)}>
+      <span class="twisty${out ? ' out' : ''}" data-twisty="${esc(t.key)}" title="${esc(T(out ? 'mail.fold' : 'mail.unfold'))}">›</span>
+      <div class="grow"><div class="lt"><span class="who ellip">${esc(who)}</span><span class="cnt">${t.count}</span><span class="when">${esc(mailDate(t.latest))}</span></div>
+      <div class="lt"><span class="d ellip grow">${marks(any)}${esc(t.subject || T('mail.noSubject'))}</span>${whose}</div></div>${starHTML(target.account, target.uid, t.flagged, target.folder)}</div>`
+    if (!out) return head
+    const cards = t.letters
+      .map(l => {
+        const here = isReading(l.account, l.folder, l.uid) ? ' open' : ''
+        return `<div class="r letter child${l.seen ? '' : ' unread'}${here}" style="--depth:${Math.min(l.depth, 4)}" ${where(l)}><span class="udot"></span>
+        <div class="grow"><div class="lt"><span class="who ellip">${esc(whoOf(l))}</span><span class="when">${esc(mailDate(l.date))}</span></div>
+        <div class="lt"><span class="d ellip grow">${marks(l)}${esc(l.snippet || l.subject || T('mail.noSubject'))}</span></div></div>${chipOf(l)}${starHTML(l.account, l.uid, l.flagged, l.folder)}</div>`
+      })
+      .join('')
+    return `${head}<div class="thread-cards">${cards}</div>`
   }
 
   // Which inbox, as the picker names it: every account's (with all their
@@ -745,7 +785,7 @@
     // open put away); one pane or two.
     const setup = two ? `<span class="link" data-mail-setup title="${esc(T('mail.setupTip'))}">${esc(T('mail.setup'))}</span>` : ''
     const panes = two ? `<span class="link" data-mail-panes="one">${esc(T('mail.panes.one'))}</span>` : roomForTwo() ? `<span class="link" data-mail-panes="two">${esc(T('mail.panes.two'))}</span>` : ''
-    const head = `<div class="sec row-sec"><span class="ellip">${esc(T('mail.inbox'))}${inbox.total ? ` · ${inbox.total}` : ''}</span><span class="grow"></span><span class="link" data-w-new>${esc(T('mail.write'))}</span><span class="link" data-mail-refresh>${esc(T(inbox.busy ? 'mail.loading' : 'mail.refresh'))}</span>${setup}${panes}</div>`
+    const head = `<div class="sec row-sec"><span class="ellip">${esc(T('mail.inbox'))}${inbox.letters ? ` · ${inbox.letters}` : ''}</span><span class="grow"></span><span class="link" data-w-new>${esc(T('mail.write'))}</span><span class="link" data-mail-refresh>${esc(T(inbox.busy ? 'mail.loading' : 'mail.refresh'))}</span>${setup}${panes}</div>`
     const tools = `<div class="r mail-tools">${pick}<span class="grow"></span>${filters}</div>`
     // The letter put aside, to go on with (not while it is written beside the list).
     const kept = draft && !(two && writing)
@@ -756,10 +796,10 @@
     const missed = (inbox.errors || []).map(e => `<div class="note err">${esc(`${accountOf(e.account)?.address || ''}: ${mailError(e.error, accountOf(e.account))}`)}</div>`).join('')
     let list
     if (inbox.error) list = `<div class="note err">${esc(mailError(inbox.error, accountOf(id)))}</div>`
-    else if (!inbox.letters.length) list = `<div class="note">${esc(T(inbox.busy ? 'mail.loading' : `mail.empty.${inbox.filter}`))}</div>`
-    else list = inbox.letters.map(l => letterRow(l, every)).join('')
-    const left = inbox.total - inbox.letters.length
-    const more = !inbox.error && left > 0 ? `<div class="r"><button class="pbtn wide" data-mail-more ${inbox.busy ? 'disabled' : ''}>${esc(T('mail.more', { n: Math.min(50, left) }))}</button></div>` : ''
+    else if (!inbox.threads.length) list = `<div class="note">${esc(T(inbox.syncing ? 'mail.syncing' : inbox.busy && !inbox.rev ? 'mail.loading' : `mail.empty.${inbox.filter}`))}</div>`
+    else list = inbox.threads.map(t => (t.count > 1 ? threadHTML(t, every) : letterRow(t.letters[0], every))).join('')
+    const left = inbox.total - inbox.threads.length
+    const more = !inbox.error && left > 0 ? `<div class="r"><button class="pbtn wide" data-mail-more ${inbox.busy ? 'disabled' : ''}>${esc(T('mail.moreThreads', { n: Math.min(50, left) }))}</button></div>` : ''
     return `${head}<div class="grp inbox">${tools}${kept}${note}${missed}${list}${more}</div>`
   }
 
@@ -924,7 +964,10 @@
     const notMe = list => (list || []).filter(p => p.address && p.address.toLowerCase() !== me)
     const d = { kind, account, to: '', cc: '', bcc: '', showCc: false, subject: '', text: '', reply: null, forward: null, files: [], touched: !!words, busy: false, error: null, note: null }
     if (l && (kind === 'reply' || kind === 'all')) {
-      const back = l.replyTo?.length ? l.replyTo : l.from
+      // To whom it asks replies to go, else who wrote it; one's own letter
+      // (in Sent), to whom it went.
+      const mine = (l.from || []).some(p => (p.address || '').toLowerCase() === me)
+      const back = l.replyTo?.length ? l.replyTo : mine && l.to?.length ? l.to : l.from
       const everyone = eachOnce([...notMe(back), ...notMe(l.to)])
       const to = kind === 'all' && everyone.length ? everyone : back
       d.to = peopleLine(to)
@@ -932,12 +975,12 @@
       d.showCc = !!d.cc
       d.subject = /^\s*(re|aw|sv|回复|答复)\s*[:：]/i.test(l.subject || '') ? l.subject : `Re: ${l.subject || ''}`
       d.text = `${words ? `${words}\n\n` : '\n\n'}${T('mail.w.wrote', { date: mailDate(l.date, true), who: people(l.from) })}\n${quoted(l.text)}`
-      d.reply = { account: l.account, uid: l.uid, messageId: l.messageId, references: l.references || [] }
+      d.reply = { account: l.account, folder: l.folder || 'inbox', uid: l.uid, messageId: l.messageId, references: l.references || [] }
     }
     if (l && kind === 'forward') {
       d.subject = /^\s*(fwd?|wg|转发)\s*[:：]/i.test(l.subject || '') ? l.subject : `Fwd: ${l.subject || ''}`
       d.text = `\n\n${forwarded(l)}`
-      d.forward = { account: l.account, uid: l.uid, files: (l.attachments || []).map((f, i) => ({ index: i, name: f.name, size: f.size })) }
+      d.forward = { account: l.account, folder: l.folder || 'inbox', uid: l.uid, files: (l.attachments || []).map((f, i) => ({ index: i, name: f.name, size: f.size })) }
     }
     draft = d
     writing = true
@@ -957,9 +1000,9 @@
   }
 
   // The same about a letter in the list: opened first (for its text).
-  async function writeAbout(kind, account, uid, words) {
-    if (!(reading?.letter && reading.account === account && reading.uid === uid)) await openLetter(account, uid)
-    if (reading?.letter && reading.account === account && reading.uid === uid) write(kind, reading.letter, words)
+  async function writeAbout(kind, account, uid, folder, words) {
+    if (!(reading?.letter && isReading(account, folder, uid))) await openLetter(account, uid, folder)
+    if (reading?.letter && isReading(account, folder, uid)) write(kind, reading.letter, words)
   }
 
   // The reply in an agent's words: the longest ``` block, if it wrote one; else all of it.
@@ -1071,7 +1114,7 @@
       subject: d.subject,
       text: d.text,
       reply: d.reply,
-      forward: d.forward ? { account: d.forward.account, uid: d.forward.uid, keep: d.forward.files.map(f => f.index) } : null,
+      forward: d.forward ? { account: d.forward.account, folder: d.forward.folder || 'inbox', uid: d.forward.uid, keep: d.forward.files.map(f => f.index) } : null,
       files: d.files.map(f => ({ name: f.name, type: f.type, data: f.data })),
     }
     const got = await window.pet.mail.send(letter)
@@ -1081,8 +1124,8 @@
       d.error = sendError(got)
       return redrawMail()
     }
-    // The letter answered shows it.
-    const answered = d.reply && inbox.letters.find(l => l.account === d.reply.account && l.uid === d.reply.uid)
+    // The letter answered shows it (the list comes again with the reply in it).
+    const answered = d.reply && listed(d.reply.account, d.reply.folder, d.reply.uid)
     if (answered) answered.answered = true
     draft = null
     writing = false
@@ -1105,8 +1148,11 @@
     if (r.busy) return `${bar}<div class="grp"><div class="note">${esc(T('mail.opening'))}</div></div>`
     if (r.error) return `${bar}<div class="grp"><div class="note err">${esc(handError(r.error))}</div></div>`
     const files = l.attachments.length ? `<div class="m-files">${l.attachments.map(f => `<span class="chip">📎 ${esc(f.name || '?')} · ${mailSize(f.size)}</span>`).join('')}</div>` : ''
-    const whose = (snap.mail || []).length > 1 ? `<div class="d">${esc(T('mail.in', { address: accountOf(l.account)?.address || '' }))}</div>` : ''
-    return `${bar}${note}<div class="grp mail-read" data-letter="${l.uid}" data-account="${esc(l.account)}">
+    // Whose (several accounts), and one's own, from Sent.
+    const address = accountOf(l.account)?.address || ''
+    const inSent = l.folder === 'sent' ? T('mail.inSent', { address }) : ''
+    const whose = inSent || (snap.mail || []).length > 1 ? `<div class="d">${esc(inSent || T('mail.in', { address }))}</div>` : ''
+    return `${bar}${note}<div class="grp mail-read" ${where(l)}>
       <div class="m-subj">${esc(l.subject || T('mail.noSubject'))}</div>
       <div class="d">${esc(people(l.from))} · ${esc(mailDate(l.date, true))}</div>
       ${l.to.length ? `<div class="d">${esc(T('mail.to'))}: ${esc(people(l.to))}</div>` : ''}
@@ -1151,43 +1197,59 @@
       ${mailForm ? mailFormHTML() : ''}`
   }
 
-  // The letter beside this one in the list (two panes, ↑ ↓), opened.
-  function step(by) {
-    const at = inbox.letters.findIndex(l => reading && l.account === reading.account && l.uid === reading.uid)
-    const next = inbox.letters[at < 0 ? (by > 0 ? 0 : inbox.letters.length - 1) : at + by]
-    if (!next) return
-    openLetter(next.account, next.uid)
-    requestAnimationFrame(() => body.querySelector(`.inbox [data-letter="${next.uid}"][data-account="${CSS.escape(next.account)}"]`)?.scrollIntoView({ block: 'nearest' }))
+  // The letters as the list shows them: a conversation folded in is the
+  // letter a click on it opens; folded out, each of its letters.
+  function shown() {
+    return inbox.threads.flatMap(t => {
+      if (t.count > 1 && expanded.has(t.key)) return t.letters.map(l => ({ l, t }))
+      const l = t.letters.find(x => isLetter(x, t.account, t.open?.folder, t.open?.uid)) || t.letters.at(-1)
+      return [{ l, t }]
+    })
   }
 
-  // The newest letters of the inbox shown, as filtered; with more, 50 more.
-  async function loadInbox(more) {
+  // The letter beside this one in the list (two panes, ↑ ↓), opened.
+  function step(by) {
+    const all = shown()
+    const at = all.findIndex(({ l, t }) => isReading(l.account, l.folder, l.uid) || (!expanded.has(t.key) && t.letters.some(x => isReading(x.account, x.folder, x.uid))))
+    const next = all[at < 0 ? (by > 0 ? 0 : all.length - 1) : at + by]?.l
+    if (!next) return
+    openLetter(next.account, next.uid, next.folder)
+    requestAnimationFrame(() => body.querySelector(`.inbox [data-letter="${next.uid}"][data-folder="${next.folder}"][data-account="${CSS.escape(next.account)}"]`)?.scrollIntoView({ block: 'nearest' }))
+  }
+
+  // The inbox's conversations as kept, as filtered; with more, 50 more.
+  // Asked again, quietly, whenever what is kept changed (snap.mailRev).
+  async function loadInbox(more, quiet = false) {
     const id = inboxId()
     if (!id || inbox.busy) return
     const which = `${id}|${inbox.filter}`
-    if (inbox.for !== which) Object.assign(inbox, { letters: [], total: 0, count: 50, error: null, errors: [] })
+    if (inbox.for !== which) Object.assign(inbox, { threads: [], total: 0, letters: 0, count: 50, error: null, errors: [], rev: 0 })
     if (more) inbox.count += 50
+    const rev = snap?.mailRev || 0
     Object.assign(inbox, { id, for: which, busy: true, error: null })
-    redrawMail()
+    if (!quiet) redrawMail()
     const got = await window.pet.mail.letters(id, inbox.count, inbox.filter)
     inbox.busy = false
     if (inbox.for !== which) return redrawMail()
-    if (got.ok) Object.assign(inbox, { letters: got.letters, total: got.total, errors: got.errors || [] })
+    if (got.ok) Object.assign(inbox, { threads: got.threads, total: got.total, letters: got.letters, errors: got.errors || [], syncing: got.syncing, rev })
     else inbox.error = got.error
     redrawMail()
+    // It changed again meanwhile.
+    if (got.ok && (snap?.mailRev || 0) !== rev) loadInbox(false, true)
   }
 
-  // A letter opened: read whole (and marked read) while the page waits.
-  async function openLetter(account, uid) {
+  // A letter opened: read whole, from what is kept (or the server), and
+  // marked read.
+  async function openLetter(account, uid, folder = 'inbox') {
     if (!accountOf(account)) return
-    reading = { account, uid, busy: true }
+    reading = { account, folder, uid, busy: true }
     draw(true)
     relayout()
-    const got = await window.pet.mail.letter(account, uid)
-    if (reading?.uid !== uid || reading?.account !== account) return
-    reading = got.ok ? { account, uid, letter: got.letter, talk: got.talk } : { account, uid, error: got.error }
-    const listed = inbox.letters.find(l => l.uid === uid && l.account === account)
-    if (listed && got.ok) Object.assign(listed, { seen: true, flagged: got.letter.flagged })
+    const got = await window.pet.mail.letter(account, uid, folder)
+    if (!isReading(account, folder, uid)) return
+    reading = got.ok ? { account, folder, uid, letter: got.letter, talk: got.talk } : { account, folder, uid, error: got.error }
+    const l = listed(account, folder, uid)
+    if (l && got.ok) Object.assign(l, { seen: true, flagged: got.letter.flagged })
     draw()
     relayout()
   }
@@ -1209,12 +1271,12 @@
 
   // A letter handed to an agent: a talk about it under the letter (opened,
   // if it was not), or a session in a terminal.
-  async function hand(account, uid, agent, how) {
+  async function hand(account, uid, agent, how, folder = 'inbox') {
     closeMenu()
-    if (how === 'talk' && !(reading?.account === account && reading?.uid === uid)) await openLetter(account, uid)
+    if (how === 'talk' && !isReading(account, folder, uid)) await openLetter(account, uid, folder)
     noteFor({ text: T('mail.hand.busy', { agent: AGENTS[agent] }) })
-    const got = await window.pet.mail.hand(account, uid, agent, how)
-    if (got.ok && how === 'talk' && reading?.letter && reading.uid === uid) reading.talk = null
+    const got = await window.pet.mail.hand(account, uid, agent, how, folder)
+    if (got.ok && how === 'talk' && reading?.letter && isReading(account, folder, uid)) reading.talk = null
     noteFor(got.ok ? (how === 'open' ? { text: T('mail.hand.opened', { agent: AGENTS[agent] }) } : null) : { text: handError(got.error, agent), bad: true })
   }
 
@@ -1232,15 +1294,15 @@
 
   // A star put on a letter or taken off: at once on the page, then on the
   // server (back as it was if that failed).
-  async function star(account, uid) {
-    const listed = inbox.letters.find(l => l.uid === uid && l.account === account)
-    const open = reading?.letter && reading.account === account && reading.uid === uid ? reading.letter : null
-    const on = !(listed || open)?.flagged
-    for (const l of [listed, open]) if (l) l.flagged = on
+  async function star(account, uid, folder = 'inbox') {
+    const inList = listed(account, folder, uid)
+    const open = reading?.letter && isReading(account, folder, uid) ? reading.letter : null
+    const on = !(inList || open)?.flagged
+    for (const l of [inList, open]) if (l) l.flagged = on
     redrawMail()
-    const got = await window.pet.mail.flag(account, uid, on)
+    const got = await window.pet.mail.flag(account, uid, on, folder)
     if (!got.ok) {
-      for (const l of [listed, open]) if (l) l.flagged = !on
+      for (const l of [inList, open]) if (l) l.flagged = !on
       noteFor({ text: mailError(got.error, accountOf(account)), bad: true })
     }
   }
@@ -1252,20 +1314,21 @@
   menuEl.hidden = true
   layer.append(menuEl)
 
-  function openMenu(account, uid, x, y) {
+  function openMenu(account, uid, folder, x, y) {
     const found = snap.mailAgents || {}
+    const at = `data-account="${esc(account)}" data-folder="${folder || 'inbox'}" data-uid="${uid}"`
     const item = (ag, how, label) =>
-      `<button class="mi" data-hand="${ag}:${how}" data-account="${esc(account)}" data-uid="${uid}" ${found[ag] ? '' : 'disabled'}>${esc(label)}${found[ag] ? '' : ` <span class="d">${esc(T('mail.hand.missing'))}</span>`}</button>`
+      `<button class="mi" data-hand="${ag}:${how}" ${at} ${found[ag] ? '' : 'disabled'}>${esc(label)}${found[ag] ? '' : ` <span class="d">${esc(T('mail.hand.missing'))}</span>`}</button>`
     const talks = agentOrder().map(ag => item(ag, 'talk', T('mail.hand.talk', { agent: AGENTS[ag] }))).join('')
     const terminals = agentOrder().map(ag => item(ag, 'open', T('mail.hand.open', { agent: AGENTS[ag] }))).join('')
-    const l = inbox.letters.find(x => x.uid === uid && x.account === account) || (reading?.uid === uid ? reading.letter : null)
-    const starItem = `<button class="mi" data-star="${esc(account)}" data-uid="${uid}">${esc(T(l?.flagged ? 'mail.unstar' : 'mail.star'))}</button>`
+    const l = listed(account, folder, uid) || (isReading(account, folder, uid) ? reading.letter : null)
+    const starItem = `<button class="mi" data-star="${esc(account)}" data-folder="${folder || 'inbox'}" data-uid="${uid}">${esc(T(l?.flagged ? 'mail.unstar' : 'mail.star'))}</button>`
     const replies = [
       ['reply', 'mail.reply'],
       ['all', 'mail.replyAll'],
       ['forward', 'mail.forward'],
     ]
-      .map(([kind, key]) => `<button class="mi" data-w-reply="${kind}" data-account="${esc(account)}" data-uid="${uid}">${esc(T(key))}</button>`)
+      .map(([kind, key]) => `<button class="mi" data-w-reply="${kind}" ${at}>${esc(T(key))}</button>`)
       .join('')
     menuEl.innerHTML = `${replies}<div class="mi-sep"></div>${talks}<div class="mi-sep"></div>${terminals}<div class="mi-sep"></div>${starItem}`
     menuPick = null
@@ -1313,7 +1376,7 @@
     // Ours, not the island's menu.
     e.preventDefault()
     e.stopPropagation()
-    openMenu(letter.dataset.account, Number(letter.dataset.letter), e.clientX, e.clientY)
+    openMenu(letter.dataset.account, Number(letter.dataset.letter), letter.dataset.folder || 'inbox', e.clientX, e.clientY)
   })
   body.addEventListener('scroll', closeMenu)
 
@@ -1524,9 +1587,9 @@
       showPart()
       if (tab === 'look') loadGallery(false)
       if (tab === 'mail' && letterToOpen) {
-        const { account, uid } = letterToOpen
+        const { account, uid, folder } = letterToOpen
         letterToOpen = null
-        openLetter(account, uid)
+        openLetter(account, uid, folder || 'inbox')
       }
       layer.focus({ preventScroll: true })
     })
@@ -1817,13 +1880,14 @@
     const handing = at('[data-hand]')
     if (handing) {
       const [agent, how] = handing.dataset.hand.split(':')
-      if (!handing.disabled) hand(handing.dataset.account || reading?.account, Number(handing.dataset.uid || reading?.uid), agent, how)
+      const ref = handing.dataset.account ? handing.dataset : { account: reading?.account, uid: reading?.uid, folder: reading?.folder }
+      if (!handing.disabled) hand(ref.account, Number(ref.uid), agent, how, ref.folder || 'inbox')
       return true
     }
     const starring = at('[data-star]')
     if (starring) {
       closeMenu()
-      star(starring.dataset.star, Number(starring.dataset.uid))
+      star(starring.dataset.star, Number(starring.dataset.uid), starring.dataset.folder || 'inbox')
       return true
     }
     if (at('[data-talk-send]')) {
@@ -1838,7 +1902,7 @@
     const more = at('[data-mail-menu]')
     if (more && reading) {
       const r = more.getBoundingClientRect()
-      openMenu(reading.account, reading.uid, r.right - 220, r.bottom + 4)
+      openMenu(reading.account, reading.uid, reading.folder, r.right - 220, r.bottom + 4)
       return true
     }
     const boxPick = at('[data-mail-box]')
@@ -1878,6 +1942,8 @@
       return true
     }
     if (at('[data-mail-refresh]')) {
+      // The server asked now (the list follows as the store changes).
+      window.pet.mail.kick(inboxId())
       loadInbox(false)
       return true
     }
@@ -1885,11 +1951,21 @@
       loadInbox(true)
       return true
     }
+    // A conversation folded out or in (its ›).
+    const twisty = at('[data-twisty]')
+    if (twisty) {
+      const key = twisty.dataset.twisty
+      if (!expanded.delete(key)) expanded.add(key)
+      redrawMail()
+      return true
+    }
     const letter = at('.inbox [data-letter]')
     if (letter) {
       // Beside the list, a letter being written is put aside for it.
       if (twoPanes()) writing = false
-      openLetter(letter.dataset.account, Number(letter.dataset.letter))
+      // A conversation folds out as its letter opens.
+      if (letter.dataset.thread) expanded.add(letter.dataset.thread)
+      openLetter(letter.dataset.account, Number(letter.dataset.letter), letter.dataset.folder || 'inbox')
       return true
     }
     const turned = at('[data-sw^="mail:"]')
@@ -1981,7 +2057,8 @@
     const re = at('[data-w-reply]')
     if (re) {
       closeMenu()
-      writeAbout(re.dataset.wReply, re.dataset.account || reading?.account, Number(re.dataset.uid || reading?.uid))
+      const ref = re.dataset.account ? re.dataset : { account: reading?.account, uid: reading?.uid, folder: reading?.folder }
+      writeAbout(re.dataset.wReply, ref.account, Number(ref.uid), ref.folder || 'inbox')
       return true
     }
     const use = at('[data-w-use]')
@@ -2274,6 +2351,8 @@
     if (!isOpen) return
     snap = got
     draw()
+    // What is kept changed (a sync): the list again, quietly.
+    if (tab === 'mail' && inbox.for && (got.mailRev || 0) !== inbox.rev) loadInbox(false, true)
   })
   // The keyboard went elsewhere: a click outside the island; not a file
   // picker (a letter's files, the desktop's picture: its own window takes

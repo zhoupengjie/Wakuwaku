@@ -139,10 +139,15 @@
       remove: id => invoke('mail_remove', { id: String(id) }),
       switch: (id, on) => invoke('mail_switch', { id: String(id), on: on === true }),
       letters: (id, count, filter) => invoke('mail_letters', { id: String(id), count: Number(count) || 50, filter: String(filter || 'all') }),
-      flag: (id, uid, on) => invoke('mail_flag', { id: String(id), uid: Number(uid), on: on === true }),
+      flag: (id, uid, on, folder) => invoke('mail_flag', { id: String(id), uid: Number(uid), on: on === true, folder: String(folder || 'inbox') }),
       say: (key, text) => invoke('mail_say', { key: String(key), text: String(text || '') }),
-      letter: (id, uid) => invoke('mail_letter', { id: String(id), uid: Number(uid) }),
-      hand: (id, uid, agent, how) => invoke('mail_hand', { id: String(id), uid: Number(uid), agent: String(agent), how: String(how) }),
+      letter: (id, uid, folder) => invoke('mail_letter', { id: String(id), uid: Number(uid), folder: String(folder || 'inbox') }),
+      // An account's sync (or every one's, '*') to look at the server now.
+      kick: id => invoke('mail_kick', { id: String(id) }),
+      // The letter being written, as kept in the data folder (null: none).
+      draft: () => invoke('mail_draft'),
+      keepDraft: draft => invoke('mail_keep_draft', { draft: draft || null }),
+      hand: (id, uid, agent, how, folder) => invoke('mail_hand', { id: String(id), uid: Number(uid), agent: String(agent), how: String(how), folder: String(folder || 'inbox') }),
     },
   }
 

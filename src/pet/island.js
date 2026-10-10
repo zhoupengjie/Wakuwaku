@@ -65,6 +65,14 @@
     error: '#c42b3c',
   }
   const hue = () => (isLight() ? COLOR_LIGHT : COLOR)
+  // A widget's own colour (a script's, or the monitor's), on the light
+  // island as deep as the moods' there: one of the moods' colours as its
+  // deeper one, any other darkened until it reads on white (widgets.js).
+  function ink(colour) {
+    if (!colour || !isLight()) return colour
+    const mood = Object.keys(COLOR).find(k => COLOR[k] === String(colour).toLowerCase())
+    return mood ? COLOR_LIGHT[mood] : Widgets.deepen(colour)
+  }
 
   // What she plays when the island opens by itself for each mood.
   const NUDGE_CLIP = { waiting: 'waiting', done: 'waving', review: 'review', error: 'failed' }
@@ -322,17 +330,17 @@
     let words, value, key
     if (widget && Widgets.partsOf(widget)) {
       words = el('span', 'label wparts')
-      words.innerHTML = Widgets.partsHTML(widget)
+      words.innerHTML = Widgets.partsHTML(widget, ink)
       value = el('span', 'clock')
       key = `w:${widget.id}`
     } else if (widget) {
       const said = Widgets.words(lang, widget, isDetailed())
       words = el('span', 'label wlabel')
       words.insertAdjacentHTML('afterbegin', Widgets.icon(widget.icon))
-      words.firstChild.style.color = widget.color || hue().idle
+      words.firstChild.style.color = ink(widget.color) || hue().idle
       words.append(said.label)
       value = el('span', 'clock wvalue', said.value)
-      value.style.color = widget.color || hue().idle
+      value.style.color = ink(widget.color) || hue().idle
       key = `w:${widget.id}`
     } else {
       words = el('span', 'label', Status.brief(lang, now, { detailed: isDetailed() }))
@@ -348,7 +356,7 @@
     turning.append(words, ...(more ? [more] : []), value)
     const isBare = !words.textContent && !value.textContent && !more
     const pinned = isPinned() && home() === 'island' ? el('span', 'pinned') : null
-    if (pinned) pinned.innerHTML = Widgets.partsHTML(monitor)
+    if (pinned) pinned.innerHTML = Widgets.partsHTML(monitor, ink)
     compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), ...(isBare && pinned ? [] : [turning]), ...(pinned ? [pinned] : []))
     compact.classList.toggle('bare', isBare)
     // As wide as set, and the readings' width more when pinned (their own,
@@ -379,10 +387,10 @@
     const row = el('span', isShown ? 'wrow on' : 'wrow')
     row.dataset.widget = widget.id
     row.insertAdjacentHTML('afterbegin', Widgets.icon(widget.icon))
-    row.firstChild.style.color = widget.color || hue().idle
+    row.firstChild.style.color = ink(widget.color) || hue().idle
     const valueText = el('span', 'wv', value)
-    valueText.style.color = widget.color || hue().idle
-    if (Widgets.partsOf(widget)) valueText.innerHTML = Widgets.partsHTML(widget)
+    valueText.style.color = ink(widget.color) || hue().idle
+    if (Widgets.partsOf(widget)) valueText.innerHTML = Widgets.partsHTML(widget, ink)
     row.append(el('span', 'wl', label), valueText)
     return row
   }
@@ -457,7 +465,7 @@
       const card = el('span', 'me')
       const top = el('span', 'head')
       top.insertAdjacentHTML('afterbegin', Widgets.icon(w.icon))
-      top.firstChild.style.color = w.color || hue().idle
+      top.firstChild.style.color = ink(w.color) || hue().idle
       top.append(el('span', 'title', words || label || value))
       card.append(top, el('span', 'sub', words ? [label, value].filter(Boolean).join(' · ') : label ? value : ''))
       lines.replaceChildren(card)
@@ -696,17 +704,17 @@
       const { label, value } = Widgets.words(lang, w, isDetailed())
       const face = el('span', 'face')
       face.insertAdjacentHTML('afterbegin', Widgets.icon(w.icon))
-      face.firstChild.style.color = w.color || hue().idle
+      face.firstChild.style.color = ink(w.color) || hue().idle
       const v = el('span', 'v', value)
-      v.style.color = w.color || hue().idle
-      if (Widgets.partsOf(w)) v.innerHTML = Widgets.partsHTML(w)
+      v.style.color = ink(w.color) || hue().idle
+      if (Widgets.partsOf(w)) v.innerHTML = Widgets.partsHTML(w, ink)
       face.append(Widgets.partsOf(w) ? '' : label, v)
       faces.push(face)
     }
     if (isPinned()) {
       const inRows = home() === 'taskbar'
       const readings = el('span', inRows ? 'face mon rows' : 'face mon')
-      readings.innerHTML = inRows ? Widgets.rowsHTML(monitor) : Widgets.partsHTML(monitor)
+      readings.innerHTML = inRows ? Widgets.rowsHTML(monitor) : Widgets.partsHTML(monitor, ink)
       faces.push(readings)
     }
     return faces

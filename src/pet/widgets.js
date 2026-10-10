@@ -56,9 +56,33 @@
     value: partsOf(w) ? partsOf(w).map(p => p.text).join(' ') : render(lang, w.value),
   })
 
-  // The monitor's readings as markup: each icon and number in its colour.
-  const partsHTML = w =>
-    (partsOf(w) || []).map(p => `<span class="wpart" style="color:${PART_COLOR[p.icon] || 'inherit'}">${icon(p.icon)}<b>${esc(p.text)}</b></span>`).join('')
+  // The monitor's readings as markup: each icon and number in its colour,
+  // as the page paints it (on the light island, deeper: island.js ink).
+  const partsHTML = (w, paint = c => c) =>
+    (partsOf(w) || []).map(p => `<span class="wpart" style="color:${paint(PART_COLOR[p.icon]) || 'inherit'}">${icon(p.icon)}<b>${esc(p.text)}</b></span>`).join('')
+
+  // A colour (#rgb or #rrggbb) darkened, its hue kept, until it reads on
+  // the ground at the ratio WCAG asks of text (4.5:1); one that already
+  // does, and one that is not such a colour, as it is.
+  function deepen(colour, ground = '#fbfbfb', ratio = 4.5) {
+    const rgb = hex => {
+      const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(hex).trim())
+      if (!m) return null
+      const h = m[1].length === 3 ? [...m[1]].map(c => c + c).join('') : m[1]
+      return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16))
+    }
+    const lum = c => {
+      const [r, g, b] = c.map(v => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4))
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    let c = rgb(colour)
+    const g = rgb(ground)
+    if (!c || !g) return colour
+    const reads = x => (lum(g) + 0.05) / (lum(x) + 0.05) >= ratio
+    if (reads(c)) return colour
+    while (!reads(c) && c.some(v => v > 0)) c = c.map(v => Math.floor(v * 0.94))
+    return `#${c.map(v => v.toString(16).padStart(2, '0')).join('')}`
+  }
 
   // The readings in two rows, as the taskbar has its clock's time over the
   // date: the machine's (CPU, memory, battery) over the network's; with only
@@ -89,7 +113,7 @@
       .map(row => `<span class="wrow">${row.map(p => `<span class="wpart${isHigh(p) ? ' high' : ''}">${icon(p.icon)}<b>${esc(p.text)}</b></span>`).join('')}</span>`)
       .join('')
 
-  const api = { ICONS, icon, words, partsOf, partsHTML, rowsOf, isHigh, rowsHTML }
+  const api = { ICONS, icon, words, partsOf, partsHTML, rowsOf, isHigh, rowsHTML, deepen }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api

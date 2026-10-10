@@ -42,3 +42,26 @@ test('a reading wants a look when the machine is nearly full or the battery low'
   assert.equal(Widgets.isHigh({ icon: 'down', text: '999K' }), false)
   assert.match(Widgets.rowsHTML({ value: { parts: [{ icon: 'cpu', text: '95%' }, { icon: 'down', text: '1.2M' }] } }), /^<span class="wrow"><span class="wpart high">.*95%.*<\/span><span class="wrow"><span class="wpart">.*1\.2M/)
 })
+
+test('a colour deepened until it reads on the light island, its hue kept', () => {
+  const ratio = (a, b) => {
+    const lum = hex => {
+      const [r, g, b2] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b2
+    }
+    return (lum(a) + 0.05) / (lum(b) + 0.05)
+  }
+  for (const c of ['#34d27b', '#ffb340', '#64d2ff', '#ffffff']) {
+    const d = Widgets.deepen(c)
+    assert.ok(ratio('#fbfbfb', d) >= 4.5, `${c} → ${d}`)
+    assert.ok(ratio('#fbfbfb', d) < 6.5, `${c} → ${d} went too dark`)
+  }
+  // Already deep enough, or not a colour it knows: as it is.
+  assert.equal(Widgets.deepen('#0f7b3f'), '#0f7b3f')
+  assert.equal(Widgets.deepen('#123'), '#123')
+  assert.equal(Widgets.deepen('tomato'), 'tomato')
+  assert.equal(Widgets.deepen(undefined), undefined)
+  // Its hue kept: green stays green.
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(Widgets.deepen('#34d27b').slice(i, i + 2), 16))
+  assert.ok(g > r && g > b)
+})

@@ -865,18 +865,31 @@ mod imp {
         }
     }
 
+    // In every press's way through Windows: only the point posted on (to the
+    // host's own loop, press_seen), and passed on at once. Held up here, every
+    // click on the machine would wait, and Windows would drop the hook.
+    const WM_PRESS_SEEN: u32 = 0x8011;
+
     extern "system" fn press_hook(code: i32, wparam: usize, lparam: isize) -> isize {
         if code >= 0 && matches!(wparam as u32, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN) {
-            // SAFETY: Windows hands a MSLLHOOKSTRUCT with these messages.
-            let at = unsafe { &*(lparam as *const MouseLl) }.pt;
-            if let Some(sh) = sh() {
-                // Where on the page (its px), for it to tell what was pressed.
-                let ((ox, oy), sf) = crate::island::origin(&sh);
-                let _ = sh.app.emit_to("island", "taskbar:press", json!({ "x": (at.x - ox) as f64 / sf, "y": (at.y - oy) as f64 / sf }));
+            // SAFETY: Windows hands a MSLLHOOKSTRUCT with these messages; a
+            // posted message to the host's own window, no pointers.
+            unsafe {
+                let at = (*(lparam as *const MouseLl)).pt;
+                PostMessageW(OURS.load(Ordering::SeqCst) as Hwnd, WM_PRESS_SEEN, at.x as u32 as usize, at.y as isize);
             }
         }
         // SAFETY: passed on, as every hook must.
         unsafe { CallNextHookEx(0, code, wparam, lparam) }
+    }
+
+    // On the host's thread, after the hook let the press go: where on the
+    // page (its px), for it to tell what was pressed.
+    fn press_seen(x: i32, y: i32) {
+        if let Some(sh) = sh() {
+            let ((ox, oy), sf) = crate::island::origin(&sh);
+            let _ = sh.app.emit_to("island", "taskbar:press", json!({ "x": (x - ox) as f64 / sf, "y": (y - oy) as f64 / sf }));
+        }
     }
 
     // Where the strip is now (physical): ours of the taskbar's class goes
@@ -1679,6 +1692,7 @@ mod imp {
                 unsafe { PostQuitMessage(0) }
             }
             WM_WATCH_PRESSES => watch(wparam != 0),
+            WM_PRESS_SEEN => press_seen(wparam as u32 as i32, lparam as i32),
             _ if msg == CREATED_MSG.load(Ordering::SeqCst) && msg != 0 => on_created(),
             _ if msg == SHELL_MSG.load(Ordering::SeqCst) && msg != 0 => on_shell(wparam, lparam),
             // SAFETY: the default for the rest.

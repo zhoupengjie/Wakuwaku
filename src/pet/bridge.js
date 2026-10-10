@@ -91,7 +91,7 @@
       trayPin: (name, pinned, order) =>
         send('taskbar_tray_pin', { name: String(name), pinned: typeof pinned === 'boolean' ? pinned : null, order: Array.isArray(order) ? order.map(String) : null }),
       // A program's button: launch (it, or another window of it), pin, unpin.
-      app: (path, what) => invoke('taskbar_app', { path: String(path), what: String(what) }).catch(() => false),
+      app: (path, what, id) => invoke('taskbar_app', { path: String(path), what: String(what), id: id ? String(id) : null }).catch(() => false),
       // Room for windows' live pictures in the page: [[window, x, y, w, h]], or none.
       thumbs: items => send('taskbar_thumbs', { items }),
     },

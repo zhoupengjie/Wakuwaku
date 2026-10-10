@@ -80,6 +80,8 @@ fn defaults() -> Map<String, Value> {
         "corner": "br",
         // The compact island's width: narrow, normal or wide (island.js WIDTHS).
         "islandWidth": "normal",
+        // The taskbar's strip: mica (the desktop's picture through it, mica.js) or black.
+        "taskbarMaterial": "mica",
         "bubble": true,
         "details": true,
         // Widgets (plugins in the island): which are off, their order, how

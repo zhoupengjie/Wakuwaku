@@ -1299,6 +1299,64 @@ body {
   padding-left: 46px;
 }
 
+/* The strip's Mica (mica.js): the desktop's picture under it, drawn small
+   and blurred, faded in over the last; Mica's own tint until it comes. A
+   line along its top over it, as on the black strip. */
+#mica {
+  display: none;
+}
+
+.tb-mica #island-row {
+  background: #202020;
+}
+
+.tb-mica #mica {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#mica canvas {
+  position: absolute;
+  transition: opacity 0.4s ease;
+}
+
+.tb-mica #mica::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* On the Mica her end is an island of its own: a black capsule in the strip
+   (island.js CAPSULE_X, CAPSULE_Y), and what it grows into rises from there,
+   rounded all round, with the settings' shadow and edge. */
+.home-taskbar.tb-mica #island:not([data-view='settings']) {
+  left: 6px;
+  bottom: 5px;
+}
+
+.home-taskbar.tb-mica #island[data-view='compact'] {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.home-taskbar.tb-mica #island:not([data-view='compact']):not([data-view='settings']) {
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.home-taskbar.tb-mica #island-compact {
+  height: 38px;
+}
+
+.home-taskbar.tb-mica.has-her #island-compact {
+  padding-left: 41px;
+}
+
 .home-taskbar #bar-rest {
   position: absolute;
   z-index: 1;
@@ -1338,11 +1396,13 @@ body {
   fill: #5e9bff;
 }
 
+/* Under the pointer (and the window in front): a light wash, as on the
+   black strip so on the Mica. */
 #bar-rest .start:hover,
 #bar-rest .ticon:hover,
 #bar-rest .tquick:hover,
 #bar-rest .tclock:hover {
-  background: #1c1c1e;
+  background: rgba(255, 255, 255, 0.11);
 }
 
 /* Windows' quick settings: the network and the volume, one button. */
@@ -1453,11 +1513,11 @@ body {
 }
 
 #bar-rest .win:hover {
-  background: #1c1c1e;
+  background: rgba(255, 255, 255, 0.11);
 }
 
 #bar-rest .win.front {
-  background: #2c2c2e;
+  background: rgba(255, 255, 255, 0.17);
 }
 
 #bar-rest .win::after {
@@ -1587,7 +1647,7 @@ body {
 }
 
 #bar-rest .kbd .ime:hover {
-  background: #1c1c1e;
+  background: rgba(255, 255, 255, 0.11);
 }
 
 #bar-rest .kbd .ime.unknown {
@@ -1616,7 +1676,7 @@ body {
 }
 
 #bar-rest .tchev:hover {
-  background: #1c1c1e;
+  background: rgba(255, 255, 255, 0.11);
 }
 
 #bar-rest .tchev svg {

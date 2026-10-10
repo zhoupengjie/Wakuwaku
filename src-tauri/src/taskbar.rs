@@ -13,6 +13,8 @@
 //     a window flashing for attention (the shell hook): the buttons' list
 //     (tasks.rs) made again on a thread of its own and sent (taskbar:windows),
 //     each with the sessions that run in it (jump.rs)
+//   - the desktop's picture changing (wallpaper.rs): sent for the strip's
+//     Mica (taskbar:wallpaper)
 // Taken when the home takes its strip, given back when it gives the strip
 // back (island.rs sync_bar) and on quitting. A killed process cannot give
 // the taskbar back: shell.rs's guard does.
@@ -32,10 +34,10 @@ mod imp {
 
     use base64::Engine;
     use serde_json::{json, Value};
-    use tauri::Emitter;
+    use tauri::{Emitter, Manager};
 
     use crate::systray::{self, Press};
-    use crate::{jump, shell, tasks, Shared};
+    use crate::{jump, shell, tasks, wallpaper, Shared};
 
     type Hwnd = *mut c_void;
 
@@ -182,6 +184,27 @@ mod imp {
 
     #[repr(C)]
     #[derive(Default)]
+    struct MonitorInfo {
+        size: u32,
+        monitor: Rect,
+        work: Rect,
+        flags: u32,
+    }
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn MonitorFromPoint(pt: Point, flags: u32) -> *mut c_void;
+        fn GetMonitorInfoW(monitor: *mut c_void, info: *mut MonitorInfo) -> i32;
+        fn GetSystemMetrics(index: i32) -> i32;
+    }
+
+    #[link(name = "shcore")]
+    extern "system" {
+        fn GetDpiForMonitor(mon: *mut c_void, kind: u32, x: *mut u32, y: *mut u32) -> i32;
+    }
+
+    #[repr(C)]
+    #[derive(Default)]
     struct Size {
         cx: i32,
         cy: i32,
@@ -215,6 +238,13 @@ mod imp {
     const WM_TASKBAR_SHOWN: u32 = 0x8001;
     const WM_TRAY_CHANGED: u32 = 0x8002;
     const WM_STOP: u32 = 0x8003;
+    // The strip moved: the desktop's picture under it looked at again.
+    const WM_PAPER: u32 = 0x8004;
+    const WM_SETTINGCHANGE: u32 = 0x001A;
+    const SPI_SETDESKWALLPAPER: usize = 0x0014;
+    const MONITOR_DEFAULTTONEAREST: u32 = 2;
+    const MDT_EFFECTIVE_DPI: u32 = 0;
+    const SM_XVIRTUALSCREEN: i32 = 76;
     const WS_POPUP: u32 = 0x8000_0000;
     const WS_EX_TOOLWINDOW: u32 = 0x80;
     const WS_EX_TOPMOST: u32 = 0x8;
@@ -297,6 +327,8 @@ mod imp {
     static SENT_KEYS: Mutex<Value> = Mutex::new(Value::Null);
     // Windows' own record of the tray icons it keeps out (windows_kept), read once.
     static KEPT: Mutex<Option<Vec<(String, Option<u32>, bool)>>> = Mutex::new(None);
+    // The desktop's picture under the strip, as sent last (send_paper).
+    static PAPER: Mutex<Value> = Mutex::new(Value::Null);
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -414,6 +446,7 @@ mod imp {
         }
         *SENT.lock().unwrap() = Value::Null;
         *SENT_WINDOWS.lock().unwrap() = Value::Null;
+        *PAPER.lock().unwrap() = Value::Null;
         *STRIP.lock().unwrap() = None;
         ORDER.lock().unwrap().clear();
         FLASHING.lock().unwrap().clear();
@@ -672,7 +705,53 @@ mod imp {
         *STRIP.lock().unwrap() = Some(strip);
         if is_up() {
             systray::place(strip);
+            // SAFETY: our own window; a posted message, no pointers.
+            unsafe { PostMessageW(OURS.load(Ordering::SeqCst) as Hwnd, WM_PAPER, 0, 0) };
         }
+    }
+
+    // --- The desktop's picture, for the strip's Mica ----------------------------------
+
+    // The display the strip is on (physical), and its scale.
+    fn monitor_of(strip: (i32, i32, i32, i32)) -> ((i32, i32, i32, i32), f64) {
+        let mut info = MonitorInfo { size: std::mem::size_of::<MonitorInfo>() as u32, ..Default::default() };
+        let (mut dx, mut dy) = (96u32, 96u32);
+        // SAFETY: our own out-parameters, of the sizes the calls write.
+        unsafe {
+            let mon = MonitorFromPoint(Point { x: strip.0 + strip.2 / 2, y: strip.1 + strip.3 / 2 }, MONITOR_DEFAULTTONEAREST);
+            GetMonitorInfoW(mon, &mut info);
+            GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &mut dx, &mut dy);
+        }
+        let r = &info.monitor;
+        ((r.left, r.top, r.right - r.left, r.bottom - r.top), dx.max(1) as f64 / 96.0)
+    }
+
+    // The picture on the strip's display (wallpaper.rs), sent when it changes
+    // (taskbar:wallpaper): its file (by the asset protocol, allowed for it;
+    // its last change after it, so a new picture under the same name is
+    // loaded anew), how it is laid, the colour round it, and where the
+    // display and all of them together are from the strip's top-left (the
+    // page's px). Looked at when the strip moves, when Windows says the
+    // wallpaper changed, and every five seconds (a slideshow, Spotlight).
+    fn send_paper() {
+        let (Some(sh), Some(strip)) = (sh(), *STRIP.lock().unwrap()) else { return };
+        let (mon, sf) = monitor_of(strip);
+        let Some(paper) = wallpaper::read(mon) else { return };
+        // SAFETY: plain reads.
+        let screen = unsafe { (GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_XVIRTUALSCREEN + 1), GetSystemMetrics(SM_XVIRTUALSCREEN + 2), GetSystemMetrics(SM_XVIRTUALSCREEN + 3)) };
+        let rel = |(x, y, w, h): (i32, i32, i32, i32)| json!([(x - strip.0) as f64 / sf, (y - strip.1) as f64 / sf, w as f64 / sf, h as f64 / sf]);
+        let url = paper.file.as_ref().map(|f| format!("{}?v={}", crate::data::asset_url(f), paper.stamp));
+        let now = json!({ "url": url, "position": paper.position, "color": paper.color, "mon": rel(mon), "screen": rel(screen), "sf": sf });
+        let mut sent = PAPER.lock().unwrap();
+        if *sent == now {
+            return;
+        }
+        if let Some(file) = &paper.file {
+            let _ = sh.app.asset_protocol_scope().allow_file(file);
+        }
+        log(&format!("wallpaper: {:?}, {}, {}", paper.file, paper.position, paper.color));
+        *sent = now.clone();
+        let _ = sh.app.emit_to("island", "taskbar:wallpaper", now);
     }
 
     // The strip taken again (Explorer started again and forgot it), off
@@ -720,6 +799,10 @@ mod imp {
         let keys = SENT_KEYS.lock().unwrap().clone();
         if !keys.is_null() {
             let _ = sh.app.emit_to("island", "taskbar:keys", keys);
+        }
+        let paper = PAPER.lock().unwrap().clone();
+        if !paper.is_null() {
+            let _ = sh.app.emit_to("island", "taskbar:wallpaper", paper);
         }
     }
 
@@ -980,6 +1063,9 @@ mod imp {
             systray::ask_again();
             log("tray: programs asked for their icons");
         }
+        if ticks % 10 == 0 {
+            send_paper();
+        }
     }
 
     // Explorer started again (a new taskbar window), or a program's asking
@@ -1142,6 +1228,8 @@ mod imp {
                 }
             }
             WM_TRAY_CHANGED => send_icons(),
+            WM_PAPER => send_paper(),
+            WM_SETTINGCHANGE if wparam == SPI_SETDESKWALLPAPER => send_paper(),
             // SAFETY: ending this thread's loop.
             WM_STOP => unsafe { PostQuitMessage(0) },
             _ if msg == CREATED_MSG.load(Ordering::SeqCst) && msg != 0 => on_created(),

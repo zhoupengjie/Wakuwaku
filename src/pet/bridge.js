@@ -94,6 +94,9 @@
     onWindows: on('taskbar:windows'),
     // The keyboard as it changes ({ lang, native, caps }).
     onKeys: on('taskbar:keys'),
+    // The desktop's picture under the strip, for its Mica ({ url, position,
+    // color, mon, screen, sf }; mica.js).
+    onWallpaper: on('taskbar:wallpaper'),
     settings: {
       get: () => invoke('settings_get'),
       set: patch => invoke('settings_set', { patch }),

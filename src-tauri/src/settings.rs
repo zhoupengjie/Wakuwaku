@@ -72,6 +72,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "display" => matches!(v.as_str(), Some("corner" | "island" | "bar" | "taskbar")),
         "corner" => matches!(v.as_str(), Some("br" | "bl" | "tr" | "tl")),
         "islandWidth" => matches!(v.as_str(), Some("narrow" | "normal" | "wide")),
+        "taskbarMaterial" => matches!(v.as_str(), Some("mica" | "black")),
         "hold" => v.as_str() == Some("seen") || matches!(v.as_u64(), Some(8 | 30 | 120)),
         "promptWaitSec" => matches!(v.as_u64(), Some(30 | 60 | 120 | 290)),
         "notify" => ["waiting", "done", "error"].iter().all(|k| v.get(k).is_some_and(Value::is_boolean)),

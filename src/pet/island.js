@@ -107,6 +107,10 @@
   const TASKBAR_GAP = 8
   const TASKBAR_SHADE = 12
   const TASK_HEAD = 30
+  // On the taskbar's Mica her end is an island of its own in the strip: a
+  // black capsule this far in from the strip's left end and its foot.
+  const CAPSULE_X = 6
+  const CAPSULE_Y = 5
   // A portrait px across is the sheet at this scale.
   const PER_PX = 0.00875
   // The settings' width.
@@ -207,6 +211,10 @@
   const home = () => (['corner', 'bar', 'taskbar'].includes(config.display) ? config.display : 'island')
   // A strip across the screen (the bar, the taskbar): the other sessions have tags in it.
   const isStrip = () => home() === 'bar' || home() === 'taskbar'
+  // The taskbar's strip the desktop's picture through (mica.js), not black.
+  const isMica = () => isOn() && home() === 'taskbar' && config.taskbarMaterial !== 'black'
+  // The compact taskbar island's height: the strip's, or the capsule's on Mica.
+  const taskCompactH = () => (isMica() ? TASKBAR_H - 2 * CAPSULE_Y : TASKBAR_H)
   const corner = () => (['br', 'bl', 'tr', 'tl'].includes(config.corner) ? config.corner : 'br')
   // In her seat: there is a pet to show, and she is not out on the desktop.
   const isHome = () => !!spriteUrl && (config.out !== true || isComingHome)
@@ -497,7 +505,7 @@
     if (view === 'compact') {
       if (home() === 'corner') portrait(CIRCLE - 8, (CIRCLE - 8) * PER_PX, 4, 4)
       else if (home() === 'bar') portrait(BAR_HEAD, BAR_HEAD * PER_PX, 4, 4)
-      else if (home() === 'taskbar') portrait(TASK_HEAD, TASK_HEAD * PER_PX, (TASKBAR_H - TASK_HEAD) / 2, (TASKBAR_H - TASK_HEAD) / 2)
+      else if (home() === 'taskbar') portrait(TASK_HEAD, TASK_HEAD * PER_PX, (taskCompactH() - TASK_HEAD) / 2, (taskCompactH() - TASK_HEAD) / 2)
       else portrait(HEAD, HEAD_SCALE, 6, 6)
     } else if (view === 'settings') {
       portrait(SET_HEAD, SET_HEAD_SCALE, 16, 13)
@@ -555,7 +563,7 @@
     // past its room (the window then grows up too, which flashes: its room
     // is kept as high as the settings ever are, settingsMax).
     if (home() === 'taskbar') {
-      const height = want.height + TASKBAR_SHADE + (view === 'settings' ? TASKBAR_H + TASKBAR_GAP : 0)
+      const height = want.height + TASKBAR_SHADE + (view === 'settings' ? TASKBAR_H + TASKBAR_GAP : isMica() ? CAPSULE_Y : 0)
       if (height <= TASKBAR_H + TASKBAR_ROOM) return null
       return { width: innerWidth, height }
     }
@@ -583,7 +591,8 @@
     island.style.width = `${width}px`
     island.style.height = `${height}px`
     // The bar's left end is square, and what hangs from it is rounded below
-    // (what grows up from the taskbar, above); the corner's is a circle until it opens.
+    // (what grows up from the taskbar, above; on its Mica, her capsule and
+    // all it grows into round); the corner's is a circle until it opens.
     island.style.borderRadius =
       home() === 'bar'
         ? view === 'compact'
@@ -591,8 +600,10 @@
           : '0 0 22px 22px'
         : home() === 'taskbar'
           ? view === 'compact'
-            ? '0'
-            : view === 'settings'
+            ? isMica()
+              ? `${height / 2}px`
+              : '0'
+            : view === 'settings' || isMica()
               ? '22px'
               : '22px 22px 0 0'
           : home() === 'corner' && view === 'compact'
@@ -618,7 +629,7 @@
         : { width: Math.min(OPEN_BARE_MAX_W, Math.max(300, expanded.offsetWidth)), height: Math.max(84, expanded.offsetHeight) }
     }
     if (home() === 'corner') return { width: CIRCLE, height: CIRCLE }
-    return { width: compactWidth, height: home() === 'bar' ? BAR_H : home() === 'taskbar' ? TASKBAR_H : 36 }
+    return { width: compactWidth, height: home() === 'bar' ? BAR_H : home() === 'taskbar' ? taskCompactH() : 36 }
   }
 
   // --- The bar's right part (and the taskbar's) -------------------------------------
@@ -749,7 +760,7 @@
   let windowsDrawn = ''
 
   function fillTaskbar() {
-    barRest.style.left = `${sizeOf('compact').width}px`
+    barRest.style.left = `${sizeOf('compact').width + (isMica() ? CAPSULE_X + 4 : 0)}px`
     if (!taskbarBuilt) {
       barRest.replaceChildren(startButton, windowsBox, tagsBox, el('span', 'grow'), facesBox, trayBox, keysBox, quickBox, clockBox, taskGear, pop)
       taskbarBuilt = true
@@ -982,6 +993,29 @@
     capsMark.title = keys?.caps ? 'Caps Lock' : ''
     showNet(keys?.net)
   })
+
+  // --- The taskbar's Mica -------------------------------------------------------------
+
+  // Behind the strip's parts: the desktop's picture under it, blurred and
+  // tinted (mica.js), as taskbar.rs sent it last; drawn again only when the
+  // picture or the strip's width changes. None on a black strip.
+  const micaBox = el('div')
+  micaBox.id = 'mica'
+  island.parentElement.prepend(micaBox)
+  const mica = Mica.mount(micaBox)
+  let paper = null
+
+  function drawMica() {
+    body.classList.toggle('tb-mica', isMica())
+    if (isMica()) mica.set(paper, innerWidth, TASKBAR_H)
+    else mica.clear()
+  }
+
+  window.pet.onWallpaper(p => {
+    paper = p
+    drawMica()
+  })
+  window.addEventListener('resize', drawMica)
 
   window.pet.onWindows(list => {
     taskWindows = Array.isArray(list) ? list : []
@@ -1331,7 +1365,7 @@
   function seatIn(r) {
     if (home() === 'corner') return [r.left + CIRCLE / 2, r.top + CIRCLE / 2]
     if (home() === 'bar') return [r.left + 15, r.top + 15]
-    if (home() === 'taskbar') return [r.left + TASKBAR_H / 2, r.top + TASKBAR_H / 2]
+    if (home() === 'taskbar') return [r.left + r.height / 2, r.top + r.height / 2]
     return [r.left + 18, r.top + 18]
   }
 
@@ -1552,6 +1586,7 @@
     body.classList.toggle('island', isOn())
     body.classList.remove('home-corner', 'home-island', 'home-bar', 'home-taskbar', 'at-br', 'at-bl', 'at-tr', 'at-tl')
     if (isOn()) body.classList.add(`home-${home()}`, `at-${corner()}`)
+    drawMica()
     seatPanel()
     if (!isOn() && panel.parentElement !== stage) stage.prepend(panel)
     if (!isOn()) {

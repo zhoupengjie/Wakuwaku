@@ -58,6 +58,7 @@ mod taskbar;
 mod tasks;
 mod tokens;
 mod tray;
+mod wallpaper;
 mod widgets;
 
 use std::fs::OpenOptions;

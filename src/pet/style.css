@@ -2428,3 +2428,111 @@ body:not(.tb-light) #bar-rest .ticon[data-mono='dark'] img {
     transform: translateY(8px);
   }
 }
+
+/* --- Her island on the taskbar, as Windows' own flyouts (tb-capsule) -------------
+   Its ground as Windows 11's own flyouts have it: their grey in the dark
+   mode, their light grey in the light, a hairline round it; black only on
+   the black strip, where it is part of it, and at the top of the screen.
+   Set by these (island.js drawIslandLook, from the settings' islandLook, may
+   put others): --i-bg the ground, --i-blur what is behind it blurred (none:
+   solid), --i-edge its edge (a hairline, the session's colour round it, or
+   none); island-bare: collapsed, no capsule of its own, part of the strip
+   (a wash under the pointer, as its buttons have) until it opens. */
+.home-taskbar.tb-capsule {
+  --i-bg: #2c2c2c;
+  --i-blur: none;
+  --i-line: rgba(255, 255, 255, 0.1);
+  --i-edge: 0 0 0 1px var(--i-line);
+}
+
+.tb-light.home-taskbar.tb-capsule {
+  --i-bg: #f3f3f3;
+  --i-line: rgba(0, 0, 0, 0.08);
+}
+
+.home-taskbar.tb-capsule #island:not([data-view='settings']),
+.home-taskbar.tb-capsule #goo div {
+  background: var(--i-bg);
+}
+
+.home-taskbar.tb-capsule #island:not([data-view='settings']) {
+  -webkit-backdrop-filter: var(--i-blur);
+  backdrop-filter: var(--i-blur);
+}
+
+.home-taskbar.tb-capsule #island[data-view='compact'] {
+  box-shadow: var(--i-edge);
+}
+
+.tb-light.home-taskbar.tb-capsule #island[data-view='compact'] {
+  box-shadow:
+    var(--i-edge),
+    0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.home-taskbar.tb-capsule #island:not([data-view='compact']):not([data-view='settings']) {
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.5),
+    var(--i-edge);
+}
+
+.tb-light.home-taskbar.tb-capsule #island:not([data-view='compact']):not([data-view='settings']) {
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.18),
+    var(--i-edge);
+}
+
+.island-bare.home-taskbar.tb-capsule #island[data-view='compact'] {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.island-bare.home-taskbar.tb-capsule #island[data-view='compact']:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tb-light.island-bare.home-taskbar.tb-capsule #island[data-view='compact']:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* The settings as Windows' own Settings in the dark mode too, as they are
+   in the light: its grey ground, the cards a step lighter. */
+.home-taskbar.tb-capsule:not(.tb-light) #island[data-view='settings'] {
+  background: #202020;
+}
+
+.home-taskbar.tb-capsule:not(.tb-light) #island-settings {
+  --g1: #2b2b2b;
+  --g2: #373737;
+  --g3: #454545;
+}
+
+/* A prompt's parts on the grey: a step lighter than the ground (on black
+   they were greys of their own), what is quoted a step deeper. */
+.home-taskbar.tb-capsule:not(.tb-light) #panel .chip,
+.home-taskbar.tb-capsule:not(.tb-light) #panel .more {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.home-taskbar.tb-capsule:not(.tb-light) #panel .code,
+.home-taskbar.tb-capsule:not(.tb-light) #panel .input {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.home-taskbar.tb-capsule:not(.tb-light) #panel .btn:not(.primary):not(.always):not(.ghost):not(.picked) {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.home-taskbar.tb-capsule:not(.tb-light) #panel .btn.option.picked {
+  border-color: #5e9bff;
+  background: rgba(94, 155, 255, 0.2);
+}
+
+/* On the light grey: what is quoted white, as Windows' own fields are. */
+.tb-light.island.home-taskbar.tb-capsule #panel .code {
+  background: #ffffff;
+}

@@ -1431,6 +1431,31 @@
     body.classList.toggle('tb-solid', isFilled() && clearWhen() === 'solid')
     if (isMica() || clearMica) mica.set(paper, innerWidth, TASKBAR_H, look.mode)
     else mica.clear()
+    drawIslandLook()
+  }
+
+  // Her island's look on the taskbar, as the settings may set it for each of
+  // Windows' modes (islandLook: { dark, light }, each { bg: '#rrggbb', op: 20
+  // to 100, blur: 0 to 60, edge: 'line' | 'ring' | 'none', bare }), over
+  // Windows' own flyout grey (style.css --i-bg, --i-blur, --i-edge,
+  // island-bare); a part left out keeps its default. The ring is the
+  // session's colour (--ring, as the island draws).
+  function drawIslandLook() {
+    const mine = (isCapsule() && config.islandLook?.[look.mode]) || {}
+    const bg = /^#[0-9a-f]{6}$/i.test(mine.bg || '') ? parseInt(mine.bg.slice(1), 16) : null
+    const op = Number.isFinite(mine.op) ? Math.min(100, Math.max(20, mine.op)) / 100 : 1
+    if (bg === null) body.style.removeProperty('--i-bg')
+    else body.style.setProperty('--i-bg', `rgba(${(bg >> 16) & 255}, ${(bg >> 8) & 255}, ${bg & 255}, ${op})`)
+    const blur = Number.isFinite(mine.blur) ? Math.min(60, Math.max(0, mine.blur)) : 0
+    if (blur) island.style.setProperty('--i-blur', `blur(${blur}px) saturate(1.25)`)
+    else island.style.removeProperty('--i-blur')
+    const edge = {
+      ring: '0 0 0 1.5px var(--ring), 0 0 12px color-mix(in srgb, var(--ring) 35%, transparent)',
+      none: '0 0 0 0 transparent',
+    }[mine.edge]
+    if (edge) island.style.setProperty('--i-edge', edge)
+    else island.style.removeProperty('--i-edge')
+    body.classList.toggle('island-bare', mine.bare === true)
   }
 
   window.pet.onWallpaper(p => {

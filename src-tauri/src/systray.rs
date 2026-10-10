@@ -84,6 +84,21 @@ mod imp {
         nid: IconData,
     }
 
+    // What Shell_NotifyIconGetRect hands the tray (asked twice: message 1
+    // for the left and top, 2 for the right and bottom). The window in 64
+    // bits here, whoever asks.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct RectQuestion {
+        signature: u32,
+        message: u32,
+        size: u32,
+        padding: u32,
+        hwnd: u64,
+        id: u32,
+        guid: [u8; 16],
+    }
+
     #[repr(C)]
     struct WndClassExW {
         size: u32,
@@ -175,9 +190,13 @@ mod imp {
         hidden: bool,
         pid: u32,
         exe: String,
+        modified: u32,
     }
 
     static OURS: AtomicIsize = AtomicIsize::new(0);
+    // Where each shown icon is on the screen (key, left, top, right, bottom), from the host.
+    static RECTS: Mutex<Vec<(u64, (i32, i32, i32, i32))>> = Mutex::new(Vec::new());
+    static RAW_NOTED: AtomicU32 = AtomicU32::new(0);
     static NOTIFY: AtomicIsize = AtomicIsize::new(0);
     static NOTIFY_MSG: AtomicU32 = AtomicU32::new(0);
     static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
@@ -338,6 +357,7 @@ mod imp {
             (NIM_ADD | NIM_MODIFY, Some(i)) => {
                 let tip = icons[i].tip.clone();
                 update(&mut icons[i], nid);
+                icons[i].modified += 1;
                 if icons[i].tip != tip {
                     note(format!("tray: {} tip \"{}\"", icons[i].exe, icons[i].tip));
                 }
@@ -348,7 +368,7 @@ mod imp {
                 // SAFETY: our own out-parameter; a gone window leaves it 0.
                 unsafe { GetWindowThreadProcessId(hwnd_of(nid.hwnd), &mut pid) };
                 let guid = (nid.flags & NIF_GUID != 0 && nid.guid != [0; 16]).then_some(nid.guid);
-                let mut icon = Icon { key: NEXT_KEY.fetch_add(1, Ordering::SeqCst), hwnd: nid.hwnd, id: nid.id, guid, callback: 0, icon: 0, tip: String::new(), version: 0, hidden: false, pid, exe: exe_of(pid) };
+                let mut icon = Icon { key: NEXT_KEY.fetch_add(1, Ordering::SeqCst), hwnd: nid.hwnd, id: nid.id, guid, callback: 0, icon: 0, tip: String::new(), version: 0, hidden: false, pid, exe: exe_of(pid), modified: 0 };
                 update(&mut icon, nid);
                 note(format!("tray: added {} (id {}, {}) \"{}\"{}", icon.exe, icon.id, if guid.is_some() { "by guid" } else { "by window" }, icon.tip, if icon.hidden { ", hidden" } else { "" }));
                 icons.push(icon);
@@ -372,10 +392,49 @@ mod imp {
         }
     }
 
+    // Where an icon is, as Shell_NotifyIconGetRect asks it: half the rect,
+    // packed as two 16-bit numbers. None for an icon not shown here.
+    fn answer_rect(cds: &CopyData) -> Option<isize> {
+        let n = (cds.size as usize).min(std::mem::size_of::<RectQuestion>());
+        if cds.ptr.is_null() || n < 28 {
+            return None;
+        }
+        if RAW_NOTED.fetch_add(1, Ordering::SeqCst) < 2 {
+            // SAFETY: n bytes of the sender's struct.
+            let bytes = unsafe { std::slice::from_raw_parts(cds.ptr as *const u8, n) };
+            note(format!("tray: where-is question, {} bytes: {}", cds.size, bytes.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ")));
+        }
+        let mut q: RectQuestion = unsafe { std::mem::zeroed() };
+        // SAFETY: n bytes into ours of at least that size.
+        unsafe { std::ptr::copy_nonoverlapping(cds.ptr as *const u8, &mut q as *mut RectQuestion as *mut u8, n) };
+        if q.signature != SIGNATURE {
+            return None;
+        }
+        let icons = ICONS.lock().unwrap();
+        let by_guid = q.guid != [0; 16];
+        let icon = icons.iter().find(|i| if by_guid { i.guid == Some(q.guid) } else { i.hwnd as u64 == q.hwnd & 0xffff_ffff && i.id == q.id })?;
+        let rects = RECTS.lock().unwrap();
+        let (_, (l, t, r, b)) = rects.iter().find(|(k, _)| *k == icon.key)?;
+        let (x, y) = if q.message == 2 { (*r, *b) } else { (*l, *t) };
+        Some(((x as u16 as u32) | ((y as u16 as u32) << 16)) as i32 as isize)
+    }
+
+    pub fn set_rects(rects: Vec<(u64, (i32, i32, i32, i32))>) {
+        *RECTS.lock().unwrap() = rects;
+    }
+
     extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
         if msg == WM_COPYDATA && lparam != 0 {
             // SAFETY: Windows' copy of the sender's struct, for the length of this call.
             let cds = unsafe { &*(lparam as *const CopyData) };
+            // Where is my icon: ours are not where Explorer's would be.
+            if cds.data == 3 {
+                if let Some(answer) = answer_rect(cds) {
+                    count("where-is, answered");
+                    return answer;
+                }
+                count("where-is, handed on");
+            }
             let answer = hand_on(msg, wparam, lparam);
             if answer.is_none() {
                 LOST.store(true, Ordering::SeqCst);
@@ -400,7 +459,7 @@ mod imp {
                         return 1;
                     }
                 }
-            } else {
+            } else if cds.data != 3 {
                 count(&format!("copydata {}", cds.data));
             }
             return answer.unwrap_or(0) as isize;
@@ -518,7 +577,7 @@ mod imp {
             .lock()
             .unwrap()
             .iter()
-            .map(|i| format!("{} id={} v{} cb={:#x}{}{} \"{}\"", i.exe, i.id, i.version, i.callback, if i.hidden { " hidden" } else { "" }, if i.icon == 0 { " no-icon" } else { "" }, i.tip))
+            .map(|i| format!("{} id={} v{} cb={:#x} changed ×{}{}{} \"{}\"", i.exe, i.id, i.version, i.callback, i.modified, if i.hidden { " hidden" } else { "" }, if i.icon == 0 { " no-icon" } else { "" }, i.tip))
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -541,7 +600,12 @@ mod imp {
             unsafe { SendNotifyMessageW(hwnd_of(i.hwnd), i.callback, w, l) };
         };
         // What opens may come to the front (a menu has to, to close again).
-        let allow = || unsafe { AllowSetForegroundWindow(i.pid) };
+        let allow = || {
+            // SAFETY: a plain call; it fails unless we may set the front ourselves.
+            if unsafe { AllowSetForegroundWindow(i.pid) } == 0 {
+                note(format!("tray: {} could not be let come to the front", i.exe));
+            }
+        };
         match press {
             Press::LeftDown => send(WM_LBUTTONDOWN),
             Press::LeftUp => {
@@ -621,7 +685,8 @@ mod imp {
     pub fn tell(_key: u64, _press: Press, _at: (i32, i32)) -> bool {
         false
     }
+    pub fn set_rects(_rects: Vec<(u64, (i32, i32, i32, i32))>) {}
 }
 
 #[allow(unused_imports)]
-pub use imp::{ask_again, describe, first, keep_first, notes, place, seen, shown, start, stop, sweep, tell};
+pub use imp::{ask_again, describe, first, keep_first, notes, place, seen, set_rects, shown, start, stop, sweep, tell};

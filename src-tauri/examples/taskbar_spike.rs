@@ -215,6 +215,8 @@ mod win {
         fn DrawIconEx(hdc: isize, x: i32, y: i32, icon: isize, w: i32, h: i32, step: u32, brush: isize, flags: u32) -> i32;
         fn TrackMouseEvent(track: *mut TrackMouse) -> i32;
         fn SetTimer(hwnd: Hwnd, id: usize, ms: u32, func: *const c_void) -> usize;
+        fn KillTimer(hwnd: Hwnd, id: usize) -> i32;
+        fn SetForegroundWindow(hwnd: Hwnd) -> i32;
         fn RegisterHotKey(hwnd: Hwnd, id: i32, mods: u32, vk: u32) -> i32;
         fn SendInput(count: u32, inputs: *const Input, size: i32) -> u32;
         fn SetWinEventHook(min: u32, max: u32, module: isize, func: WinEventProc, pid: u32, tid: u32, flags: u32) -> isize;
@@ -616,6 +618,33 @@ mod win {
         unsafe { InvalidateRect(hwnd, std::ptr::null(), 0) };
     }
 
+    // A press that opens something: the bar comes to the front first, as the
+    // taskbar does when pressed, so it may let the program come to the front
+    // (a menu that is not in front does not close when you press elsewhere).
+    fn tray_press(hwnd: Hwnd, key: u64, press: Press) {
+        // SAFETY: our own window; we have just had the input.
+        let front = unsafe { SetForegroundWindow(hwnd) } != 0;
+        let told = systray::tell(key, press, cursor());
+        let tip = HOVER_TIP.lock().unwrap().clone();
+        note(&format!("tray: {press:?} on {tip} (bar in front: {front}; told: {told})"));
+        // Explorer's own icons with no one to tell (the volume): its quick settings, as Windows opens.
+        if !told && press == Press::LeftUp && tip.ends_with("（explorer.exe）") {
+            press_keys_later(&[VK_LWIN, b'A' as u16]);
+        }
+        for line in systray::notes() {
+            log(&line);
+        }
+        // SAFETY: our own window: what is in front, looked at in a moment.
+        unsafe { SetTimer(hwnd, 2, 400, std::ptr::null()) };
+    }
+
+    fn press_keys_later(keys: &'static [u16]) {
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(60));
+            press(keys);
+        });
+    }
+
     // The tray's list, written down whenever it changes.
     fn tray_changed(hwnd: Hwnd) {
         for line in systray::notes() {
@@ -688,6 +717,10 @@ mod win {
             }
             let (icons, mut rest) = slots(rest, dpi);
             let shown = systray::shown();
+            // Where each is on the screen, for the programs that ask (Shell_NotifyIconGetRect).
+            let mut at = Rect::default();
+            GetWindowRect(hwnd, &mut at);
+            systray::set_rects(icons.iter().map(|(r, k)| (*k, (at.left + r.left, at.top + r.top, at.left + r.right, at.top + r.bottom))).collect());
             let size = 16 * dpi as i32 / 96;
             let hovered = HOVERED.load(Ordering::SeqCst);
             for (r, key) in icons {
@@ -813,9 +846,10 @@ mod win {
                             WM_RBUTTONUP => Press::RightUp,
                             _ => Press::Double,
                         };
-                        let told = systray::tell(k, press, cursor());
                         if press != Press::LeftDown && press != Press::RightDown {
-                            note(&format!("tray: {press:?} on {} (told: {told})", HOVER_TIP.lock().unwrap()));
+                            tray_press(hwnd, k, press);
+                        } else {
+                            systray::tell(k, press, cursor());
                         }
                     }
                     return 0;
@@ -823,8 +857,7 @@ mod win {
                 WM_LBUTTONUP => {
                     let x = (lparam & 0xffff) as i16 as i32;
                     if let Some(k) = slot_at(hwnd, x) {
-                        let told = systray::tell(k, Press::LeftUp, cursor());
-                        note(&format!("tray: LeftUp on {} (told: {told})", HOVER_TIP.lock().unwrap()));
+                        tray_press(hwnd, k, Press::LeftUp);
                         return 0;
                     }
                     let (buttons, _) = layout(client_of(hwnd), dpi());
@@ -837,6 +870,11 @@ mod win {
                             press(b.keys());
                         }
                     }
+                    return 0;
+                }
+                WM_TIMER if wparam == 2 => {
+                    KillTimer(hwnd, 2);
+                    log(&format!("  in front after the press: {}", describe(GetForegroundWindow())));
                     return 0;
                 }
                 WM_TIMER => {

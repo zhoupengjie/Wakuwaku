@@ -229,6 +229,18 @@ mod imp {
         info.icon
     }
 
+    // The icon Windows gives a program file with none of its own (any .exe,
+    // by its kind alone), ours to destroy: a program with only that one has
+    // its icon on its windows.
+    pub fn plain_program_icon() -> isize {
+        const SHGFI_USEFILEATTRIBUTES: u32 = 0x10;
+        const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+        let mut info: ShFileInfo = unsafe { std::mem::zeroed() };
+        // SAFETY: our own struct, its size passed; no file is opened.
+        unsafe { SHGetFileInfoW(wide("program.exe").as_ptr(), FILE_ATTRIBUTE_NORMAL, &mut info, std::mem::size_of::<ShFileInfo>() as u32, SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES) };
+        info.icon
+    }
+
     pub fn destroy_icon(icon: isize) {
         if icon != 0 {
             // SAFETY: an icon of ours (file_icon's).
@@ -491,6 +503,9 @@ mod imp {
     pub fn app_name(path: &str) -> String {
         file_name(path)
     }
+    pub fn plain_program_icon() -> isize {
+        0
+    }
     pub fn file_icon(_path: &str) -> isize {
         0
     }
@@ -519,4 +534,4 @@ mod imp {
     }
 }
 
-pub use imp::{alive, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, is_start, keys, launch, list, net, press, toggle_native};
+pub use imp::{alive, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, is_start, keys, launch, list, net, plain_program_icon, press, toggle_native};

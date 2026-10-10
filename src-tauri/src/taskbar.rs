@@ -536,6 +536,29 @@ mod imp {
         *MARKS.lock().unwrap() = Some(marks);
     }
 
+    // A program that only hosts what its windows show, whose icons are
+    // theirs: a store app (its frame's program is the app's, under
+    // WindowsApps), Windows' own apps, Java, Python.
+    fn hosts(path: &str) -> bool {
+        let p = path.to_ascii_lowercase();
+        ["\\windowsapps\\", "\\systemapps\\", "\\immersivecontrolpanel\\"].iter().any(|d| p.contains(d))
+            || ["java.exe", "javaw.exe", "python.exe", "pythonw.exe", "py.exe", "pyw.exe"].iter().any(|n| p.ends_with(&format!("\\{n}")))
+    }
+
+    // Windows' plain program icon, drawn once at this size (plain_program_icon).
+    fn plain_png(size: i32) -> String {
+        static PLAIN: Mutex<Option<(i32, String)>> = Mutex::new(None);
+        let mut plain = PLAIN.lock().unwrap();
+        if let Some((_, png)) = plain.as_ref().filter(|(at, _)| *at == size) {
+            return png.clone();
+        }
+        let icon = tasks::plain_program_icon();
+        let png = if icon == 0 { String::new() } else { png_of(icon, size).unwrap_or_default() };
+        tasks::destroy_icon(icon);
+        *plain = Some((size, png.clone()));
+        png
+    }
+
     // The buttons as the page draws them: one per program, as Windows' 11
     // has them by default. The programs kept on the taskbar first, in the
     // order they were kept (taskbarPinned: [{ path, name }]), whether they run
@@ -612,17 +635,23 @@ mod imp {
                         .collect();
                     let key = path.to_lowercase();
                     let name = names.entry(key.clone()).or_insert_with(|| tasks::app_name(path)).clone();
-                    let png = windows.iter().find_map(|w| w["png"].as_str().filter(|p| !p.is_empty()).map(str::to_string)).unwrap_or_else(|| {
-                        file_pngs
-                            .entry(key.clone())
-                            .or_insert_with(|| {
-                                let icon = tasks::file_icon(path);
-                                let png = if icon == 0 { String::new() } else { png_of(icon, size).unwrap_or_default() };
-                                tasks::destroy_icon(icon);
-                                png
-                            })
-                            .clone()
-                    });
+                    // The program's own icon, as Windows' taskbar has it on a
+                    // program's button: File Explorer's for every folder,
+                    // drive or This PC its windows show. Its window's where the
+                    // program only hosts what it shows (hosts) or has no icon
+                    // of its own (Windows' plain one), and while it has none.
+                    let window_png = windows.iter().find_map(|w| w["png"].as_str().filter(|p| !p.is_empty()).map(str::to_string));
+                    let file_png = file_pngs
+                        .entry(key.clone())
+                        .or_insert_with(|| {
+                            let icon = tasks::file_icon(path);
+                            let png = if icon == 0 { String::new() } else { png_of(icon, size).unwrap_or_default() };
+                            tasks::destroy_icon(icon);
+                            png
+                        })
+                        .clone();
+                    let own = !file_png.is_empty() && !hosts(path) && file_png != plain_png(size);
+                    let png = if own { file_png } else { window_png.unwrap_or(file_png) };
                     json!({ "app": key, "path": path, "name": name, "pinned": is_pinned, "png": png, "windows": windows })
                 })
                 .collect()

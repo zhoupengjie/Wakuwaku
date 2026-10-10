@@ -742,10 +742,12 @@
   // clocks, the tray's icons would lose the pointer and blink.
   const startButton = el('span', 'start')
   startButton.dataset.bar = 'start'
-  // Windows 11's mark, drawn as it is: four panes in one blue running from
-  // light at the top left to deep at the bottom right (style.css .s0, .s1).
+  // Windows 11's mark, drawn as it is (Windows' own is drawn by its
+  // taskbar's code: no file or icon font holds it), as big as the
+  // programs' icons: four panes in one blue running from light at the top
+  // left to deep at the bottom right (style.css .s0, .s1).
   startButton.innerHTML =
-    '<svg viewBox="0 0 16 16"><defs><linearGradient id="start-blue" gradientUnits="userSpaceOnUse" x1="1" y1="1" x2="15" y2="15"><stop class="s0" offset="0"/><stop class="s1" offset="1"/></linearGradient></defs><g fill="url(#start-blue)"><rect x="1" y="1" width="6.65" height="6.65" rx="0.7"/><rect x="8.35" y="1" width="6.65" height="6.65" rx="0.7"/><rect x="1" y="8.35" width="6.65" height="6.65" rx="0.7"/><rect x="8.35" y="8.35" width="6.65" height="6.65" rx="0.7"/></g></svg>'
+    '<svg viewBox="0 0 24 24"><defs><linearGradient id="start-blue" gradientUnits="userSpaceOnUse" x1="1" y1="1" x2="23" y2="23"><stop class="s0" offset="0"/><stop class="s1" offset="1"/></linearGradient></defs><g fill="url(#start-blue)"><rect x="1" y="1" width="10.5" height="10.5" rx="0.9"/><rect x="12.5" y="1" width="10.5" height="10.5" rx="0.9"/><rect x="1" y="12.5" width="10.5" height="10.5" rx="0.9"/><rect x="12.5" y="12.5" width="10.5" height="10.5" rx="0.9"/></g></svg>'
   // As Windows 11's: its mark pressed in under the pointer and springing
   // back; a bounce when Windows' Start menu opens by the Windows key, and
   // lit while it is open (taskbar.rs taskbar:start). Pressed just now, the

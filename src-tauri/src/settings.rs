@@ -75,6 +75,8 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "taskbarMaterial" => matches!(v.as_str(), Some("mica" | "black")),
         "taskbarButtons" => matches!(v.as_str(), Some("icons" | "labels")),
         "taskbarAlign" => matches!(v.as_str(), Some("center" | "left")),
+        // The programs' buttons in the order dragged: their keys (paths).
+        "taskbarOrder" => v.as_array().is_some_and(|keys| keys.len() <= 200 && keys.iter().all(|k| k.as_str().is_some_and(|s| s.len() <= 1024))),
         "hold" => v.as_str() == Some("seen") || matches!(v.as_u64(), Some(8 | 30 | 120)),
         "promptWaitSec" => matches!(v.as_u64(), Some(30 | 60 | 120 | 290)),
         "notify" => ["waiting", "done", "error"].iter().all(|k| v.get(k).is_some_and(Value::is_boolean)),

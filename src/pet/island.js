@@ -969,12 +969,25 @@
   // line under it, longer for the one in front; lit while a window of it
   // flashes for attention. No marks for the sessions in its windows: the
   // island says how they are.
+  // The programs' buttons in the order dragged (taskbarOrder, their keys,
+  // those not running kept), the rest after, as they came.
+  const appOrder = () => (Array.isArray(config.taskbarOrder) ? config.taskbarOrder.map(String) : [])
+  function orderedApps() {
+    const order = appOrder()
+    const rank = a => (order.includes(a.app) ? order.indexOf(a.app) : Infinity)
+    return taskWindows
+      .map((a, n) => [a, n])
+      .sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1])
+      .map(([a]) => a)
+  }
+
   function drawWindows() {
-    const drawn = JSON.stringify([taskWindows, lang])
+    const apps = orderedApps()
+    const drawn = JSON.stringify([apps, lang])
     if (drawn === windowsDrawn) return
     windowsDrawn = drawn
     windowsBox.replaceChildren(
-      ...taskWindows.map(app => {
+      ...apps.map(app => {
         const windows = app.windows || []
         const button = el('span', 'win')
         button.dataset.app = app.app
@@ -1101,6 +1114,11 @@
     const app = appOf(e.target.closest('[data-app]')?.dataset.app)
     if (!app) return
     e.stopPropagation()
+    // The end of a drag, not a press.
+    if (winDragged) {
+      winDragged = false
+      return
+    }
     const windows = app.windows || []
     if (!windows.length) return window.pet.taskbar.app(app.path, 'launch')
     if (windows.length === 1) {
@@ -1117,10 +1135,100 @@
     e.stopPropagation()
     openPop(app.app, 'menu')
   })
+  // A program's button dragged along the taskbar: put where it is let go
+  // among the others, before the one under the pointer (after it past its
+  // middle), the order kept (taskbarOrder). { app, x, y, ghost } while held.
+  let winPress = null
+  let winDragged = false
+  windowsBox.addEventListener('pointerdown', e => {
+    const key = e.target.closest('[data-app]')?.dataset.app
+    if (e.button !== 0 || !key) return
+    winPress = { app: key, x: e.clientX, y: e.clientY, ghost: null }
+  })
+  windowsBox.addEventListener('pointermove', e => {
+    if (!winPress) return
+    // Let go of off the buttons before a drag began: nothing held now.
+    if (!(e.buttons & 1)) return cancelWinDrag()
+    if (!winPress.ghost && Math.hypot(e.clientX - winPress.x, e.clientY - winPress.y) > 6) {
+      // Held from here on, wherever the pointer goes; only now, for a
+      // captured press clicks on the box, not on its button.
+      try {
+        windowsBox.setPointerCapture(e.pointerId)
+      } catch {}
+      const from = windowsBox.querySelector(`[data-app="${CSS.escape(winPress.app)}"] img`)
+      winPress.ghost = el('img', 'tghost')
+      if (from) winPress.ghost.src = from.src
+      body.append(winPress.ghost)
+      body.classList.add('win-dragging')
+      clearTimeout(popTimer)
+      closePop()
+    }
+    if (winPress.ghost) {
+      Object.assign(winPress.ghost.style, { left: `${e.clientX - 10}px`, top: `${e.clientY - 10}px` })
+      markWinDrop(winDropAt(e.clientX, e.clientY, winPress.app))
+    }
+  })
+  windowsBox.addEventListener('pointerup', e => {
+    const press = winPress
+    winPress = null
+    if (!press?.ghost) return
+    press.ghost.remove()
+    body.classList.remove('win-dragging')
+    markWinDrop(null)
+    // The click that follows the release is the drag's.
+    winDragged = true
+    setTimeout(() => (winDragged = false), 0)
+    const drop = winDropAt(e.clientX, e.clientY, press.app)
+    if (!drop) return
+    const order = appOrder()
+    for (const a of orderedApps()) if (!order.includes(a.app)) order.push(a.app)
+    order.splice(order.indexOf(press.app), 1)
+    order.splice(order.indexOf(drop.target) + (drop.after ? 1 : 0), 0, press.app)
+    window.pet.settings.set({ taskbarOrder: order.slice(0, 200) })
+  })
+  // Cancelled, or the pointer let go of before the button came up (the
+  // window letting the mouse through once it left the taskbar): no drop.
+  const cancelWinDrag = () => {
+    winPress?.ghost?.remove()
+    winPress = null
+    body.classList.remove('win-dragging')
+    markWinDrop(null)
+  }
+  windowsBox.addEventListener('pointercancel', cancelWinDrag)
+  windowsBox.addEventListener('lostpointercapture', () => winPress && cancelWinDrag())
+
+  // Where a dragged button would land at (x, y): beside the button whose
+  // span holds x (past the last, after it); null when let go off the
+  // taskbar, or on itself.
+  function winDropAt(x, y, key) {
+    const strip = windowsBox.getBoundingClientRect()
+    if (y < strip.top - 24 || y > strip.bottom + 24) return null
+    const buttons = [...windowsBox.querySelectorAll('[data-app]')]
+    const self = buttons.find(b => b.dataset.app === key)
+    const r0 = self?.getBoundingClientRect()
+    if (r0 && x >= r0.left && x <= r0.right) return null
+    const others = buttons.filter(b => b !== self)
+    if (!others.length) return null
+    for (const b of others) {
+      const r = b.getBoundingClientRect()
+      if (x < r.right) return { target: b.dataset.app, after: x > r.left + r.width / 2, slot: b }
+    }
+    const last = others[others.length - 1]
+    return { target: last.dataset.app, after: true, slot: last }
+  }
+
+  let winMarked = null
+  function markWinDrop(drop) {
+    if (winMarked) winMarked.classList.remove('drop-before', 'drop-after')
+    winMarked = drop?.slot || null
+    if (winMarked) winMarked.classList.add(drop.after ? 'drop-after' : 'drop-before')
+  }
+
   // The pointer resting on a running program's button: its windows.
   windowsBox.addEventListener('mouseover', e => {
     const app = appOf(e.target.closest('[data-app]')?.dataset.app)
     clearTimeout(popTimer)
+    if (winPress?.ghost) return
     if (!app || popFor?.kind === 'menu') return
     if (popFor?.app === app.app) return
     popTimer = setTimeout(() => (app.windows || []).length && openPop(app.app, 'list'), popFor ? 0 : 500)

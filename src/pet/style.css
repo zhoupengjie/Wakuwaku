@@ -1834,12 +1834,15 @@ body {
   pointer-events: none;
 }
 
-/* While a tray icon is dragged: the side of the icon it would land beside. */
-#bar-rest .ticon.drop-before {
+/* While a tray icon or a program's button is dragged: the side of the one
+   it would land beside. */
+#bar-rest .ticon.drop-before,
+#bar-rest .win.drop-before {
   box-shadow: inset 2px 0 0 var(--win-accent, #5e9bff);
 }
 
-#bar-rest .ticon.drop-after {
+#bar-rest .ticon.drop-after,
+#bar-rest .win.drop-after {
   box-shadow: inset -2px 0 0 var(--win-accent, #5e9bff);
 }
 

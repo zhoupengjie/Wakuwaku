@@ -373,6 +373,23 @@ impl Shared {
         }
     }
 
+    // Another app full screen or no longer: she (and the taskbar, as Windows'
+    // own does) steps aside or comes back. Looked at by the clock (every 1.5
+    // s), and at once when a window comes to the front or the one in front
+    // changes its size (taskbar.rs, the taskbar's own hooks).
+    pub fn look_fullscreen(self: &Arc<Self>) {
+        let watching = fullscreen::AVAILABLE && (self.flag("hideInFullscreen") || self.home() == "taskbar");
+        let own = self.own.lock().unwrap().clone();
+        let is_full = if watching { fullscreen::check(&own) } else { Some(false) };
+        if let Some(is_full) = is_full {
+            if self.by_fullscreen.swap(is_full, Ordering::SeqCst) != is_full {
+                let which = if is_full { format!(", {}", fullscreen::front()) } else { String::new() };
+                self.log(&format!("another app full screen: {is_full}{which}"));
+                self.apply_visibility();
+            }
+        }
+    }
+
     pub fn apply_visibility(self: &Arc<Self>) {
         pet::apply_visibility(self);
         island::apply_visibility(self);
@@ -1073,17 +1090,7 @@ fn main() {
                         }
                     }
                     if n % 3 == 0 {
-                        // The taskbar steps aside for an app full screen, as Windows' own does.
-                        let watching = fullscreen::AVAILABLE && (ticker.flag("hideInFullscreen") || ticker.home() == "taskbar");
-                        let own = ticker.own.lock().unwrap().clone();
-                        let is_full = if watching { fullscreen::check(&own) } else { Some(false) };
-                        if let Some(is_full) = is_full {
-                            if ticker.by_fullscreen.swap(is_full, Ordering::SeqCst) != is_full {
-                                let which = if is_full { format!(", {}", fullscreen::front()) } else { String::new() };
-                                ticker.log(&format!("another app full screen: {is_full}{which}"));
-                                ticker.apply_visibility();
-                            }
-                        }
+                        ticker.look_fullscreen();
                     }
                     if n % 4 == 0 {
                         let screens = screen::read(&ticker.app);

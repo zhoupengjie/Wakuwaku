@@ -1346,9 +1346,17 @@
     const title = now.mood === 'idle' ? T('s.headIdle', { name: pet ? pet.name : 'Wakuwaku' }) : T(HEAD_KEY[now.mood])
     const asks = (snap.asks || []).length
     const sub = [Status.nameOf(now, snap.settings.details !== false), asks ? T('s.asksWaiting', { n: asks }) : ''].filter(Boolean).join(' · ')
+    // By ✕, in Windows' own glyphs: locked, a click outside (or on the head)
+    // closes them no more; on top, over every window as well (locked too:
+    // on top and gone at the next click outside is no use). island.rs
+    // keep_on_top.
+    const locked = !!snap.settings.settingsPin
+    const onTop = locked && !!snap.settings.settingsTop
+    const lock = `<button class="x g${locked ? ' on' : ''}" data-lock title="${esc(T(locked ? 's.locked' : 's.lock'))}">${locked ? '&#xE72E;' : '&#xE785;'}</button>`
+    const top = `<button class="x g${onTop ? ' on' : ''}" data-top title="${esc(T(onTop ? 's.onTop' : 's.top'))}">${onTop ? '&#xE840;' : '&#xE718;'}</button>`
     setHTML(
       head,
-      `<div class="grow ellip"><span class="t">${esc(title)}</span>${sub ? ` <span class="s">· ${esc(sub)}</span>` : ''}</div>${clockTag(now)}<button class="x" data-close title="${esc(T('s.close'))}">✕</button>`,
+      `<div class="grow ellip"><span class="t">${esc(title)}</span>${sub ? ` <span class="s">· ${esc(sub)}</span>` : ''}</div>${clockTag(now)}${lock}${top}<button class="x" data-close title="${esc(T('s.close'))}">✕</button>`,
     )
   }
 
@@ -1419,6 +1427,9 @@
       window.pet.keyboard(true)
       clearInterval(clockTimer)
       clockTimer = setInterval(tick, 1000)
+    } else if (!document.hasFocus()) {
+      // Locked and gone under another window: asked for again, to the front.
+      window.pet.keyboard(true)
     }
     window.pet.settings.get().then(got => {
       snap = got
@@ -1550,7 +1561,13 @@
     const at = selector => e.target.closest(selector)
     // A click anywhere but on it closes the letter menu.
     if (!menuEl.hidden && !at('.mmenu')) closeMenu()
-    if (at('[data-close]')) return close('click')
+    if (at('[data-lock]')) return patch(snap.settings.settingsPin ? { settingsPin: false, settingsTop: false } : { settingsPin: true })
+    if (at('[data-top]')) return patch(snap.settings.settingsPin && snap.settings.settingsTop ? { settingsTop: false } : { settingsPin: true, settingsTop: true })
+    if (at('[data-close]')) {
+      // Locked: ✕ closes them (and Esc), a press on the head no more.
+      if (snap.settings.settingsPin && !at('.x[data-close]')) return
+      return close('click')
+    }
     const tabButton = at('[data-tab]')
     if (tabButton) return setTab(tabButton.dataset.tab)
     // A session: to its window (the settings close as it comes to the front).
@@ -2151,7 +2168,8 @@
   // The keyboard went elsewhere: a click outside the island; not a file
   // picker (a letter's files, the desktop's picture: its own window takes
   // the focus).
-  window.pet.onBlur(() => !picking && !pickingPaper && close('blur'))
+  // Locked (the button by ✕), they stay.
+  window.pet.onBlur(() => !snap?.settings?.settingsPin && !picking && !pickingPaper && close('blur'))
   layer.addEventListener('cancel', e => e.target.matches?.('[data-w-file]') && (picking = false), true)
   window.addEventListener('focus', () => setTimeout(() => (picking = false), 1000))
 

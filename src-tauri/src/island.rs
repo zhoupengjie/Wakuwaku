@@ -633,6 +633,7 @@ pub fn open_settings(sh: &Arc<Shared>, tab: Option<&str>) {
     };
     sh.log(&format!("island: settings open on {:?}{}", tab, if is_up { "" } else { " (risen for them)" }));
     apply_visibility(sh);
+    keep_on_top(sh);
     sh.redraw();
     if ready {
         let _ = sh.app.emit_to("island", "island:settings", json!({ "tab": tab.unwrap_or("") }));
@@ -645,6 +646,7 @@ pub fn open_settings(sh: &Arc<Shared>, tab: Option<&str>) {
 pub fn settings_closed(sh: &Arc<Shared>) {
     sh.island.lock().unwrap().settings_open = false;
     sh.log("island: settings closed");
+    keep_on_top(sh);
     if !sh.flag("onboarded") {
         sh.change(json!({ "onboarded": true }));
     } else {
@@ -662,6 +664,47 @@ pub fn settings_closed(sh: &Arc<Shared>) {
         }
         apply_visibility(&sh);
         sh.redraw();
+    });
+}
+
+// The settings' two buttons by ✕ (settings.js): locked ("settingsPin"), a
+// click outside does not close them, and other windows come over them as
+// over any window (hers kept on top only while they are not open); on top
+// as well ("settingsTop"), they stay over every window, another program's
+// own "on top" one too: looked at every 0.7 s, raised should one be over
+// them. Unlocked, a click outside closes them: on top as ever.
+static TOPMOST: AtomicBool = AtomicBool::new(true);
+static WATCHING_TOP: AtomicBool = AtomicBool::new(false);
+
+pub fn keep_on_top(sh: &Arc<Shared>) {
+    let open = sh.island.lock().unwrap().settings_open;
+    let (locked, top) = (sh.flag("settingsPin"), sh.flag("settingsTop"));
+    let topmost = !(open && locked && !top);
+    if TOPMOST.swap(topmost, Ordering::SeqCst) != topmost {
+        if let Some(win) = window(sh) {
+            let _ = win.set_always_on_top(topmost);
+        }
+        sh.log(&format!("island: settings {}", if topmost { "on top of other windows" } else { "under the windows pressed" }));
+    }
+    if !(open && locked && top) || WATCHING_TOP.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let sh = sh.clone();
+    std::thread::spawn(move || loop {
+        let watched = || sh.island.lock().unwrap().settings_open && sh.flag("settingsPin") && sh.flag("settingsTop");
+        while watched() {
+            let hwnd = hwnd(&sh);
+            let own = sh.own.lock().unwrap().clone();
+            if hwnd != 0 && crate::tasks::covered(hwnd, &own) {
+                crate::tasks::raise_top(hwnd);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(700));
+        }
+        WATCHING_TOP.store(false, Ordering::SeqCst);
+        // Asked again in the moment between the last look and letting go.
+        if !watched() || WATCHING_TOP.swap(true, Ordering::SeqCst) {
+            return;
+        }
     });
 }
 

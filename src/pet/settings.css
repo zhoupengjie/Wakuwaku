@@ -230,6 +230,23 @@
   color: var(--fg);
 }
 
+/* Lock and on top, by ✕: Windows' own glyphs; lit, in the accent. */
+#island-settings .s-head .x.g {
+  font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+  font-size: 14px;
+  font-weight: normal;
+  line-height: 1;
+}
+
+#island-settings .s-head .x.g.on {
+  background: #0a84ff;
+  color: #ffffff;
+}
+
+.tb-light #island-settings .s-head .x.g.on {
+  background: #005fb8;
+}
+
 .s-tabs {
   position: relative;
   display: flex;

@@ -1842,6 +1842,15 @@ body {
   pointer-events: none;
 }
 
+/* While a tray icon is dragged: the side of the icon it would land beside. */
+#bar-rest .ticon.drop-before {
+  box-shadow: inset 2px 0 0 var(--win-accent, #5e9bff);
+}
+
+#bar-rest .ticon.drop-after {
+  box-shadow: inset -2px 0 0 var(--win-accent, #5e9bff);
+}
+
 /* A program kept on the taskbar, not running: its icon alone. Several
    windows: how many, by the icon. */
 #bar-rest .win.idle {

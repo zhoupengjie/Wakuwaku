@@ -1556,13 +1556,23 @@ pub fn taskbar_app(app: tauri::AppHandle, path: String, what: String) -> bool {
 
 // A tray icon kept out on the taskbar or folded away (dragged there), by
 // its name (systray.rs Shown), in the settings (trayPinned); Windows' own
-// choice until the person makes one.
+// choice until the person makes one. And the tray's order as dragged
+// (trayOrder, names), the two in one change.
 #[tauri::command]
-pub fn taskbar_tray_pin(app: tauri::AppHandle, name: String, pinned: bool) {
+pub fn taskbar_tray_pin(app: tauri::AppHandle, name: String, pinned: Option<bool>, order: Option<Vec<String>>) {
     let sh = crate::shared(&app);
-    let mut kept = sh.setting("trayPinned").as_object().cloned().unwrap_or_default();
-    kept.insert(name, serde_json::json!(pinned));
-    sh.change(serde_json::json!({ "trayPinned": kept }));
+    let mut change = serde_json::Map::new();
+    if let Some(pinned) = pinned {
+        let mut kept = sh.setting("trayPinned").as_object().cloned().unwrap_or_default();
+        kept.insert(name, serde_json::json!(pinned));
+        change.insert("trayPinned".into(), serde_json::Value::Object(kept));
+    }
+    if let Some(order) = order {
+        change.insert("trayOrder".into(), serde_json::json!(order.into_iter().take(200).collect::<Vec<_>>()));
+    }
+    if !change.is_empty() {
+        sh.change(serde_json::Value::Object(change));
+    }
 }
 
 // Where the page drew each tray icon (key, x, y, w, h in its own px), for

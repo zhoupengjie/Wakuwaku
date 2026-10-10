@@ -1149,8 +1149,18 @@
   // The tray, as Windows' has it: the icons kept out on the taskbar, and
   // the rest folded away behind ^, open above it on a press. Where each is
   // kept: the person's choice (dragged from one to the other, trayPinned),
-  // else Windows' own (windowsOut).
+  // else Windows' own (windowsOut). In what order: as dragged (trayOrder,
+  // names, those not running kept too), the rest after, as they came.
   const isOut = i => config.trayPinned?.[i.name] ?? i.windowsOut === true
+  const trayOrder = () => (Array.isArray(config.trayOrder) ? config.trayOrder.map(String) : [])
+  function orderedTray() {
+    const order = trayOrder()
+    const rank = i => (order.includes(i.name) ? order.indexOf(i.name) : Infinity)
+    return trayIcons
+      .map((i, n) => [i, n])
+      .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
+      .map(([i]) => i)
+  }
   const chevron = el('span', 'tchev')
   chevron.append(el('span', 'fi', ''))
   const outBox = el('span', 'tout')
@@ -1210,14 +1220,15 @@
   }
 
   function drawTray() {
-    const folded = trayIcons.filter(i => !isOut(i))
+    const icons = orderedTray()
+    const folded = icons.filter(i => !isOut(i))
     if (!folded.length) trayOpen = false
-    const drawn = JSON.stringify([trayIcons.map(i => [i.key, i.png.length, i.png.slice(-24), i.tip, isOut(i)]), trayOpen])
+    const drawn = JSON.stringify([icons.map(i => [i.key, i.png.length, i.png.slice(-24), i.tip, isOut(i)]), trayOpen])
     if (drawn !== trayDrawn) {
       trayDrawn = drawn
       chevron.hidden = !folded.length
       chevron.classList.toggle('open', trayOpen)
-      outBox.replaceChildren(...trayIcons.filter(isOut).map(trayIcon))
+      outBox.replaceChildren(...icons.filter(isOut).map(trayIcon))
       flyout.replaceChildren(...folded.map(trayIcon))
       flyout.hidden = !trayOpen
       if (trayBox.firstChild !== flyout) trayBox.replaceChildren(flyout, chevron, outBox)
@@ -1271,7 +1282,8 @@
   // the second press of a double one as a double press; the pointer coming,
   // moving (at most every 100 ms) and going. A left press is told once it
   // is let go, for it may be a drag instead: an icon dragged onto ^ or into
-  // the folded ones is folded away, one dragged onto the taskbar kept out.
+  // the folded ones is folded away, one dragged onto the taskbar kept out,
+  // either put where it is let go among the others there.
   const trayKey = e => e.target.closest('[data-tray]')?.dataset.tray
   let trayOver = null
   let trayMovedAt = 0
@@ -1314,15 +1326,50 @@
     }
     press.ghost.remove()
     body.classList.remove('tray-dragging')
-    const over = document.elementFromPoint(e.clientX, e.clientY)
+    markDrop(null)
     const icon = trayIcons.find(i => String(i.key) === press.key)
-    if (!icon || !over) return
-    if (flyout.contains(over) || chevron.contains(over)) {
-      if (isOut(icon)) window.pet.taskbar.trayPin(press.name, false)
-    } else if (barRest.contains(over) && !isOut(icon)) {
-      window.pet.taskbar.trayPin(press.name, true)
+    const drop = dropAt(e.clientX, e.clientY, press.name)
+    if (!icon || !drop) return
+    // Kept out or folded, and where among the others: before the icon
+    // under the pointer (after it past its middle), else last there.
+    const order = trayOrder()
+    for (const i of orderedTray()) if (!order.includes(i.name)) order.push(i.name)
+    order.splice(order.indexOf(press.name), 1)
+    let at
+    if (drop.target) {
+      at = order.indexOf(drop.target) + (drop.after ? 1 : 0)
+    } else {
+      const there = orderedTray().filter(i => i.name !== press.name && isOut(i) === drop.out)
+      at = there.length ? order.indexOf(there[there.length - 1].name) + 1 : order.length
     }
+    order.splice(at, 0, press.name)
+    window.pet.taskbar.trayPin(press.name, isOut(icon) === drop.out ? null : drop.out, order.slice(0, 200))
   })
+
+  // Where a dragged icon would land at (x, y): kept out (anywhere on the
+  // taskbar) or folded (the folded ones, ^), and the icon there it goes
+  // beside (none: last); null, nowhere.
+  function dropAt(x, y, name) {
+    const over = document.elementFromPoint(x, y)
+    if (!over) return null
+    const out = !(flyout.contains(over) || chevron.contains(over))
+    if (out && !barRest.contains(over)) return null
+    const slot = over.closest('[data-tray]')
+    // Let go on itself: left where it was.
+    if (slot?.dataset.name === name) return null
+    const mine = slot && (out ? outBox : flyout).contains(slot) ? slot : null
+    if (!mine) return { out, target: null, after: false, slot: null }
+    const r = mine.getBoundingClientRect()
+    return { out, target: mine.dataset.name, after: x > r.left + r.width / 2, slot: mine }
+  }
+
+  // While dragging: a bar on the side of the icon it would land beside.
+  let dropMarked = null
+  function markDrop(drop) {
+    if (dropMarked) dropMarked.classList.remove('drop-before', 'drop-after')
+    dropMarked = drop?.slot || null
+    if (dropMarked) dropMarked.classList.add(drop.after ? 'drop-after' : 'drop-before')
+  }
   window.addEventListener('mousemove', e => {
     if (!trayPress) return
     if (!trayPress.ghost && Math.hypot(e.clientX - trayPress.x, e.clientY - trayPress.y) > 6) {
@@ -1334,7 +1381,10 @@
       // Dragged from the taskbar: the folded ones open to take it.
       openTray(true)
     }
-    if (trayPress.ghost) Object.assign(trayPress.ghost.style, { left: `${e.clientX - 10}px`, top: `${e.clientY - 10}px` })
+    if (trayPress.ghost) {
+      Object.assign(trayPress.ghost.style, { left: `${e.clientX - 10}px`, top: `${e.clientY - 10}px` })
+      markDrop(dropAt(e.clientX, e.clientY, trayPress.name))
+    }
   })
   trayBox.addEventListener('mousemove', e => {
     const key = trayKey(e) || null

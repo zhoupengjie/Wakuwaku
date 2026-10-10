@@ -82,8 +82,10 @@
       trayRects: rects => send('taskbar_tray_rects', { rects }),
       // A press on a window's button: press (to the front, or minimized), close.
       window: (id, what) => invoke('taskbar_window', { id: Number(id), what: String(what) }).catch(() => false),
-      // A tray icon kept out on the taskbar, or folded away (its name, systray.rs).
-      trayPin: (name, pinned) => send('taskbar_tray_pin', { name: String(name), pinned: pinned === true }),
+      // A tray icon kept out on the taskbar, or folded away (its name,
+      // systray.rs; null: where it was), and the tray's order (names) after it.
+      trayPin: (name, pinned, order) =>
+        send('taskbar_tray_pin', { name: String(name), pinned: typeof pinned === 'boolean' ? pinned : null, order: Array.isArray(order) ? order.map(String) : null }),
       // A program's button: launch (it, or another window of it), pin, unpin.
       app: (path, what) => invoke('taskbar_app', { path: String(path), what: String(what) }).catch(() => false),
       // Room for windows' live pictures in the page: [[window, x, y, w, h]], or none.

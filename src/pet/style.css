@@ -1374,3 +1374,127 @@ body {
   font-style: normal;
   color: #a1a1a6;
 }
+
+/* The windows' buttons, in the order they came (taskbar.rs): an icon and a
+   title, a line under it, longer and blue for the one in front; lit amber
+   while one flashes for attention; a dot for each session in it. */
+#bar-rest .wins {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#bar-rest .win {
+  position: relative;
+  flex: 0 1 168px;
+  min-width: 40px;
+  height: 40px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  border-radius: 6px;
+  color: #d1d1d6;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+#bar-rest .win:hover {
+  background: #1c1c1e;
+}
+
+#bar-rest .win.front {
+  background: #2c2c2e;
+}
+
+#bar-rest .win::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: #8e8e93;
+  transform: translateX(-50%);
+  transition:
+    width 0.2s ease,
+    background 0.2s ease;
+}
+
+#bar-rest .win.front::after {
+  width: 18px;
+  background: #5e9bff;
+}
+
+#bar-rest .win.min {
+  color: #8e8e93;
+}
+
+#bar-rest .win.flash {
+  animation: win-flash 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes win-flash {
+  from {
+    background: rgba(255, 179, 64, 0.38);
+  }
+  to {
+    background: rgba(255, 179, 64, 0.12);
+  }
+}
+
+#bar-rest .win img {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+#bar-rest .win .letter {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: #3a3a3c;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+#bar-rest .win .wt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#bar-rest .win .marks {
+  position: absolute;
+  top: 6px;
+  left: 23px;
+  display: flex;
+  gap: 2px;
+}
+
+#bar-rest .win .marks i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #000;
+}
+
+#bar-rest .win .marks i.wants {
+  animation: mark-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mark-pulse {
+  50% {
+    transform: scale(1.35);
+  }
+}

@@ -14,7 +14,7 @@
 //   island.rs      her home's window (corner, island, bar, taskbar), and the settings
 //   appbar.rs      the bar's and the taskbar's strip, kept from other windows
 //   taskbar.rs     the taskbar's side of Windows: its own put away (shell.rs),
-//                  the tray taken over (systray.rs)
+//                  the tray taken over (systray.rs), the windows' buttons (tasks.rs)
 //   settings.rs    what the settings show and change
 //   pointer.rs     click-through, for both windows; screen.rs the work areas
 //   asks.rs        prompts answered on her or the island
@@ -55,6 +55,7 @@ mod shell;
 mod state;
 mod systray;
 mod taskbar;
+mod tasks;
 mod tokens;
 mod tray;
 mod widgets;
@@ -894,6 +895,7 @@ fn main() {
             taskbar::taskbar_tray,
             taskbar::taskbar_open,
             taskbar::taskbar_tray_rects,
+            taskbar::taskbar_window,
         ])
         .on_menu_event(|app, event| tray::on_menu(&shared(app), event.id().as_ref()))
         .setup(move |app| {
@@ -944,6 +946,12 @@ fn main() {
             taskbar::recover(&sh);
 
             pet::create(&sh)?;
+            // An app full screen as she starts, known before her home first
+            // shows: the taskbar takes its strip only once it can show (one
+            // taken with its window hidden keeps no room).
+            if fullscreen::AVAILABLE && (sh.flag("hideInFullscreen") || sh.home() == "taskbar") {
+                sh.by_fullscreen.store(fullscreen::check(&[]) == Some(true), Ordering::SeqCst);
+            }
             island::apply_visibility(&sh);
             tray::create(&sh)?;
             server::serve(sh.clone(), listener);

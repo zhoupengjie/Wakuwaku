@@ -141,11 +141,6 @@ pub fn hwnd(sh: &Shared) -> isize {
     sh.island.lock().unwrap().hwnd
 }
 
-// Its window is up now (shown).
-pub fn is_up_now(sh: &Shared) -> bool {
-    sh.island.lock().unwrap().shown
-}
-
 // Where its window is (physical) and its scale: the page's px to the screen's.
 pub fn origin(sh: &Shared) -> ((i32, i32), f64) {
     let isl = sh.island.lock().unwrap();
@@ -423,8 +418,11 @@ pub fn apply_visibility(sh: &Arc<Shared>) {
     if want {
         place(sh);
     } else {
-        // The taskbar keeps its strip while an app full screen hides it.
-        sync_bar(sh, sh.home() == "taskbar");
+        // The taskbar keeps the strip it holds while an app full screen
+        // hides it; it takes none then: one taken with its window hidden
+        // keeps no room (2026-10-10), so it waits for the window to show.
+        let held = sh.island.lock().unwrap().bar_for.is_some();
+        sync_bar(sh, sh.home() == "taskbar" && held);
     }
     if want == shown {
         return;

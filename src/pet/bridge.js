@@ -80,8 +80,12 @@
       open: what => invoke('taskbar_open', { what: String(what) }).catch(() => false),
       tray: (key, press) => send('taskbar_tray', { key: Number(key), press: String(press) }),
       trayRects: rects => send('taskbar_tray_rects', { rects }),
+      // A press on a window's button: press (to the front, or minimized), close.
+      window: (id, what) => invoke('taskbar_window', { id: Number(id), what: String(what) }).catch(() => false),
     },
     onTray: on('taskbar:tray'),
+    // The windows' buttons as they change ({ id, title, exe, png, front, min, flash, sessions }).
+    onWindows: on('taskbar:windows'),
     settings: {
       get: () => invoke('settings_get'),
       set: patch => invoke('settings_set', { patch }),

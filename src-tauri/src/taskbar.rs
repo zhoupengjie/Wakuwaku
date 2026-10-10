@@ -9,6 +9,10 @@
 //   - Explorer's taskbar shown (a WinEvent): put away again at once
 //   - the tray's icons changing: drawn into PNGs and sent to the island's
 //     page (taskbar:tray)
+//   - windows coming, going, renamed, brought to the front, minimized, and
+//     a window flashing for attention (the shell hook): the buttons' list
+//     (tasks.rs) made again on a thread of its own and sent (taskbar:windows),
+//     each with the sessions that run in it (jump.rs)
 // Taken when the home takes its strip, given back when it gives the strip
 // back (island.rs sync_bar) and on quitting. A killed process cannot give
 // the taskbar back: shell.rs's guard does.
@@ -31,7 +35,7 @@ mod imp {
     use tauri::Emitter;
 
     use crate::systray::{self, Press};
-    use crate::{shell, Shared};
+    use crate::{jump, shell, tasks, Shared};
 
     type Hwnd = *mut c_void;
 
@@ -153,6 +157,9 @@ mod imp {
         fn SetForegroundWindow(hwnd: Hwnd) -> i32;
         fn GetCursorPos(pt: *mut Point) -> i32;
         fn DrawIconEx(hdc: isize, x: i32, y: i32, icon: isize, w: i32, h: i32, step: u32, brush: isize, flags: u32) -> i32;
+        fn RegisterShellHookWindow(hwnd: Hwnd) -> i32;
+        fn DeregisterShellHookWindow(hwnd: Hwnd) -> i32;
+        fn RegisterWindowMessageW(name: *const u16) -> u32;
     }
 
     #[link(name = "gdi32")]
@@ -178,8 +185,18 @@ mod imp {
     const WS_POPUP: u32 = 0x8000_0000;
     const WS_EX_TOOLWINDOW: u32 = 0x80;
     const SPI_GETWORKAREA: u32 = 0x30;
+    const SPI_SETWORKAREA: u32 = 0x2F;
+
     const EVENT_OBJECT_SHOW: u32 = 0x8002;
+    // What changes the buttons: a window made, shown, hidden, gone (0x8001
+    // to 0x8003), renamed, cloaked or not (another desktop), brought to the
+    // front, minimized or restored.
+    const WINDOW_EVENTS: [(u32, u32); 5] = [(0x8001, 0x8003), (0x800C, 0x800C), (0x8017, 0x8018), (0x0003, 0x0003), (0x0016, 0x0017)];
     const OBJID_WINDOW: i32 = 0;
+    // The shell hook's: a window flashing for attention, one activated.
+    const HSHELL_FLASH: usize = 0x8006;
+    const HSHELL_WINDOWACTIVATED: usize = 4;
+    const HSHELL_RUDEAPPACTIVATED: usize = 0x8004;
     const KEYEVENTF_EXTENDEDKEY: u32 = 0x1;
     const KEYEVENTF_KEYUP: u32 = 0x2;
     const VK_LWIN: u16 = 0x5B;
@@ -214,6 +231,18 @@ mod imp {
     // Each icon drawn: (key, its handle) to its PNG; the list sent last.
     static PNGS: Mutex<Option<HashMap<u64, (isize, String)>>> = Mutex::new(None);
     static SENT: Mutex<Value> = Mutex::new(Value::Null);
+    // The buttons: their thread, woken when windows change; their order (as
+    // they came); the windows flashing; each window's icon drawn (its
+    // handle, its PNG); the sessions in each window; the list sent last.
+    static TASKS: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
+    static WAKE: (Mutex<bool>, std::sync::Condvar) = (Mutex::new(false), std::sync::Condvar::new());
+    static TASKS_STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    static ORDER: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+    static FLASHING: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+    static WIN_PNGS: Mutex<Option<HashMap<isize, (isize, String)>>> = Mutex::new(None);
+    static MARKS: Mutex<Option<HashMap<isize, Vec<Value>>>> = Mutex::new(None);
+    static SENT_WINDOWS: Mutex<Value> = Mutex::new(Value::Null);
+    static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -271,10 +300,18 @@ mod imp {
             Ok(hwnd) => *HOST.lock().unwrap() = Some(Host { hwnd, thread }),
             Err(_) => sh.log("taskbar: its thread did not start"),
         }
+        TASKS_STOP.store(false, Ordering::SeqCst);
+        let sh = crate::shared(&sh.app);
+        *TASKS.lock().unwrap() = Some(std::thread::spawn(move || tasks_loop(sh)));
     }
 
     // The tray handed back to Explorer and its taskbar shown again.
     pub fn give_back(sh: &Shared) {
+        if let Some(thread) = TASKS.lock().unwrap().take() {
+            TASKS_STOP.store(true, Ordering::SeqCst);
+            wake_tasks();
+            let _ = thread.join();
+        }
         let host = HOST.lock().unwrap().take();
         if let Some(host) = host {
             // SAFETY: the thread's own window; a posted message, no pointers.
@@ -286,7 +323,144 @@ mod imp {
             sh.log(&format!("taskbar: Windows' given back: {}", shell::restore(&file)));
         }
         *SENT.lock().unwrap() = Value::Null;
+        *SENT_WINDOWS.lock().unwrap() = Value::Null;
         *STRIP.lock().unwrap() = None;
+        ORDER.lock().unwrap().clear();
+        FLASHING.lock().unwrap().clear();
+        *WIN_PNGS.lock().unwrap() = None;
+        *MARKS.lock().unwrap() = None;
+    }
+
+    // --- The buttons ----------------------------------------------------------------
+
+    fn wake_tasks() {
+        let (dirty, cv) = &WAKE;
+        *dirty.lock().unwrap() = true;
+        cv.notify_one();
+    }
+
+    // The buttons' list kept: made again when windows change (a moment
+    // after, so a burst of changes makes it once) and every two seconds;
+    // the sessions' windows looked for every three (it looks through the
+    // processes).
+    fn tasks_loop(sh: Arc<Shared>) {
+        let mut marked_at = Instant::now() - Duration::from_secs(10);
+        loop {
+            {
+                let (dirty, cv) = &WAKE;
+                let guard = dirty.lock().unwrap();
+                let (mut guard, _) = cv.wait_timeout_while(guard, Duration::from_secs(2), |d| !*d).unwrap();
+                *guard = false;
+            }
+            if TASKS_STOP.load(Ordering::SeqCst) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(120));
+            *WAKE.0.lock().unwrap() = false;
+            if marked_at.elapsed() >= Duration::from_secs(3) {
+                marked_at = Instant::now();
+                mark_sessions(&sh);
+            }
+            send_windows(&sh);
+        }
+    }
+
+    // Each session with a window of its own to go to, by that window.
+    fn mark_sessions(sh: &Shared) {
+        let targets: Vec<(String, String, jump::Chain, Vec<String>)> = {
+            let pet = sh.pet.lock().unwrap();
+            let list = pet.list();
+            list.as_array()
+                .map(|all| {
+                    all.iter()
+                        .filter(|s| s["jump"] == true)
+                        .filter_map(|s| {
+                            let id = s["id"].as_str()?.to_string();
+                            let (chain, hints) = pet.jump_target(&id)?;
+                            Some((id, s["mood"].as_str().unwrap_or("idle").to_string(), chain, hints))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let mut marks: HashMap<isize, Vec<Value>> = HashMap::new();
+        for (id, mood, chain, hints) in targets {
+            let hints: Vec<&str> = hints.iter().map(String::as_str).collect();
+            if let Some(hwnd) = jump::window_for(&chain, &hints) {
+                marks.entry(hwnd).or_default().push(json!({ "id": id, "mood": mood }));
+            }
+        }
+        *MARKS.lock().unwrap() = Some(marks);
+    }
+
+    // The buttons as the page draws them, in the order the windows came.
+    fn send_windows(sh: &Shared) {
+        let found = tasks::list();
+        let front = tasks::front();
+        let order: Vec<isize> = {
+            let mut order = ORDER.lock().unwrap();
+            order.retain(|h| found.iter().any(|t| t.hwnd == *h));
+            for t in &found {
+                if !order.contains(&t.hwnd) {
+                    order.push(t.hwnd);
+                }
+            }
+            order.clone()
+        };
+        let flashing = {
+            let mut flashing = FLASHING.lock().unwrap();
+            flashing.retain(|h| *h != front && tasks::alive(*h));
+            flashing.clone()
+        };
+        let size = (16.0 * sh.screens().primary.map_or(1.0, |a| a.sf)).round() as i32;
+        let marks = MARKS.lock().unwrap().clone().unwrap_or_default();
+        let list: Vec<Value> = {
+            let mut pngs = WIN_PNGS.lock().unwrap();
+            let pngs = pngs.get_or_insert_with(HashMap::new);
+            pngs.retain(|h, _| order.contains(h));
+            order
+                .iter()
+                .filter_map(|h| found.iter().find(|t| t.hwnd == *h))
+                .map(|t| {
+                    let icon = tasks::icon_of(t.hwnd);
+                    let png = match pngs.get(&t.hwnd) {
+                        Some((at, png)) if *at == icon => png.clone(),
+                        _ => {
+                            let png = if icon == 0 { String::new() } else { png_of(icon, size).unwrap_or_default() };
+                            pngs.insert(t.hwnd, (icon, png.clone()));
+                            png
+                        }
+                    };
+                    json!({
+                        "id": t.hwnd,
+                        "title": t.title,
+                        "exe": t.exe,
+                        "png": png,
+                        "front": t.hwnd == front,
+                        "min": t.min,
+                        "flash": flashing.contains(&t.hwnd),
+                        "sessions": marks.get(&t.hwnd).cloned().unwrap_or_default(),
+                    })
+                })
+                .collect()
+        };
+        let list = Value::Array(list);
+        let mut sent = SENT_WINDOWS.lock().unwrap();
+        if *sent != list {
+            *sent = list.clone();
+            let _ = sh.app.emit_to("island", "taskbar:windows", list);
+        }
+    }
+
+    // A press on a window's button: to the front, or minimized; or closed.
+    pub fn window(what: &str, hwnd: isize) -> bool {
+        let done = match what {
+            "press" => tasks::press(hwnd),
+            "close" => tasks::close(hwnd),
+            _ => false,
+        };
+        wake_tasks();
+        done
     }
 
     // Where the strip is now (physical): ours of the taskbar's class goes
@@ -298,33 +472,47 @@ mod imp {
         }
     }
 
-    // The strip taken again, off this thread: the island's side waits on the
-    // main thread, which may be waiting on this one (its app bar's messages
-    // come to the tray's window, here). Recycled: Windows' taskbar shown for
-    // a moment and put away afresh first, so Explorer works the work area
-    // out again; the strip is taken once its room is free again.
-    fn take_strip_again(recycle: bool) {
-        let Some(sh) = sh() else { return };
-        let strip = *STRIP.lock().unwrap();
+    // The strip taken again (Explorer started again and forgot it), off
+    // this thread: the island's side waits on the main thread, which may be
+    // waiting on this one (its app bar's messages come to the tray's window,
+    // here).
+    fn take_strip_again() {
+        if let Some(sh) = sh() {
+            std::thread::spawn(move || crate::island::take_strip_again(&sh));
+        }
+    }
+
+    // The work area's bottom set where the strip starts, as Explorer sets
+    // it for a bar it counts. It does not always count ours: put away in a
+    // moment (its work area free at once, not after its slide), Windows'
+    // taskbar left the work area the whole display, our strip taken or not,
+    // even taken again, even with it set to hide itself afresh (2026-10-10).
+    // Set quietly: told to every window, Explorer set it back at once.
+    fn set_work_bottom(bottom: i32) {
+        let mut r = Rect::default();
+        // SAFETY: our own struct, read and handed back.
+        let ok = unsafe {
+            SystemParametersInfoW(SPI_GETWORKAREA, 0, &mut r as *mut Rect as *mut c_void, 0);
+            r.bottom = bottom;
+            SystemParametersInfoW(SPI_SETWORKAREA, 0, &mut r as *mut Rect as *mut c_void, 0)
+        };
+        let error = std::io::Error::last_os_error();
+        let now = work_bottom();
         std::thread::spawn(move || {
-            if recycle {
-                shell::recycle();
-                let bottom = strip.map_or(0, |s| s.1 + s.3);
-                let t = Instant::now();
-                while work_bottom() != bottom && t.elapsed() < Duration::from_millis(1500) {
-                    std::thread::sleep(Duration::from_millis(20));
-                }
-                log(&format!("recycled; work area free after {} ms", t.elapsed().as_millis()));
-            }
-            crate::island::take_strip_again(&sh);
+            std::thread::sleep(Duration::from_millis(150));
+            log(&format!("work area set: {ok} ({error}); bottom then {now}, 150 ms after {}", work_bottom()));
         });
     }
 
-    // The tray's icons as last sent, for a page that has just come up.
+    // The tray's icons and the buttons as last sent, for a page that has just come up.
     pub fn resend(sh: &Shared) {
         let sent = SENT.lock().unwrap().clone();
         if !sent.is_null() {
             let _ = sh.app.emit_to("island", "taskbar:tray", sent);
+        }
+        let windows = SENT_WINDOWS.lock().unwrap().clone();
+        if !windows.is_null() {
+            let _ = sh.app.emit_to("island", "taskbar:windows", windows);
         }
     }
 
@@ -407,12 +595,14 @@ mod imp {
             OURS.store(hwnd as isize, Ordering::SeqCst);
             CREATED_MSG.store(shell::taskbar_created(), Ordering::SeqCst);
             EXPLORER.store(shell::taskbars().first().copied().unwrap_or(0), Ordering::SeqCst);
-            let hook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, 0, on_event, 0, 0, 0);
+            let hooks: Vec<isize> = WINDOW_EVENTS.iter().map(|&(min, max)| SetWinEventHook(min, max, 0, on_event, 0, 0, 0)).collect();
+            SHELL_MSG.store(RegisterWindowMessageW(wide("SHELLHOOK").as_ptr()), Ordering::SeqCst);
+            let shell_hook = RegisterShellHookWindow(hwnd) != 0;
             SetTimer(hwnd, 1, 500, std::ptr::null());
             TICKS.store(0, Ordering::SeqCst);
             let tray = systray::start(strip, hwnd as isize, WM_TRAY_CHANGED);
             ASK_AT.store(SETTLE_TICKS, Ordering::SeqCst);
-            log(&format!("up: show hook {}, tray {tray} (first: {})", hook != 0, systray::first()));
+            log(&format!("up: window hooks {}, shell hook {shell_hook}, tray {tray} (first: {})", hooks.iter().filter(|h| **h != 0).count(), systray::first()));
             let _ = ready.send(hwnd as isize);
 
             let mut msg: Msg = std::mem::zeroed();
@@ -420,9 +610,10 @@ mod imp {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
-            if hook != 0 {
+            for hook in hooks.into_iter().filter(|h| *h != 0) {
                 UnhookWinEvent(hook);
             }
+            DeregisterShellHookWindow(hwnd);
             KillTimer(hwnd, 1);
             log(&format!("tray handed back; it was handed {}", systray::seen()));
             systray::stop();
@@ -432,18 +623,40 @@ mod imp {
         }
     }
 
-    extern "system" fn on_event(_hook: isize, _event: u32, hwnd: Hwnd, object: i32, _child: i32, _thread: u32, _time: u32) {
-        if object != OBJID_WINDOW || hwnd.is_null() {
+    // A window changed: the buttons are made again (their thread, woken);
+    // Explorer's taskbar shown: put away again.
+    extern "system" fn on_event(_hook: isize, event: u32, hwnd: Hwnd, object: i32, child: i32, _thread: u32, _time: u32) {
+        if object != OBJID_WINDOW || child != 0 || hwnd.is_null() {
             return;
         }
-        let mut name = [0u16; 32];
-        // SAFETY: our own buffer, its size passed.
-        let n = unsafe { GetClassNameW(hwnd, name.as_mut_ptr(), 32) }.max(0) as usize;
-        let class = String::from_utf16_lossy(&name[..n]);
-        if class == "Shell_TrayWnd" || class == "Shell_SecondaryTrayWnd" {
-            // SAFETY: our own window, handled on its thread.
-            unsafe { PostMessageW(OURS.load(Ordering::SeqCst) as Hwnd, WM_TASKBAR_SHOWN, 0, hwnd as isize) };
+        if event == EVENT_OBJECT_SHOW {
+            let mut name = [0u16; 32];
+            // SAFETY: our own buffer, its size passed.
+            let n = unsafe { GetClassNameW(hwnd, name.as_mut_ptr(), 32) }.max(0) as usize;
+            let class = String::from_utf16_lossy(&name[..n]);
+            if class == "Shell_TrayWnd" || class == "Shell_SecondaryTrayWnd" {
+                // SAFETY: our own window, handled on its thread.
+                unsafe { PostMessageW(OURS.load(Ordering::SeqCst) as Hwnd, WM_TASKBAR_SHOWN, 0, hwnd as isize) };
+                return;
+            }
         }
+        wake_tasks();
+    }
+
+    // The shell hook: a window flashing for attention (until it is in
+    // front), one activated.
+    fn on_shell(what: usize, hwnd: isize) {
+        match what {
+            HSHELL_FLASH => {
+                let mut flashing = FLASHING.lock().unwrap();
+                if !flashing.contains(&hwnd) {
+                    flashing.push(hwnd);
+                }
+            }
+            HSHELL_WINDOWACTIVATED | HSHELL_RUDEAPPACTIVATED => FLASHING.lock().unwrap().retain(|h| *h != hwnd),
+            _ => return,
+        }
+        wake_tasks();
     }
 
     fn put_away_again(how: &str) {
@@ -477,28 +690,26 @@ mod imp {
         if shell::visible() {
             put_away_again("seen by the timer");
         }
-        // The work area reaching into the strip, the window up: Windows has
-        // not kept it. A strip taken while its window is hidden (an app full
-        // screen as she starts) keeps no room, nor does one taken again
-        // while it is still hidden; once the window shows, it is taken again
-        // (after a second of it, at most every ten seconds).
+        // The work area reaching into the strip: Windows has not counted it.
+        // Its bottom is set where the strip starts (after half a second of
+        // it, at most every two seconds, should something set it back).
         let bottom = work_bottom();
         if bottom != WORK_BOTTOM.swap(bottom, Ordering::SeqCst) {
             log(&format!("work area's bottom now {bottom}"));
         }
         let strip = *STRIP.lock().unwrap();
-        let up = sh().is_some_and(|sh| crate::island::is_up_now(&sh));
-        let lost = up && strip.is_some_and(|s| bottom > s.1);
+        let lost = strip.is_some_and(|s| bottom > s.1);
         let ticks = TICKS.load(Ordering::SeqCst);
         if !lost {
             LOST_SINCE.store(0, Ordering::SeqCst);
         } else if LOST_SINCE.load(Ordering::SeqCst) == 0 {
             LOST_SINCE.store(ticks.max(1), Ordering::SeqCst);
-        } else if ticks >= LOST_SINCE.load(Ordering::SeqCst) + 2 && ticks >= LAST_TAKEN.load(Ordering::SeqCst) + 20 {
-            log(&format!("work area's bottom {bottom} is in the strip ({:?}): taken again", strip));
+        } else if ticks >= LOST_SINCE.load(Ordering::SeqCst) + 1 && ticks >= LAST_TAKEN.load(Ordering::SeqCst) + 4 {
+            let top = strip.map_or(bottom, |s| s.1);
+            log(&format!("work area's bottom {bottom} is in the strip ({strip:?}): set to {top}"));
             LAST_TAKEN.store(ticks, Ordering::SeqCst);
             LOST_SINCE.store(0, Ordering::SeqCst);
-            take_strip_again(true);
+            set_work_bottom(top);
         }
         systray::sweep();
         if systray::keep_first() {
@@ -524,7 +735,7 @@ mod imp {
         }
         log("Explorer started again");
         shell::rehide();
-        take_strip_again(false);
+        take_strip_again();
         systray::keep_first();
         ask_soon();
     }
@@ -633,6 +844,7 @@ mod imp {
             // SAFETY: ending this thread's loop.
             WM_STOP => unsafe { PostQuitMessage(0) },
             _ if msg == CREATED_MSG.load(Ordering::SeqCst) && msg != 0 => on_created(),
+            _ if msg == SHELL_MSG.load(Ordering::SeqCst) && msg != 0 => on_shell(wparam, lparam),
             // SAFETY: the default for the rest.
             _ => return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
         }
@@ -655,6 +867,9 @@ mod imp {
         false
     }
     pub fn open(_what: &str) -> bool {
+        false
+    }
+    pub fn window(_what: &str, _hwnd: isize) -> bool {
         false
     }
     pub fn work_area_bottom() -> i32 {
@@ -683,6 +898,12 @@ pub fn taskbar_tray(app: tauri::AppHandle, key: u64, press: String) -> bool {
 #[tauri::command]
 pub fn taskbar_open(what: String) -> bool {
     imp::open(&what)
+}
+
+// A press on a window's button (press: to the front or minimized; close).
+#[tauri::command]
+pub fn taskbar_window(id: i64, what: String) -> bool {
+    imp::window(&what, id as isize)
 }
 
 // Where the page drew each tray icon (key, x, y, w, h in its own px), for

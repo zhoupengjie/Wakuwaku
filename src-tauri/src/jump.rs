@@ -435,6 +435,17 @@ mod imp {
 
 pub use imp::{chain_of, client_of, hook_chain};
 
+// A window to the front, restored if minimized (the taskbar's buttons).
+pub fn bring_window(hwnd: isize) -> bool {
+    imp::bring(hwnd)
+}
+
+// The window a session runs in, while its own process still does (the
+// taskbar marks that window's button with the session).
+pub fn window_for(chain: &Chain, hints: &[&str]) -> Option<isize> {
+    imp::window_of(chain, hints, true)
+}
+
 // A chain as the hooks' messages carry it: [[pid, started], ...].
 pub fn chain_json(chain: &Chain) -> serde_json::Value {
     serde_json::Value::Array(chain.iter().map(|&(pid, at)| serde_json::json!([pid, at])).collect())

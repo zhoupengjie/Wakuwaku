@@ -629,19 +629,23 @@
 
   function sessionTags() {
     const detailed = isDetailed()
-    return Status.othersOf(now.list, now).map(x => {
-      const tag = el('span', 'tag')
-      if (x.jump && x.id) {
-        tag.dataset.jump = x.id
-        tag.title = t(lang, 'jump.hint')
-      }
-      const dot = el('i', 'dot')
-      dot.style.background = COLOR[x.mood] || COLOR.idle
-      const when = el('span', 'when', Status.time(x))
-      when.style.color = COLOR[x.mood] || COLOR.idle
-      tag.append(dot, el('span', 'who', Status.nameOf(x, detailed)), el('span', 'what', Status.brief(lang, x, { detailed })), when)
-      return tag
-    })
+    // In the taskbar, a session marked on its window's button needs no tag.
+    const onButtons = new Set(home() === 'taskbar' ? taskWindows.flatMap(w => (w.sessions || []).map(s => s.id)) : [])
+    return Status.othersOf(now.list, now)
+      .filter(x => !onButtons.has(x.id))
+      .map(x => {
+        const tag = el('span', 'tag')
+        if (x.jump && x.id) {
+          tag.dataset.jump = x.id
+          tag.title = t(lang, 'jump.hint')
+        }
+        const dot = el('i', 'dot')
+        dot.style.background = COLOR[x.mood] || COLOR.idle
+        const when = el('span', 'when', Status.time(x))
+        when.style.color = COLOR[x.mood] || COLOR.idle
+        tag.append(dot, el('span', 'who', Status.nameOf(x, detailed)), el('span', 'what', Status.brief(lang, x, { detailed })), when)
+        return tag
+      })
   }
 
   // The widget shown, and the monitor, pinned: always there by the settings.
@@ -690,6 +694,7 @@
   startButton.dataset.bar = 'start'
   startButton.innerHTML =
     '<svg viewBox="0 0 16 16"><rect x="1" y="1" width="6.4" height="6.4" rx="1.2"/><rect x="8.6" y="1" width="6.4" height="6.4" rx="1.2"/><rect x="1" y="8.6" width="6.4" height="6.4" rx="1.2"/><rect x="8.6" y="8.6" width="6.4" height="6.4" rx="1.2"/></svg>'
+  const windowsBox = el('span', 'wins')
   const tagsBox = el('span', 'tags')
   const facesBox = el('span', 'faces')
   const trayBox = el('span', 'tray')
@@ -701,21 +706,72 @@
   let trayIcons = []
   let trayDrawn = ''
   let trayRectsSent = ''
+  // The windows' buttons as last sent (taskbar.rs), and as drawn.
+  let taskWindows = []
+  let windowsDrawn = ''
 
   function fillTaskbar() {
     barRest.style.left = `${sizeOf('compact').width}px`
     if (!taskbarBuilt) {
-      barRest.replaceChildren(startButton, tagsBox, el('span', 'grow'), facesBox, trayBox, clockBox, taskGear)
+      barRest.replaceChildren(startButton, windowsBox, tagsBox, el('span', 'grow'), facesBox, trayBox, clockBox, taskGear)
       taskbarBuilt = true
       trayDrawn = ''
+      windowsDrawn = ''
     }
     startButton.title = t(lang, 'taskbar.start')
     clockBox.title = t(lang, 'taskbar.clock')
     tagsBox.replaceChildren(...sessionTags())
     facesBox.replaceChildren(...widgetFaces())
+    drawWindows()
     drawTray()
     tickClock()
   }
+
+  // A button for each window, in the order they came: its icon and title, a
+  // line under it (longer for the one in front), lit while it flashes for
+  // attention, and a dot for each session in it, in its mood's colour.
+  function drawWindows() {
+    const drawn = JSON.stringify([taskWindows.map(w => [w.id, w.title, w.png.length, w.png.slice(-24), w.front, w.min, w.flash, w.sessions]), lang])
+    if (drawn === windowsDrawn) return
+    windowsDrawn = drawn
+    windowsBox.replaceChildren(
+      ...taskWindows.map(w => {
+        const button = el('span', 'win')
+        button.dataset.win = w.id
+        button.title = w.title
+        button.classList.toggle('front', w.front)
+        button.classList.toggle('min', w.min)
+        button.classList.toggle('flash', w.flash)
+        if (w.png) {
+          const img = el('img')
+          img.src = w.png
+          img.draggable = false
+          button.append(img)
+        } else {
+          button.append(el('span', 'letter', (w.exe || w.title || '?').slice(0, 1).toUpperCase()))
+        }
+        button.append(el('span', 'wt', w.title))
+        if (w.sessions?.length) {
+          const marks = el('span', 'marks')
+          for (const s of w.sessions) {
+            const dot = el('i', s.mood === 'waiting' ? 'wants' : '')
+            dot.style.background = COLOR[s.mood] || COLOR.idle
+            marks.append(dot)
+          }
+          button.append(marks)
+        }
+        return button
+      }),
+    )
+  }
+
+  window.pet.onWindows(list => {
+    taskWindows = Array.isArray(list) ? list : []
+    if (isOn() && home() === 'taskbar') {
+      drawWindows()
+      tagsBox.replaceChildren(...sessionTags())
+    }
+  })
 
   // The time and the date, as Windows' taskbar has them.
   function tickClock() {
@@ -820,6 +876,9 @@
   // The taskbar's own buttons open what Windows' do: Start, and from the
   // clock the notifications and the calendar (once the button is up).
   barRest.addEventListener('click', e => {
+    // A window's button: to the front, or minimized when it is the one in front.
+    const win = e.target.closest('[data-win]')
+    if (win) return window.pet.taskbar.window(win.dataset.win, 'press')
     const what = e.target.closest('[data-bar]')?.dataset.bar
     if (what && what !== 'settings') window.pet.taskbar.open(what)
   })

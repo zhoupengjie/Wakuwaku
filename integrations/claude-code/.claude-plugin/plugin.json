@@ -1,6 +1,6 @@
 {
   "name": "wakuwaku",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tells the Wakuwaku desktop pet what Claude Code is doing, and lets you answer its prompts on her.",
   "author": {
     "name": "Pengjie Zhou"

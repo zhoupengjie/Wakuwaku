@@ -176,6 +176,35 @@ mod imp {
         fn GetModuleHandleW(name: *const u16) -> isize;
     }
 
+    #[repr(C)]
+    #[derive(Default)]
+    struct Size {
+        cx: i32,
+        cy: i32,
+    }
+
+    #[repr(C)]
+    struct ThumbnailProperties {
+        flags: u32,
+        dest: Rect,
+        source: Rect,
+        opacity: u8,
+        visible: i32,
+        client_only: i32,
+    }
+
+    #[link(name = "dwmapi")]
+    extern "system" {
+        fn DwmRegisterThumbnail(dest: Hwnd, src: Hwnd, thumb: *mut isize) -> i32;
+        fn DwmUnregisterThumbnail(thumb: isize) -> i32;
+        fn DwmUpdateThumbnailProperties(thumb: isize, props: *const ThumbnailProperties) -> i32;
+        fn DwmQueryThumbnailSourceSize(thumb: isize, size: *mut Size) -> i32;
+    }
+
+    const DWM_TNP_RECTDESTINATION: u32 = 0x1;
+    const DWM_TNP_OPACITY: u32 = 0x4;
+    const DWM_TNP_VISIBLE: u32 = 0x8;
+
     const WM_TIMER: u32 = 0x0113;
     // Explorer's taskbar seen shown (the hook), lParam its window; the tray's
     // icons changed (systray.rs); the thread asked to end.
@@ -246,6 +275,8 @@ mod imp {
     // Each program's name (tasks::app_name), and its file's icon drawn, by its path.
     static APP_NAMES: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
     static FILE_PNGS: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+    // The live pictures shown (window, thumbnail), over the windows listed above a button.
+    static THUMBS: Mutex<Vec<(isize, isize)>> = Mutex::new(Vec::new());
     static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
     // The keyboard's thread, and what it sent last.
     static KEYS: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
@@ -515,6 +546,47 @@ mod imp {
         if *sent != list {
             *sent = list.clone();
             let _ = sh.app.emit_to("island", "taskbar:windows", list);
+        }
+    }
+
+    // Windows' live pictures of windows (DWM thumbnails), drawn over the
+    // home's window where the page left room for them (the windows listed
+    // above a program's button): each window's at (x, y, w, h), physical,
+    // in the home's window, its shape kept. None: all taken away.
+    pub fn thumbs(home: isize, items: Vec<(isize, (i32, i32, i32, i32))>) {
+        let mut shown = THUMBS.lock().unwrap();
+        for (_, thumb) in shown.drain(..) {
+            // SAFETY: a thumbnail of ours.
+            unsafe { DwmUnregisterThumbnail(thumb) };
+        }
+        if home == 0 {
+            return;
+        }
+        for (hwnd, (x, y, w, h)) in items {
+            let mut thumb = 0isize;
+            // SAFETY: our own window and another's; the handle is ours to unregister.
+            if unsafe { DwmRegisterThumbnail(home as Hwnd, hwnd as Hwnd, &mut thumb) } != 0 || thumb == 0 {
+                continue;
+            }
+            let mut size = Size::default();
+            // SAFETY: our own struct.
+            unsafe { DwmQueryThumbnailSourceSize(thumb, &mut size) };
+            // Fitted into the room, its shape kept, in the middle.
+            let (sw, sh) = (size.cx.max(1) as f64, size.cy.max(1) as f64);
+            let k = (w as f64 / sw).min(h as f64 / sh);
+            let (dw, dh) = ((sw * k).round() as i32, (sh * k).round() as i32);
+            let (dx, dy) = (x + (w - dw) / 2, y + (h - dh) / 2);
+            let props = ThumbnailProperties {
+                flags: DWM_TNP_RECTDESTINATION | DWM_TNP_OPACITY | DWM_TNP_VISIBLE,
+                dest: Rect { left: dx, top: dy, right: dx + dw, bottom: dy + dh },
+                source: Rect::default(),
+                opacity: 255,
+                visible: 1,
+                client_only: 0,
+            };
+            // SAFETY: our own thumbnail and struct.
+            unsafe { DwmUpdateThumbnailProperties(thumb, &props) };
+            shown.push((hwnd, thumb));
         }
     }
 
@@ -1010,6 +1082,7 @@ mod imp {
     pub fn app(_sh: &Shared, _what: &str, _path: &str) -> bool {
         false
     }
+    pub fn thumbs(_home: isize, _items: Vec<(isize, (i32, i32, i32, i32))>) {}
     pub fn work_area_bottom() -> i32 {
         0
     }
@@ -1042,6 +1115,17 @@ pub fn taskbar_open(what: String) -> bool {
 #[tauri::command]
 pub fn taskbar_window(id: i64, what: String) -> bool {
     imp::window(&what, id as isize)
+}
+
+// Where the page left room for windows' live pictures (window, x, y, w, h
+// in its own px): shown there; none, taken away.
+#[tauri::command]
+pub fn taskbar_thumbs(app: tauri::AppHandle, items: Vec<(i64, f64, f64, f64, f64)>) {
+    let sh = crate::shared(&app);
+    let (_, sf) = crate::island::origin(&sh);
+    let px = |v: f64| (v * sf).round() as i32;
+    let items = items.into_iter().map(|(h, x, y, w, ht)| (h as isize, (px(x), px(y), px(w), px(ht)))).collect();
+    imp::thumbs(crate::island::hwnd(&sh), items);
 }
 
 // A program's button: launch (a program kept on the taskbar, not running;

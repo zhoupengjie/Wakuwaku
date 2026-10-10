@@ -898,6 +898,7 @@ fn main() {
             taskbar::taskbar_window,
             taskbar::taskbar_tray_pin,
             taskbar::taskbar_app,
+            taskbar::taskbar_thumbs,
         ])
         .on_menu_event(|app, event| tray::on_menu(&shared(app), event.id().as_ref()))
         .setup(move |app| {

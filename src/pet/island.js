@@ -799,6 +799,7 @@
     clearTimeout(popTimer)
     popFor = null
     pop.hidden = true
+    sendThumbs()
   }
 
   function drawPop() {
@@ -808,19 +809,25 @@
     const windows = app.windows || []
     const rows = []
     if (popFor.kind === 'list') {
+      // A card for each: its icon, title and ✕, and room under them for
+      // its live picture (taskbar.rs thumbs).
       for (const w of windows) {
-        const row = el('div', w.front ? 'wrow front' : 'wrow')
-        row.dataset.win = w.id
+        const card = el('div', w.front ? 'wcard front' : 'wcard')
+        card.dataset.win = w.id
+        const top = el('div', 'wtop')
         if (w.png || app.png) {
           const img = el('img')
           img.src = w.png || app.png
-          row.append(img)
+          top.append(img)
         }
-        row.append(el('span', 'wt', w.title))
+        top.append(el('span', 'wt', w.title))
         const x = el('span', 'wx', '✕')
         x.dataset.close = w.id
-        row.append(x)
-        rows.push(row)
+        top.append(x)
+        const room = el('div', 'wthumb')
+        room.dataset.thumb = w.id
+        card.append(top, room)
+        rows.push(card)
       }
     } else {
       const item = (text, act) => {
@@ -835,11 +842,30 @@
     if (!rows.length) return closePop()
     pop.replaceChildren(...rows)
     pop.classList.toggle('menu', popFor.kind === 'menu')
+    pop.classList.toggle('list', popFor.kind === 'list')
     pop.hidden = false
     // Over its button, kept within the screen.
     const left = button.offsetLeft + button.offsetWidth / 2 - pop.offsetWidth / 2
     pop.style.left = `${Math.max(4, Math.min(left, barRest.offsetWidth - pop.offsetWidth - 4))}px`
+    requestAnimationFrame(sendThumbs)
   }
+
+  // The live pictures where the cards left room for them; none once closed.
+  let thumbsSent = ''
+  function sendThumbs() {
+    const items = popFor?.kind === 'list' ? [...pop.querySelectorAll('[data-thumb]')].map(r => {
+      const b = r.getBoundingClientRect()
+      return [Number(r.dataset.thumb), b.left, b.top, b.width, b.height]
+    }) : []
+    const sent = JSON.stringify(items)
+    if (sent === thumbsSent) return
+    thumbsSent = sent
+    window.pet.taskbar.thumbs(items)
+  }
+  window.addEventListener('resize', () => {
+    thumbsSent = ''
+    requestAnimationFrame(sendThumbs)
+  })
 
   // A press on a program's button: one not running starts; one window goes
   // to the front, or is minimized when in front; several to pick from.

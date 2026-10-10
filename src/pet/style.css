@@ -1735,3 +1735,55 @@ body {
   color: #a1a1a6;
   font-size: 11px;
 }
+
+/* The windows listed above a program's button: a card each, its live
+   picture drawn by Windows into the room under its title. */
+#bar-rest .wpop.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 90vw;
+}
+
+#bar-rest .wpop .wcard {
+  width: 208px;
+  padding: 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#bar-rest .wpop .wcard:hover {
+  background: #2c2c2e;
+}
+
+#bar-rest .wpop .wcard.front {
+  box-shadow: inset 0 0 0 1.5px #5e9bff;
+}
+
+#bar-rest .wpop .wtop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+}
+
+#bar-rest .wpop .wtop img {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+#bar-rest .wpop .wtop .wt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#bar-rest .wpop .wthumb {
+  height: 117px;
+  margin-top: 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+}

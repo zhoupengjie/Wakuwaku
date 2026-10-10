@@ -86,6 +86,8 @@
       trayPin: (name, pinned) => send('taskbar_tray_pin', { name: String(name), pinned: pinned === true }),
       // A program's button: launch (it, or another window of it), pin, unpin.
       app: (path, what) => invoke('taskbar_app', { path: String(path), what: String(what) }).catch(() => false),
+      // Room for windows' live pictures in the page: [[window, x, y, w, h]], or none.
+      thumbs: items => send('taskbar_thumbs', { items }),
     },
     onTray: on('taskbar:tray'),
     // The windows' buttons as they change ({ id, title, exe, png, front, min, flash, sessions }).

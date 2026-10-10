@@ -147,11 +147,25 @@ pub fn download_pet(input: &str, dir: &Path) -> Result<Value, PetError> {
     Ok(json!({ "id": id, "name": pet["displayName"], "author": pet["ownerName"], "warning": warning }))
 }
 
-// A page of the site's gallery. Only what the gallery shows is passed on, and
-// only pictures from the site itself.
-pub fn gallery(page: u64, sort: &str) -> Result<Value, PetError> {
-    let sort = if sort == "newest" { "newest" } else { "popular" };
-    let url = format!("{SITE}/api/pets?page={}&pageSize=12&sort={sort}", page.max(1));
+// A page of the gallery's list: the newest first or the best liked, and
+// those a search finds (by name, description or id, loosely, as the site's
+// own search box finds them). The site says "new" now; "newest" it turned
+// away (400, invalid sort, 2026-10-10).
+fn gallery_url(page: u64, sort: &str, query: &str) -> String {
+    let sort = if sort == "new" || sort == "newest" { "new" } else { "popular" };
+    let query: String = query.trim().chars().take(100).collect();
+    let mut url = Url::parse(&format!("{SITE}/api/pets")).expect("the site's address");
+    url.query_pairs_mut().append_pair("page", &page.max(1).to_string()).append_pair("pageSize", "12").append_pair("sort", sort);
+    if !query.is_empty() {
+        url.query_pairs_mut().append_pair("q", &query);
+    }
+    url.to_string()
+}
+
+// A page of the site's gallery, or of what a search finds there. Only what
+// the gallery shows is passed on, and only pictures from the site itself.
+pub fn gallery(page: u64, sort: &str, query: &str) -> Result<Value, PetError> {
+    let url = gallery_url(page, sort, query);
     let body: Value = agent()
         .get(&url)
         .header("user-agent", "wakuwaku")
@@ -178,7 +192,7 @@ pub fn gallery(page: u64, sort: &str) -> Result<Value, PetError> {
             })
         })
         .collect();
-    Ok(json!({ "items": items, "page": body["page"], "totalPages": body["totalPages"] }))
+    Ok(json!({ "items": items, "page": body["page"], "totalPages": body["totalPages"], "total": body["total"] }))
 }
 
 // An error in the person's language.
@@ -221,6 +235,13 @@ mod tests {
         assert_eq!(id("https://www.codex-pets.net/pets/abc").as_deref(), Some("abc"));
         assert_eq!(parse_pet_ref("https://example.com/#/pets/abc").err().map(|e| e.code), Some("otherSite"));
         assert_eq!(parse_pet_ref("https://codex-pets.net/").err().map(|e| e.code), Some("noId"));
+    }
+
+    #[test]
+    fn gallery_asks() {
+        assert_eq!(gallery_url(0, "popular", ""), "https://codex-pets.net/api/pets?page=1&pageSize=12&sort=popular");
+        assert_eq!(gallery_url(2, "newest", " "), "https://codex-pets.net/api/pets?page=2&pageSize=12&sort=new");
+        assert_eq!(gallery_url(1, "x", "猫 cat&sort=new"), "https://codex-pets.net/api/pets?page=1&pageSize=12&sort=popular&q=%E7%8C%AB+cat%26sort%3Dnew");
     }
 
     #[test]

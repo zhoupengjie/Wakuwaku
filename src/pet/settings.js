@@ -55,8 +55,14 @@
   let typedRef = ''
   let fetching = null
   let fetchNote = { text: '', isError: false }
-  // The gallery, loaded the first time the pets page is shown.
-  const gallery = { sort: 'popular', items: [], page: 0, totalPages: 1, loading: false, error: '', getting: '' }
+  // The gallery, loaded the first time the pets page is shown; or what a
+  // search finds there, the words typed in the download box (a link there
+  // is downloaded, any other words are looked for as the site's own search
+  // box looks: a name, part of one, a word of its description). Each ask
+  // numbered: a slower answer to an earlier search never lands over a later.
+  const gallery = { sort: 'popular', query: '', items: [], page: 0, totalPages: 1, total: 0, loading: false, error: '', getting: '', asked: 0 }
+  let searchTimer
+  const isLink = text => /:\/\/|codex-pets\.net/i.test(text)
   let thumbTimers = []
   let clockTimer
   // The plugins page: the plugin whose settings are folded out, and what is
@@ -283,10 +289,15 @@
       .join('')
     const more =
       gallery.loading ? `<div class="note">${esc(T('home.getting'))}</div>` : gallery.page < gallery.totalPages ? `<button class="pbtn wide" data-more>${esc(T('home.more'))}</button>` : ''
+    // The button downloads a link, and looks for other words.
+    const fetchLabel = fetching ? T('settings.fetching') : T(isLink(typedRef.trim()) ? 'settings.fetch' : 's.search')
+    const q = gallery.query
+    const listTitle = !q ? T('home.gallery') : gallery.loading && !gallery.items.length ? T('s.searching', { q }) : T('s.found', { q, n: gallery.total })
+    const none = q && !gallery.loading && !gallery.error && !gallery.items.length ? `<div class="note">${esc(T('s.foundNone', { q }))}</div>` : ''
     return `${sec(T('home.installed'))}<div class="grp">${installed}</div>
-      ${sec(T('s.download'))}<div class="grp"><div class="r"><input class="in" id="s-ref" spellcheck="false" placeholder="${esc(T('s.fetchPlaceholder'))}"><button class="pbtn al" data-fetch ${fetching ? 'disabled' : ''}>${esc(fetching ? T('settings.fetching') : T('settings.fetch'))}</button></div>${note}</div>
-      <div class="sec row-sec"><span>${esc(T('home.gallery'))}</span><span class="grow"></span>${seg('gallery', [['popular', T('home.popular')], ['newest', T('home.newest')]], gallery.sort)}</div>
-      ${gallery.error ? `<div class="note err">${esc(T('home.galleryError', { message: gallery.error }))}</div>` : ''}
+      ${sec(T('s.download'))}<div class="grp"><div class="r"><input class="in" id="s-ref" spellcheck="false" placeholder="${esc(T('s.fetchPlaceholder'))}"><button class="pbtn al" data-fetch ${fetching ? 'disabled' : ''}>${esc(fetchLabel)}</button></div>${note}</div>
+      <div class="sec row-sec"><span class="ellip">${esc(listTitle)}</span><span class="grow"></span>${seg('gallery', [['popular', T('home.popular')], ['newest', T('home.newest')]], gallery.sort)}</div>
+      ${gallery.error ? `<div class="note err">${esc(T('home.galleryError', { message: gallery.error }))}</div>` : ''}${none}
       <div class="cards">${cards}</div>${more}
       <div class="links"><span class="link" data-site="site">${esc(T('settings.browse'))} ›</span></div>`
   }
@@ -1363,10 +1374,12 @@
     const changed = setHTML(body, PAGES[tab]())
     if (reset) body.scrollTop = 0
     if (!changed) return
+    // Left as it is while it has the focus: set again, a word half-made in
+    // an input method was lost (results landing while one typed).
     const again = document.getElementById('s-ref')
-    if (again) again.value = typedRef
+    if (again && again.value !== typedRef) again.value = typedRef
     const back = which && body.querySelector(which)
-    if (back) {
+    if (back && back !== document.activeElement) {
       back.focus()
       back.setSelectionRange(caret, caret)
     }
@@ -1452,21 +1465,47 @@
   }
 
   async function loadGallery(more) {
-    if (gallery.loading || (!more && gallery.page > 0)) return
+    if (more ? gallery.loading : gallery.page > 0) return
+    const asked = ++gallery.asked
     gallery.loading = true
     gallery.error = ''
     draw()
-    const got = await window.pet.settings.gallery(more ? gallery.page + 1 : 1, gallery.sort)
+    const got = await window.pet.settings.gallery(more ? gallery.page + 1 : 1, gallery.sort, gallery.query)
+    if (asked !== gallery.asked) return
     gallery.loading = false
     if (got.ok) {
       gallery.items = more ? [...gallery.items, ...got.items] : got.items
       gallery.page = got.page || 1
       gallery.totalPages = got.totalPages || 1
+      gallery.total = got.total ?? gallery.items.length
     } else {
       gallery.error = got.error
     }
     draw()
     relayout()
+  }
+
+  // The gallery as a search finds it (no words: the gallery itself), from
+  // its first page.
+  function search(text) {
+    clearTimeout(searchTimer)
+    const query = text.trim()
+    if (query === gallery.query) return
+    gallery.query = query
+    gallery.page = 0
+    gallery.items = []
+    gallery.total = 0
+    loadGallery(false)
+  }
+
+  // Typed: looked for a moment after the last key (a link is not looked
+  // for; the button downloads it), the button saying which it does.
+  function searchSoon() {
+    clearTimeout(searchTimer)
+    const text = typedRef.trim()
+    const button = layer.querySelector('[data-fetch]')
+    if (button && !fetching) button.textContent = T(isLink(text) ? 'settings.fetch' : 's.search')
+    if (!isLink(text)) searchTimer = setTimeout(() => search(text), 400)
   }
 
   async function fetchPet(reference, fromGallery) {
@@ -1617,8 +1656,9 @@
     const use = at('[data-use]')
     if (use) return patch({ pet: use.dataset.use })
     if (at('[data-fetch]')) {
-      if (!typedRef.trim()) return document.getElementById('s-ref')?.focus()
-      return fetchPet(typedRef.trim(), false)
+      const text = typedRef.trim()
+      if (!text) return document.getElementById('s-ref')?.focus()
+      return isLink(text) ? fetchPet(text, false) : search(text)
     }
     const get = at('[data-get]')
     if (get) return fetchPet(get.dataset.get, true)
@@ -2037,8 +2077,19 @@
       dropSure = false
       keepDraft()
     }
-    if (e.target.id === 's-ref') typedRef = e.target.value
+    if (e.target.id === 's-ref') {
+      typedRef = e.target.value
+      // Not mid-word in an input method: once the word is chosen.
+      if (!e.isComposing) searchSoon()
+    }
     if (e.target.dataset.field) drafts[e.target.dataset.field] = e.target.value
+  })
+
+  // The word an input method has chosen: looked for as if typed.
+  layer.addEventListener('compositionend', e => {
+    if (e.target.id !== 's-ref') return
+    typedRef = e.target.value
+    searchSoon()
   })
 
   // A plugin's setting kept once typed (Enter, or leaving the box); a
@@ -2074,7 +2125,7 @@
         e.preventDefault()
         return sendDraft()
       }
-      if (e.key === 'Enter' && e.target.id === 's-ref') layer.querySelector('[data-fetch]')?.click()
+      if (e.key === 'Enter' && e.target.id === 's-ref' && !e.isComposing) layer.querySelector('[data-fetch]')?.click()
       if (e.key === 'Enter' && e.target.dataset.field) e.target.blur()
       if (e.key === 'Enter' && e.target.dataset.mf) layer.querySelector('[data-mail-find]:not([disabled]), [data-mail-save]:not([disabled])')?.click()
       if (e.key === 'Enter' && e.target.dataset.talk && !e.isComposing) say(e.target)

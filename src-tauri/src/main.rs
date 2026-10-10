@@ -910,6 +910,8 @@ fn main() {
             taskbar::taskbar_open,
             taskbar::taskbar_tray_rects,
             taskbar::taskbar_window,
+            taskbar::taskbar_windows,
+            taskbar::taskbar_watch_presses,
             taskbar::taskbar_tray_pin,
             taskbar::taskbar_app,
             taskbar::taskbar_thumbs,

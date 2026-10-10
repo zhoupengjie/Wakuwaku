@@ -189,6 +189,7 @@ mod imp {
     const WM_CLOSE: u32 = 0x0010;
     const WM_SYSCOMMAND: u32 = 0x0112;
     const SC_MINIMIZE: usize = 0xF020;
+    const SC_RESTORE: usize = 0xF120;
     const ICON_SMALL: usize = 0;
     const ICON_BIG: usize = 1;
     const ICON_SMALL2: usize = 2;
@@ -448,6 +449,65 @@ mod imp {
         crate::jump::bring_window(hwnd)
     }
 
+    extern "system" fn stack(hwnd: Hwnd, param: isize) -> i32 {
+        // SAFETY: param is the Vec in_stack() passed, alive for the enumeration.
+        unsafe { (*(param as *mut Vec<isize>)).push(hwnd as isize) };
+        1
+    }
+
+    // These windows as they lie, the one on top first.
+    fn in_stack(hwnds: &[isize]) -> Vec<isize> {
+        let mut all = Vec::new();
+        // SAFETY: the callback only pushes onto the Vec, which outlives the call.
+        unsafe { EnumWindows(stack, &mut all as *mut Vec<isize> as isize) };
+        all.into_iter().filter(|h| hwnds.contains(h)).collect()
+    }
+
+    // A press on the button of a program with several windows: all of them
+    // to the front (restored if minimized), the one on top of them on top
+    // still; all minimized when one of them is the one in front, as a
+    // single window's button does.
+    pub fn press_all(hwnds: &[isize], may_minimize: bool) -> bool {
+        let windows = in_stack(hwnds);
+        let Some(&top) = windows.first() else { return false };
+        // SAFETY: plain calls and posted messages about windows; a stale
+        // handle only makes them fail.
+        unsafe {
+            let up = |h: isize| IsIconic(h as Hwnd) == 0 && IsWindowVisible(h as Hwnd) != 0;
+            let wait_for = |done: &dyn Fn() -> bool, ms: u64| {
+                let asked = std::time::Instant::now();
+                while !done() && asked.elapsed() < std::time::Duration::from_millis(ms) {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            };
+            if may_minimize && windows.contains(&(GetForegroundWindow() as isize)) {
+                // As press(): each asked, forced once it has had its time.
+                for &h in &windows {
+                    if up(h) {
+                        PostMessageW(h as Hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+                    }
+                }
+                wait_for(&|| !windows.iter().any(|&h| up(h)), 1000);
+                for &h in windows.iter().filter(|&&h| up(h)) {
+                    ShowWindow(h as Hwnd, SW_MINIMIZE);
+                }
+                return true;
+            }
+            // The minimized ones asked to come back all at once (jump::bring),
+            // then each to the front from the lowest, the top one last.
+            for &h in &windows {
+                if IsIconic(h as Hwnd) != 0 {
+                    PostMessageW(h as Hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+                }
+            }
+            wait_for(&|| !windows.iter().any(|&h| IsIconic(h as Hwnd) != 0), 1500);
+        }
+        for &h in windows.iter().rev().filter(|&&h| h != top) {
+            crate::jump::bring_window(h);
+        }
+        crate::jump::bring_window(top)
+    }
+
     // Asked to close, as its own ✕ does.
     pub fn close(hwnd: isize) -> bool {
         // SAFETY: a posted message, no pointers.
@@ -620,6 +680,9 @@ mod imp {
     pub fn alive(_hwnd: isize) -> bool {
         false
     }
+    pub fn press_all(_hwnds: &[isize], _may_minimize: bool) -> bool {
+        false
+    }
     pub fn press(_hwnd: isize) -> bool {
         false
     }
@@ -628,4 +691,4 @@ mod imp {
     }
 }
 
-pub use imp::{alive, app_id, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, is_shell_flyout, is_start, keys, launch, list, net, plain_program_icon, press, toggle_native, with_com};
+pub use imp::{alive, app_id, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, is_shell_flyout, is_start, keys, launch, list, net, plain_program_icon, press, press_all, toggle_native, with_com};

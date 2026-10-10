@@ -82,6 +82,10 @@
       trayRects: rects => send('taskbar_tray_rects', { rects }),
       // A press on a window's button: press (to the front, or minimized), close.
       window: (id, what) => invoke('taskbar_window', { id: Number(id), what: String(what) }).catch(() => false),
+      // A program's windows all to the front, or all minimized when one is in front.
+      windows: ids => invoke('taskbar_windows', { ids: (ids || []).map(Number) }).catch(() => false),
+      // Presses anywhere told back (onPress) while something is open that closes on one.
+      watch: on => send('taskbar_watch_presses', { on: on === true }),
       // A tray icon kept out on the taskbar, or folded away (its name,
       // systray.rs; null: where it was), and the tray's order (names) after it.
       trayPin: (name, pinned, order) =>
@@ -96,6 +100,7 @@
     onWindows: on('taskbar:windows'),
     // The keyboard as it changes ({ lang, native, caps }).
     onKeys: on('taskbar:keys'),
+    onPress: on('taskbar:press'),
     // The desktop's picture under the strip, for its Mica ({ url, position,
     // color, mon, screen, sf }; mica.js).
     onWallpaper: on('taskbar:wallpaper'),

@@ -804,6 +804,81 @@ mod imp {
         done
     }
 
+    // A press on the button of a program with several windows: all of them
+    // to the front, or all minimized (tasks::press_all); off the page's
+    // thread, as window().
+    pub fn windows(hwnds: Vec<isize>) -> bool {
+        std::thread::spawn(move || {
+            let closed = close_flyout();
+            tasks::press_all(&hwnds, !closed);
+            wake_tasks();
+        });
+        true
+    }
+
+    // A press anywhere, told to the page while it has something open (the
+    // windows listed above a button, the folded tray icons) that closes on
+    // a press elsewhere, as Windows' do: ours never take the focus whose
+    // loss would tell. A low-level mouse hook, on the host's thread (whose
+    // loop it needs) and only while asked for.
+    const WM_WATCH_PRESSES: u32 = 0x8010;
+    const WH_MOUSE_LL: i32 = 14;
+    const WM_LBUTTONDOWN: u32 = 0x0201;
+    const WM_RBUTTONDOWN: u32 = 0x0204;
+    const WM_MBUTTONDOWN: u32 = 0x0207;
+    static PRESS_HOOK: AtomicIsize = AtomicIsize::new(0);
+
+    #[repr(C)]
+    struct MouseLl {
+        pt: Point,
+        data: u32,
+        flags: u32,
+        time: u32,
+        extra: usize,
+    }
+
+    type HookProc = extern "system" fn(i32, usize, isize) -> isize;
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn SetWindowsHookExW(id: i32, proc_: HookProc, module: isize, thread: u32) -> isize;
+        fn UnhookWindowsHookEx(hook: isize) -> i32;
+        fn CallNextHookEx(hook: isize, code: i32, wparam: usize, lparam: isize) -> isize;
+    }
+
+    pub fn watch_presses(on: bool) {
+        // SAFETY: a posted message to the host's own window.
+        unsafe { PostMessageW(OURS.load(Ordering::SeqCst) as Hwnd, WM_WATCH_PRESSES, on as usize, 0) };
+    }
+
+    // On the host's thread.
+    fn watch(on: bool) {
+        let hook = PRESS_HOOK.load(Ordering::SeqCst);
+        // SAFETY: a hook of our own, put in and taken out on this thread.
+        unsafe {
+            if on && hook == 0 {
+                PRESS_HOOK.store(SetWindowsHookExW(WH_MOUSE_LL, press_hook, GetModuleHandleW(std::ptr::null()), 0), Ordering::SeqCst);
+            } else if !on && hook != 0 {
+                UnhookWindowsHookEx(hook);
+                PRESS_HOOK.store(0, Ordering::SeqCst);
+            }
+        }
+    }
+
+    extern "system" fn press_hook(code: i32, wparam: usize, lparam: isize) -> isize {
+        if code >= 0 && matches!(wparam as u32, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN) {
+            // SAFETY: Windows hands a MSLLHOOKSTRUCT with these messages.
+            let at = unsafe { &*(lparam as *const MouseLl) }.pt;
+            if let Some(sh) = sh() {
+                // Where on the page (its px), for it to tell what was pressed.
+                let ((ox, oy), sf) = crate::island::origin(&sh);
+                let _ = sh.app.emit_to("island", "taskbar:press", json!({ "x": (at.x - ox) as f64 / sf, "y": (at.y - oy) as f64 / sf }));
+            }
+        }
+        // SAFETY: passed on, as every hook must.
+        unsafe { CallNextHookEx(0, code, wparam, lparam) }
+    }
+
     // Where the strip is now (physical): ours of the taskbar's class goes
     // there too, for those who ask the taskbar's window where it is.
     pub fn strip_moved(strip: (i32, i32, i32, i32)) {
@@ -1598,8 +1673,12 @@ mod imp {
             }
             WM_TRAY_CHANGED => send_icons(),
             WM_PAPER | WM_DWMCOLORIZATIONCOLORCHANGED | WM_SETTINGCHANGE => send_look(),
-            // SAFETY: ending this thread's loop.
-            WM_STOP => unsafe { PostQuitMessage(0) },
+            WM_STOP => {
+                watch(false);
+                // SAFETY: ending this thread's loop.
+                unsafe { PostQuitMessage(0) }
+            }
+            WM_WATCH_PRESSES => watch(wparam != 0),
             _ if msg == CREATED_MSG.load(Ordering::SeqCst) && msg != 0 => on_created(),
             _ if msg == SHELL_MSG.load(Ordering::SeqCst) && msg != 0 => on_shell(wparam, lparam),
             // SAFETY: the default for the rest.
@@ -1629,6 +1708,10 @@ mod imp {
     pub fn open(_what: &str) -> bool {
         false
     }
+    pub fn windows(_hwnds: Vec<isize>) -> bool {
+        false
+    }
+    pub fn watch_presses(_on: bool) {}
     pub fn window(_what: &str, _hwnd: isize) -> bool {
         false
     }
@@ -1758,6 +1841,20 @@ pub fn taskbar_open(what: String) -> bool {
 #[tauri::command]
 pub fn taskbar_window(id: i64, what: String) -> bool {
     imp::window(&what, id as isize)
+}
+
+// A press on the button of a program with several windows: all of them to
+// the front, or all minimized when one is in front.
+#[tauri::command]
+pub fn taskbar_windows(ids: Vec<i64>) -> bool {
+    imp::windows(ids.into_iter().map(|id| id as isize).collect())
+}
+
+// While the page has something open that closes on a press elsewhere: the
+// presses told to it (taskbar:press).
+#[tauri::command]
+pub fn taskbar_watch_presses(on: bool) {
+    imp::watch_presses(on);
 }
 
 // Where the page left room for windows' live pictures (window, x, y, w, h

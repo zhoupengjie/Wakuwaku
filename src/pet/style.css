@@ -1877,7 +1877,8 @@ body {
 
 /* Icons alone (island.js, taskbarButtons): a square for each program and
    for Start, the icon as big as on Windows' own taskbar. Its windows are
-   listed when the pointer rests on it: no title, no count. */
+   listed when the pointer rests on it: no title; how many, at the icon's
+   top right when more than one. */
 #bar-rest.icons .start,
 #bar-rest.icons .win {
   flex: none;
@@ -1898,9 +1899,24 @@ body {
   font-size: 13px;
 }
 
-#bar-rest.icons .win .wt,
-#bar-rest.icons .win .count {
+#bar-rest.icons .win .wt {
   display: none;
+}
+
+#bar-rest.icons .win .count {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--win-accent, #5e9bff);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  box-shadow: 0 0 0 1.5px #000;
 }
 
 /* Centred (island.js alignApps), they slide to the middle as programs come and go. */
@@ -2105,6 +2121,12 @@ body {
 .tb-light #bar-rest .win .count {
   background: #d6d6d6;
   color: #1b1b1b;
+}
+
+.tb-light #bar-rest.icons .win .count {
+  background: var(--win-accent, #0067c0);
+  color: #fff;
+  box-shadow: 0 0 0 1.5px #f3f3f3;
 }
 
 .tb-light #bar-rest .mon.rows .wpart.high b {

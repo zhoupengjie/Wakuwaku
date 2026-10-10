@@ -1071,6 +1071,7 @@
     clearTimeout(popTimer)
     popFor = { app: key, kind }
     drawPop()
+    watchPresses()
   }
 
   function closePop() {
@@ -1078,7 +1079,25 @@
     popFor = null
     pop.hidden = true
     sendThumbs()
+    watchPresses()
   }
+
+  // While the windows' list (or menu) or the folded tray icons are open, a
+  // press anywhere else closes them, as Windows' do: told by the host
+  // (taskbar.rs press hook), for ours never take the focus whose loss would.
+  let watching = false
+  function watchPresses() {
+    const want = !!popFor || trayOpen
+    if (want === watching) return
+    watching = want
+    window.pet.taskbar.watch(want)
+  }
+  window.pet.onPress(at => {
+    if (!isOn() || home() !== 'taskbar' || !at) return
+    const over = document.elementFromPoint(at.x, at.y)
+    if (popFor && !(over && (pop.contains(over) || windowsBox.contains(over)))) closePop()
+    if (trayOpen && !(over && trayBox.contains(over))) openTray(false)
+  })
 
   function drawPop() {
     const app = popFor && appOf(popFor.app)
@@ -1164,12 +1183,11 @@
     }
     const windows = app.windows || []
     if (!windows.length) return window.pet.taskbar.app(app.path, 'launch')
-    if (windows.length === 1) {
-      closePop()
-      return window.pet.taskbar.window(windows[0].id, 'press')
-    }
-    if (popFor?.app === app.app && popFor.kind === 'list') closePop()
-    else openPop(app.app, 'list')
+    closePop()
+    if (windows.length === 1) return window.pet.taskbar.window(windows[0].id, 'press')
+    // Several: all to the front, or all minimized when one is in front (the
+    // list of them comes with the pointer resting on the button).
+    window.pet.taskbar.windows(windows.map(w => w.id))
   })
   windowsBox.addEventListener('contextmenu', e => {
     const app = appOf(e.target.closest('[data-app]')?.dataset.app)
@@ -1484,6 +1502,7 @@
     if (trayOpen === open) return
     trayOpen = open
     drawTray()
+    watchPresses()
   }
   chevron.addEventListener('click', () => openTray(!trayOpen))
   // Folded away again once the pointer has been gone from it a moment.

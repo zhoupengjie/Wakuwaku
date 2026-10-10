@@ -97,8 +97,9 @@
     // The desktop's picture under the strip, for its Mica ({ url, position,
     // color, mon, screen, sf }; mica.js).
     onWallpaper: on('taskbar:wallpaper'),
-    // Windows' accent colour ({ base, light }), for what the taskbar colours as Windows' own does.
-    onAccent: on('taskbar:accent'),
+    // Windows' look ({ mode: dark | light, accent: { base, light, dark } }),
+    // for the taskbar to be as Windows' own is.
+    onLook: on('taskbar:look'),
     settings: {
       get: () => invoke('settings_get'),
       set: patch => invoke('settings_set', { patch }),

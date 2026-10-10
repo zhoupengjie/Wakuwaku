@@ -14,8 +14,8 @@
 //     (tasks.rs) made again on a thread of its own and sent (taskbar:windows),
 //     each with the sessions that run in it (jump.rs)
 //   - the desktop's picture changing (wallpaper.rs): sent for the strip's
-//     Mica (taskbar:wallpaper); Windows' accent colour, for what the strip
-//     colours as Windows' own does (taskbar:accent)
+//     Mica (taskbar:wallpaper); Windows' mode and accent colour, for the
+//     strip to be as Windows' own taskbar is (taskbar:look)
 // Taken when the home takes its strip, given back when it gives the strip
 // back (island.rs sync_bar) and on quitting. A killed process cannot give
 // the taskbar back: shell.rs's guard does.
@@ -166,6 +166,8 @@ mod imp {
         fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
         fn ShowWindow(hwnd: Hwnd, cmd: i32) -> i32;
         fn SetLayeredWindowAttributes(hwnd: Hwnd, key: u32, alpha: u8, flags: u32) -> i32;
+        fn SetClassLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> usize;
+        fn InvalidateRect(hwnd: Hwnd, rect: *const Rect, erase: i32) -> i32;
     }
 
     #[link(name = "gdi32")]
@@ -244,6 +246,7 @@ mod imp {
     const WM_PAPER: u32 = 0x8004;
     const WM_SETTINGCHANGE: u32 = 0x001A;
     const WM_DWMCOLORIZATIONCOLORCHANGED: u32 = 0x0320;
+    const GCLP_HBRBACKGROUND: i32 = -10;
     const MONITOR_DEFAULTTONEAREST: u32 = 2;
     const MDT_EFFECTIVE_DPI: u32 = 0;
     const SM_XVIRTUALSCREEN: i32 = 76;
@@ -329,10 +332,12 @@ mod imp {
     static SENT_KEYS: Mutex<Value> = Mutex::new(Value::Null);
     // Windows' own record of the tray icons it keeps out (windows_kept), read once.
     static KEPT: Mutex<Option<Vec<(String, Option<u32>, bool)>>> = Mutex::new(None);
-    // The desktop's picture under the strip and Windows' accent colour, as
+    // The desktop's picture under the strip and Windows' look, as
     // sent last (send_look), and whether they are being looked at.
     static PAPER: Mutex<Value> = Mutex::new(Value::Null);
-    static ACCENT: Mutex<Value> = Mutex::new(Value::Null);
+    static LOOK: Mutex<Value> = Mutex::new(Value::Null);
+    // The live pictures' window's ground (COLORREF), as set last (thumbs_ground).
+    static THUMBS_GROUND: AtomicU32 = AtomicU32::new(0x001E_1C1C);
     static LOOK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
     fn wide(s: &str) -> Vec<u16> {
@@ -452,7 +457,7 @@ mod imp {
         *SENT.lock().unwrap() = Value::Null;
         *SENT_WINDOWS.lock().unwrap() = Value::Null;
         *PAPER.lock().unwrap() = Value::Null;
-        *ACCENT.lock().unwrap() = Value::Null;
+        *LOOK.lock().unwrap() = Value::Null;
         *STRIP.lock().unwrap() = None;
         ORDER.lock().unwrap().clear();
         FLASHING.lock().unwrap().clear();
@@ -621,6 +626,25 @@ mod imp {
         }
     }
 
+    // The live pictures' window as the cards round it are: dark, or light in
+    // Windows' light mode (style.css .wpop, its ground #1c1c1e or #f9f9f9).
+    fn thumbs_ground(light: bool) {
+        let host = THUMB_HOST.load(Ordering::SeqCst);
+        let colour: u32 = if light { 0x00F9_F9F9 } else { 0x001E_1C1C };
+        if host == 0 || THUMBS_GROUND.swap(colour, Ordering::SeqCst) == colour {
+            return;
+        }
+        // SAFETY: our own window's class; the brush it had, ours, deleted
+        // once replaced.
+        unsafe {
+            let old = SetClassLongPtrW(host as Hwnd, GCLP_HBRBACKGROUND, CreateSolidBrush(colour));
+            if old != 0 {
+                DeleteObject(old as isize);
+            }
+            InvalidateRect(host as Hwnd, std::ptr::null(), 1);
+        }
+    }
+
     // Windows' live pictures of windows (DWM thumbnails) where the page left
     // room for them (the windows listed above a program's button): each
     // window's at (x, y, w, h) on the screen, physical, its shape kept, on
@@ -739,8 +763,9 @@ mod imp {
     // its last change after it, so a new picture under the same name is
     // loaded anew), how it is laid, the colour round it, and where the
     // display and all of them together are from the strip's top-left (the
-    // page's px). With it Windows' accent colour (taskbar:accent: { base,
-    // light }), for what the strip colours as Windows' own taskbar does.
+    // page's px). With it Windows' look (taskbar:look: { mode: dark | light,
+    // accent: { base, light, dark } }), for the strip to be as Windows' own
+    // taskbar is; the live pictures' window's ground with it (thumbs_ground).
     // Looked at when the strip moves, when Windows says a setting or its
     // colours changed, and every five seconds (a slideshow, Spotlight); on
     // a thread of its own, one at a time: Windows' answer goes through
@@ -757,12 +782,17 @@ mod imp {
 
     fn look_at_desktop() {
         let Some(sh) = sh() else { return };
-        let accent = wallpaper::accent().map_or(Value::Null, |(base, light)| json!({ "base": base, "light": light }));
-        let mut sent = ACCENT.lock().unwrap();
-        if *sent != accent {
-            log(&format!("accent: {accent}"));
-            *sent = accent.clone();
-            let _ = sh.app.emit_to("island", "taskbar:accent", accent);
+        let (light, accent) = wallpaper::look();
+        thumbs_ground(light);
+        let look = json!({
+            "mode": if light { "light" } else { "dark" },
+            "accent": accent.map(|a| json!({ "base": a.base, "light": a.light, "dark": a.dark })),
+        });
+        let mut sent = LOOK.lock().unwrap();
+        if *sent != look {
+            log(&format!("look: {look}"));
+            *sent = look.clone();
+            let _ = sh.app.emit_to("island", "taskbar:look", look);
         }
         drop(sent);
         let Some(strip) = *STRIP.lock().unwrap() else { return };
@@ -835,9 +865,9 @@ mod imp {
         if !paper.is_null() {
             let _ = sh.app.emit_to("island", "taskbar:wallpaper", paper);
         }
-        let accent = ACCENT.lock().unwrap().clone();
-        if !accent.is_null() {
-            let _ = sh.app.emit_to("island", "taskbar:accent", accent);
+        let look = LOOK.lock().unwrap().clone();
+        if !look.is_null() {
+            let _ = sh.app.emit_to("island", "taskbar:look", look);
         }
     }
 

@@ -150,6 +150,8 @@
   let lang = 'en'
   let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
   let config = {}
+  // Windows' look as taskbar.rs sent it last: its mode (dark, light) and accent colour.
+  let look = { mode: 'dark' }
   let spriteUrl = null
   let second = null
   let isHover = false
@@ -211,10 +213,15 @@
   const home = () => (['corner', 'bar', 'taskbar'].includes(config.display) ? config.display : 'island')
   // A strip across the screen (the bar, the taskbar): the other sessions have tags in it.
   const isStrip = () => home() === 'bar' || home() === 'taskbar'
-  // The taskbar's strip the desktop's picture through (mica.js), not black.
+  // The taskbar's strip the desktop's picture through (mica.js), not solid.
   const isMica = () => isOn() && home() === 'taskbar' && config.taskbarMaterial !== 'black'
-  // The compact taskbar island's height: the strip's, or the capsule's on Mica.
-  const taskCompactH = () => (isMica() ? TASKBAR_H - 2 * CAPSULE_Y : TASKBAR_H)
+  // The taskbar light, as Windows' own is in its light mode (taskbar.rs).
+  const isLight = () => isOn() && home() === 'taskbar' && look.mode === 'light'
+  // Her end a black capsule in the strip, wherever the strip is not black
+  // itself: on the Mica, or light.
+  const isCapsule = () => isMica() || isLight()
+  // The compact taskbar island's height: the strip's, or the capsule's.
+  const taskCompactH = () => (isCapsule() ? TASKBAR_H - 2 * CAPSULE_Y : TASKBAR_H)
   const corner = () => (['br', 'bl', 'tr', 'tl'].includes(config.corner) ? config.corner : 'br')
   // In her seat: there is a pet to show, and she is not out on the desktop.
   const isHome = () => !!spriteUrl && (config.out !== true || isComingHome)
@@ -563,7 +570,7 @@
     // past its room (the window then grows up too, which flashes: its room
     // is kept as high as the settings ever are, settingsMax).
     if (home() === 'taskbar') {
-      const height = want.height + TASKBAR_SHADE + (view === 'settings' ? TASKBAR_H + TASKBAR_GAP : isMica() ? CAPSULE_Y : 0)
+      const height = want.height + TASKBAR_SHADE + (view === 'settings' ? TASKBAR_H + TASKBAR_GAP : isCapsule() ? CAPSULE_Y : 0)
       if (height <= TASKBAR_H + TASKBAR_ROOM) return null
       return { width: innerWidth, height }
     }
@@ -600,10 +607,10 @@
           : '0 0 22px 22px'
         : home() === 'taskbar'
           ? view === 'compact'
-            ? isMica()
+            ? isCapsule()
               ? `${height / 2}px`
               : '0'
-            : view === 'settings' || isMica()
+            : view === 'settings' || isCapsule()
               ? '22px'
               : '22px 22px 0 0'
           : home() === 'corner' && view === 'compact'
@@ -766,7 +773,7 @@
   let windowsDrawn = ''
 
   function fillTaskbar() {
-    barRest.style.left = `${sizeOf('compact').width + (isMica() ? CAPSULE_X + 4 : 0)}px`
+    barRest.style.left = `${sizeOf('compact').width + (isCapsule() ? CAPSULE_X + 4 : 0)}px`
     if (!taskbarBuilt) {
       barRest.replaceChildren(startButton, windowsBox, tagsBox, growNode, facesBox, trayBox, keysBox, quickBox, clockBox, taskGear, pop)
       taskbarBuilt = true
@@ -1024,11 +1031,13 @@
     showNet(keys?.net)
   })
 
-  // --- The taskbar's Mica -------------------------------------------------------------
+  // --- The taskbar's look: Mica, light or dark, Windows' accent -------------------------
 
   // Behind the strip's parts: the desktop's picture under it, blurred and
-  // tinted (mica.js), as taskbar.rs sent it last; drawn again only when the
-  // picture or the strip's width changes. None on a black strip.
+  // tinted (mica.js) for Windows' mode, as taskbar.rs sent it last; drawn
+  // again only when the picture, the mode or the strip's width changes. None
+  // on a solid strip. The strip light in Windows' light mode (tb-light), her
+  // end a capsule wherever the strip is not black (tb-capsule).
   const micaBox = el('div')
   micaBox.id = 'mica'
   island.parentElement.prepend(micaBox)
@@ -1037,7 +1046,9 @@
 
   function drawMica() {
     body.classList.toggle('tb-mica', isMica())
-    if (isMica()) mica.set(paper, innerWidth, TASKBAR_H)
+    body.classList.toggle('tb-light', isLight())
+    body.classList.toggle('tb-capsule', isCapsule())
+    if (isMica()) mica.set(paper, innerWidth, TASKBAR_H, look.mode)
     else mica.clear()
   }
 
@@ -1046,13 +1057,20 @@
     drawMica()
   })
 
-  // Windows' accent colour (taskbar.rs), the lighter one as its own dark
-  // taskbar draws with: the monitor's icons, the line under the window in
-  // front (style.css --win-accent; its own blue until it comes). Not
-  // --accent: that is her mood's colour (pet.js).
-  window.pet.onAccent(a => {
-    if (a?.light) document.documentElement.style.setProperty('--win-accent', a.light)
+  // Windows' mode and accent colour (taskbar.rs). The accent as its own
+  // taskbar draws with it: a lighter one on the dark strip, a darker one on
+  // the light (style.css --win-accent, for the monitor's icons and the line
+  // under the window in front; its own blue until it comes). Not --accent:
+  // that is her mood's colour (pet.js).
+  window.pet.onLook(l => {
+    look = { mode: l?.mode === 'light' ? 'light' : 'dark', accent: l?.accent || null }
+    const colour = look.accent && (look.mode === 'light' ? look.accent.dark : look.accent.light)
+    if (colour) document.documentElement.style.setProperty('--win-accent', colour)
     else document.documentElement.style.removeProperty('--win-accent')
+    if (isOn() && home() === 'taskbar') {
+      drawMica()
+      update()
+    }
   })
   window.addEventListener('resize', drawMica)
 

@@ -1331,29 +1331,30 @@ body {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-/* On the Mica her end is an island of its own: a black capsule in the strip
-   (island.js CAPSULE_X, CAPSULE_Y), and what it grows into rises from there,
+/* On the Mica, and on the light strip, her end is an island of its own: a
+   black capsule in the strip (island.js isCapsule, tb-capsule;
+   CAPSULE_X, CAPSULE_Y), and what it grows into rises from there,
    rounded all round, with the settings' shadow and edge. */
-.home-taskbar.tb-mica #island:not([data-view='settings']) {
+.home-taskbar.tb-capsule #island:not([data-view='settings']) {
   left: 6px;
   bottom: 5px;
 }
 
-.home-taskbar.tb-mica #island[data-view='compact'] {
+.home-taskbar.tb-capsule #island[data-view='compact'] {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
 }
 
-.home-taskbar.tb-mica #island:not([data-view='compact']):not([data-view='settings']) {
+.home-taskbar.tb-capsule #island:not([data-view='compact']):not([data-view='settings']) {
   box-shadow:
     0 8px 30px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-.home-taskbar.tb-mica #island-compact {
+.home-taskbar.tb-capsule #island-compact {
   height: 38px;
 }
 
-.home-taskbar.tb-mica.has-her #island-compact {
+.home-taskbar.tb-capsule.has-her #island-compact {
   padding-left: 41px;
 }
 
@@ -1939,4 +1940,122 @@ body {
   margin-top: 6px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
+}
+
+/* --- The taskbar in Windows' light mode (island.js tb-light: as Windows'
+   own taskbar is, SystemUsesLightTheme, which taskbar.rs sends) ---------------
+   The strip and what opens from it light; her end stays black, a capsule in
+   it (island.js isCapsule). The programs draw their tray icons for the
+   light taskbar themselves. Under the pointer and in front: a white wash,
+   as on Windows' own. */
+.tb-light #island-row {
+  background: #eeeeee;
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.tb-light.tb-mica #island-row {
+  background: #f3f3f3;
+}
+
+.tb-light #mica::after {
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.06);
+}
+
+.tb-light #bar-rest,
+.tb-light #bar-rest .win,
+.tb-light #bar-rest .mon.rows,
+.tb-light #bar-rest .tclock b,
+.tb-light #bar-rest .kbd .ime,
+.tb-light #bar-rest .tag .who {
+  color: #1b1b1b;
+}
+
+.tb-light #bar-rest .tclock i,
+.tb-light #bar-rest .tag .what,
+.tb-light #bar-rest .wpop .wx,
+.tb-light #bar-rest .wpop .whead {
+  color: #5d5d5d;
+}
+
+.tb-light #bar-rest .win.min,
+.tb-light #bar-rest .kbd .ime.unknown {
+  color: #8a8a8a;
+}
+
+.tb-light #bar-rest .tquick svg,
+.tb-light #bar-rest .tchev svg,
+.tb-light #bar-rest .gear svg {
+  stroke: #1b1b1b;
+}
+
+.tb-light #bar-rest .tquick .vol path:first-child,
+.tb-light #bar-rest .tquick .dot {
+  fill: #1b1b1b;
+}
+
+.tb-light #bar-rest .start:hover,
+.tb-light #bar-rest .ticon:hover,
+.tb-light #bar-rest .tquick:hover,
+.tb-light #bar-rest .tclock:hover,
+.tb-light #bar-rest .win:hover,
+.tb-light #bar-rest .kbd .ime:hover,
+.tb-light #bar-rest .tchev:hover,
+.tb-light #bar-rest .gear:hover,
+.tb-light #bar-rest .tag[data-jump]:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.tb-light #bar-rest .win.front {
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.tb-light #bar-rest .win::after {
+  background: #868686;
+}
+
+.tb-light #bar-rest .win.front::after {
+  background: var(--win-accent, #0067c0);
+}
+
+.tb-light #bar-rest .win .letter,
+.tb-light #bar-rest .win .count {
+  background: #d6d6d6;
+  color: #1b1b1b;
+}
+
+.tb-light #bar-rest .mon.rows .wpart.high b {
+  color: #c25400;
+}
+
+.tb-light #bar-rest .tag {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.tb-light #bar-rest .wpop,
+.tb-light #bar-rest .tfly {
+  background: #f9f9f9;
+  color: #1b1b1b;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.tb-light #bar-rest .wpop .wrow:hover,
+.tb-light #bar-rest .wpop .witem:hover,
+.tb-light #bar-rest .wpop .wcard:hover,
+.tb-light #bar-rest .tfly .ticon:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.tb-light #bar-rest .wpop .wrow.front {
+  box-shadow: inset 2px 0 0 var(--win-accent, #0067c0);
+}
+
+.tb-light #bar-rest .wpop .wcard.front {
+  box-shadow: inset 0 0 0 1.5px var(--win-accent, #0067c0);
+}
+
+.tb-light #bar-rest .wpop .wthumb {
+  background: rgba(0, 0, 0, 0.04);
 }

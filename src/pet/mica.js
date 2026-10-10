@@ -12,12 +12,13 @@
   const BLUR = 36
   const SCALE = 0.25
   const MARGIN = 2 * BLUR
-  // The tint, as Windows' dark Mica has it: the picture's lightness taken
-  // to the tint's, keeping its hues (so any wallpaper is as dark), then the
-  // tint itself over it, part of the way.
-  const TINT = '#202020'
-  const LUMINOSITY = 0.8
-  const TINT_OPACITY = 0.45
+  // The tint for Windows' mode, as its Mica has it: the picture's lightness
+  // taken to the tint's, keeping its hues (so any wallpaper is as dark, or
+  // as light), then the tint itself over it, part of the way.
+  const TINTS = {
+    dark: { tint: '#202020', luminosity: 0.8, opacity: 0.45 },
+    light: { tint: '#f3f3f3', luminosity: 0.8, opacity: 0.5 },
+  }
   // A new picture fades in over the old.
   const FADE_MS = 400
 
@@ -58,8 +59,9 @@
   // drawn at SCALE: the colour round the picture, the picture where it lies,
   // the display's edges carried on past them (below the strip, beyond its
   // ends: blurred with nothing there, they would darken), blurred, tinted.
-  // img: the picture, loaded (none: the colour alone).
-  function draw(paper, img, width, height) {
+  // img: the picture, loaded (none: the colour alone); mode: Windows' (dark, light).
+  function draw(paper, img, width, height, mode = 'dark') {
+    const { tint, luminosity, opacity } = TINTS[mode] || TINTS.dark
     const W = Math.ceil((width + 2 * MARGIN) * SCALE)
     const H = Math.ceil((height + 2 * MARGIN) * SCALE)
     const raw = document.createElement('canvas')
@@ -99,25 +101,25 @@
     o.filter = `blur(${BLUR * SCALE}px)`
     o.drawImage(raw, 0, 0)
     o.filter = 'none'
-    o.fillStyle = TINT
+    o.fillStyle = tint
     o.globalCompositeOperation = 'luminosity'
-    o.globalAlpha = LUMINOSITY
+    o.globalAlpha = luminosity
     o.fillRect(0, 0, W, H)
     o.globalCompositeOperation = 'source-over'
-    o.globalAlpha = TINT_OPACITY
+    o.globalAlpha = opacity
     o.fillRect(0, 0, W, H)
     return out
   }
 
   // The Mica in box (the strip's own size): set to a picture (taskbar.rs's
-  // paper) and the strip's size, drawn anew only when either changes, the
-  // new faded in over the old; cleared.
+  // paper), the strip's size and Windows' mode, drawn anew only when one
+  // changes, the new faded in over the old; cleared.
   function mount(box) {
     let key = ''
     let turn = 0
     return {
-      async set(paper, width, height) {
-        const now = JSON.stringify([paper, width, height])
+      async set(paper, width, height, mode = 'dark') {
+        const now = JSON.stringify([paper, width, height, mode])
         if (!paper || now === key) return
         key = now
         const mine = ++turn
@@ -132,7 +134,7 @@
           }
         }
         if (mine !== turn) return
-        const canvas = draw(paper, img, width, height)
+        const canvas = draw(paper, img, width, height, mode)
         if (img) img.src = ''
         Object.assign(canvas.style, {
           left: `${-MARGIN}px`,

@@ -1473,7 +1473,8 @@
     drawHead()
     drawTabs()
     drawBody(reset)
-    foot.querySelector('.foot-text').textContent = T('s.foot')
+    // Locked (the button by ✕), a click outside closes them no more.
+    foot.querySelector('.foot-text').textContent = T(snap.settings.settingsPin ? 's.footLocked' : 's.foot')
     foot.querySelector('.ver').textContent = `v${snap.version}`
     tick()
     // The same height on every page, however much it holds: the head and

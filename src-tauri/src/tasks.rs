@@ -57,6 +57,85 @@ mod imp {
     extern "system" {
         fn SHGetFileInfoW(path: *const u16, attributes: u32, info: *mut ShFileInfo, size: u32, flags: u32) -> usize;
         fn ShellExecuteW(hwnd: Hwnd, op: *const u16, file: *const u16, params: *const u16, dir: *const u16, show: i32) -> isize;
+        fn SHGetPropertyStoreForWindow(hwnd: Hwnd, iid: *const Guid, out: *mut *mut c_void) -> i32;
+    }
+
+    #[repr(C)]
+    struct Guid(u32, u16, u16, [u8; 8]);
+
+    #[repr(C)]
+    struct PropertyKey {
+        fmtid: Guid,
+        pid: u32,
+    }
+
+    #[repr(C)]
+    struct PropVariant {
+        vt: u16,
+        reserved: [u16; 3],
+        value: *mut u16,
+        extra: usize,
+    }
+
+    // IPropertyStore's table, as far as what is asked of it.
+    #[repr(C)]
+    struct StoreVtbl {
+        _query_interface: usize,
+        _add_ref: usize,
+        release: extern "system" fn(*mut Store) -> u32,
+        _get_count: usize,
+        _get_at: usize,
+        get_value: extern "system" fn(*mut Store, *const PropertyKey, *mut PropVariant) -> i32,
+    }
+
+    #[repr(C)]
+    struct Store {
+        vtbl: *const StoreVtbl,
+    }
+
+    #[link(name = "ole32")]
+    extern "system" {
+        fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
+        fn PropVariantClear(value: *mut PropVariant) -> i32;
+    }
+
+    const IID_PROPERTY_STORE: Guid = Guid(0x886D_8EEB, 0x8CF2, 0x4446, [0x8D, 0x02, 0xCD, 0xBA, 0x1D, 0xBD, 0xCF, 0x99]);
+    const PKEY_APP_USER_MODEL_ID: PropertyKey = PropertyKey { fmtid: Guid(0x9F4C_2855, 0x9F79, 0x4B39, [0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3]), pid: 5 };
+    const VT_LPWSTR: u16 = 31;
+
+    thread_local! {
+        // COM on the thread that asks the shell (the buttons'), from its first
+        // question for as long as it runs.
+        static COM: i32 = unsafe { CoInitializeEx(std::ptr::null_mut(), 0x2) };
+    }
+
+    pub fn with_com() {
+        COM.with(|_| ());
+    }
+
+    // The app a window says it is (its AppUserModelID; a store app's frame
+    // says its app's from the moment it shows), what Windows' taskbar takes a
+    // button's icon from (taskbar.rs app_png). None for a window that says
+    // nothing: a program is then known by its file.
+    pub fn app_id(hwnd: isize) -> Option<String> {
+        with_com();
+        // SAFETY: the window's property store, released; the value read
+        // before it is cleared.
+        unsafe {
+            let mut store: *mut Store = std::ptr::null_mut();
+            if SHGetPropertyStoreForWindow(hwnd as Hwnd, &IID_PROPERTY_STORE, &mut store as *mut *mut Store as *mut *mut c_void) < 0 || store.is_null() {
+                return None;
+            }
+            let mut value: PropVariant = std::mem::zeroed();
+            let got = ((*(*store).vtbl).get_value)(store, &PKEY_APP_USER_MODEL_ID, &mut value) >= 0;
+            let id = (got && value.vt == VT_LPWSTR && !value.value.is_null()).then(|| {
+                let n = (0..).take_while(|&i| *value.value.add(i) != 0).count();
+                String::from_utf16_lossy(std::slice::from_raw_parts(value.value, n))
+            });
+            PropVariantClear(&mut value);
+            ((*(*store).vtbl).release)(store);
+            id.filter(|s| !s.is_empty())
+        }
     }
 
     #[link(name = "version")]
@@ -506,6 +585,10 @@ mod imp {
     pub fn plain_program_icon() -> isize {
         0
     }
+    pub fn app_id(_hwnd: isize) -> Option<String> {
+        None
+    }
+    pub fn with_com() {}
     pub fn file_icon(_path: &str) -> isize {
         0
     }
@@ -534,4 +617,4 @@ mod imp {
     }
 }
 
-pub use imp::{alive, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, is_start, keys, launch, list, net, plain_program_icon, press, toggle_native};
+pub use imp::{alive, app_id, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, is_start, keys, launch, list, net, plain_program_icon, press, toggle_native, with_com};

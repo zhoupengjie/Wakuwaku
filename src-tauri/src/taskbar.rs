@@ -537,12 +537,12 @@ mod imp {
     }
 
     // A program that only hosts what its windows show, whose icons are
-    // theirs: a store app (its frame's program is the app's, under
-    // WindowsApps), Windows' own apps, Java, Python.
+    // theirs: a store app (its frame, before its app is in it; then the
+    // app's program, under WindowsApps), Windows' own apps, Java, Python.
     fn hosts(path: &str) -> bool {
         let p = path.to_ascii_lowercase();
         ["\\windowsapps\\", "\\systemapps\\", "\\immersivecontrolpanel\\"].iter().any(|d| p.contains(d))
-            || ["java.exe", "javaw.exe", "python.exe", "pythonw.exe", "py.exe", "pyw.exe"].iter().any(|n| p.ends_with(&format!("\\{n}")))
+            || ["applicationframehost.exe", "java.exe", "javaw.exe", "python.exe", "pythonw.exe", "py.exe", "pyw.exe"].iter().any(|n| p.ends_with(&format!("\\{n}")))
     }
 
     // Windows' plain program icon, drawn once at this size (plain_program_icon).
@@ -610,9 +610,16 @@ mod imp {
             let file_pngs = file_pngs.get_or_insert_with(HashMap::new);
             apps.iter()
                 .map(|(path, is_pinned, windows)| {
+                    // The app each window says it is, and that app's icon as
+                    // Windows' taskbar shows it (app_png): the button's, and a
+                    // hosted window's own (a store app's frame shows a plain
+                    // icon until its app is in it).
+                    let app_pngs: Vec<Option<String>> = windows.iter().map(|t| tasks::app_id(t.hwnd).and_then(|id| app_png(&id, size))).collect();
+                    let hosted = hosts(path);
                     let windows: Vec<Value> = windows
                         .iter()
-                        .map(|t| {
+                        .zip(&app_pngs)
+                        .map(|(t, app)| {
                             let icon = tasks::icon_of(t.hwnd);
                             let png = match pngs.get(&t.hwnd) {
                                 Some((at, png)) if *at == icon => png.clone(),
@@ -621,6 +628,10 @@ mod imp {
                                     pngs.insert(t.hwnd, (icon, png.clone()));
                                     png
                                 }
+                            };
+                            let png = match app {
+                                Some(app) if hosted || png.is_empty() => app.clone(),
+                                _ => png,
                             };
                             json!({
                                 "id": t.hwnd,
@@ -635,11 +646,13 @@ mod imp {
                         .collect();
                     let key = path.to_lowercase();
                     let name = names.entry(key.clone()).or_insert_with(|| tasks::app_name(path)).clone();
-                    // The program's own icon, as Windows' taskbar has it on a
-                    // program's button: File Explorer's for every folder,
-                    // drive or This PC its windows show. Its window's where the
-                    // program only hosts what it shows (hosts) or has no icon
-                    // of its own (Windows' plain one), and while it has none.
+                    // As Windows' taskbar has it on a program's button: the
+                    // app's icon by the id its windows give (Settings' grey cog,
+                    // from its first moment); else the program's own icon (File
+                    // Explorer's for every folder, drive or This PC its windows
+                    // show); its window's where the program only hosts what it
+                    // shows (hosts) or has no icon of its own (Windows' plain
+                    // one), and while it has none.
                     let window_png = windows.iter().find_map(|w| w["png"].as_str().filter(|p| !p.is_empty()).map(str::to_string));
                     let file_png = file_pngs
                         .entry(key.clone())
@@ -651,7 +664,11 @@ mod imp {
                         })
                         .clone();
                     let own = !file_png.is_empty() && !hosts(path) && file_png != plain_png(size);
-                    let png = if own { file_png } else { window_png.unwrap_or(file_png) };
+                    let png = match app_pngs.into_iter().flatten().next() {
+                        Some(app) => app,
+                        None if own => file_png,
+                        None => window_png.unwrap_or(file_png),
+                    };
                     json!({ "app": key, "path": path, "name": name, "pinned": is_pinned, "png": png, "windows": windows })
                 })
                 .collect()
@@ -1403,6 +1420,124 @@ mod imp {
             writer.write_image_data(&rgba).ok()?;
         }
         Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(out)))
+    }
+
+    // An app's icon as Windows' taskbar shows it, asked of the shell by the
+    // app's id (tasks::app_id): its Apps folder's item, drawn by the shell at
+    // `size` from the app's own pictures (a store app's plain one for the
+    // taskbar, Settings' grey cog). Each asked once; None where the shell
+    // knows no such app.
+    #[repr(C)]
+    struct KnownGuid(u32, u16, u16, [u8; 8]);
+
+    #[repr(C)]
+    struct ImageSize {
+        cx: i32,
+        cy: i32,
+    }
+
+    // IShellItemImageFactory's table.
+    #[repr(C)]
+    struct FactoryVtbl {
+        _query_interface: usize,
+        _add_ref: usize,
+        release: extern "system" fn(*mut Factory) -> u32,
+        get_image: extern "system" fn(*mut Factory, ImageSize, i32, *mut isize) -> i32,
+    }
+
+    #[repr(C)]
+    struct Factory {
+        vtbl: *const FactoryVtbl,
+    }
+
+    #[link(name = "shell32")]
+    extern "system" {
+        fn SHCreateItemInKnownFolder(folder: *const KnownGuid, flags: u32, item: *const u16, iid: *const KnownGuid, out: *mut *mut c_void) -> i32;
+    }
+
+    #[link(name = "gdi32")]
+    extern "system" {
+        fn GetDIBits(dc: isize, bmp: isize, start: u32, lines: u32, bits: *mut u8, info: *mut BitmapInfoHeader, usage: u32) -> i32;
+    }
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetDC(hwnd: Hwnd) -> isize;
+        fn ReleaseDC(hwnd: Hwnd, dc: isize) -> i32;
+    }
+
+    const FOLDERID_APPS: KnownGuid = KnownGuid(0x1E87_508D, 0x89C2, 0x42F0, [0x8A, 0x7E, 0x64, 0x5A, 0x0F, 0x50, 0xCA, 0x58]);
+    const IID_IMAGE_FACTORY: KnownGuid = KnownGuid(0xBCC1_8B79, 0xBA16, 0x442F, [0x80, 0xC4, 0x8A, 0x59, 0xC3, 0x0C, 0x46, 0x3B]);
+    const SIIGBF_ICONONLY: i32 = 0x4;
+
+    static APP_PNGS: Mutex<Option<HashMap<(String, i32), Option<String>>>> = Mutex::new(None);
+
+    fn app_png(app_id: &str, size: i32) -> Option<String> {
+        let key = (app_id.to_string(), size);
+        if let Some(known) = APP_PNGS.lock().unwrap().get_or_insert_with(HashMap::new).get(&key) {
+            return known.clone();
+        }
+        tasks::with_com();
+        // SAFETY: the shell's item and bitmap, released and deleted; the
+        // pixels read into our own buffer of the size asked for.
+        let rgba = unsafe {
+            let mut factory: *mut Factory = std::ptr::null_mut();
+            let made = SHCreateItemInKnownFolder(&FOLDERID_APPS, 0, wide(app_id).as_ptr(), &IID_IMAGE_FACTORY, &mut factory as *mut *mut Factory as *mut *mut c_void);
+            let mut bmp = 0isize;
+            let drawn = made >= 0 && !factory.is_null() && ((*(*factory).vtbl).get_image)(factory, ImageSize { cx: size, cy: size }, SIIGBF_ICONONLY, &mut bmp) >= 0 && bmp != 0;
+            if !factory.is_null() {
+                ((*(*factory).vtbl).release)(factory);
+            }
+            let mut bm: BitmapObj = std::mem::zeroed();
+            let sized = drawn && GetObjectW(bmp, std::mem::size_of::<BitmapObj>() as i32, &mut bm as *mut BitmapObj as *mut c_void) != 0 && bm.width > 0 && bm.height > 0 && bm.width <= 256 && bm.height <= 256;
+            let pixels = sized.then(|| {
+                let (w, h) = (bm.width, bm.height);
+                let mut info = BitmapInfoHeader { size: 40, width: w, height: -h, planes: 1, bit_count: 32, compression: 0, size_image: 0, x_ppm: 0, y_ppm: 0, clr_used: 0, clr_important: 0 };
+                let mut bgra = vec![0u8; (w * h * 4) as usize];
+                let dc = GetDC(std::ptr::null_mut());
+                let lines = GetDIBits(dc, bmp, 0, h as u32, bgra.as_mut_ptr(), &mut info, 0);
+                ReleaseDC(std::ptr::null_mut(), dc);
+                (lines == h).then(|| {
+                    for px in bgra.chunks_exact_mut(4) {
+                        px.swap(0, 2);
+                    }
+                    if (w, h) == (size, size) { bgra } else { super::resize(&bgra, w as usize, h as usize, size as usize, size as usize) }
+                })
+            });
+            if bmp != 0 {
+                DeleteObject(bmp);
+            }
+            pixels.flatten()
+        };
+        let png = rgba.filter(|p| p.chunks_exact(4).any(|px| px[3] != 0)).and_then(|rgba| {
+            let mut out = Vec::new();
+            {
+                let mut encoder = png::Encoder::new(&mut out, size as u32, size as u32);
+                encoder.set_color(png::ColorType::Rgba);
+                encoder.set_depth(png::BitDepth::Eight);
+                let mut writer = encoder.write_header().ok()?;
+                writer.write_image_data(&rgba).ok()?;
+            }
+            Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(out)))
+        });
+        APP_PNGS.lock().unwrap().get_or_insert_with(HashMap::new).insert(key, png.clone());
+        png
+    }
+
+    #[cfg(test)]
+    mod app_icon_tests {
+        // On a desktop: Settings' icon by its app id, at the size asked;
+        // nothing for an id the shell does not know.
+        #[test]
+        fn the_shell_draws_an_app_by_its_id() {
+            assert_eq!(super::app_png("no.such.app_0000000000000!Nothing", 30), None);
+            let Some(png) = super::app_png("windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel", 30) else { return };
+            use base64::Engine;
+            let bytes = base64::engine::general_purpose::STANDARD.decode(png.trim_start_matches("data:image/png;base64,")).unwrap();
+            let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+            let info = decoder.read_info().unwrap();
+            assert_eq!((info.info().width, info.info().height), (30, 30));
+        }
     }
 
     // The live pictures' window: nothing of its own but its colour.

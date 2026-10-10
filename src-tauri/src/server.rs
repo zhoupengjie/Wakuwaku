@@ -157,7 +157,7 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool) {
         // replacing her with a new build, which must not just kill her.
         ("POST", "/quit") | ("POST", "/debug/quit") => {
             reply(req, 200, json!({ "ok": true }));
-            sh.app.exit(0);
+            sh.quit();
         }
         ("POST", "/debug/walk") if is_debug => {
             let Some(body) = read_json(&mut req) else { return reply(req, 400, json!({ "error": "bad json" })) };

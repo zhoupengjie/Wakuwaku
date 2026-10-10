@@ -125,7 +125,7 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
         "deviceManager" => {
             crate::tasks::launch("devmgmt.msc");
         }
-        "quit" => sh.app.exit(0),
+        "quit" => sh.quit(),
         _ => {
             if let Some(home) = id.strip_prefix("display:") {
                 crate::set_display(sh, home);

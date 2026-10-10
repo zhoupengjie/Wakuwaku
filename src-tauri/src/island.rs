@@ -214,9 +214,9 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
         (true, Some((edge, h))) => area(sh).map(|a| (a, edge, (h * a.sf).round() as i32)),
         _ => None,
     };
-    let (hwnd, held) = {
+    let (hwnd, held, registered) = {
         let isl = sh.island.lock().unwrap();
-        (isl.hwnd, isl.bar_for)
+        (isl.hwnd, isl.bar_for, isl.bar_own)
     };
     if hwnd == 0 {
         return;
@@ -225,9 +225,14 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
     if held == ask {
         return;
     }
-    // Another home's strip (or none wanted): given back first.
+    // Another home's strip (or none wanted): given back first. A bar of ours
+    // taken away only if there is one: over Windows' room there is none, and
+    // asking goes to the taskbar's window of the tray, on the taskbar's
+    // thread, waited for (quitting, the main thread).
     if let Some((_, _, was)) = held.filter(|h| Some(h.2) != ask.map(|a| a.2)) {
-        appbar::remove(hwnd);
+        if registered {
+            appbar::remove(hwnd);
+        }
         {
             let mut isl = sh.island.lock().unwrap();
             isl.bar = None;

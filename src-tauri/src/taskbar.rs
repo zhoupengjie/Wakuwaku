@@ -542,21 +542,38 @@ mod imp {
         }
     }
 
+    // A thread asked to stop, waited for two seconds at most: on the way out
+    // (the main thread, quitting) one that does not stop must not hold her,
+    // and Windows' taskbar, up; it is left, and goes with her. Each step in
+    // the log: a quit once hung here, none of it said where (2026-10-11).
+    fn stop_within(name: &str, thread: JoinHandle<()>) {
+        log(&format!("giving back: {name} asked to stop"));
+        let asked = Instant::now();
+        while !thread.is_finished() && asked.elapsed() < Duration::from_secs(2) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        if thread.is_finished() {
+            let _ = thread.join();
+        } else {
+            log(&format!("giving back: {name} did not stop in 2 s: left"));
+        }
+    }
+
     // The tray handed back to Explorer and its taskbar shown again.
     pub fn give_back(sh: &Shared) {
         TASKS_STOP.store(true, Ordering::SeqCst);
         if let Some(thread) = TASKS.lock().unwrap().take() {
             wake_tasks();
-            let _ = thread.join();
+            stop_within("the buttons' thread", thread);
         }
         if let Some(thread) = KEYS.lock().unwrap().take() {
-            let _ = thread.join();
+            stop_within("the keys' thread", thread);
         }
         let host = HOST.lock().unwrap().take();
         if let Some(host) = host {
             // SAFETY: the thread's own window; a posted message, no pointers.
             unsafe { PostMessageW(host.hwnd as Hwnd, WM_STOP, 0, 0) };
-            let _ = host.thread.join();
+            stop_within("the taskbar's thread", host.thread);
         }
         let file = sh.dir.join("taskbar.json");
         if file.exists() {

@@ -443,6 +443,21 @@ impl Shared {
         }
     }
 
+    // Quit (the menu's Quit, POST /quit), never taking longer than 8 s: a
+    // quit once hung (80 s, Windows' taskbar with it, 2026-10-11). Ended
+    // then, whatever is stuck; the guard gives Windows' taskbar back once
+    // she is gone.
+    pub fn quit(self: &Arc<Self>) {
+        self.log("quitting");
+        let watched = self.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(8));
+            watched.log("quitting: not done in 8 s: ended");
+            end_now();
+        });
+        self.app.exit(0);
+    }
+
     pub fn is_shuffling(&self) -> bool {
         now_ms() < self.shuffle_until.load(Ordering::SeqCst)
     }
@@ -1157,9 +1172,27 @@ fn main() {
         // plugins she ran stopped.
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
-                island::release_bar(&shared(app));
-                scripts::stop_all(&shared(app));
-                mail::stop_all(&shared(app));
+                let sh = shared(app);
+                sh.log("quitting: the bar given back, the plugins and the mail stopped");
+                island::release_bar(&sh);
+                scripts::stop_all(&sh);
+                mail::stop_all(&sh);
+                sh.log("quitting: done");
             }
         });
+}
+
+// This process ended at once, whatever its threads are doing.
+fn end_now() -> ! {
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetCurrentProcess() -> isize;
+            fn TerminateProcess(process: isize, code: u32) -> i32;
+        }
+        // SAFETY: this process's own pseudo-handle.
+        unsafe { TerminateProcess(GetCurrentProcess(), 0) };
+    }
+    std::process::exit(0)
 }

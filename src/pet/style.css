@@ -2289,24 +2289,24 @@ body:not(.tb-light) #bar-rest .ticon[data-mono='dark'] img {
 }
 
 /* --- Start, as Windows 11's (island.js startButton) -------------------------------
-   Its mark's blue, light at the top left, deep at the bottom right (deeper
-   on the light taskbar); pressed in under the pointer and springing back;
-   bouncing once when the Start menu opens by the Windows key; lit while it
-   is open. */
+   Its mark's blues as measured on Windows' own (26200, both modes), light
+   at the top left, deep at the bottom right (deeper on the light taskbar);
+   pressed in under the pointer and springing back; bouncing once when the
+   Start menu opens by the Windows key; lit while it is open. */
 #bar-rest .start .s0 {
-  stop-color: #6ad3ff;
+  stop-color: #77f3ff;
 }
 
 #bar-rest .start .s1 {
-  stop-color: #0b6fe0;
+  stop-color: #0c9eff;
 }
 
 .tb-light #bar-rest .start .s0 {
-  stop-color: #2bb0f6;
+  stop-color: #4bcffe;
 }
 
 .tb-light #bar-rest .start .s1 {
-  stop-color: #0056b8;
+  stop-color: #0179d4;
 }
 
 #bar-rest .start svg {

@@ -742,12 +742,43 @@
   // clocks, the tray's icons would lose the pointer and blink.
   const startButton = el('span', 'start')
   startButton.dataset.bar = 'start'
-  // Windows 11's mark, drawn as it is (Windows' own is drawn by its
-  // taskbar's code: no file or icon font holds it), as big as the
-  // programs' icons: four panes in one blue running from light at the top
-  // left to deep at the bottom right (style.css .s0, .s1).
-  startButton.innerHTML =
-    '<svg viewBox="0 0 24 24"><defs><linearGradient id="start-blue" gradientUnits="userSpaceOnUse" x1="1" y1="1" x2="23" y2="23"><stop class="s0" offset="0"/><stop class="s1" offset="1"/></linearGradient></defs><g fill="url(#start-blue)"><rect x="1" y="1" width="10.5" height="10.5" rx="0.9"/><rect x="12.5" y="1" width="10.5" height="10.5" rx="0.9"/><rect x="1" y="12.5" width="10.5" height="10.5" rx="0.9"/><rect x="12.5" y="12.5" width="10.5" height="10.5" rx="0.9"/></g></svg>'
+  // Windows 11's mark, drawn as Windows draws it (its own is drawn by its
+  // taskbar's code: no file or icon font holds it), as measured on its own
+  // taskbar: as big as the programs' icons (29 of the 30 screen pixels of
+  // 24px at 125%), four panes in one blue running from light at the top left
+  // to deep at the bottom right (style.css .s0, .s1), a one-pixel gap. On
+  // the screen's own pixels, as Windows': the panes in whole device pixels
+  // for the screen's scale, and the mark moved by the part of a pixel it
+  // lands off one (snapStart), or the gap blurs.
+  let startScale = 0
+  function drawStartMark() {
+    const dpr = devicePixelRatio || 1
+    if (dpr === startScale) return
+    startScale = dpr
+    const box = Math.round(24 * dpr)
+    const gap = Math.max(1, Math.round(0.8 * dpr))
+    const pane = Math.floor((box - 1 - gap) / 2)
+    const at = Math.floor((box - 2 * pane - gap) / 2)
+    const far = at + pane + gap
+    const end = far + pane
+    const r = Math.max(0.5, 0.8 * dpr).toFixed(2)
+    const rect = (x, y) => `<rect x="${x}" y="${y}" width="${pane}" height="${pane}" rx="${r}"/>`
+    startButton.innerHTML = `<svg viewBox="0 0 ${box} ${box}" style="width:${box / dpr}px;height:${box / dpr}px"><defs><linearGradient id="start-blue" gradientUnits="userSpaceOnUse" x1="${at}" y1="${at}" x2="${end}" y2="${end}"><stop class="s0" offset="0"/><stop class="s1" offset="1"/></linearGradient></defs><g fill="url(#start-blue)">${rect(at, at)}${rect(far, at)}${rect(at, far)}${rect(far, far)}</g></svg>`
+  }
+  function snapStart() {
+    const mark = startButton.firstElementChild
+    if (!mark || !mark.isConnected || startButton.classList.contains('down')) return
+    const dpr = devicePixelRatio || 1
+    mark.style.translate = '0px 0px'
+    const r = mark.getBoundingClientRect()
+    const off = v => (Math.round(v * dpr) - v * dpr) / dpr
+    mark.style.translate = `${off(r.left).toFixed(3)}px ${off(r.top).toFixed(3)}px`
+  }
+  drawStartMark()
+  window.addEventListener('resize', () => {
+    drawStartMark()
+    snapStart()
+  })
   // As Windows 11's: its mark pressed in under the pointer and springing
   // back; a bounce when Windows' Start menu opens by the Windows key, and
   // lit while it is open (taskbar.rs taskbar:start). Pressed just now, the
@@ -860,6 +891,7 @@
     drawTray()
     tickClock()
     alignApps()
+    snapStart()
   }
 
   // Start and the programs' buttons in the middle of the screen, as Windows
@@ -886,6 +918,7 @@
     if (e.propertyName !== 'margin-left') return
     if (popFor) drawPop()
     if (glideOn?.isConnected) glideTo(glideOn, true)
+    snapStart()
     requestAnimationFrame(sendTrayRects)
   })
 
@@ -1333,6 +1366,7 @@
       drawWindows()
       tagsBox.replaceChildren(...sessionTags())
       alignApps()
+      snapStart()
     }
   })
 

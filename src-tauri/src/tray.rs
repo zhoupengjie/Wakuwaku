@@ -24,15 +24,39 @@ fn face(mood: &str) -> &'static [u8] {
     }
 }
 
-// The menu, over her (is_tray false) or the tray.
-pub fn menu(sh: &Shared, is_tray: bool) -> tauri::Result<Menu<Wry>> {
+// Where the menu opens: the tray icon, her, or her home's window.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Over {
+    Tray,
+    Her,
+    Home,
+}
+
+// The menu, over the tray, her or her home. Over the taskbar (her home as
+// the taskbar): what a taskbar's right press is for (do not disturb, the
+// settings, Windows' own, quit); hers (pets, size, her home…) are in the
+// settings, and on her.
+pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     let app = &sh.app;
     let lang = sh.lang();
     let t = |key: &str| i18n::t(lang, key);
     let settings = sh.settings.lock().unwrap().clone();
     let flag = |key: &str| settings.get(key).and_then(|v| v.as_bool()).unwrap_or(false);
     let home = sh.home();
+    let is_tray = over == Over::Tray;
     let menu = Menu::new(app)?;
+
+    if over == Over::Home && home == "taskbar" {
+        menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, flag("dnd"), None::<&str>)?)?;
+        menu.append(&MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?)?;
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+        menu.append(&MenuItem::with_id(app, "winSettings", t("menu.winSettings"), true, None::<&str>)?)?;
+        menu.append(&MenuItem::with_id(app, "controlPanel", t("menu.controlPanel"), true, None::<&str>)?)?;
+        menu.append(&MenuItem::with_id(app, "deviceManager", t("menu.deviceManager"), true, None::<&str>)?)?;
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+        menu.append(&MenuItem::with_id(app, "quit", t("menu.quit"), true, None::<&str>)?)?;
+        return Ok(menu);
+    }
 
     if is_tray {
         let label = if sh.is_visible() { t("menu.hide") } else { t("menu.show") };
@@ -119,7 +143,7 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
 pub fn create(sh: &Shared) -> tauri::Result<()> {
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(Image::from_bytes(face("idle"))?)
-        .menu(&menu(sh, true)?)
+        .menu(&menu(sh, Over::Tray)?)
         .show_menu_on_left_click(false)
         // Click: show or hide her (in do-not-disturb, the settings); right-click: the menu.
         .on_tray_icon_event(|tray, event| {
@@ -167,7 +191,7 @@ pub fn refresh(sh: &Shared) {
 
 // The tray's menu, when the settings or her being hidden change.
 pub fn refresh_menu(sh: &Shared) {
-    if let (Some(tray), Ok(menu)) = (sh.app.tray_by_id(TRAY_ID), menu(sh, true)) {
+    if let (Some(tray), Ok(menu)) = (sh.app.tray_by_id(TRAY_ID), menu(sh, Over::Tray)) {
         let _ = tray.set_menu(Some(menu));
     }
 }

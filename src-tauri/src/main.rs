@@ -538,7 +538,7 @@ async fn pet_drag_end(app: AppHandle, window: WebviewWindow) {
 #[tauri::command]
 async fn pet_menu(app: AppHandle, window: WebviewWindow) {
     let sh = shared(&app);
-    if let Ok(menu) = tray::menu(&sh, false) {
+    if let Ok(menu) = tray::menu(&sh, if is_island(&window) { tray::Over::Home } else { tray::Over::Her }) {
         // A Windows menu closes at once unless its window can come to the
         // front, which these cannot (they never take focus): for the menu, it may.
         let was_open = sh.island.lock().unwrap().settings_open && is_island(&window);

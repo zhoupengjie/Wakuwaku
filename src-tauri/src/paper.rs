@@ -266,11 +266,19 @@ mod imp {
     }
 
     // Back to how it was before the last change made here: its picture, or
-    // its folder's slideshow (on another of its pictures), laid as it was.
+    // its folder's slideshow on the picture it showed then, laid as it was.
+    // The slideshow set again with no step (a step showed another of its
+    // pictures, and each undo seemed a new one at random, 2026-10-10), kept
+    // as it is should it be that folder's already.
     pub fn undo() -> bool {
         let Some(s) = BEFORE.lock().unwrap().pop() else { return false };
+        note(format!("undo: back to {} ({})", name(&s.file), if s.slideshow { "the slideshow" } else { "one picture" }));
         let back = match (s.slideshow, s.folder.as_deref()) {
-            (true, Some(folder)) => set_folder(folder) && set_turns(Some(s.every), Some(s.shuffle)),
+            (true, Some(folder)) => {
+                let turning = state().is_some_and(|n| n.slideshow && n.folder.as_deref().is_some_and(|f| f.eq_ignore_ascii_case(folder)));
+                let on = (turning || slideshow(folder, false)) && set_turns(Some(s.every), Some(s.shuffle));
+                on && (s.file.is_empty() || show(&s.file, &s, "undo"))
+            }
             _ => !s.file.is_empty() && set_picture(&s.file),
         };
         back && set_position(s.position)
@@ -371,13 +379,13 @@ mod imp {
             return false;
         };
         note(format!("previous: back to {} ({from}; {count} seen)", name(&file)));
-        show(&file, &now)
+        show(&file, &now, "previous")
     }
 
     // A picture shown now: Windows' call for it; should it not take (the
     // slideshow's own), the classic one, and the slideshow it ended on again
     // from there.
-    fn show(file: &str, was: &State) -> bool {
+    fn show(file: &str, was: &State, why: &str) -> bool {
         // SAFETY: a COM object of our own, released; the path alive for the call.
         let hr = with_com(|| unsafe {
             let Some(w) = wallpaper() else { return E_FAIL };
@@ -388,16 +396,16 @@ mod imp {
             hr
         });
         let mut done = hr >= 0 && shows(file, 1500);
-        note(format!("previous: SetWallpaper {:#010x}, shown: {done}", hr as u32));
+        note(format!("{why}: SetWallpaper {:#010x}, shown: {done}", hr as u32));
         if !done {
             let set = set_picture(file);
             done = set && shows(file, 1500);
-            note(format!("previous: SPI_SETDESKWALLPAPER {set}, shown: {done}"));
+            note(format!("{why}: SPI_SETDESKWALLPAPER {set}, shown: {done}"));
         }
         let ended = state().is_some_and(|s| !s.slideshow);
         if let (true, true, true, Some(folder)) = (done, was.slideshow, ended, was.folder.as_deref()) {
             let on = slideshow(folder, false) && set_turns(Some(was.every), Some(was.shuffle));
-            note(format!("previous: the slideshow ended; on again: {on}, the picture kept: {}", shows(file, 0)));
+            note(format!("{why}: the slideshow ended; on again: {on}, the picture kept: {}", shows(file, 0)));
         }
         done
     }

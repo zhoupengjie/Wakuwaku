@@ -73,7 +73,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "lang" => matches!(v.as_str(), Some("auto" | "zh" | "en")),
         "pet" => v.as_str().is_some_and(|id| data::pets(&sh.dir).iter().any(|p| p.id == id)),
         "scale" => v.as_f64().is_some_and(|s| data::SCALES.iter().any(|(_, x)| (x - s).abs() < 1e-9)),
-        "details" | "walk" | "look" | "sound" | "dnd" | "hideInFullscreen" | "onboarded" | "out" | "settingsPin" | "settingsTop" => is_bool,
+        "details" | "walk" | "look" | "sound" | "dnd" | "hideInFullscreen" | "onboarded" | "out" | "settingsPin" | "settingsTop" | "oledShift" => is_bool,
         "display" => matches!(v.as_str(), Some("island" | "taskbar")),
         "islandWidth" => matches!(v.as_str(), Some("narrow" | "normal" | "wide")),
         "taskbarMaterial" => matches!(v.as_str(), Some("mica" | "black" | "clear")),

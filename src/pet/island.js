@@ -2089,11 +2089,48 @@
     }
   }
 
+  // OLED's guard against burn-in (the settings' oledShift): what stays put
+  // all day, the taskbar's icons, words and clock and the island, a screen
+  // pixel off every 2.5 minutes, round a 5 x 5 square row by row and back
+  // (two hours), one pixel a step: too little to see. Whole screen pixels
+  // (a part of one blurs the words); by the clock, so a restart goes on
+  // where it was. The strip's own ground stays put (style.css --oled-x).
+  const OLED_STEP_MS = 150000
+  const OLED_PATH = (() => {
+    const square = []
+    for (let y = -2; y <= 2; y++) {
+      const xs = [-2, -1, 0, 1, 2]
+      square.push(...(y % 2 ? xs.reverse() : xs).map(x => [x, y]))
+    }
+    return [...square, ...square.slice(1, -1).reverse()]
+  })()
+  let oledOn = false
+  let oledTimer
+  function oledShift() {
+    clearTimeout(oledTimer)
+    const root = document.documentElement.style
+    if (!oledOn) {
+      root.removeProperty('--oled-x')
+      root.removeProperty('--oled-y')
+      return
+    }
+    const at = Date.now()
+    const [x, y] = OLED_PATH[Math.floor(at / OLED_STEP_MS) % OLED_PATH.length]
+    const dpr = devicePixelRatio || 1
+    root.setProperty('--oled-x', `${x / dpr}px`)
+    root.setProperty('--oled-y', `${y / dpr}px`)
+    oledTimer = setTimeout(oledShift, OLED_STEP_MS - (at % OLED_STEP_MS) + 50)
+  }
+
   window.pet.onUpdate(data => {
     const before = now.mood
     now = data
     lang = data.lang || lang
     config = data.config || {}
+    if (!!config.oledShift !== oledOn) {
+      oledOn = !!config.oledShift
+      oledShift()
+    }
     if (config.out !== true) isComingHome = false
     spriteUrl = data.sprite
     second = data.second || null

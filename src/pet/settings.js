@@ -92,7 +92,8 @@
   let writing = false
   let dropSure = false
   let draftTimer
-  // The file picker is open: the focus it takes does not close the settings.
+  // A file picker is open (a letter's files; the desktop's picture, in
+  // Windows' own dialog): the focus it takes does not close the settings.
   let picking = false
   // The most a letter takes with it (as send.rs has it).
   const MOST_FILES = 25 << 20
@@ -330,6 +331,46 @@
     return `${sec(T('s.windows'))}<div class="grp">
         ${row(esc(T('s.winMode')), esc(T('s.winModeNote')), seg('winMode', [['light', T('s.winMode.light')], ['dark', T('s.winMode.dark')]], look.light ? 'light' : 'dark'))}
         ${ACCENT_PICKER ? `<div class="r col"><div>${esc(T('s.winAccent'))}</div><div class="accents">${swatches}</div></div>` : ''}
+      </div>
+      ${pagePaper()}`
+  }
+
+  // Asked of Windows for the desktop's picture; the snapshot as it is after.
+  function paperDo(what, value) {
+    if (what === 'picture' || what === 'folder') {
+      picking = true
+      draw()
+    }
+    return window.pet.settings.wallpaper(what, value).then(got => {
+      picking = false
+      snap = got
+      draw()
+    })
+  }
+
+  // The desktop's picture (paper.rs): one picture or a folder's in turn,
+  // picked in Windows' file dialog; how it is laid; the turns.
+  const PAPER_POSITIONS = ['fill', 'fit', 'stretch', 'tile', 'center', 'span']
+  const PAPER_EVERY = [60000, 600000, 1800000, 3600000, 21600000, 86400000]
+  const lastPart = path => String(path || '').split(/[\\/]/).filter(Boolean).pop() || ''
+  function pagePaper() {
+    const paper = snap.winPaper
+    if (!paper) return ''
+    const now = paper.slideshow
+      ? T('s.paperNowFolder', { name: lastPart(paper.folder) || T('s.paperUnknown') })
+      : T('s.paperNowPicture', { name: lastPart(paper.file) || T('s.paperUnknown') })
+    const every = PAPER_EVERY.map(ms => [ms, ms >= 86400000 ? T('s.paperDay') : ms >= 3600000 ? T('s.paperHours', { n: ms / 3600000 }) : T('settings.minutes', { n: ms / 60000 })])
+    const pick = `<span class="btns"><button class="pbtn sm" data-paper="picture" ${picking ? 'disabled' : ''}>${esc(T('s.paperPicture'))}</button><button class="pbtn sm" data-paper="folder" ${picking ? 'disabled' : ''}>${esc(T('s.paperFolder'))}</button></span>`
+    return `${sec(T('s.wallpaper'))}<div class="grp">
+        ${row(esc(T('s.paperNow')), esc(now), pick)}
+        ${row(esc(T('s.paperFit')), '', seg('paperPosition', PAPER_POSITIONS.map(p => [p, T(`s.paperPos.${p}`)]), paper.position))}
+        ${
+          paper.slideshow
+            ? `${row(esc(T('s.paperEvery')), '', seg('paperEvery', every, paper.every))}
+        ${row(esc(T('s.paperShuffle')), '', sw('paperShuffle', paper.shuffle))}
+        ${row(esc(T('s.paperNext')), '', `<button class="pbtn sm" data-paper="next">${esc(T('s.paperNextButton'))}</button>`)}`
+            : ''
+        }
       </div>`
   }
 
@@ -1461,6 +1502,7 @@
     if (toggle && !toggle.disabled) {
       const key = toggle.dataset.sw
       if (key === 'login') return window.pet.settings.login(!snap.loginAtStart).then(got => ((snap = got), draw()))
+      if (key === 'paperShuffle') return paperDo('shuffle', !snap.winPaper?.shuffle)
       if (key.startsWith('notify.')) return patch({ notify: { ...s.notify, [key.slice(7)]: !s.notify?.[key.slice(7)] } })
       // A widget on or off.
       if (key.startsWith('w:')) {
@@ -1511,6 +1553,8 @@
     if (option) {
       const key = option.parentElement.dataset.seg
       const raw = option.dataset.value
+      if (key === 'paperPosition') return raw !== snap.winPaper?.position && paperDo('position', raw)
+      if (key === 'paperEvery') return Number(raw) !== snap.winPaper?.every && paperDo('every', raw)
       if (key === 'winMode') {
         if ((raw === 'light') === !!snap.winLook?.light) return
         return window.pet.settings.winLook({ light: raw === 'light' }).then(got => ((snap = got), draw()))
@@ -1537,6 +1581,8 @@
     }
     const mode = at('[data-mode]')
     if (mode) return mode.dataset.mode !== s.display && patch({ display: mode.dataset.mode })
+    const paperButton = at('[data-paper]')
+    if (paperButton && !paperButton.disabled) return paperDo(paperButton.dataset.paper)
     const accent = at('[data-accent]')
     if (accent && ACCENT_PICKER) return window.pet.settings.winLook({ accent: accent.dataset.accent }).then(got => ((snap = got), draw()))
     const use = at('[data-use]')
@@ -2022,8 +2068,9 @@
     snap = got
     draw()
   })
-  // The keyboard went elsewhere: a click outside the island; not the file
-  // picker, opened for a letter's files (its own window takes the focus).
+  // The keyboard went elsewhere: a click outside the island; not a file
+  // picker (a letter's files, the desktop's picture: its own window takes
+  // the focus).
   window.pet.onBlur(() => !picking && close('blur'))
   layer.addEventListener('cancel', e => e.target.matches?.('[data-w-file]') && (picking = false), true)
   window.addEventListener('focus', () => setTimeout(() => (picking = false), 1000))

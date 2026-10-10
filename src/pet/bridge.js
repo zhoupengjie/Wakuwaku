@@ -116,6 +116,8 @@
       login: on => invoke('settings_login', { on: on === true }),
       // Windows' own mode ({ light }) or accent colour ({ accent: "#rrggbb" }).
       winLook: ({ light, accent } = {}) => invoke('settings_win_look', { light: typeof light === 'boolean' ? light : null, accent: typeof accent === 'string' ? accent : null }),
+      // The desktop's picture: picked (picture, folder), laid (position), its turns (every, shuffle), the next now.
+      wallpaper: (what, value) => invoke('settings_wallpaper', { what: String(what), value: value == null ? null : String(value) }),
       hooks: action => invoke('settings_hooks', { action }),
       codexHooks: action => invoke('settings_codex_hooks', { action }),
       fetch: reference => invoke('settings_fetch', { reference: String(reference || '') }),

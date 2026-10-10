@@ -327,8 +327,10 @@ mod imp {
     static SENT_KEYS: Mutex<Value> = Mutex::new(Value::Null);
     // Windows' own record of the tray icons it keeps out (windows_kept), read once.
     static KEPT: Mutex<Option<Vec<(String, Option<u32>, bool)>>> = Mutex::new(None);
-    // The desktop's picture under the strip, as sent last (send_paper).
+    // The desktop's picture under the strip, as sent last (send_paper), and
+    // whether it is being looked at.
     static PAPER: Mutex<Value> = Mutex::new(Value::Null);
+    static PAPER_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -732,8 +734,20 @@ mod imp {
     // loaded anew), how it is laid, the colour round it, and where the
     // display and all of them together are from the strip's top-left (the
     // page's px). Looked at when the strip moves, when Windows says the
-    // wallpaper changed, and every five seconds (a slideshow, Spotlight).
+    // wallpaper changed, and every five seconds (a slideshow, Spotlight); on
+    // a thread of its own, one at a time: Windows' answer goes through
+    // Explorer, which may be busy, and the tray's messages come to this one.
     fn send_paper() {
+        if PAPER_BUSY.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        std::thread::spawn(|| {
+            look_at_paper();
+            PAPER_BUSY.store(false, Ordering::SeqCst);
+        });
+    }
+
+    fn look_at_paper() {
         let (Some(sh), Some(strip)) = (sh(), *STRIP.lock().unwrap()) else { return };
         let (mon, sf) = monitor_of(strip);
         let Some(paper) = wallpaper::read(mon) else { return };

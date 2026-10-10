@@ -619,12 +619,13 @@ mod win {
         unsafe { InvalidateRect(hwnd, std::ptr::null(), 0) };
     }
 
-    // A press that opens something: the bar comes to the front first, as the
-    // taskbar does when pressed, so it may let the program come to the front
-    // (a menu that is not in front does not close when you press elsewhere).
+    // Letting go (or a double press): the bar came to the front on the press,
+    // as the taskbar does, and is not brought there again: a program that
+    // opened its menu on the press (WeChat's, Voicemeeter's) has the front
+    // by now, and a menu that loses it does not close when you press elsewhere.
     fn tray_press(hwnd: Hwnd, key: u64, press: Press) {
-        // SAFETY: our own window; we have just had the input.
-        let front = unsafe { SetForegroundWindow(hwnd) } != 0;
+        // SAFETY: a plain query.
+        let front = unsafe { GetForegroundWindow() } == hwnd;
         let told = systray::tell(key, press, cursor());
         let tip = HOVER_TIP.lock().unwrap().clone();
         note(&format!("tray: {press:?} on {tip} (bar in front: {front}; told: {told})"));

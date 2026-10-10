@@ -1233,16 +1233,71 @@ mod imp {
     // An icon drawn as a PNG (a data: URL), size px across. Drawn twice, on
     // black and on white: how much the white shows through is how clear each
     // pixel is, for icons with an alpha channel and those with a mask alike.
+    #[repr(C)]
+    struct IconInfo {
+        is_icon: i32,
+        hot_x: u32,
+        hot_y: u32,
+        mask: isize,
+        color: isize,
+    }
+
+    #[repr(C)]
+    struct BitmapObj {
+        kind: i32,
+        width: i32,
+        height: i32,
+        width_bytes: i32,
+        planes: u16,
+        bits_pixel: u16,
+        bits: *mut c_void,
+    }
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetIconInfo(icon: isize, info: *mut IconInfo) -> i32;
+    }
+
+    #[link(name = "gdi32")]
+    extern "system" {
+        fn GetObjectW(obj: isize, size: i32, out: *mut c_void) -> i32;
+    }
+
+    // An icon's own size, its picture's (half its mask's for a two-colour one).
+    fn icon_size(icon: isize) -> Option<(i32, i32)> {
+        let mut info = IconInfo { is_icon: 0, hot_x: 0, hot_y: 0, mask: 0, color: 0 };
+        // SAFETY: our own structs; the bitmaps the call makes are deleted.
+        unsafe {
+            if GetIconInfo(icon, &mut info) == 0 {
+                return None;
+            }
+            let mut bm = BitmapObj { kind: 0, width: 0, height: 0, width_bytes: 0, planes: 0, bits_pixel: 0, bits: std::ptr::null_mut() };
+            let of = if info.color != 0 { info.color } else { info.mask };
+            let ok = GetObjectW(of, std::mem::size_of::<BitmapObj>() as i32, &mut bm as *mut BitmapObj as *mut c_void) != 0;
+            for b in [info.color, info.mask] {
+                if b != 0 {
+                    DeleteObject(b);
+                }
+            }
+            let h = if info.color != 0 { bm.height } else { bm.height / 2 };
+            (ok && bm.width > 0 && h > 0).then_some((bm.width, h))
+        }
+    }
+
+    // Drawn at its own size, then made `size` square smoothly (super::resize):
+    // drawn straight at another, Windows stretches it pixel by pixel, which
+    // shows as jagged edges (a 32px icon at 30, a 16px one at 20).
     fn png_of(icon: isize, size: i32) -> Option<String> {
         if size <= 0 {
             return None;
         }
-        let n = (size * size) as usize;
+        let (w, h) = icon_size(icon).filter(|&(w, h)| w <= 256 && h <= 256).unwrap_or((size, size));
+        let n = (w * h) as usize;
         let draw = |fill: u8| -> Option<Vec<u8>> {
             // SAFETY: a DIB section of our own, drawn into and read, then deleted.
             unsafe {
                 let dc = CreateCompatibleDC(0);
-                let info = BitmapInfoHeader { size: 40, width: size, height: -size, planes: 1, bit_count: 32, compression: 0, size_image: 0, x_ppm: 0, y_ppm: 0, clr_used: 0, clr_important: 0 };
+                let info = BitmapInfoHeader { size: 40, width: w, height: -h, planes: 1, bit_count: 32, compression: 0, size_image: 0, x_ppm: 0, y_ppm: 0, clr_used: 0, clr_important: 0 };
                 let mut bits: *mut u8 = std::ptr::null_mut();
                 let bmp = CreateDIBSection(dc, &info, 0, &mut bits, 0, 0);
                 if bmp == 0 || bits.is_null() {
@@ -1251,7 +1306,7 @@ mod imp {
                 }
                 let old = SelectObject(dc, bmp);
                 std::ptr::write_bytes(bits, fill, n * 4);
-                DrawIconEx(dc, 0, 0, icon, size, size, 0, 0, DI_NORMAL);
+                DrawIconEx(dc, 0, 0, icon, w, h, 0, 0, DI_NORMAL);
                 let pixels = std::slice::from_raw_parts(bits, n * 4).to_vec();
                 SelectObject(dc, old);
                 DeleteObject(bmp);
@@ -1274,6 +1329,7 @@ mod imp {
             }
             rgba[i * 4 + 3] = alpha;
         }
+        let rgba = if (w, h) == (size, size) { rgba } else { super::resize(&rgba, w as usize, h as usize, size as usize, size as usize) };
         let mut out = Vec::new();
         {
             let mut encoder = png::Encoder::new(&mut out, size as u32, size as u32);
@@ -1346,6 +1402,96 @@ mod imp {
 }
 
 pub use imp::{explorer_room, give_back, resend, strip_moved, take, work_area_bottom};
+
+// RGBA pixels (sw × sh) made dw × dh smoothly: each pixel out the weighted
+// mean of those it covers, under a tent as wide as a pixel of the coarser
+// of the two (bilinear growing, area-like shrinking), on colour premultiplied
+// by its alpha so edges keep no dark fringe.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn resize(src: &[u8], sw: usize, sh: usize, dw: usize, dh: usize) -> Vec<u8> {
+    let pre: Vec<[f32; 4]> = src
+        .chunks_exact(4)
+        .map(|p| {
+            let a = p[3] as f32 / 255.0;
+            [p[0] as f32 * a, p[1] as f32 * a, p[2] as f32 * a, p[3] as f32]
+        })
+        .collect();
+    // For each pixel out along one side: the pixels in, and their weights.
+    let weights = |s: usize, d: usize| -> Vec<Vec<(usize, f32)>> {
+        let scale = s as f32 / d as f32;
+        let radius = scale.max(1.0);
+        (0..d)
+            .map(|i| {
+                let centre = (i as f32 + 0.5) * scale;
+                let lo = (centre - radius).floor().max(0.0) as usize;
+                let hi = ((centre + radius).ceil() as usize).min(s);
+                let mut ws: Vec<(usize, f32)> = (lo..hi).map(|j| (j, 1.0 - ((j as f32 + 0.5 - centre).abs() / radius))).filter(|w| w.1 > 0.0).collect();
+                let sum: f32 = ws.iter().map(|w| w.1).sum();
+                if sum > 0.0 {
+                    ws.iter_mut().for_each(|w| w.1 /= sum);
+                } else {
+                    ws = vec![((centre as usize).min(s - 1), 1.0)];
+                }
+                ws
+            })
+            .collect()
+    };
+    let (across, down) = (weights(sw, dw), weights(sh, dh));
+    let mut wide = vec![[0f32; 4]; dw * sh];
+    for y in 0..sh {
+        for (x, ws) in across.iter().enumerate() {
+            let mut acc = [0f32; 4];
+            for &(j, w) in ws {
+                let p = pre[y * sw + j];
+                (0..4).for_each(|c| acc[c] += p[c] * w);
+            }
+            wide[y * dw + x] = acc;
+        }
+    }
+    let mut out = vec![0u8; dw * dh * 4];
+    for (y, ws) in down.iter().enumerate() {
+        for x in 0..dw {
+            let mut acc = [0f32; 4];
+            for &(j, w) in ws {
+                let p = wide[j * dw + x];
+                (0..4).for_each(|c| acc[c] += p[c] * w);
+            }
+            let i = (y * dw + x) * 4;
+            let a = acc[3].clamp(0.0, 255.0);
+            if a >= 0.5 {
+                (0..3).for_each(|c| out[i + c] = (acc[c] * 255.0 / a).round().clamp(0.0, 255.0) as u8);
+                out[i + 3] = a.round() as u8;
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resize;
+
+    #[test]
+    fn resize_keeps_a_flat_colour_and_the_size() {
+        let src: Vec<u8> = (0..16 * 16).flat_map(|_| [200, 100, 50, 255]).collect();
+        for (dw, dh) in [(20, 20), (12, 12), (30, 30)] {
+            let out = resize(&src, 16, 16, dw, dh);
+            assert_eq!(out.len(), dw * dh * 4);
+            assert!(out.chunks_exact(4).all(|p| p == [200, 100, 50, 255]));
+        }
+    }
+
+    #[test]
+    fn resize_softens_a_hard_edge_without_a_dark_fringe() {
+        // Left half opaque white, right half fully transparent black.
+        let src: Vec<u8> = (0..8 * 8).flat_map(|i| if i % 8 < 4 { [255, 255, 255, 255] } else { [0, 0, 0, 0] }).collect();
+        let out = resize(&src, 8, 8, 10, 10);
+        let row: Vec<&[u8]> = out.chunks_exact(4).take(10).collect();
+        // Somewhere between, partly see-through; what shows is still white.
+        assert!(row.iter().any(|p| p[3] > 0 && p[3] < 255));
+        assert!(row.iter().filter(|p| p[3] > 0).all(|p| p[0] == 255 && p[1] == 255 && p[2] == 255));
+    }
+}
 
 // At start: Windows' taskbar left put away by a run that is gone (its guard
 // gone too) is given back.

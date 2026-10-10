@@ -74,8 +74,9 @@ fn defaults() -> Map<String, Value> {
         "lang": "auto",
         "pet": "claude-chan",
         "scale": 0.55,
-        // Her home: island or taskbar; out, she is on the desktop.
-        "display": "island",
+        // Her home: island or taskbar (the taskbar from the first start);
+        // out, she is on the desktop.
+        "display": "taskbar",
         "out": false,
         // The compact island's width: narrow, normal or wide (island.js WIDTHS).
         "islandWidth": "normal",
@@ -107,7 +108,8 @@ fn defaults() -> Map<String, Value> {
         "mail": [],
         "walk": true,
         "look": true,
-        "hold": "seen",
+        // Done, changed or failed: shown 8 s, or until seen (8, 30, 120, "seen").
+        "hold": 8,
         "notify": { "waiting": false, "done": false, "error": false },
         "sound": false,
         "promptWaitSec": 290,

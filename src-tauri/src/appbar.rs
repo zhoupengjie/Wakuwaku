@@ -1,8 +1,8 @@
 // A bar's room on the screen: registered with Windows as an app bar, as the
 // taskbar is, so the work area loses its height and maximized windows stop
-// at it. The top bar (display 'bar') takes a strip along the top; the taskbar
-// (display 'taskbar') one along the bottom, Windows' own being put away
-// (shell.rs, which reads and sets its state here). Given back when the bar
+// at it. The taskbar (display 'taskbar') takes a strip along the bottom,
+// Windows' own being put away (shell.rs, which reads and sets its state
+// here); Edge::Top is kept for a bar along the top. Given back when the bar
 // goes (another home, out of sight, quitting). Windows only.
 
 #[derive(Clone, Copy, PartialEq, Debug)]

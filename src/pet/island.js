@@ -1,11 +1,10 @@
-// Her home: by display, a round portrait in a corner of the screen (corner),
-// a black pill at the top centre after the iPhone's Dynamic Island (island),
-// a strip along the top of the screen (bar), its left end hers and the
-// other sessions as tags along the rest, or a strip along the bottom in
-// place of Windows' taskbar (taskbar): the bar's, with the Start button, the
-// tray's icons (taskbar.rs) and the clock besides. The same element in
-// each, which springs between three shapes (in a corner, away from the
-// corner; in the bar, hanging below it; in the taskbar, growing up from it):
+// Her home: by display, a black pill at the top centre after the iPhone's
+// Dynamic Island (island), or a strip along the bottom of the screen in
+// place of Windows' taskbar (taskbar): its left end hers, the other sessions
+// as tags along the rest, with the Start button, the tray's icons
+// (taskbar.rs) and the clock besides. The same element in each, which
+// springs between three shapes (below the island; in the taskbar, growing
+// up from it):
 //   compact   her round portrait, where the session is (or whose ending it
 //             is) and the clock
 //   expanded  hovered, or for a few seconds when something happens (a turn
@@ -105,18 +104,6 @@
   // Her portrait in the settings' head.
   const SET_HEAD = 32
   const SET_HEAD_SCALE = 0.28
-  // The corner's circle and its margin, and the window without extra room
-  // there: big enough for the card the circle opens into on a hover and for
-  // a pull (PULL_ROOM), so none of those resize the window (one resized from
-  // a corner moves its top-left corner and shows its old picture from there
-  // for a frame or two: the circle jumped). It is see-through and lets
-  // clicks through but over the island.
-  // The bar's height and her portrait in it. (island.rs has these too.)
-  const CIRCLE = 56
-  const CORNER_M = 14
-  const CORNER_BASE = { width: 760, height: 440 }
-  const BAR_H = 30
-  const BAR_HEAD = 22
   // The taskbar's strip, the room kept above it (both island.rs's), and her
   // portrait in it.
   const TASKBAR_H = 48
@@ -227,10 +214,10 @@
   // Risen only for the settings (she is the pet on her own): it goes once they close.
   // This page draws her home in the home's window; her own window draws her.
   const isOn = () => ROLE === 'island'
-  // Her home, and for the corner, which.
-  const home = () => (['corner', 'bar', 'taskbar'].includes(config.display) ? config.display : 'island')
-  // A strip across the screen (the bar, the taskbar): the other sessions have tags in it.
-  const isStrip = () => home() === 'bar' || home() === 'taskbar'
+  // Her home: the island, or the taskbar.
+  const home = () => (config.display === 'taskbar' ? 'taskbar' : 'island')
+  // A strip across the screen (the taskbar): the other sessions have tags in it.
+  const isStrip = () => home() === 'taskbar'
   // The taskbar's strip the desktop's picture through (mica.js), not solid.
   const isMica = () => isOn() && home() === 'taskbar' && config.taskbarMaterial !== 'black'
   // The taskbar light, as Windows' own is in its light mode (taskbar.rs).
@@ -240,13 +227,9 @@
   const isCapsule = () => isMica() || isLight()
   // The compact taskbar island's height: the strip's, or the capsule's.
   const taskCompactH = () => (isCapsule() ? TASKBAR_H - 2 * CAPSULE_Y : TASKBAR_H)
-  const corner = () => (['br', 'bl', 'tr', 'tl'].includes(config.corner) ? config.corner : 'br')
   // In her seat: there is a pet to show, and she is not out on the desktop.
   const isHome = () => !!spriteUrl && (config.out !== true || isComingHome)
   const isAsking = () => isOn() && !panel.hidden
-  // Out from the corner she does the talking (her bubble, her panel): the
-  // corner keeps her portrait, and opens only when hovered.
-  const sheTalks = () => home() === 'corner' && config.out === true
   // The settings open in the island (settings.js).
   const isSetting = () => isOn() && !!window.Settings?.isOpen()
   const isNudging = () => !!nudge && Date.now() < nudge.until
@@ -312,16 +295,6 @@
   // --- The shapes ---------------------------------------------------------------
 
   function fillCompact() {
-    // The corner's circle: her alone, ringed in the mood's colour, and a
-    // dot in the next one's when other sessions are busy too; her portrait
-    // while she is out.
-    cornerBadge.classList.toggle('on', now.others > 0)
-    cornerBadge.style.background = hue()[second] || hue().working
-    if (home() === 'corner' && !isHome()) {
-      compact.replaceChildren(stillHer(CIRCLE - 8))
-      compact.classList.add('bare')
-      return
-    }
     // Three places: her at the left (her portrait while she is out), a line
     // of words cut short in the middle, a short value at its right (the
     // clock, a widget's number), with "+N" for the other sessions before it;
@@ -528,9 +501,7 @@
       herSheet.style.transform = `translate(${-(CELL_W * scale - px) / 2}px, -2px) scale(${scale})`
     }
     if (view === 'compact') {
-      if (home() === 'corner') portrait(CIRCLE - 8, (CIRCLE - 8) * PER_PX, 4, 4)
-      else if (home() === 'bar') portrait(BAR_HEAD, BAR_HEAD * PER_PX, 4, 4)
-      else if (home() === 'taskbar') portrait(TASK_HEAD, TASK_HEAD * PER_PX, (taskCompactH() - TASK_HEAD) / 2, (taskCompactH() - TASK_HEAD) / 2)
+      if (home() === 'taskbar') portrait(TASK_HEAD, TASK_HEAD * PER_PX, (taskCompactH() - TASK_HEAD) / 2, (taskCompactH() - TASK_HEAD) / 2)
       else portrait(HEAD, HEAD_SCALE, 6, 6)
     } else if (view === 'settings') {
       portrait(SET_HEAD, SET_HEAD_SCALE, 16, 13)
@@ -562,28 +533,11 @@
 
   // --- Room: the window grows before the island does, and shrinks after ----------------
 
-  // The window with no extra room, by home: the bar and the taskbar are as
-  // wide as the screen, the taskbar with its room above.
-  const baseRoom = () =>
-    home() === 'corner'
-      ? CORNER_BASE
-      : home() === 'bar'
-        ? { width: innerWidth, height: BAR_H }
-        : home() === 'taskbar'
-          ? { width: innerWidth, height: TASKBAR_H + TASKBAR_ROOM }
-          : BASE
+  // The window with no extra room, by home: the taskbar is as wide as the
+  // screen, with its room above.
+  const baseRoom = () => (home() === 'taskbar' ? { width: innerWidth, height: TASKBAR_H + TASKBAR_ROOM } : BASE)
 
   function roomFor(want) {
-    if (home() === 'corner') {
-      const width = want.width + 2 * CORNER_M + 8
-      const height = want.height + 2 * CORNER_M + 8
-      return width <= CORNER_BASE.width && height <= CORNER_BASE.height ? null : { width, height }
-    }
-    // The bar: whatever hangs below it (main keeps the width the screen's).
-    if (home() === 'bar') {
-      if (want.height <= BAR_H) return null
-      return { width: innerWidth, height: want.height + 12 }
-    }
     // The taskbar: what grows up from it, or the settings standing above it,
     // past its room (the window then grows up too, which flashes: its room
     // is kept as high as the settings ever are, settingsMax).
@@ -615,25 +569,18 @@
   function setSize({ width, height }) {
     island.style.width = `${width}px`
     island.style.height = `${height}px`
-    // The bar's left end is square, and what hangs from it is rounded below
-    // (what grows up from the taskbar, above; on its Mica, her capsule and
-    // all it grows into round); the corner's is a circle until it opens.
+    // The taskbar's left end is square, and what grows up from it is rounded
+    // above (on its Mica, her capsule and all it grows into round).
     island.style.borderRadius =
-      home() === 'bar'
+      home() === 'taskbar'
         ? view === 'compact'
-          ? '0'
-          : '0 0 22px 22px'
-        : home() === 'taskbar'
-          ? view === 'compact'
-            ? isCapsule()
-              ? `${height / 2}px`
-              : '0'
-            : view === 'settings' || isCapsule()
-              ? '22px'
-              : '22px 22px 0 0'
-          : home() === 'corner' && view === 'compact'
-            ? `${CIRCLE / 2}px`
-            : `${height > 60 ? 30 : height / 2}px`
+          ? isCapsule()
+            ? `${height / 2}px`
+            : '0'
+          : view === 'settings' || isCapsule()
+            ? '22px'
+            : '22px 22px 0 0'
+        : `${height > 60 ? 30 : height / 2}px`
   }
 
   // --- Deciding ---------------------------------------------------------------
@@ -653,23 +600,18 @@
         ? { width: Math.min(OPEN_MAX_W, Math.max(320, expanded.offsetWidth)), height: Math.max(OPEN_H, expanded.offsetHeight) }
         : { width: Math.min(OPEN_BARE_MAX_W, Math.max(300, expanded.offsetWidth)), height: Math.max(84, expanded.offsetHeight) }
     }
-    if (home() === 'corner') return { width: CIRCLE, height: CIRCLE }
-    return { width: compactWidth, height: home() === 'bar' ? BAR_H : home() === 'taskbar' ? taskCompactH() : 36 }
+    return { width: compactWidth, height: home() === 'taskbar' ? taskCompactH() : 36 }
   }
 
-  // --- The bar's right part (and the taskbar's) -------------------------------------
+  // --- The taskbar's right part ---------------------------------------------------
 
   // The other sessions as tags (a press goes to one's window), a widget, and
-  // the settings; in the taskbar, the Start button before them, the tray's
-  // icons and the clock after. Its left edge stays where the compact island
-  // ends, so what opens from the island hangs over it (grows up over it).
+  // the settings, with the Start button before them, the tray's icons and
+  // the clock after. Its left edge stays where the compact island ends, so
+  // what opens from the island grows up over it.
   const barRest = document.createElement('div')
   barRest.id = 'bar-rest'
   island.after(barRest)
-  // The corner's dot for other busy sessions.
-  const cornerBadge = el('span')
-  cornerBadge.id = 'corner-badge'
-  island.append(cornerBadge)
 
   function sessionTags() {
     const detailed = isDetailed()
@@ -732,13 +674,7 @@
   }
 
   function fillBar() {
-    if (home() === 'taskbar') return fillTaskbar()
-    if (home() !== 'bar') return
-    barRest.style.left = `${sizeOf('compact').width}px`
-    const parts = [el('span', 'tags'), el('span', 'grow')]
-    parts[0].append(...sessionTags())
-    barRest.replaceChildren(...parts, ...widgetFaces(), gearNode())
-    taskbarBuilt = false
+    if (home() === 'taskbar') fillTaskbar()
   }
 
   // The taskbar's parts that stay put: rebuilt every second with the
@@ -1502,16 +1438,14 @@
   }
 
   // Where a neck leaves her home: the point of its edge nearest (x, y), so a
-  // drop below the island hangs from its lower edge, and one up and to the
-  // left of a corner's circle from that side.
+  // drop below the island hangs from its lower edge, and one above the
+  // taskbar stands on its upper edge.
   function edgeNear(r, x, y) {
     return [Math.min(Math.max(x, r.left + 24), r.right - 24), Math.min(Math.max(y, r.top + 14), r.bottom - 14)]
   }
 
   // Her seat in her home, in the page: where she springs back to.
   function seatIn(r) {
-    if (home() === 'corner') return [r.left + CIRCLE / 2, r.top + CIRCLE / 2]
-    if (home() === 'bar') return [r.left + 15, r.top + 15]
     if (home() === 'taskbar') return [r.left + r.height / 2, r.top + r.height / 2]
     return [r.left + 18, r.top + 18]
   }
@@ -1547,8 +1481,8 @@
     const r = island.getBoundingClientRect()
     const cx = x
     // From the top of the screen she can only come down, from the taskbar
-    // only up; from a corner, any way.
-    const cy = home() === 'corner' ? y + 30 : home() === 'taskbar' ? Math.min(y + 30, r.top + 10) : Math.max(y + 30, r.bottom - 10)
+    // only up.
+    const cy = home() === 'taskbar' ? Math.min(y + 30, r.top + 10) : Math.max(y + 30, r.bottom - 10)
     const [ax, ay] = edgeNear(r, cx, cy)
     const dist = Math.hypot(cx - ax, cy - ay)
     pull.broken = dist > BREAK_PX
@@ -1731,8 +1665,8 @@
 
   function place() {
     body.classList.toggle('island', isOn())
-    body.classList.remove('home-corner', 'home-island', 'home-bar', 'home-taskbar', 'at-br', 'at-bl', 'at-tr', 'at-tl')
-    if (isOn()) body.classList.add(`home-${home()}`, `at-${corner()}`)
+    body.classList.remove('home-island', 'home-taskbar')
+    if (isOn()) body.classList.add(`home-${home()}`)
     drawMica()
     seatPanel()
     if (!isOn() && panel.parentElement !== stage) stage.prepend(panel)
@@ -1771,18 +1705,18 @@
     // Something new that wants you, or is finished: the island opens for a
     // moment, a longer one with Claude's words to read.
     const isReading = isDetailed() && Status.isEnding(now) && !!now.reply
-    if (isOn() && !sheTalks() && before !== now.mood && NUDGE_CLIP[now.mood]) nudgeFor(NUDGE_CLIP[now.mood], null, isReading ? NUDGE_READ_MS : NUDGE_MS)
+    if (isOn() && before !== now.mood && NUDGE_CLIP[now.mood]) nudgeFor(NUDGE_CLIP[now.mood], null, isReading ? NUDGE_READ_MS : NUDGE_MS)
     else update()
   })
 
   // A hello, or something to fix: the island opens to say it, and she waves.
   window.pet.onReact(({ say: text }) => {
-    if (isOn() && !sheTalks() && text) nudgeFor('waving', say(lang, text))
+    if (isOn() && text) nudgeFor('waving', say(lang, text))
   })
 
   // A widget asks to open the island (main checked that nothing wants you).
   window.pet.onNudge(n => {
-    if (!isOn() || sheTalks()) return
+    if (!isOn()) return
     const at = widgets.findIndex(w => w.id === n.id)
     if (at >= 0) widgetAt = at
     nudgeFor('waving', null, NUDGE_READ_MS, { ...n, icon: widgets[at]?.icon, color: widgets[at]?.color })

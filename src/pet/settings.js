@@ -3,7 +3,7 @@
 // close them. Five pages:
 //   now       the sessions (a click on one goes to its window), and four quick switches
 //   pets      the pets downloaded, a download by link or id, the gallery
-//   look      her home (corner, island, bar), size, bubble, strolls, eyes, language
+//   look      her home (island, taskbar), size, strolls, eyes, language
 //   alerts    how long endings stay, notifications, sound, prompts, quiet
 //   widgets   plugins: the built-in ones, those she runs for you (a switch, their settings folded under), their order, turns, nudges, waku, and how to write one
 //   mail      mail accounts, and setting one up as Thunderbird does: an address and a password, the server found or typed
@@ -33,9 +33,8 @@
   const TAB_KEY = { now: 's.tabNow', pets: 's.tabPets', look: 's.tabLook', alerts: 's.tabAlerts', widgets: 's.tabWidgets', mail: 's.tabMail', connect: 's.tabConnect' }
   const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
   const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
-  const HOMES = ['corner', 'island', 'bar', 'taskbar']
-  const HOME_KEY = { corner: 's.displayCorner', island: 's.displayIsland', bar: 's.displayBar', taskbar: 's.displayTaskbar' }
-  const CORNERS = ['br', 'bl', 'tr', 'tl']
+  const HOMES = ['island', 'taskbar']
+  const HOME_KEY = { island: 's.displayIsland', taskbar: 's.displayTaskbar' }
   const HOLDS = ['seen', 8, 30, 120]
   const WAITS = [30, 60, 120, 290]
   const SPINS = [0, 5, 8, 15]
@@ -257,19 +256,14 @@
 
   function pageLook() {
     const s = snap.settings
-    const current = snap.pets.find(p => p.id === s.pet)
     return `${sec(T('home.display'))}<div class="modes">
-        <div class="mode${s.display === 'corner' ? ' on' : ''}" data-mode="corner"><div class="pv"><b class="circle">${current ? thumb(24, current.url, current.version) : ''}</b></div><div class="l"><span class="rd"></span>${esc(T('s.displayCorner'))}</div></div>
-        <div class="mode${s.display === 'island' ? ' on' : ''}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div></div>
-        <div class="mode${s.display === 'bar' ? ' on' : ''}" data-mode="bar"><div class="pv"><u></u></div><div class="l"><span class="rd"></span>${esc(T('s.displayBar'))}</div></div>
+        <div class="mode${s.display === 'taskbar' ? '' : ' on'}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div></div>
         <div class="mode${s.display === 'taskbar' ? ' on' : ''}" data-mode="taskbar"><div class="pv"><s></s></div><div class="l"><span class="rd"></span>${esc(T('s.displayTaskbar'))}</div></div>
       </div>
       ${s.display === 'taskbar' ? `<div class="grp"><div class="note">${esc(T('s.taskbarNote'))}</div></div><div class="grp">${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${row(esc(T('s.taskbarAlign')), '', seg('taskbarAlign', ['center', 'left'].map(a => [a, T(`s.align.${a}`)]), s.taskbarAlign || 'center'))}</div>` : ''}
-      ${s.display === 'corner' ? `<div class="grp">${row(esc(T('s.corner')), '', seg('corner', CORNERS.map(c => [c, T(`s.corner.${c}`)]), s.corner || 'br'))}</div>` : ''}
-      ${s.display !== 'corner' ? `<div class="grp">${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}</div>` : ''}
+      <div class="grp">${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}</div>
       ${sec(T('s.her'))}<div class="grp">
         ${row(esc(T('menu.size')), '', seg('scale', SIZES.map(([name, scale]) => [scale, T(`menu.${name}`)]), s.scale))}
-        ${row(esc(T('s.bubble')), esc(T('s.bubbleNote')), sw('bubble', s.bubble))}
         ${row(esc(T('s.details')), esc(T('s.detailsNote')), sw('details', s.details !== false))}
         ${row(esc(T('s.walk')), esc(T('s.walkNote')), sw('walk', s.walk))}
         ${row(esc(T('s.look')), '', sw('look', s.look))}
@@ -1187,7 +1181,7 @@
         gallery.items = []
         return loadGallery(false)
       }
-      const value = ['lang', 'corner', 'islandWidth', 'taskbarMaterial', 'taskbarButtons', 'taskbarAlign', 'mailAgent'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
+      const value = ['lang', 'islandWidth', 'taskbarMaterial', 'taskbarButtons', 'taskbarAlign', 'mailAgent'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
       return patch({ [key]: value })
     }
     const tile = at('[data-tile]')

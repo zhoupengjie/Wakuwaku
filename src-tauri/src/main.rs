@@ -47,6 +47,7 @@ mod mail;
 mod notify;
 mod paper;
 mod pet;
+mod pins;
 mod pointer;
 mod screen;
 mod scripts;
@@ -1019,6 +1020,12 @@ fn main() {
             taskbar::recover(&sh);
 
             pet::create(&sh)?;
+            // Windows' own taskbar's pinned programs, once: hers seeded from
+            // them, those she kept before after them (pins.rs).
+            if !sh.flag("taskbarPinsImported") {
+                let first = sh.clone();
+                std::thread::spawn(move || pins::take_from_windows(&first));
+            }
             // An app full screen as she starts, known before her home first
             // shows: the taskbar takes its strip only once it can show (one
             // taken with its window hidden keeps no room).

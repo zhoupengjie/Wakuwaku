@@ -313,15 +313,10 @@ pub async fn settings_open_site(app: AppHandle, place: String) {
         "yahooAppPasswords" => "https://login.yahoo.com/account/security",
         _ => fetch::SITE,
     };
-    let mut command = std::process::Command::new("cmd");
-    command.args(["/C", "start", "", url]);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // CREATE_NO_WINDOW
-        command.creation_flags(0x0800_0000);
-    }
-    if let Err(err) = command.spawn() {
-        shared(&app).log(&format!("open {url}: {err}"));
+    // By ShellExecute, not `cmd /c start`: run from the installed pet (no
+    // console), cmd got handles that were none and never started ("the
+    // handle is invalid").
+    if !crate::jump::open_url(url) {
+        shared(&app).log(&format!("open {url}: ShellExecute failed"));
     }
 }

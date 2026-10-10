@@ -126,8 +126,17 @@
   color: #0b5e30;
 }
 
-.tb-light #island-settings .m-sum.bad {
+.tb-light #island-settings .m-sum.bad,
+.tb-light #island-settings .talk.failed .talk-h {
   color: #9f1d2c;
+}
+
+.tb-light #island-settings .talk-h {
+  color: #0b4a8f;
+}
+
+.tb-light #island-settings .star.on {
+  color: #c97a00;
 }
 
 #island[data-view='settings'] #island-her {

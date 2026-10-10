@@ -1770,6 +1770,45 @@ body {
   text-align: center;
 }
 
+/* Icons alone (island.js, taskbarButtons): a square for each program and
+   for Start, the icon as big as on Windows' own taskbar. Its windows are
+   listed when the pointer rests on it: no title, no count. Its sessions'
+   dots on the icon's corner. */
+#bar-rest.icons .start,
+#bar-rest.icons .win {
+  flex: none;
+  width: 44px;
+  min-width: 44px;
+  padding: 0;
+  justify-content: center;
+}
+
+#bar-rest.icons .win img,
+#bar-rest.icons .win .letter {
+  width: 24px;
+  height: 24px;
+}
+
+#bar-rest.icons .win .letter {
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+#bar-rest.icons .win .wt,
+#bar-rest.icons .win .count {
+  display: none;
+}
+
+#bar-rest.icons .win .marks {
+  top: 4px;
+  left: 29px;
+}
+
+/* Centred (island.js alignApps), they slide to the middle as programs come and go. */
+#bar-rest .start {
+  transition: margin-left 0.25s ease;
+}
+
 /* Above a program's button: its windows to pick from, or what can be done. */
 #bar-rest .wpop {
   position: absolute;

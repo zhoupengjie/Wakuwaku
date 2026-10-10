@@ -117,7 +117,7 @@ mod imp {
     const SW_MINIMIZE: i32 = 6;
     const SW_SHOWNORMAL: i32 = 1;
     const SHGFI_ICON: u32 = 0x100;
-    const SHGFI_SMALLICON: u32 = 0x1;
+    const SHGFI_LARGEICON: u32 = 0x0;
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
     // The desktop and the taskbars themselves: shown, unowned, never buttons.
     const NOT_TASKS: [&str; 5] = ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "WakuwakuTaskbarHost"];
@@ -206,11 +206,12 @@ mod imp {
         }
     }
 
-    // A program file's small icon, ours to destroy (destroy_icon).
+    // A program file's icon, the big one (a button draws it at 24px), ours
+    // to destroy (destroy_icon).
     pub fn file_icon(path: &str) -> isize {
         let mut info: ShFileInfo = unsafe { std::mem::zeroed() };
         // SAFETY: our own struct, its size passed.
-        unsafe { SHGetFileInfoW(wide(path).as_ptr(), 0, &mut info, std::mem::size_of::<ShFileInfo>() as u32, SHGFI_ICON | SHGFI_SMALLICON) };
+        unsafe { SHGetFileInfoW(wide(path).as_ptr(), 0, &mut info, std::mem::size_of::<ShFileInfo>() as u32, SHGFI_ICON | SHGFI_LARGEICON) };
         info.icon
     }
 
@@ -291,26 +292,20 @@ mod imp {
             .collect()
     }
 
-    // Its icon (the window's own, else its class's), the small one first;
-    // the program's handle, not ours: drawn at once, never kept.
+    // Its icon (the window's own, else its class's), the big one first: a
+    // button draws it at 24px, and a small one blurs grown to that. The
+    // program's handle, not ours: drawn at once, never kept.
     pub fn icon_of(hwnd: isize) -> isize {
         let h = hwnd as Hwnd;
-        for which in [ICON_SMALL2, ICON_SMALL, ICON_BIG] {
+        let asked = |which: usize| {
             let mut icon = 0usize;
             // SAFETY: a window's own answer, waited for at most 50 ms (a hung one gives none).
             let ok = unsafe { SendMessageTimeoutW(h, WM_GETICON, which, 0, SMTO_ABORTIFHUNG, 50, &mut icon) };
-            if ok != 0 && icon != 0 {
-                return icon as isize;
-            }
-        }
+            if ok != 0 { icon as isize } else { 0 }
+        };
         // SAFETY: plain queries.
-        unsafe {
-            let small = GetClassLongPtrW(h, GCLP_HICONSM);
-            if small != 0 {
-                return small as isize;
-            }
-            GetClassLongPtrW(h, GCLP_HICON) as isize
-        }
+        let class = |which: i32| unsafe { GetClassLongPtrW(h, which) as isize };
+        [asked(ICON_BIG), class(GCLP_HICON), asked(ICON_SMALL2), asked(ICON_SMALL), class(GCLP_HICONSM)].into_iter().find(|&i| i != 0).unwrap_or(0)
     }
 
     pub fn front() -> isize {

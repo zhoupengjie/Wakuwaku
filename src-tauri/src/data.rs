@@ -82,6 +82,10 @@ fn defaults() -> Map<String, Value> {
         "islandWidth": "normal",
         // The taskbar's strip: mica (the desktop's picture through it, mica.js) or black.
         "taskbarMaterial": "mica",
+        // Its programs' buttons: icons alone or with their titles; in the
+        // middle of the screen or after her end (island.js alignApps).
+        "taskbarButtons": "icons",
+        "taskbarAlign": "center",
         "bubble": true,
         "details": true,
         // Widgets (plugins in the island): which are off, their order, how

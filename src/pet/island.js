@@ -750,6 +750,9 @@
   const clockBox = el('span', 'tclock')
   clockBox.dataset.bar = 'notifications'
   const taskGear = gearNode()
+  // The room between the programs' buttons and what comes after them: what
+  // centring them moves them into (alignApps).
+  const growNode = el('span', 'grow')
   let taskbarBuilt = false
   // The tray's icons as last sent ({ key, png, tip, exe }), and as drawn.
   let trayIcons = []
@@ -762,11 +765,13 @@
   function fillTaskbar() {
     barRest.style.left = `${sizeOf('compact').width + (isMica() ? CAPSULE_X + 4 : 0)}px`
     if (!taskbarBuilt) {
-      barRest.replaceChildren(startButton, windowsBox, tagsBox, el('span', 'grow'), facesBox, trayBox, keysBox, quickBox, clockBox, taskGear, pop)
+      barRest.replaceChildren(startButton, windowsBox, tagsBox, growNode, facesBox, trayBox, keysBox, quickBox, clockBox, taskGear, pop)
       taskbarBuilt = true
       trayDrawn = ''
       windowsDrawn = ''
     }
+    // The programs' buttons as icons alone (taskbarButtons), or with their titles.
+    barRest.classList.toggle('icons', config.taskbarButtons !== 'labels')
     startButton.title = t(lang, 'taskbar.start')
     quickBox.title = t(lang, 'taskbar.quick')
     clockBox.title = t(lang, 'taskbar.clock')
@@ -775,13 +780,44 @@
     drawWindows()
     drawTray()
     tickClock()
+    alignApps()
   }
+
+  // Start and the programs' buttons in the middle of the screen, as Windows
+  // 11 has them (taskbarAlign: center; left, after her end): moved along by
+  // the Start button's margin, never back past where they start nor into
+  // what comes after them (the room before the monitor and the tray is all
+  // they may take). Moved, they slide; what hangs over a button (its
+  // windows' list) is placed again once they are there.
+  function alignApps() {
+    if (!taskbarBuilt) return
+    // Measured by the margin as it is now (it may be sliding), set to the one wanted.
+    const target = parseFloat(startButton.style.marginLeft) || 0
+    let want = 0
+    if (config.taskbarAlign !== 'left') {
+      const now = parseFloat(getComputedStyle(startButton).marginLeft) || 0
+      const start = startButton.getBoundingClientRect()
+      const width = windowsBox.getBoundingClientRect().right - start.left
+      const room = growNode.getBoundingClientRect().width + now
+      want = Math.round(Math.max(0, Math.min((innerWidth - width) / 2 - (start.left - now), room)))
+    }
+    if (want !== Math.round(target)) startButton.style.marginLeft = `${want}px`
+  }
+  startButton.addEventListener('transitionend', e => {
+    if (e.propertyName !== 'margin-left') return
+    if (popFor) drawPop()
+    requestAnimationFrame(sendTrayRects)
+  })
+  window.addEventListener('resize', () => isOn() && home() === 'taskbar' && alignApps())
 
   // A button for each program (taskbar.rs): those kept on the taskbar
   // first, then the others as their windows came. Its icon; the title of its
-  // one window, or its name and how many; none while it does not run. A line
-  // under it, longer for the one in front; lit while a window of it flashes
-  // for attention; a dot for each session in its windows, in its mood's colour.
+  // one window, or its name and how many; none while it does not run (its
+  // name then under the pointer). Icons alone (style.css #bar-rest.icons):
+  // no title, no count, its windows listed when the pointer rests on it. A
+  // line under it, longer for the one in front; lit while a window of it
+  // flashes for attention; a dot for each session in its windows, in its
+  // mood's colour.
   function drawWindows() {
     const drawn = JSON.stringify([taskWindows, lang])
     if (drawn === windowsDrawn) return
@@ -795,6 +831,7 @@
         button.classList.toggle('min', windows.length > 0 && windows.every(w => w.min))
         button.classList.toggle('flash', windows.some(w => w.flash))
         button.classList.toggle('idle', !windows.length)
+        if (!windows.length) button.title = app.name || ''
         if (app.png) {
           const img = el('img')
           img.src = app.png
@@ -1022,6 +1059,7 @@
     if (isOn() && home() === 'taskbar') {
       drawWindows()
       tagsBox.replaceChildren(...sessionTags())
+      alignApps()
     }
   })
 

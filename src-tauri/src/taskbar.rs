@@ -542,7 +542,9 @@ mod imp {
             flashing.retain(|h| *h != front && tasks::alive(*h));
             flashing.clone()
         };
-        let size = (16.0 * sh.screens().primary.map_or(1.0, |a| a.sf)).round() as i32;
+        // As big as the buttons show them alone (island.js, 24px); smaller
+        // with their titles, and in the lists above them.
+        let size = (24.0 * sh.screens().primary.map_or(1.0, |a| a.sf)).round() as i32;
         let marks = MARKS.lock().unwrap().clone().unwrap_or_default();
         let pinned: Vec<(String, String)> = sh
             .setting("taskbarPinned")

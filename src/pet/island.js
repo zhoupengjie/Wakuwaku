@@ -46,7 +46,8 @@
   const Status = window.Status
   const Widgets = window.Widgets
 
-  // Brighter than the pet's colours: these sit on black.
+  // Brighter than the pet's colours: these sit on black. On the light
+  // taskbar (Windows' light mode) the same, deep enough to read on white.
   const COLOR = {
     idle: '#8e8e93',
     working: '#5e9bff',
@@ -55,6 +56,15 @@
     review: '#b18cff',
     error: '#ff5c6c',
   }
+  const COLOR_LIGHT = {
+    idle: '#6e6e73',
+    working: '#0067c0',
+    waiting: '#b25e00',
+    done: '#0f7b3f',
+    review: '#7346c9',
+    error: '#c42b3c',
+  }
+  const hue = () => (isLight() ? COLOR_LIGHT : COLOR)
 
   // What she plays when the island opens by itself for each mood.
   const NUDGE_CLIP = { waiting: 'waiting', done: 'waving', review: 'review', error: 'failed' }
@@ -217,8 +227,8 @@
   const isMica = () => isOn() && home() === 'taskbar' && config.taskbarMaterial !== 'black'
   // The taskbar light, as Windows' own is in its light mode (taskbar.rs).
   const isLight = () => isOn() && home() === 'taskbar' && look.mode === 'light'
-  // Her end a black capsule in the strip, wherever the strip is not black
-  // itself: on the Mica, or light.
+  // Her end a capsule of its own in the strip (black, or light in Windows'
+  // light mode), wherever the strip is not black itself: on the Mica, or light.
   const isCapsule = () => isMica() || isLight()
   // The compact taskbar island's height: the strip's, or the capsule's.
   const taskCompactH = () => (isCapsule() ? TASKBAR_H - 2 * CAPSULE_Y : TASKBAR_H)
@@ -252,7 +262,7 @@
   // session, and in her place when there is no pet yet.
   function face(mood, px) {
     const node = el('span', 'face')
-    node.style.cssText = `width:${px}px;height:${px}px;background:${COLOR[mood] || COLOR.idle}`
+    node.style.cssText = `width:${px}px;height:${px}px;background:${hue()[mood] || hue().idle}`
     node.append(el('i'), el('i'))
     return node
   }
@@ -264,7 +274,7 @@
     if (!spriteUrl) return face(now.mood, px)
     const scale = px * 0.00875
     const node = el('span', 'still-her')
-    node.style.cssText = `width:${px}px;height:${px}px;box-shadow:0 0 0 1.5px ${COLOR[now.mood] || COLOR.idle}`
+    node.style.cssText = `width:${px}px;height:${px}px;box-shadow:0 0 0 1.5px ${hue()[now.mood] || hue().idle}`
     const sheet = el('span', 'sheet')
     const clip = MOOD_CLIP[now.mood]
     sheet.dataset.clip = clip
@@ -298,7 +308,7 @@
     // dot in the next one's when other sessions are busy too; her portrait
     // while she is out.
     cornerBadge.classList.toggle('on', now.others > 0)
-    cornerBadge.style.background = COLOR[second] || COLOR.working
+    cornerBadge.style.background = hue()[second] || hue().working
     if (home() === 'corner' && !isHome()) {
       compact.replaceChildren(stillHer(CIRCLE - 8))
       compact.classList.add('bare')
@@ -319,20 +329,20 @@
       const said = Widgets.words(lang, widget, isDetailed())
       words = el('span', 'label wlabel')
       words.insertAdjacentHTML('afterbegin', Widgets.icon(widget.icon))
-      words.firstChild.style.color = widget.color || COLOR.idle
+      words.firstChild.style.color = widget.color || hue().idle
       words.append(said.label)
       value = el('span', 'clock wvalue', said.value)
-      value.style.color = widget.color || COLOR.idle
+      value.style.color = widget.color || hue().idle
       key = `w:${widget.id}`
     } else {
       words = el('span', 'label', Status.brief(lang, now, { detailed: isDetailed() }))
       value = el('span', 'clock', time())
-      value.style.color = COLOR[now.mood]
+      value.style.color = hue()[now.mood]
       key = `s:${now.id || ''}:${now.mood}`
     }
     // In the bar and the taskbar the other sessions have their own tags.
     const more = now.others > 0 && !isStrip() ? el('span', 'more', `+${now.others}`) : null
-    if (more) more.style.color = COLOR[second] || COLOR.working
+    if (more) more.style.color = hue()[second] || hue().working
     // What takes turns, together: it slides in when it is something else.
     const turning = el('span', 'turning')
     turning.append(words, ...(more ? [more] : []), value)
@@ -369,9 +379,9 @@
     const row = el('span', isShown ? 'wrow on' : 'wrow')
     row.dataset.widget = widget.id
     row.insertAdjacentHTML('afterbegin', Widgets.icon(widget.icon))
-    row.firstChild.style.color = widget.color || COLOR.idle
+    row.firstChild.style.color = widget.color || hue().idle
     const valueText = el('span', 'wv', value)
-    valueText.style.color = widget.color || COLOR.idle
+    valueText.style.color = widget.color || hue().idle
     if (Widgets.partsOf(widget)) valueText.innerHTML = Widgets.partsHTML(widget)
     row.append(el('span', 'wl', label), valueText)
     return row
@@ -391,7 +401,7 @@
 
     const head = el('span', 'head')
     const clockText = el('span', 'clock', time())
-    clockText.style.color = COLOR[now.mood]
+    clockText.style.color = hue()[now.mood]
     head.append(el('span', 'title', title), clockText)
     // The session shown, all of it one place to click.
     const me = el('span', 'me')
@@ -406,7 +416,7 @@
       const progress = el('span', 'progress')
       const bar = el('span', 'bar')
       const fill = el('i')
-      fill.style.cssText = `width:${Math.round((100 * now.todo.done) / now.todo.total)}%;background:${COLOR[now.mood]}`
+      fill.style.cssText = `width:${Math.round((100 * now.todo.done) / now.todo.total)}%;background:${hue()[now.mood]}`
       bar.append(fill)
       progress.append(bar)
       if (now.todo.active) progress.append(el('span', 'item', now.todo.active))
@@ -420,10 +430,10 @@
         const row = el('span', 'other')
         canJump(row, x)
         const dot = el('i', 'dot')
-        dot.style.background = COLOR[x.mood] || COLOR.idle
+        dot.style.background = hue()[x.mood] || hue().idle
         const what = detailed ? Status.status(lang, x, { withClock: false }) : t(lang, `island.${x.mood}`)
         const when = el('span', 'when', Status.time(x))
-        when.style.color = COLOR[x.mood] || COLOR.idle
+        when.style.color = hue()[x.mood] || hue().idle
         row.append(dot, el('span', 'who', Status.nameOf(x, detailed)), el('span', 'what', what), when)
         list.append(row)
       }
@@ -447,7 +457,7 @@
       const card = el('span', 'me')
       const top = el('span', 'head')
       top.insertAdjacentHTML('afterbegin', Widgets.icon(w.icon))
-      top.firstChild.style.color = w.color || COLOR.idle
+      top.firstChild.style.color = w.color || hue().idle
       top.append(el('span', 'title', words || label || value))
       card.append(top, el('span', 'sub', words ? [label, value].filter(Boolean).join(' · ') : label ? value : ''))
       lines.replaceChildren(card)
@@ -506,7 +516,7 @@
     const s = her.style
     const portrait = (px, scale, left, top) => {
       Object.assign(s, { left: `${left}px`, top: `${top}px`, width: `${px}px`, height: `${px}px`, borderRadius: `${px / 2}px` })
-      s.setProperty('--ring', COLOR[now.mood])
+      s.setProperty('--ring', hue()[now.mood])
       herSheet.style.transform = `translate(${-(CELL_W * scale - px) / 2}px, -2px) scale(${scale})`
     }
     if (view === 'compact') {
@@ -667,9 +677,9 @@
           tag.title = t(lang, 'jump.hint')
         }
         const dot = el('i', 'dot')
-        dot.style.background = COLOR[x.mood] || COLOR.idle
+        dot.style.background = hue()[x.mood] || hue().idle
         const when = el('span', 'when', Status.time(x))
-        when.style.color = COLOR[x.mood] || COLOR.idle
+        when.style.color = hue()[x.mood] || hue().idle
         tag.append(dot, el('span', 'who', Status.nameOf(x, detailed)), el('span', 'what', Status.brief(lang, x, { detailed })), when)
         return tag
       })
@@ -686,9 +696,9 @@
       const { label, value } = Widgets.words(lang, w, isDetailed())
       const face = el('span', 'face')
       face.insertAdjacentHTML('afterbegin', Widgets.icon(w.icon))
-      face.firstChild.style.color = w.color || COLOR.idle
+      face.firstChild.style.color = w.color || hue().idle
       const v = el('span', 'v', value)
-      v.style.color = w.color || COLOR.idle
+      v.style.color = w.color || hue().idle
       if (Widgets.partsOf(w)) v.innerHTML = Widgets.partsHTML(w)
       face.append(Widgets.partsOf(w) ? '' : label, v)
       faces.push(face)
@@ -702,10 +712,14 @@
     return faces
   }
 
+  // The settings: a cog (a ringed one read as the sun, as brightness).
   function gearNode() {
     const gear = el('span', 'gear')
     gear.dataset.bar = 'settings'
-    gear.insertAdjacentHTML('afterbegin', '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>')
+    gear.insertAdjacentHTML(
+      'afterbegin',
+      '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    )
     return gear
   }
 
@@ -760,6 +774,9 @@
   const clockBox = el('span', 'tclock')
   clockBox.dataset.bar = 'notifications'
   const taskGear = gearNode()
+  // Show the desktop: a sliver at the screen's right edge, as Windows' own (Win+D).
+  const deskEdge = el('span', 'tdesk')
+  deskEdge.dataset.bar = 'desktop'
   // The room between the programs' buttons and what comes after them: what
   // centring them moves them into (alignApps).
   const growNode = el('span', 'grow')
@@ -775,7 +792,7 @@
   function fillTaskbar() {
     barRest.style.left = `${sizeOf('compact').width + (isCapsule() ? CAPSULE_X + 4 : 0)}px`
     if (!taskbarBuilt) {
-      barRest.replaceChildren(startButton, windowsBox, tagsBox, growNode, facesBox, trayBox, keysBox, quickBox, clockBox, taskGear, pop)
+      barRest.replaceChildren(startButton, windowsBox, tagsBox, growNode, facesBox, trayBox, keysBox, quickBox, clockBox, taskGear, deskEdge, pop)
       taskbarBuilt = true
       trayDrawn = ''
       windowsDrawn = ''
@@ -785,6 +802,7 @@
     startButton.title = t(lang, 'taskbar.start')
     quickBox.title = t(lang, 'taskbar.quick')
     clockBox.title = t(lang, 'taskbar.clock')
+    deskEdge.title = t(lang, 'taskbar.desktop')
     tagsBox.replaceChildren(...sessionTags())
     facesBox.replaceChildren(...widgetFaces())
     drawWindows()
@@ -1297,7 +1315,7 @@
     if (view === 'ask' && !isAsking()) nudge = null
     view = isSetting() ? 'settings' : isAsking() ? 'ask' : isHover || isNudging() ? 'expanded' : 'compact'
     island.dataset.view = view
-    island.style.setProperty('--ring', COLOR[now.mood])
+    island.style.setProperty('--ring', hue()[now.mood])
     island.classList.toggle('wants', now.mood === 'waiting')
     seatPanel()
     body.classList.toggle('has-her', isHome())

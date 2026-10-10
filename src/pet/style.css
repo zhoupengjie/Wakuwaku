@@ -1366,11 +1366,59 @@ body {
   height: 48px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 6px 0 4px;
+  gap: 0;
+  padding: 0 0 0 4px;
   font-size: 12px;
   color: #d1d1d6;
   white-space: nowrap;
+}
+
+/* Its parts touch, each a 40px-high button with room of its own, so the
+   icons and words along it stand evenly apart, as on Windows' own; a little
+   more between the groups (Start and the programs, the sessions' tags, the
+   monitor, the tray and the clock). */
+.home-taskbar #bar-rest .wins {
+  margin-left: 2px;
+}
+
+.home-taskbar #bar-rest .tags:not(:empty) {
+  margin-left: 8px;
+}
+
+.home-taskbar #bar-rest .faces:not(:empty) {
+  margin-right: 10px;
+}
+
+/* The settings, a button like the others. */
+.home-taskbar #bar-rest .gear {
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 40px;
+  padding: 0;
+}
+
+.home-taskbar #bar-rest .gear:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.home-taskbar #bar-rest .gear svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.6;
+}
+
+/* Show the desktop: a sliver at the screen's right edge, its line showing
+   under the pointer, as on Windows' own. */
+#bar-rest .tdesk {
+  align-self: stretch;
+  width: 9px;
+  margin-left: 3px;
+  border-left: 1px solid transparent;
+}
+
+#bar-rest .tdesk:hover {
+  border-left-color: rgba(255, 255, 255, 0.35);
 }
 
 #bar-rest .faces {
@@ -1446,9 +1494,9 @@ body {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   height: 40px;
-  padding: 0 9px;
+  padding: 0 10px;
   border-radius: 6px;
   cursor: pointer;
 }
@@ -1503,7 +1551,7 @@ body {
   align-items: flex-end;
   justify-content: center;
   height: 40px;
-  padding: 0 8px;
+  padding: 0 10px;
   border-radius: 6px;
   line-height: 1.25;
   cursor: pointer;
@@ -1648,9 +1696,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
+  min-width: 32px;
   height: 40px;
-  padding: 0 4px;
+  padding: 0 2px;
   border-radius: 6px;
   color: #f5f5f7;
   font-size: 14px;
@@ -1944,10 +1992,10 @@ body {
 
 /* --- The taskbar in Windows' light mode (island.js tb-light: as Windows'
    own taskbar is, SystemUsesLightTheme, which taskbar.rs sends) ---------------
-   The strip and what opens from it light; her end stays black, a capsule in
-   it (island.js isCapsule). The programs draw their tray icons for the
-   light taskbar themselves. Under the pointer and in front: a white wash,
-   as on Windows' own. */
+   The strip and what opens from it light, her island too (a capsule in
+   it, island.js isCapsule; the settings stay dark). The programs draw
+   their tray icons for the light taskbar themselves. Under the pointer
+   and in front: a white wash, as on Windows' own. */
 .tb-light #island-row {
   background: #eeeeee;
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.08);
@@ -2058,4 +2106,142 @@ body {
 
 .tb-light #bar-rest .wpop .wthumb {
   background: rgba(0, 0, 0, 0.04);
+}
+
+.tb-light #bar-rest .tdesk:hover {
+  border-left-color: rgba(0, 0, 0, 0.3);
+}
+
+/* Her island, light as Windows' own flyouts are: the capsule a light pill
+   in the strip, what it grows into a light card, the prompt's parts light;
+   the moods in their deeper colours (island.js COLOR_LIGHT). The settings,
+   which stand in the island too, stay dark. */
+.tb-light #island:not([data-view='settings']) {
+  background: #fbfbfb;
+  color: #1b1b1b;
+}
+
+.tb-light.home-taskbar.tb-capsule #island[data-view='compact'] {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.08),
+    0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.tb-light.home-taskbar.tb-capsule #island:not([data-view='compact']):not([data-view='settings']) {
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.tb-light #goo div {
+  background: #fbfbfb;
+}
+
+.tb-light #island-compact .label,
+.tb-light #island-expanded .reply {
+  color: #3a3a3a;
+}
+
+.tb-light #island-compact .pinned {
+  border-left-color: rgba(0, 0, 0, 0.12);
+}
+
+.tb-light #island-compact .more {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.tb-light #island-expanded [data-jump]:hover,
+.tb-light #island-expanded .wrow.on {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.tb-light #island-expanded .sub,
+.tb-light #island-expanded .progress .item,
+.tb-light #island-expanded .other .what,
+.tb-light #island-expanded .wrow {
+  color: #5d5d5d;
+}
+
+.tb-light #island-expanded .other .who,
+.tb-light #island-expanded .wrow.on {
+  color: #1b1b1b;
+}
+
+.tb-light #island-expanded .other.rest {
+  color: #8a8a8a;
+}
+
+.tb-light #island-expanded .bar {
+  background: #e3e3e3;
+}
+
+.tb-light #island-expanded .others,
+.tb-light #island-expanded .wlist {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+.tb-light #island .portrait,
+.tb-light #island .still-her {
+  background-color: #e8e8e8;
+}
+
+.tb-light.island #panel {
+  color: #1b1b1b;
+}
+
+.tb-light.island #panel .chip,
+.tb-light.island #panel .more {
+  background: #ececec;
+  color: #3a3a3a;
+}
+
+.tb-light.island #panel .code {
+  background: #f0f0f0;
+  color: #1b1b1b;
+}
+
+.tb-light.island #panel .btn {
+  border-color: #d6d6d6;
+  background: #ffffff;
+  color: #1b1b1b;
+}
+
+.tb-light.island #panel .btn.primary {
+  border-color: #34d27b;
+  background: #34d27b;
+  color: #04220f;
+}
+
+.tb-light.island #panel .btn.always {
+  border-color: #5e9bff;
+  background: #5e9bff;
+  color: #04122b;
+}
+
+.tb-light.island #panel .btn.danger {
+  color: #c42b3c;
+}
+
+.tb-light.island #panel .btn.option.picked {
+  border-color: #0067c0;
+  background: #e6f0fb;
+}
+
+.tb-light.island #panel .btn.ghost {
+  background: none;
+  color: #6e6e73;
+}
+
+.tb-light.island #panel .input {
+  border-color: #d6d6d6;
+  background: #ffffff;
+  color: #1b1b1b;
+}
+
+.tb-light.island #panel .note,
+.tb-light.island #panel .unit,
+.tb-light.island #panel .hint,
+.tb-light.island #panel .qdesc,
+.tb-light.island #panel .btn.option .desc {
+  color: #6e6e73;
 }

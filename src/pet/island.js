@@ -765,12 +765,23 @@
   quickBox.dataset.bar = 'quick'
   const NET = { wired: '', wifi: '', other: '', none: '' }
   const netMark = el('span', 'fi net')
-  const volMark = el('span', 'fi vol', '')
+  // The volume as Windows draws it: the speaker's three waves faint, those up
+  // to the volume solid over them; struck through, muted.
+  const volMark = el('span', 'fi vol')
+  const volBack = el('span', 'back', '')
+  const volFront = el('span', 'front', '')
+  volMark.append(volBack, volFront)
   quickBox.append(netMark, volMark)
   function showNet(kind) {
     netMark.textContent = NET[kind] || NET.other
   }
   showNet('other')
+  function showVolume(v) {
+    const [level, muted] = Array.isArray(v) ? v : [null, false]
+    volFront.textContent = muted ? '' : level == null || level >= 67 ? '' : level >= 34 ? '' : level > 0 ? '' : ''
+    volBack.hidden = !!muted
+    volMark.title = level == null ? '' : muted ? t(lang, 'taskbar.muted') : t(lang, 'taskbar.volume', { n: level })
+  }
   // What is using the microphone, the camera, the location, as Windows'
   // taskbar shows it before the input method; a press, its privacy settings.
   const PRIVACY = { mic: '', cam: '', loc: '' }
@@ -1068,6 +1079,7 @@
     capsMark.title = keys?.caps ? 'Caps Lock' : ''
     showNet(keys?.net)
     showPrivacy(keys?.use)
+    showVolume(keys?.volume)
   })
 
   // --- The taskbar's look: Mica, light or dark, Windows' accent -------------------------

@@ -1518,6 +1518,25 @@ body {
   color: #1b1b1b;
 }
 
+/* The volume: all three waves faint, those up to it over them solid. */
+#bar-rest .tquick .vol {
+  position: relative;
+}
+
+#bar-rest .tquick .vol .back {
+  opacity: 0.35;
+}
+
+#bar-rest .tquick .vol .back[hidden] {
+  display: none;
+}
+
+#bar-rest .tquick .vol .front {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
 /* What is using the microphone, the camera, the location (island.js showPrivacy). */
 #bar-rest .tpriv {
   flex: none;
@@ -1525,13 +1544,20 @@ body {
   align-items: center;
 }
 
+/* In Windows' accent, as its own taskbar shows them (--win-accent: its
+   lighter shade on the dark strip, its darker on the light). */
 #bar-rest .tpriv .fi {
   display: flex;
   align-items: center;
   height: 40px;
   padding: 0 7px;
   border-radius: 6px;
+  color: var(--win-accent, #4cc2ff);
   cursor: pointer;
+}
+
+.tb-light #bar-rest .tpriv .fi {
+  color: var(--win-accent, #0067c0);
 }
 
 #bar-rest .tpriv .fi:hover {
@@ -1760,7 +1786,7 @@ body {
 }
 
 #bar-rest .tchev .fi {
-  font-size: 12px;
+  font-size: 16px;
   transition: transform 0.2s ease;
 }
 

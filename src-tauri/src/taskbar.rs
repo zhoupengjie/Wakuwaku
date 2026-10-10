@@ -411,11 +411,12 @@ mod imp {
         *KEYS.lock().unwrap() = Some(std::thread::spawn(move || keys_loop(keys_sh)));
     }
 
-    // The keyboard (tasks::keys) looked at four times a second; the
-    // network's way out (the quick settings' button) and what is using the
-    // microphone, camera or location (tasks::in_use) every two; sent when
-    // any of it changes.
+    // The keyboard (tasks::keys) and the volume (audio.rs) looked at four
+    // times a second; the network's way out (the quick settings' button) and
+    // what is using the microphone, camera or location (tasks::in_use) every
+    // two; sent when any of it changes.
     fn keys_loop(sh: Arc<Shared>) {
+        let _com = crate::audio::Com::new();
         let mut sent = Value::Null;
         let using = || Value::Object(tasks::in_use().into_iter().map(|(what, names)| (what.to_string(), json!(names))).collect());
         let (mut net, mut used) = (tasks::net(), using());
@@ -427,7 +428,8 @@ mod imp {
                 used = using();
             }
             let keys = tasks::keys();
-            let now = json!({ "lang": keys.lang, "native": keys.native, "caps": keys.caps, "net": net, "use": used });
+            let volume = crate::audio::read().map(|(level, muted)| json!([level, muted]));
+            let now = json!({ "lang": keys.lang, "native": keys.native, "caps": keys.caps, "net": net, "use": used, "volume": volume });
             if now != sent {
                 let _ = sh.app.emit_to("island", "taskbar:keys", now.clone());
                 *SENT_KEYS.lock().unwrap() = now.clone();

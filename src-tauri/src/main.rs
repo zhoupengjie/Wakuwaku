@@ -14,7 +14,8 @@
 //   island.rs      her home's window (corner, island, bar, taskbar), and the settings
 //   appbar.rs      the bar's and the taskbar's strip, kept from other windows
 //   taskbar.rs     the taskbar's side of Windows: its own put away (shell.rs),
-//                  the tray taken over (systray.rs), the windows' buttons (tasks.rs)
+//                  the tray taken over (systray.rs), the windows' buttons (tasks.rs),
+//                  the volume (audio.rs)
 //   settings.rs    what the settings show and change
 //   pointer.rs     click-through, for both windows; screen.rs the work areas
 //   asks.rs        prompts answered on her or the island
@@ -33,6 +34,7 @@
 
 mod appbar;
 mod asks;
+mod audio;
 mod connection;
 mod data;
 mod events;

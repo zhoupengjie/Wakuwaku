@@ -1267,11 +1267,27 @@ body {
   bottom: 0;
   z-index: 2;
   box-shadow: none;
+  transition:
+    width 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    height 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    border-radius 0.4s ease,
+    left 0.3s ease,
+    bottom 0.3s ease;
 }
 
+/* Grown up from the strip, black on black: no outline, which would cut a
+   line down through the strip where the two meet. */
 .home-taskbar #island:not([data-view='compact']) {
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.45);
+}
+
+/* The settings stand above the strip, as what Windows opens from its
+   taskbar does, and leave it whole (island.js TASKBAR_GAP). */
+.home-taskbar #island[data-view='settings'] {
+  left: 8px;
+  bottom: 56px;
   box-shadow:
-    0 -12px 30px rgba(0, 0, 0, 0.45),
+    0 8px 30px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
@@ -1324,8 +1340,41 @@ body {
 
 #bar-rest .start:hover,
 #bar-rest .ticon:hover,
+#bar-rest .tquick:hover,
 #bar-rest .tclock:hover {
   background: #1c1c1e;
+}
+
+/* Windows' quick settings: the network and the volume, one button. */
+#bar-rest .tquick {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#bar-rest .tquick svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #e5e5ea;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#bar-rest .tquick .vol path:first-child,
+#bar-rest .tquick .dot {
+  fill: #e5e5ea;
+}
+
+#bar-rest .tquick .off {
+  stroke: #ff5c6c;
 }
 
 /* The tray's icons, as the programs drew them (taskbar.rs). */

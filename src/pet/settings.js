@@ -906,9 +906,11 @@
     foot.querySelector('.foot-text').textContent = T('s.foot')
     foot.querySelector('.ver').textContent = `v${snap.version}`
     tick()
-    // Never taller than the screen: the page scrolls inside instead.
+    // Never taller than the screen, nor than the home keeps room for (the
+    // taskbar's): the page scrolls inside instead.
     const rest = layer.offsetHeight - body.offsetHeight
-    body.style.maxHeight = `${Math.max(160, Math.min(460, screen.availHeight - 56 - rest))}px`
+    const most = window.Island?.settingsMax?.() ?? screen.availHeight - 56
+    body.style.maxHeight = `${Math.max(160, Math.min(460, most - rest))}px`
     window.Island?.changed()
   }
 

@@ -42,7 +42,9 @@ pub const BAR_H: f64 = 30.0;
 // (the corner's, for the same reason as the corner's: a window growing up
 // moves its top-left corner). The window is the two.
 pub const TASKBAR_H: f64 = 48.0;
-const TASKBAR_ROOM: f64 = 440.0;
+// As high as the settings ever are (they stand above the strip, island.js
+// settingsMax): opening them never moves the window, which would flash.
+const TASKBAR_ROOM: f64 = 640.0;
 // The middle of her portrait at the taskbar's left end.
 const TASKBAR_SEAT_X: f64 = 24.0;
 // The island's top edge in the window, and its compact height.

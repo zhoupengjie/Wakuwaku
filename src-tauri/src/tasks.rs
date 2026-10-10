@@ -38,6 +38,12 @@ mod imp {
         fn ImmGetDefaultIMEWnd(hwnd: Hwnd) -> Hwnd;
     }
 
+    #[link(name = "iphlpapi")]
+    extern "system" {
+        fn GetBestInterface(dest: u32, index: *mut u32) -> u32;
+        fn ConvertInterfaceIndexToLuid(index: u32, luid: *mut u64) -> u32;
+    }
+
     #[repr(C)]
     struct ShFileInfo {
         icon: isize,
@@ -374,6 +380,28 @@ mod imp {
         Keys { lang, native: native.flatten(), caps }
     }
 
+    // The network's way out, as Windows' taskbar shows it: "wired", "wifi",
+    // "other" (a VPN's, a phone's) or "none": the interface Windows would
+    // send to a public address by, its type in its LUID's top 16 bits.
+    pub fn net() -> &'static str {
+        let mut index = 0u32;
+        let mut luid = 0u64;
+        // SAFETY: our own out-parameters; 1.1.1.1 reads the same in either byte order.
+        unsafe {
+            if GetBestInterface(u32::from_ne_bytes([1, 1, 1, 1]), &mut index) != 0 {
+                return "none";
+            }
+            if ConvertInterfaceIndexToLuid(index, &mut luid) != 0 {
+                return "other";
+            }
+        }
+        match luid >> 48 {
+            6 => "wired",
+            71 => "wifi",
+            _ => "other",
+        }
+    }
+
     // The window in front's input method between its own script and plain letters.
     pub fn toggle_native() -> bool {
         let (_, ime) = front_ime();
@@ -394,6 +422,9 @@ mod imp {
     }
     pub fn toggle_native() -> bool {
         false
+    }
+    pub fn net() -> &'static str {
+        "other"
     }
     pub fn file_name(path: &str) -> String {
         path.rsplit('/').next().unwrap_or(path).to_string()
@@ -429,4 +460,4 @@ mod imp {
     }
 }
 
-pub use imp::{alive, app_name, close, destroy_icon, file_icon, front, icon_of, keys, launch, list, press, toggle_native};
+pub use imp::{alive, app_name, close, destroy_icon, file_icon, front, icon_of, keys, launch, list, net, press, toggle_native};

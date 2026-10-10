@@ -102,7 +102,10 @@
   // The taskbar's strip, the room kept above it (both island.rs's), and her
   // portrait in it.
   const TASKBAR_H = 48
-  const TASKBAR_ROOM = 440
+  const TASKBAR_ROOM = 640
+  // The settings above the taskbar: clear of it, and room for their shadow.
+  const TASKBAR_GAP = 8
+  const TASKBAR_SHADE = 12
   const TASK_HEAD = 30
   // A portrait px across is the sheet at this scale.
   const PER_PX = 0.00875
@@ -548,10 +551,13 @@
       if (want.height <= BAR_H) return null
       return { width: innerWidth, height: want.height + 12 }
     }
-    // The taskbar: what grows up from it, past its room (the window then grows up too).
+    // The taskbar: what grows up from it, or the settings standing above it,
+    // past its room (the window then grows up too, which flashes: its room
+    // is kept as high as the settings ever are, settingsMax).
     if (home() === 'taskbar') {
-      if (want.height + 12 <= TASKBAR_H + TASKBAR_ROOM) return null
-      return { width: innerWidth, height: want.height + 12 }
+      const height = want.height + TASKBAR_SHADE + (view === 'settings' ? TASKBAR_H + TASKBAR_GAP : 0)
+      if (height <= TASKBAR_H + TASKBAR_ROOM) return null
+      return { width: innerWidth, height }
     }
     const width = want.width + 48
     const height = TOP + want.height + 24
@@ -586,7 +592,9 @@
         : home() === 'taskbar'
           ? view === 'compact'
             ? '0'
-            : '22px 22px 0 0'
+            : view === 'settings'
+              ? '22px'
+              : '22px 22px 0 0'
           : home() === 'corner' && view === 'compact'
             ? `${CIRCLE / 2}px`
             : `${height > 60 ? 30 : height / 2}px`
@@ -705,6 +713,27 @@
   const imeMark = el('span', 'ime')
   imeMark.dataset.bar = 'ime'
   keysBox.append(capsMark, imeMark)
+  // Windows' quick settings (Wi-Fi, Bluetooth, volume…), as its own taskbar
+  // has them: the network's way out (by cable, Wi-Fi, or none) and the volume.
+  const quickBox = el('span', 'tquick')
+  quickBox.dataset.bar = 'quick'
+  const NET = {
+    wifi: '<path d="M1.5 6.2a9.5 9.5 0 0 1 13 0M3.8 8.6a6.2 6.2 0 0 1 8.4 0M6.1 11a3 3 0 0 1 3.8 0"/><circle cx="8" cy="13.2" r="0.9" class="dot"/>',
+    wired: '<rect x="2" y="2.5" width="12" height="8.5" rx="1.2"/><path d="M8 11v2.5M5 13.5h6"/>',
+    other: '<circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c2 2 2 10.4 0 12.4M8 1.8c-2 2-2 10.4 0 12.4"/>',
+    none: '<circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c2 2 2 10.4 0 12.4M8 1.8c-2 2-2 10.4 0 12.4"/><path d="M3 13L13 3" class="off"/>',
+  }
+  const netMark = el('span', 'net')
+  const volMark = el('span', 'vol')
+  volMark.innerHTML = '<svg viewBox="0 0 16 16"><path d="M2 6h2.5L8 3v10l-3.5-3H2z"/><path d="M10.5 5.8a3 3 0 0 1 0 4.4M12.4 3.9a5.7 5.7 0 0 1 0 8.2"/></svg>'
+  quickBox.append(netMark, volMark)
+  function showNet(kind) {
+    const k = NET[kind] ? kind : 'other'
+    if (netMark.dataset.k === k) return
+    netMark.dataset.k = k
+    netMark.innerHTML = `<svg viewBox="0 0 16 16">${NET[k]}</svg>`
+  }
+  showNet('other')
   const clockBox = el('span', 'tclock')
   clockBox.dataset.bar = 'notifications'
   const taskGear = gearNode()
@@ -720,12 +749,13 @@
   function fillTaskbar() {
     barRest.style.left = `${sizeOf('compact').width}px`
     if (!taskbarBuilt) {
-      barRest.replaceChildren(startButton, windowsBox, tagsBox, el('span', 'grow'), facesBox, trayBox, keysBox, clockBox, taskGear, pop)
+      barRest.replaceChildren(startButton, windowsBox, tagsBox, el('span', 'grow'), facesBox, trayBox, keysBox, quickBox, clockBox, taskGear, pop)
       taskbarBuilt = true
       trayDrawn = ''
       windowsDrawn = ''
     }
     startButton.title = t(lang, 'taskbar.start')
+    quickBox.title = t(lang, 'taskbar.quick')
     clockBox.title = t(lang, 'taskbar.clock')
     tagsBox.replaceChildren(...sessionTags())
     facesBox.replaceChildren(...widgetFaces())
@@ -948,6 +978,7 @@
     imeMark.classList.toggle('unknown', !!script && keys.native == null)
     capsMark.classList.toggle('on', !!keys?.caps)
     capsMark.title = keys?.caps ? 'Caps Lock' : ''
+    showNet(keys?.net)
   })
 
   window.pet.onWindows(list => {
@@ -1638,5 +1669,9 @@
   blink()
 
   // panel.js tells the island when its prompt changes.
-  window.Island = { isOn, changed: update, reach, absorb }
+  // The most the settings may be high: above the taskbar, its room (the
+  // window never moves for them); elsewhere, none said (the screen's).
+  const settingsMax = () => (home() === 'taskbar' ? TASKBAR_ROOM - TASKBAR_GAP - TASKBAR_SHADE : null)
+
+  window.Island = { isOn, changed: update, reach, absorb, settingsMax }
 })()

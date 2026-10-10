@@ -369,15 +369,24 @@ mod imp {
         *KEYS.lock().unwrap() = Some(std::thread::spawn(move || keys_loop(keys_sh)));
     }
 
-    // The keyboard (tasks::keys) looked at four times a second; sent when it changes.
+    // The keyboard (tasks::keys) looked at four times a second, and the
+    // network's way out (the quick settings' button) every two; sent when
+    // either changes.
     fn keys_loop(sh: Arc<Shared>) {
-        let mut sent = None;
+        let mut sent = Value::Null;
+        let mut net = tasks::net();
+        let mut looks = 0u32;
         while !TASKS_STOP.load(Ordering::SeqCst) {
+            looks += 1;
+            if looks % 8 == 0 {
+                net = tasks::net();
+            }
             let keys = tasks::keys();
-            if sent.as_ref() != Some(&keys) {
-                let _ = sh.app.emit_to("island", "taskbar:keys", json!({ "lang": keys.lang, "native": keys.native, "caps": keys.caps }));
-                *SENT_KEYS.lock().unwrap() = json!({ "lang": keys.lang, "native": keys.native, "caps": keys.caps });
-                sent = Some(keys);
+            let now = json!({ "lang": keys.lang, "native": keys.native, "caps": keys.caps, "net": net });
+            if now != sent {
+                let _ = sh.app.emit_to("island", "taskbar:keys", now.clone());
+                *SENT_KEYS.lock().unwrap() = now.clone();
+                sent = now;
             }
             std::thread::sleep(Duration::from_millis(250));
         }

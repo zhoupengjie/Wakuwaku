@@ -894,8 +894,8 @@
   // edge first, the trailing one after, so it stretches and gathers, a
   // little squashed on the way (style.css .hdrop). It comes and goes in
   // place, jumps rather than slides a long way, and gives a little under a
-  // press. Not over what opens above the buttons, nor while a tray icon is
-  // being dragged.
+  // press. Not over what opens above the buttons, nor while a tray icon or
+  // a program's button is being dragged.
   const GLIDE_ON = '.start, .win, .tout .ticon, .tchev, .tpriv, .kbd .ime, .tquick, .tclock, .gear, .tag[data-jump]'
   const GLIDE_FAR = 360
   const glide = el('span', 'hdrop')
@@ -943,7 +943,7 @@
   barRest.addEventListener(
     'mouseenter',
     e => {
-      if (!isOn() || home() !== 'taskbar' || !isGlideOn(e.target) || body.classList.contains('tray-dragging')) return
+      if (!isOn() || home() !== 'taskbar' || !isGlideOn(e.target) || body.classList.contains('tray-dragging') || body.classList.contains('win-dragging')) return
       glideTo(e.target)
     },
     true,

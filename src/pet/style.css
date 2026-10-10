@@ -2383,7 +2383,8 @@ body:not(.tb-light) #bar-rest .ticon[data-mono='dark'] img {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
 }
 
-.tray-dragging #bar-rest .hdrop {
+.tray-dragging #bar-rest .hdrop,
+.win-dragging #bar-rest .hdrop {
   opacity: 0;
 }
 

@@ -440,14 +440,29 @@ pub fn apply_visibility(sh: &Arc<Shared>) {
     }
 }
 
-// Kept in its place (a display gone, the scale changed, another bar).
+// Kept in its place (a display gone, the scale changed, another bar). And
+// put back where it was put if Windows moved it: the taskbar's window, which
+// reaches over its own strip, was pushed up into the work area by the strip's
+// height (2026-10-10, as a game went full screen and back).
 pub fn keep_on_screen(sh: &Shared) {
-    let is_up = {
+    let (is_up, pos, size) = {
         let isl = sh.island.lock().unwrap();
-        isl.shown && !isl.holding && !isl.reaching
+        (isl.shown && !isl.holding && !isl.reaching, isl.pos, isl.size)
     };
-    if is_up {
-        place(sh);
+    if !is_up {
+        return;
+    }
+    place(sh);
+    if sh.home() != "taskbar" {
+        return;
+    }
+    let Some(win) = window(sh) else { return };
+    if let Ok(at) = win.outer_position() {
+        if (at.x, at.y) != pos && sh.island.lock().unwrap().pos == pos {
+            sh.log(&format!("island: moved by Windows to ({}, {}); put back at {pos:?}", at.x, at.y));
+            let _ = win.set_size(PhysicalSize::new(size.0 as u32, size.1 as u32));
+            let _ = win.set_position(PhysicalPosition::new(pos.0, pos.1));
+        }
     }
 }
 

@@ -10,7 +10,9 @@
 // twin, 120, gives Explorer\Accent's StartColorMenu and AccentColorMenu),
 // which works out the shades the rest of Windows uses. Should Windows not
 // take it (AccentColorMenu, the colour picked, unchanged), the shades are
-// worked out here (palette) and written as Windows keeps them.
+// worked out here (palette) and written as Windows keeps them. The windows'
+// frames' colour is DWM's, kept in its memory and written from there over
+// the registry: set through DWM (dwmapi's unnamed 131, read back by 127).
 
 // Lighter and darker shades of a colour, as Windows keeps its accent's
 // (Explorer\Accent's AccentPalette, wallpaper.rs accent_of): Light3, Light2,
@@ -89,6 +91,24 @@ mod imp {
 
     type SetUserColorPreference = extern "system" fn(*const ColorPreference, i32) -> i32;
 
+    // DWM's colours for the windows' frames, as it keeps them in memory (and
+    // writes them over the registry's DWM values from there): read by
+    // dwmapi's export 127 (DwmGetColorizationParameters), set by 131.
+    #[repr(C)]
+    #[derive(Default)]
+    struct Colorization {
+        color: u32,
+        afterglow: u32,
+        intensity: u32,
+        afterglow_balance: u32,
+        blur_balance: u32,
+        reflection: u32,
+        opaque: u32,
+    }
+
+    type GetColorization = extern "system" fn(*mut Colorization) -> i32;
+    type SetColorization = extern "system" fn(*const Colorization, u32) -> i32;
+
     #[link(name = "kernel32")]
     extern "system" {
         fn LoadLibraryW(name: *const u16) -> isize;
@@ -100,19 +120,54 @@ mod imp {
         fn SendMessageTimeoutW(hwnd: *mut std::ffi::c_void, msg: u32, wparam: usize, lparam: isize, flags: u32, ms: u32, result: *mut usize) -> isize;
     }
 
-    // uxtheme's export 122, which has no name; None should it be missing.
-    fn set_user_color_preference() -> Option<SetUserColorPreference> {
-        let name: Vec<u16> = "uxtheme.dll".encode_utf16().chain(std::iter::once(0)).collect();
+    // A system library's export that has no name, by its number; null
+    // should it be missing.
+    fn export(dll: &str, number: usize) -> *const () {
+        let name: Vec<u16> = dll.encode_utf16().chain(std::iter::once(0)).collect();
         // SAFETY: a system library (loaded already in any program with
         // windows), and an export asked for by its number, as Windows allows.
         unsafe {
             let module = LoadLibraryW(name.as_ptr());
             if module == 0 {
-                return None;
+                return std::ptr::null();
             }
-            let f = GetProcAddress(module, 122usize as *const u8);
-            (!f.is_null()).then(|| std::mem::transmute::<*const (), SetUserColorPreference>(f))
+            GetProcAddress(module, number as *const u8)
         }
+    }
+
+    // uxtheme's export 122.
+    fn set_user_color_preference() -> Option<SetUserColorPreference> {
+        let f = export("uxtheme.dll", 122);
+        // SAFETY: the export of this number has this shape (its reading twin,
+        // 120, checked against the registry, 2026-10-10).
+        (!f.is_null()).then(|| unsafe { std::mem::transmute::<*const (), SetUserColorPreference>(f) })
+    }
+
+    fn colorization() -> Option<Colorization> {
+        let f = export("dwmapi.dll", 127);
+        if f.is_null() {
+            return None;
+        }
+        // SAFETY: as set_user_color_preference; its seven fields read back sound.
+        let get = unsafe { std::mem::transmute::<*const (), GetColorization>(f) };
+        let mut c = Colorization::default();
+        (get(&mut c) >= 0).then_some(c)
+    }
+
+    // DWM's frames' colour (and its afterglow) set to this one, the rest of
+    // its colours as they were; its colour then, read back.
+    fn set_colorization(argb: u32) -> Option<u32> {
+        let mut c = colorization()?;
+        let f = export("dwmapi.dll", 131);
+        if f.is_null() {
+            return None;
+        }
+        // SAFETY: as colorization, the same struct handed back.
+        let set = unsafe { std::mem::transmute::<*const (), SetColorization>(f) };
+        c.color = argb;
+        c.afterglow = argb;
+        set(&c, 1);
+        colorization().map(|c| c.color)
     }
 
     const HWND_BROADCAST: isize = 0xffff;
@@ -148,7 +203,8 @@ mod imp {
         Some(format!("#{:02x}{:02x}{:02x}", v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff))
     }
 
-    pub fn set_accent(rgb: [u8; 3]) -> bool {
+    // What came of it, for the log.
+    pub fn set_accent(rgb: [u8; 3]) -> String {
         let shades = super::palette(rgb);
         let shade = |i: usize| [shades[i * 4], shades[i * 4 + 1], shades[i * 4 + 2]];
         // Not from the desktop's picture any more: this colour.
@@ -178,17 +234,23 @@ mod imp {
                 let _ = accent.set_value("StartColorMenu", &abgr(shade(5)));
             }
         }
-        // The windows' frames' colour, which Windows' call leaves as it was
-        // (an orange stayed after blue was picked again): this one, either way.
-        if let Ok((dwm, _)) = user.create_subkey(r"Software\Microsoft\Windows\DWM") {
-            let [r, g, b] = rgb;
-            let argb = 0xc400_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32;
-            let _ = dwm.set_value("AccentColor", &abgr(rgb));
-            let _ = dwm.set_value("ColorizationColor", &argb);
-            let _ = dwm.set_value("ColorizationAfterglow", &argb);
-        }
         announce();
-        true
+        // The windows' frames' colour, which Windows' call can leave as it
+        // was: DWM keeps it in memory and writes its own over the registry
+        // (an orange came back after blue was written there, 2026-10-10), so
+        // it is set through DWM; the registry's own only should DWM not take it.
+        let [r, g, b] = rgb;
+        let argb = 0xc400_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32;
+        let frames = set_colorization(argb);
+        if frames != Some(argb) {
+            if let Ok((dwm, _)) = user.create_subkey(r"Software\Microsoft\Windows\DWM") {
+                let _ = dwm.set_value("AccentColor", &abgr(rgb));
+                let _ = dwm.set_value("ColorizationColor", &argb);
+                let _ = dwm.set_value("ColorizationAfterglow", &argb);
+            }
+        }
+        let frames = frames.map_or("none".to_string(), |c| format!("{c:#010x}"));
+        format!("called {set}, taken by Windows {taken}; frames (DWM) now {frames}, wanted {argb:#010x}")
     }
 }
 
@@ -200,8 +262,8 @@ mod imp {
     pub fn current_accent() -> Option<String> {
         None
     }
-    pub fn set_accent(_rgb: [u8; 3]) -> bool {
-        false
+    pub fn set_accent(_rgb: [u8; 3]) -> String {
+        String::new()
     }
 }
 

@@ -181,8 +181,8 @@ pub async fn settings_win_look(app: AppHandle, light: Option<bool>, accent: Opti
         sh.log(&format!("settings: Windows' mode set {}: {ok}", if light { "light" } else { "dark" }));
     }
     if let Some(rgb) = accent.as_deref().and_then(crate::theme::parse) {
-        let ok = crate::theme::set_accent(rgb);
-        sh.log(&format!("settings: Windows' accent set {}: {ok}", accent.unwrap_or_default()));
+        let came = crate::theme::set_accent(rgb);
+        sh.log(&format!("settings: Windows' accent set {}: {came}", accent.unwrap_or_default()));
     }
     snapshot(&sh)
 }

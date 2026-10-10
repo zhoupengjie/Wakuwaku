@@ -400,8 +400,25 @@ pub fn view(sh: &Shared) -> Value {
 
 // --- From the settings ---------------------------------------------------------------------------
 
-fn new_id() -> String {
-    format!("{:08x}", (now_ms() ^ ((std::process::id() as u64) << 20)) & 0xffff_ffff)
+// The accounts are read, changed and written back by one command at a time:
+// two saves at once (the sign-in between taking seconds) would each write
+// back the list as it was before the other.
+static EDITING: Mutex<()> = Mutex::new(());
+
+// An id no account has: the time, a count and the process, mixed.
+fn new_id(all: &[Account]) -> String {
+    use std::hash::{BuildHasher, Hasher};
+    static COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    loop {
+        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+        h.write_u64(now_ms());
+        h.write_u64(COUNT.fetch_add(1, Ordering::SeqCst));
+        h.write_u32(std::process::id());
+        let id = format!("{:08x}", h.finish() & 0xffff_ffff);
+        if !all.iter().any(|a| a.id == id) {
+            return id;
+        }
+    }
 }
 
 fn keep_accounts(sh: &Arc<Shared>, all: &[Account]) {
@@ -436,9 +453,9 @@ pub async fn mail_save(app: AppHandle, account: Value, password: String) -> Valu
     let Some(server) = Server::from_json(&account).filter(|_| split(&address).is_some()) else {
         return json!({ "ok": false, "error": { "kind": "fields", "text": "" } });
     };
-    let mut all = accounts(&sh);
-    let id = account["id"].as_str().filter(|id| all.iter().any(|a| a.id == *id)).map_or_else(new_id, String::from);
-    let password = if password.is_empty() { secret::read(&id).unwrap_or_default() } else { password };
+    // One being changed: its id, and the password kept for it.
+    let known = account["id"].as_str().filter(|id| accounts(&sh).iter().any(|a| a.id == *id)).map(String::from);
+    let password = if password.is_empty() { known.as_deref().and_then(secret::read).unwrap_or_default() } else { password };
     if password.is_empty() {
         return json!({ "ok": false, "error": { "kind": "password", "text": "" } });
     }
@@ -448,35 +465,47 @@ pub async fn mail_save(app: AppHandle, account: Value, password: String) -> Valu
         Ok(n) => n,
         Err((fail, auths)) => return json!({ "ok": false, "error": fail.json(), "auths": auths }),
     };
-    if let Err(e) = secret::write(&id, &password) {
-        return json!({ "ok": false, "error": { "kind": "keep", "text": e } });
+    // Kept against the accounts as they are now, others saved meanwhile included.
+    {
+        let _editing = EDITING.lock().unwrap();
+        let mut all = accounts(&sh);
+        let id = known.filter(|id| all.iter().any(|a| a.id == *id)).unwrap_or_else(|| new_id(&all));
+        if let Err(e) = secret::write(&id, &password) {
+            return json!({ "ok": false, "error": { "kind": "keep", "text": e } });
+        }
+        let kept = Account { id: id.clone(), address, server, on: true };
+        match all.iter_mut().find(|a| a.id == id) {
+            Some(a) => *a = kept,
+            None => all.push(kept),
+        }
+        keep_accounts(&sh, &all);
     }
-    let kept = Account { id: id.clone(), address, server, on: true };
-    match all.iter_mut().find(|a| a.id == id) {
-        Some(a) => *a = kept,
-        None => all.push(kept),
-    }
-    keep_accounts(&sh, &all);
     json!({ "ok": true, "unread": unread, "snapshot": settings::snapshot(&sh) })
 }
 
 #[tauri::command]
 pub async fn mail_remove(app: AppHandle, id: String) -> Value {
     let sh = shared(&app);
-    let all: Vec<Account> = accounts(&sh).into_iter().filter(|a| a.id != id).collect();
-    secret::delete(&id);
-    keep_accounts(&sh, &all);
+    {
+        let _editing = EDITING.lock().unwrap();
+        let all: Vec<Account> = accounts(&sh).into_iter().filter(|a| a.id != id).collect();
+        secret::delete(&id);
+        keep_accounts(&sh, &all);
+    }
     settings::snapshot(&sh)
 }
 
 #[tauri::command]
 pub async fn mail_switch(app: AppHandle, id: String, on: bool) -> Value {
     let sh = shared(&app);
-    let mut all = accounts(&sh);
-    if let Some(a) = all.iter_mut().find(|a| a.id == id) {
-        a.on = on;
+    {
+        let _editing = EDITING.lock().unwrap();
+        let mut all = accounts(&sh);
+        if let Some(a) = all.iter_mut().find(|a| a.id == id) {
+            a.on = on;
+        }
+        keep_accounts(&sh, &all);
     }
-    keep_accounts(&sh, &all);
     settings::snapshot(&sh)
 }
 
@@ -589,6 +618,17 @@ mod tests {
         let head = "From: =?UTF-8?B?546L5oC7?= <boss@example.com>\r\nSubject: =?GBK?B?1tzO5bXEt72wuA==?=\r\n\r\n";
         assert_eq!(from_and_subject(head.as_bytes()), ("王总".into(), "周五的方案".into()));
         assert_eq!(from_and_subject(b"From: boss@example.com\r\n\r\n").0, "boss@example.com");
+    }
+
+    #[test]
+    fn two_accounts_at_once_get_ids_of_their_own() {
+        let server = Server { host: "h".into(), port: 993, security: Security::Ssl, username: "u".into(), auth: Auth::Auto };
+        let mut all = Vec::new();
+        for _ in 0..2000 {
+            let id = new_id(&all);
+            assert!(id.len() == 8 && !all.iter().any(|a: &Account| a.id == id), "{id}");
+            all.push(Account { id, address: "a@b.c".into(), server: server.clone(), on: true });
+        }
     }
 
     #[test]

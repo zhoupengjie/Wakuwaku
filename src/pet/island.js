@@ -648,7 +648,8 @@
 
   function sessionTags() {
     const detailed = isDetailed()
-    // In the taskbar, a session marked on its window's button needs no tag.
+    // In the taskbar, a session whose window has a button needs no tag: the
+    // button goes to it, and the island says how it is.
     const onButtons = new Set(home() === 'taskbar' ? taskWindows.flatMap(a => (a.windows || []).flatMap(w => (w.sessions || []).map(s => s.id))) : [])
     return Status.othersOf(now.list, now)
       .filter(x => !onButtons.has(x.id))
@@ -816,8 +817,8 @@
   // name then under the pointer). Icons alone (style.css #bar-rest.icons):
   // no title, no count, its windows listed when the pointer rests on it. A
   // line under it, longer for the one in front; lit while a window of it
-  // flashes for attention; a dot for each session in its windows, in its
-  // mood's colour.
+  // flashes for attention. No marks for the sessions in its windows: the
+  // island says how they are.
   function drawWindows() {
     const drawn = JSON.stringify([taskWindows, lang])
     if (drawn === windowsDrawn) return
@@ -842,16 +843,6 @@
         }
         if (windows.length) button.append(el('span', 'wt', windows.length === 1 ? windows[0].title : app.name))
         if (windows.length > 1) button.append(el('span', 'count', String(windows.length)))
-        const sessions = windows.flatMap(w => w.sessions || [])
-        if (sessions.length) {
-          const marks = el('span', 'marks')
-          for (const s of sessions) {
-            const dot = el('i', s.mood === 'waiting' ? 'wants' : '')
-            dot.style.background = COLOR[s.mood] || COLOR.idle
-            marks.append(dot)
-          }
-          button.append(marks)
-        }
         return button
       }),
     )

@@ -1486,7 +1486,7 @@ body {
 
 /* The windows' buttons, in the order they came (taskbar.rs): an icon and a
    title, a line under it, longer and blue for the one in front; lit amber
-   while one flashes for attention; a dot for each session in it. */
+   while one flashes for attention. */
 #bar-rest .wins {
   flex: 0 1 auto;
   display: flex;
@@ -1581,31 +1581,6 @@ body {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-#bar-rest .win .marks {
-  position: absolute;
-  top: 6px;
-  left: 23px;
-  display: flex;
-  gap: 2px;
-}
-
-#bar-rest .win .marks i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1.5px #000;
-}
-
-#bar-rest .win .marks i.wants {
-  animation: mark-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes mark-pulse {
-  50% {
-    transform: scale(1.35);
-  }
 }
 
 /* The keyboard: Caps Lock (only while on), the input method's script. */
@@ -1772,8 +1747,7 @@ body {
 
 /* Icons alone (island.js, taskbarButtons): a square for each program and
    for Start, the icon as big as on Windows' own taskbar. Its windows are
-   listed when the pointer rests on it: no title, no count. Its sessions'
-   dots on the icon's corner. */
+   listed when the pointer rests on it: no title, no count. */
 #bar-rest.icons .start,
 #bar-rest.icons .win {
   flex: none;
@@ -1797,11 +1771,6 @@ body {
 #bar-rest.icons .win .wt,
 #bar-rest.icons .win .count {
   display: none;
-}
-
-#bar-rest.icons .win .marks {
-  top: 4px;
-  left: 29px;
 }
 
 /* Centred (island.js alignApps), they slide to the middle as programs come and go. */

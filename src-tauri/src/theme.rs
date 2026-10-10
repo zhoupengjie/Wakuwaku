@@ -238,16 +238,16 @@ mod imp {
         // The windows' frames' colour, which Windows' call can leave as it
         // was: DWM keeps it in memory and writes its own over the registry
         // (an orange came back after blue was written there, 2026-10-10), so
-        // it is set through DWM; the registry's own only should DWM not take it.
+        // it is set through DWM first. Nor does DWM write its new one down
+        // soon (the orange stayed there after it took blue): the registry's
+        // then, for the next sign-in, which DWM no longer writes over.
         let [r, g, b] = rgb;
         let argb = 0xc400_0000 | (r as u32) << 16 | (g as u32) << 8 | b as u32;
         let frames = set_colorization(argb);
-        if frames != Some(argb) {
-            if let Ok((dwm, _)) = user.create_subkey(r"Software\Microsoft\Windows\DWM") {
-                let _ = dwm.set_value("AccentColor", &abgr(rgb));
-                let _ = dwm.set_value("ColorizationColor", &argb);
-                let _ = dwm.set_value("ColorizationAfterglow", &argb);
-            }
+        if let Ok((dwm, _)) = user.create_subkey(r"Software\Microsoft\Windows\DWM") {
+            let _ = dwm.set_value("AccentColor", &abgr(rgb));
+            let _ = dwm.set_value("ColorizationColor", &argb);
+            let _ = dwm.set_value("ColorizationAfterglow", &argb);
         }
         let frames = frames.map_or("none".to_string(), |c| format!("{c:#010x}"));
         format!("called {set}, taken by Windows {taken}; frames (DWM) now {frames}, wanted {argb:#010x}")

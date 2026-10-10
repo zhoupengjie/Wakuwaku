@@ -74,6 +74,12 @@ pub fn menu(sh: &Shared, is_tray: bool) -> tauri::Result<Menu<Wry>> {
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, flag("dnd"), None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?)?;
+    // In place of Windows' taskbar, the way to Windows' own settings too.
+    if home == "taskbar" {
+        menu.append(&MenuItem::with_id(app, "winSettings", t("menu.winSettings"), true, None::<&str>)?)?;
+        menu.append(&MenuItem::with_id(app, "controlPanel", t("menu.controlPanel"), true, None::<&str>)?)?;
+        menu.append(&MenuItem::with_id(app, "deviceManager", t("menu.deviceManager"), true, None::<&str>)?)?;
+    }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&MenuItem::with_id(app, "quit", t("menu.quit"), true, None::<&str>)?)?;
     Ok(menu)
@@ -86,6 +92,15 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
         "out" => crate::set_out(sh, !sh.flag("out")),
         "corner" => crate::come_home(sh),
         "settings" => crate::island::open_settings(sh, None),
+        "winSettings" => {
+            crate::tasks::launch("ms-settings:");
+        }
+        "controlPanel" => {
+            crate::tasks::launch("control.exe");
+        }
+        "deviceManager" => {
+            crate::tasks::launch("devmgmt.msc");
+        }
         "quit" => sh.app.exit(0),
         _ => {
             if let Some(home) = id.strip_prefix("display:") {

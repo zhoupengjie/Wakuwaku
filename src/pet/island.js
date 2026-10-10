@@ -231,13 +231,20 @@
   const home = () => (['corner', 'bar', 'taskbar'].includes(config.display) ? config.display : 'island')
   // A strip across the screen (the bar, the taskbar): the other sessions have tags in it.
   const isStrip = () => home() === 'bar' || home() === 'taskbar'
-  // The taskbar's strip the desktop's picture through (mica.js), not solid.
-  const isMica = () => isOn() && home() === 'taskbar' && config.taskbarMaterial !== 'black'
+  // The taskbar's strip the desktop's picture through (mica.js), neither
+  // solid nor clear.
+  const isMica = () => isOn() && home() === 'taskbar' && !['black', 'clear'].includes(config.taskbarMaterial)
+  // The taskbar's strip clear, the desktop itself through it; solid while a
+  // window is maximized on its display (taskbar.rs "max"), unless it is to
+  // stay clear always (taskbarClearWhen).
+  const isClear = () => isOn() && home() === 'taskbar' && config.taskbarMaterial === 'clear'
+  const isSolidNow = () => isClear() && config.taskbarClearWhen !== 'always' && taskWindows.some(a => (a.windows || []).some(w => w.max && !w.min))
   // The taskbar light, as Windows' own is in its light mode (taskbar.rs).
   const isLight = () => isOn() && home() === 'taskbar' && look.mode === 'light'
   // Her end a capsule of its own in the strip (black, or light in Windows'
-  // light mode), wherever the strip is not black itself: on the Mica, or light.
-  const isCapsule = () => isMica() || isLight()
+  // light mode), wherever the strip is not black itself: on the Mica, clear,
+  // or light.
+  const isCapsule = () => isMica() || isClear() || isLight()
   // The compact taskbar island's height: the strip's, or the capsule's.
   const taskCompactH = () => (isCapsule() ? TASKBAR_H - 2 * CAPSULE_Y : TASKBAR_H)
   const corner = () => (['br', 'bl', 'tr', 'tl'].includes(config.corner) ? config.corner : 'br')
@@ -1075,6 +1082,13 @@
   }
 
   function closePop() {
+    clearTimeout(popMoveTimer)
+    popMoving = false
+    popShown = null
+    pop.getAnimations().forEach(a => a.id === 'slide' && a.cancel())
+    pop.classList.remove('sliding', 'rising')
+    pop.style.width = ''
+    pop.style.height = ''
     clearTimeout(popTimer)
     popFor = null
     pop.hidden = true
@@ -1137,6 +1151,11 @@
       if (windows.length) rows.push(item(t(lang, windows.length > 1 ? 'taskbar.closeAll' : 'taskbar.close'), 'close'))
     }
     if (!rows.length) return closePop()
+    // Another program's windows taking the place of the last's (the pointer
+    // gone along the buttons): where the list was and how big, to slide from.
+    const isList = popFor.kind === 'list'
+    const from = isList && !pop.hidden && pop.classList.contains('list') && popShown && popShown !== app.app ? { left: pop.offsetLeft, width: pop.offsetWidth, height: pop.offsetHeight } : null
+    const opening = pop.hidden
     // Drawn again only when what it shows changed: a card replaced under a
     // press is never clicked (the windows' list comes again often).
     const drawn = JSON.stringify([popFor, app.name, app.pinned, windows.map(w => [w.id, w.title, w.front, (w.png || '').length]), lang])
@@ -1145,17 +1164,75 @@
       pop.replaceChildren(...rows)
     }
     pop.classList.toggle('menu', popFor.kind === 'menu')
-    pop.classList.toggle('list', popFor.kind === 'list')
+    pop.classList.toggle('list', isList)
     pop.hidden = false
-    // Over its button, kept within the screen.
+    popShown = app.app
+    // Mid-slide, the list keeps going where it was going.
+    if (popMoving && !from) return
+    // Over its button, kept within the screen, at its own size.
+    pop.classList.remove('sliding', 'rising')
+    pop.style.width = ''
+    pop.style.height = ''
     const left = button.offsetLeft + button.offsetWidth / 2 - pop.offsetWidth / 2
-    pop.style.left = `${Math.max(4, Math.min(left, barRest.offsetWidth - pop.offsetWidth - 4))}px`
+    const to = { left: Math.max(4, Math.min(left, barRest.offsetWidth - pop.offsetWidth - 4)), width: pop.offsetWidth, height: pop.offsetHeight }
+    if (from) return slidePop(from, to)
+    pop.style.left = `${to.left}px`
+    if (opening && isList) return risePop()
     requestAnimationFrame(sendThumbs)
+  }
+
+  // The list moving from one program's button to the next as Windows' own
+  // does: sliding over and taking its new size, the new cards coming in from
+  // the side it moves to. Windows draws the live pictures, which cannot
+  // slide with it: they go for the slide and come back once it is there.
+  // Opening, it rises a little into place, the pictures after it.
+  const POP_SLIDE_MS = 300
+  let popShown = null
+  let popMoving = false
+  let popMoveTimer
+
+  function holdThumbs() {
+    popMoving = true
+    clearTimeout(popMoveTimer)
+    thumbsSent = '[]'
+    window.pet.taskbar.thumbs([])
+  }
+
+  function settlePop(ms) {
+    popMoveTimer = setTimeout(() => {
+      popMoving = false
+      // A slide not quite done by now would hold the list at its old size.
+      pop.getAnimations().forEach(a => a.id === 'slide' && a.cancel())
+      pop.classList.remove('sliding', 'rising')
+      pop.style.width = ''
+      pop.style.height = ''
+      sendThumbs()
+    }, ms)
+  }
+
+  function slidePop(from, to) {
+    holdThumbs()
+    pop.style.setProperty('--come', `${to.left > from.left ? 16 : -16}px`)
+    pop.classList.add('sliding')
+    const box = b => ({ left: `${b.left}px`, width: `${b.width}px`, height: `${b.height}px` })
+    Object.assign(pop.style, box(to))
+    pop.getAnimations().forEach(a => a.id === 'slide' && a.cancel())
+    const slide = pop.animate([box(from), box(to)], { duration: POP_SLIDE_MS, easing: 'cubic-bezier(0.3, 1.2, 0.5, 1)' })
+    slide.id = 'slide'
+    settlePop(POP_SLIDE_MS)
+  }
+
+  function risePop() {
+    holdThumbs()
+    pop.classList.add('rising')
+    settlePop(180)
   }
 
   // The live pictures where the cards left room for them; none once closed.
   let thumbsSent = ''
   function sendThumbs() {
+    // Not while the list slides or rises: they come once it is in place.
+    if (popMoving) return
     const items = popFor?.kind === 'list' ? [...pop.querySelectorAll('[data-thumb]')].map(r => {
       const b = r.getBoundingClientRect()
       return [Number(r.dataset.thumb), b.left, b.top, b.width, b.height]
@@ -1348,8 +1425,10 @@
   // Behind the strip's parts: the desktop's picture under it, blurred and
   // tinted (mica.js) for Windows' mode, as taskbar.rs sent it last; drawn
   // again only when the picture, the mode or the strip's width changes. None
-  // on a solid strip. The strip light in Windows' light mode (tb-light), her
-  // end a capsule wherever the strip is not black (tb-capsule).
+  // on a solid strip, nor on a clear one (tb-clear), which is solid while a
+  // window is maximized on its display (tb-solid, drawn again as the windows
+  // change). The strip light in Windows' light mode (tb-light), her end a
+  // capsule wherever the strip is not black (tb-capsule).
   const micaBox = el('div')
   micaBox.id = 'mica'
   island.parentElement.prepend(micaBox)
@@ -1360,6 +1439,8 @@
     body.classList.toggle('tb-mica', isMica())
     body.classList.toggle('tb-light', isLight())
     body.classList.toggle('tb-capsule', isCapsule())
+    body.classList.toggle('tb-clear', isClear())
+    body.classList.toggle('tb-solid', isSolidNow())
     if (isMica()) mica.set(paper, innerWidth, TASKBAR_H, look.mode)
     else mica.clear()
   }
@@ -1393,6 +1474,7 @@
       tagsBox.replaceChildren(...sessionTags())
       alignApps()
       snapStart()
+      drawMica()
     }
   })
 

@@ -265,7 +265,7 @@
         <div class="mode${s.display === 'bar' ? ' on' : ''}" data-mode="bar"><div class="pv"><u></u></div><div class="l"><span class="rd"></span>${esc(T('s.displayBar'))}</div></div>
         <div class="mode${s.display === 'taskbar' ? ' on' : ''}" data-mode="taskbar"><div class="pv"><s></s></div><div class="l"><span class="rd"></span>${esc(T('s.displayTaskbar'))}</div></div>
       </div>
-      ${s.display === 'taskbar' ? `<div class="grp"><div class="note">${esc(T('s.taskbarNote'))}</div></div><div class="grp">${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${row(esc(T('s.taskbarAlign')), '', seg('taskbarAlign', ['center', 'left'].map(a => [a, T(`s.align.${a}`)]), s.taskbarAlign || 'center'))}</div>` : ''}
+      ${s.display === 'taskbar' ? `<div class="grp"><div class="note">${esc(T('s.taskbarNote'))}</div></div><div class="grp">${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['maximized', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), s.taskbarClearWhen || 'maximized')) : ''}${row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${row(esc(T('s.taskbarAlign')), '', seg('taskbarAlign', ['center', 'left'].map(a => [a, T(`s.align.${a}`)]), s.taskbarAlign || 'center'))}</div>` : ''}
       ${s.display === 'corner' ? `<div class="grp">${row(esc(T('s.corner')), '', seg('corner', CORNERS.map(c => [c, T(`s.corner.${c}`)]), s.corner || 'br'))}</div>` : ''}
       ${s.display !== 'corner' ? `<div class="grp">${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}</div>` : ''}
       ${sec(T('s.her'))}<div class="grp">
@@ -1218,7 +1218,7 @@
         gallery.items = []
         return loadGallery(false)
       }
-      const value = ['lang', 'corner', 'islandWidth', 'taskbarMaterial', 'taskbarButtons', 'taskbarAlign', 'mailAgent'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
+      const value = ['lang', 'corner', 'islandWidth', 'taskbarMaterial', 'taskbarClearWhen', 'taskbarButtons', 'taskbarAlign', 'mailAgent'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
       return patch({ [key]: value })
     }
     const tile = at('[data-tile]')

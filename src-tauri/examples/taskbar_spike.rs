@@ -348,6 +348,7 @@ mod win {
     static TICKS: AtomicU32 = AtomicU32::new(0);
     // The tick from which to ask programs for their icons, once ours is first (0: asked).
     static ASK_AT: AtomicU32 = AtomicU32::new(0);
+    static LAST_ASK: AtomicU32 = AtomicU32::new(0);
     static LOG: Mutex<Option<File>> = Mutex::new(None);
 
     fn wide(s: &str) -> Vec<u16> {
@@ -727,7 +728,7 @@ mod win {
                 if key == hovered {
                     FillRect(hdc, &r, btn);
                 }
-                if let Some(s) = shown.iter().find(|s| s.key == key) {
+                if let Some(s) = shown.iter().find(|s| s.key == key && s.icon != 0) {
                     DrawIconEx(hdc, (r.left + r.right - size) / 2, (r.top + r.bottom - size) / 2, s.icon, size, size, 0, 0, 3);
                 }
             }
@@ -786,6 +787,18 @@ mod win {
         log(&format!("  put away in {} ms; {}", t.elapsed().as_millis(), state_now()));
         if systray::keep_first() {
             log("  tray: Explorer's window had come first; ours put ahead again");
+            ask_soon();
+        }
+    }
+
+    // Explorer's window came first for a moment: what programs handed the
+    // tray then went to it (an icon, its version). They are asked again once
+    // it settles, at most every ten seconds.
+    fn ask_soon() {
+        let ticks = TICKS.load(Ordering::SeqCst);
+        if TRAY.load(Ordering::SeqCst) && ASK_AT.load(Ordering::SeqCst) == 0 && ticks >= LAST_ASK.load(Ordering::SeqCst) + 20 {
+            ASK_AT.store(ticks + 3, Ordering::SeqCst);
+            log("  tray: programs to be asked again once it settles");
         }
     }
 
@@ -849,6 +862,8 @@ mod win {
                         if press != Press::LeftDown && press != Press::RightDown {
                             tray_press(hwnd, k, press);
                         } else {
+                            // The taskbar comes to the front on the press already.
+                            SetForegroundWindow(hwnd);
                             systray::tell(k, press, cursor());
                         }
                     }
@@ -895,11 +910,13 @@ mod win {
                         systray::sweep();
                         if systray::keep_first() {
                             log("tray: Explorer's window had come first (timer); ours put ahead again");
+                            ask_soon();
                         }
                         let ticks = TICKS.fetch_add(1, Ordering::SeqCst) + 1;
                         let ask = ASK_AT.load(Ordering::SeqCst);
                         if ask != 0 && ticks >= ask && systray::first() {
                             ASK_AT.store(0, Ordering::SeqCst);
+                            LAST_ASK.store(ticks, Ordering::SeqCst);
                             systray::ask_again();
                             log("tray: ours first and settled: programs asked to add their icons again");
                         }

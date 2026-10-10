@@ -27,8 +27,8 @@ pub enum Press {
     HoverOut,
 }
 
-// An icon as shown: its key (for tell), its icon (a copy of ours), its tip,
-// the program it is from.
+// An icon as shown: its key (for tell), its icon (a copy of ours; 0 while
+// it blinks dark), its tip, the program it is from.
 pub struct Shown {
     pub key: u64,
     pub icon: isize,
@@ -130,6 +130,8 @@ mod imp {
         fn PostMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> i32;
         fn RegisterWindowMessageW(name: *const u16) -> u32;
         fn IsWindow(hwnd: Hwnd) -> i32;
+        fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
+        fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
         fn CopyIcon(icon: isize) -> isize;
         fn DestroyIcon(icon: isize) -> i32;
         fn AllowSetForegroundWindow(pid: u32) -> i32;
@@ -171,7 +173,6 @@ mod imp {
     const WS_EX_TOPMOST: u32 = 0x8;
     const WS_EX_TOOLWINDOW: u32 = 0x80;
     const HWND_TOPMOST: isize = -1;
-    const HWND_BROADCAST: isize = 0xffff;
     const SWP_NOSIZE: u32 = 0x1;
     const SWP_NOMOVE: u32 = 0x2;
     const SWP_NOACTIVATE: u32 = 0x10;
@@ -191,6 +192,8 @@ mod imp {
         pid: u32,
         exe: String,
         modified: u32,
+        // It has had an icon: its place is kept while it has none (blinking).
+        had_icon: bool,
     }
 
     static OURS: AtomicIsize = AtomicIsize::new(0);
@@ -332,13 +335,15 @@ mod imp {
         }
         if nid.flags & NIF_ICON != 0 {
             // SAFETY: the program's icon, copied: it may destroy its own after this.
-            let copy = unsafe { CopyIcon(nid.icon as i32 as isize) };
-            if copy != 0 {
+            // None at all is an icon too: a blink's dark half (WeChat's).
+            let copy = if nid.icon == 0 { 0 } else { unsafe { CopyIcon(nid.icon as i32 as isize) } };
+            if copy != 0 || nid.icon == 0 {
                 if icon.icon != 0 {
                     // SAFETY: our own copy, replaced.
                     unsafe { DestroyIcon(icon.icon) };
                 }
                 icon.icon = copy;
+                icon.had_icon |= copy != 0;
             }
         }
         if nid.flags & NIF_TIP != 0 {
@@ -368,7 +373,7 @@ mod imp {
                 // SAFETY: our own out-parameter; a gone window leaves it 0.
                 unsafe { GetWindowThreadProcessId(hwnd_of(nid.hwnd), &mut pid) };
                 let guid = (nid.flags & NIF_GUID != 0 && nid.guid != [0; 16]).then_some(nid.guid);
-                let mut icon = Icon { key: NEXT_KEY.fetch_add(1, Ordering::SeqCst), hwnd: nid.hwnd, id: nid.id, guid, callback: 0, icon: 0, tip: String::new(), version: 0, hidden: false, pid, exe: exe_of(pid), modified: 0 };
+                let mut icon = Icon { key: NEXT_KEY.fetch_add(1, Ordering::SeqCst), hwnd: nid.hwnd, id: nid.id, guid, callback: 0, icon: 0, tip: String::new(), version: 0, hidden: false, pid, exe: exe_of(pid), modified: 0, had_icon: false };
                 update(&mut icon, nid);
                 note(format!("tray: added {} (id {}, {}) \"{}\"{}", icon.exe, icon.id, if guid.is_some() { "by guid" } else { "by window" }, icon.tip, if icon.hidden { ", hidden" } else { "" }));
                 icons.push(icon);
@@ -435,19 +440,27 @@ mod imp {
                 }
                 count("where-is, handed on");
             }
-            let answer = hand_on(msg, wparam, lparam);
-            if answer.is_none() {
-                LOST.store(true, Ordering::SeqCst);
-            }
             let header = std::mem::size_of::<TrayData>() - std::mem::size_of::<IconData>();
-            if cds.data == 1 && cds.size as usize >= header + 24 && !cds.ptr.is_null() {
+            let tray = (cds.data == 1 && cds.size as usize >= header + 24 && !cds.ptr.is_null()).then(|| {
                 // Read what came, the rest left zero (older programs send less).
                 let mut data: TrayData = unsafe { std::mem::zeroed() };
                 let n = (cds.size as usize).min(std::mem::size_of::<TrayData>());
                 // SAFETY: n bytes of the sender's struct, into ours of at least that size.
                 unsafe { std::ptr::copy_nonoverlapping(cds.ptr as *const u8, &mut data as *mut TrayData as *mut u8, n) };
-                if data.signature == SIGNATURE {
+                data
+            });
+            let tray = tray.filter(|d| d.signature == SIGNATURE);
+            // An icon added again that ours has: Explorer has it too (it had
+            // the first), and an add it has refused can make it show the taskbar.
+            let known = tray.is_some_and(|d| d.message == NIM_ADD && ICONS.lock().unwrap().iter().any(|i| same(i, &d.nid)));
+            let answer = if known { Some(1) } else { hand_on(msg, wparam, lparam) };
+            if answer.is_none() {
+                LOST.store(true, Ordering::SeqCst);
+            }
+            match tray {
+                Some(data) => {
                     count(match data.message {
+                        NIM_ADD if known => "NIM_ADD again",
                         NIM_ADD => "NIM_ADD",
                         NIM_MODIFY => "NIM_MODIFY",
                         NIM_DELETE => "NIM_DELETE",
@@ -459,8 +472,8 @@ mod imp {
                         return 1;
                     }
                 }
-            } else if cds.data != 3 {
-                count(&format!("copydata {}", cds.data));
+                None if cds.data != 3 => count(&format!("copydata {}", cds.data)),
+                None => {}
             }
             return answer.unwrap_or(0) as isize;
         }
@@ -514,10 +527,29 @@ mod imp {
         true
     }
 
-    // Every program asked to add its icons again (they come to ours, ahead).
+    extern "system" fn ask_one(hwnd: Hwnd, msg: isize) -> i32 {
+        let mut pid = 0;
+        // SAFETY: a window being enumerated; our own out-parameter and buffer.
+        unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+        let mut name = [0u16; 32];
+        let n = unsafe { GetClassNameW(hwnd, name.as_mut_ptr(), 32) }.max(0) as usize;
+        let class = String::from_utf16_lossy(&name[..n]);
+        if pid != std::process::id() && class != "Shell_TrayWnd" && class != "Shell_SecondaryTrayWnd" {
+            // SAFETY: a registered message with no pointers.
+            unsafe { SendNotifyMessageW(hwnd, msg as u32, 0, 0) };
+        }
+        1
+    }
+
+    // Every program asked to add its icons again (they come to ours, ahead):
+    // every window but the taskbar's, which, told too, shows itself, and
+    // comes first while programs answer (2026-10-10: 3 times in 4).
     pub fn ask_again() {
-        // SAFETY: a broadcast with no pointers.
-        unsafe { SendNotifyMessageW(HWND_BROADCAST as Hwnd, RegisterWindowMessageW(wide("TaskbarCreated").as_ptr()), 0, 0) };
+        // SAFETY: a name of our own; the callback sends only.
+        unsafe {
+            let msg = RegisterWindowMessageW(wide("TaskbarCreated").as_ptr());
+            EnumWindows(ask_one, msg as isize);
+        }
     }
 
     pub fn place(rect: (i32, i32, i32, i32)) {
@@ -569,7 +601,7 @@ mod imp {
     }
 
     pub fn shown() -> Vec<Shown> {
-        ICONS.lock().unwrap().iter().filter(|i| !i.hidden && i.icon != 0).map(|i| Shown { key: i.key, icon: i.icon, tip: i.tip.clone(), exe: i.exe.clone() }).collect()
+        ICONS.lock().unwrap().iter().filter(|i| !i.hidden && i.had_icon).map(|i| Shown { key: i.key, icon: i.icon, tip: i.tip.clone(), exe: i.exe.clone() }).collect()
     }
 
     pub fn describe() -> String {
@@ -606,8 +638,12 @@ mod imp {
                 note(format!("tray: {} could not be let come to the front", i.exe));
             }
         };
+        // Some open what they open on the press itself (Electron's), not on letting go.
         match press {
-            Press::LeftDown => send(WM_LBUTTONDOWN),
+            Press::LeftDown => {
+                allow();
+                send(WM_LBUTTONDOWN);
+            }
             Press::LeftUp => {
                 allow();
                 send(WM_LBUTTONUP);
@@ -615,7 +651,10 @@ mod imp {
                     send(NIN_SELECT);
                 }
             }
-            Press::RightDown => send(WM_RBUTTONDOWN),
+            Press::RightDown => {
+                allow();
+                send(WM_RBUTTONDOWN);
+            }
             Press::RightUp => {
                 allow();
                 send(WM_RBUTTONUP);

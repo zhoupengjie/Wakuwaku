@@ -86,6 +86,8 @@
     onTray: on('taskbar:tray'),
     // The windows' buttons as they change ({ id, title, exe, png, front, min, flash, sessions }).
     onWindows: on('taskbar:windows'),
+    // The keyboard as it changes ({ lang, native, caps }).
+    onKeys: on('taskbar:keys'),
     settings: {
       get: () => invoke('settings_get'),
       set: patch => invoke('settings_set', { patch }),

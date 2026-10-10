@@ -698,6 +698,13 @@
   const tagsBox = el('span', 'tags')
   const facesBox = el('span', 'faces')
   const trayBox = el('span', 'tray')
+  // The keyboard: Caps Lock while it is on, and the input method's script
+  // (a press switches it; a right press, the input methods to pick from).
+  const keysBox = el('span', 'kbd')
+  const capsMark = el('span', 'caps', 'A')
+  const imeMark = el('span', 'ime')
+  imeMark.dataset.bar = 'ime'
+  keysBox.append(capsMark, imeMark)
   const clockBox = el('span', 'tclock')
   clockBox.dataset.bar = 'notifications'
   const taskGear = gearNode()
@@ -713,7 +720,7 @@
   function fillTaskbar() {
     barRest.style.left = `${sizeOf('compact').width}px`
     if (!taskbarBuilt) {
-      barRest.replaceChildren(startButton, windowsBox, tagsBox, el('span', 'grow'), facesBox, trayBox, clockBox, taskGear)
+      barRest.replaceChildren(startButton, windowsBox, tagsBox, el('span', 'grow'), facesBox, trayBox, keysBox, clockBox, taskGear)
       taskbarBuilt = true
       trayDrawn = ''
       windowsDrawn = ''
@@ -764,6 +771,18 @@
       }),
     )
   }
+
+  // The script's mark by the layout's language: its own and plain letters.
+  const SCRIPTS = { 0x04: ['中', '英'], 0x11: ['あ', 'A'], 0x12: ['한', 'A'] }
+  const LANGS = { 0x09: 'EN', 0x07: 'DE', 0x0c: 'FR', 0x0a: 'ES', 0x10: 'IT', 0x16: 'PT', 0x19: 'RU', 0x13: 'NL', 0x1f: 'TR' }
+  window.pet.onKeys(keys => {
+    const primary = (keys?.lang || 0) & 0x3ff
+    const script = SCRIPTS[primary]
+    imeMark.textContent = script ? script[keys.native === false ? 1 : 0] : LANGS[primary] || primary.toString(16).toUpperCase()
+    imeMark.classList.toggle('unknown', !!script && keys.native == null)
+    capsMark.classList.toggle('on', !!keys?.caps)
+    capsMark.title = keys?.caps ? 'Caps Lock' : ''
+  })
 
   window.pet.onWindows(list => {
     taskWindows = Array.isArray(list) ? list : []
@@ -882,10 +901,13 @@
     const what = e.target.closest('[data-bar]')?.dataset.bar
     if (what && what !== 'settings') window.pet.taskbar.open(what)
   })
-  // A right press: a tray icon's program has it; elsewhere, her menu.
+  // A right press: a tray icon's program has it; on the input method, the
+  // input methods to pick from; elsewhere, her menu.
   barRest.addEventListener('contextmenu', e => {
     e.preventDefault()
-    if (!trayKey(e)) window.pet.menu()
+    if (trayKey(e)) return
+    if (e.target.closest('[data-bar="ime"]')) return window.pet.taskbar.open('inputs')
+    window.pet.menu()
   })
   // It takes the pointer while it is under it (the window lets clicks through elsewhere).
   barRest.addEventListener('mouseenter', () => window.pet.hover(true))

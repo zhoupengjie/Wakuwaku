@@ -12,14 +12,29 @@ pub struct Task {
     pub min: bool,
 }
 
+// The keyboard as Windows' taskbar shows it: the language of the window in
+// front (its keyboard layout's), whether its input method types the
+// language's own script or plain letters (中 or 英), and Caps Lock.
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct Keys {
+    pub lang: u16,
+    pub native: Option<bool>,
+    pub caps: bool,
+}
+
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
 
-    use super::Task;
+    use super::{Keys, Task};
 
     type Hwnd = *mut c_void;
     type Handle = isize;
+
+    #[link(name = "imm32")]
+    extern "system" {
+        fn ImmGetDefaultIMEWnd(hwnd: Hwnd) -> Hwnd;
+    }
 
     #[link(name = "user32")]
     extern "system" {
@@ -38,6 +53,8 @@ mod imp {
         fn SendMessageTimeoutW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize, flags: u32, ms: u32, result: *mut usize) -> isize;
         fn GetClassLongPtrW(hwnd: Hwnd, index: i32) -> usize;
         fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
+        fn GetKeyboardLayout(thread: u32) -> isize;
+        fn GetKeyState(vk: i32) -> i16;
     }
 
     #[link(name = "dwmapi")]
@@ -227,11 +244,66 @@ mod imp {
         // SAFETY: a posted message, no pointers.
         unsafe { PostMessageW(hwnd as Hwnd, WM_CLOSE, 0, 0) != 0 }
     }
+
+    const WM_IME_CONTROL: u32 = 0x0283;
+    const IMC_GETCONVERSIONMODE: usize = 0x1;
+    const IMC_SETCONVERSIONMODE: usize = 0x2;
+    const IMC_GETOPENSTATUS: usize = 0x5;
+    const IME_CMODE_NATIVE: usize = 0x1;
+    const VK_CAPITAL: i32 = 0x14;
+
+    // An input method's answer about the window in front (its default IME
+    // window, as input-method indicators ask): None if it gives none.
+    fn ime_ask(ime: Hwnd, what: usize, value: isize) -> Option<usize> {
+        let mut answer = 0usize;
+        // SAFETY: the IME window's answer, waited for at most 50 ms.
+        let ok = unsafe { SendMessageTimeoutW(ime, WM_IME_CONTROL, what, value, SMTO_ABORTIFHUNG, 50, &mut answer) };
+        (ok != 0).then_some(answer)
+    }
+
+    fn front_ime() -> (u16, Hwnd) {
+        // SAFETY: plain queries about the window in front.
+        unsafe {
+            let front = GetForegroundWindow();
+            let thread = GetWindowThreadProcessId(front, std::ptr::null_mut());
+            let lang = (GetKeyboardLayout(thread) & 0xffff) as u16;
+            (lang, ImmGetDefaultIMEWnd(front))
+        }
+    }
+
+    pub fn keys() -> Keys {
+        let (lang, ime) = front_ime();
+        let native = (!ime.is_null()).then(|| {
+            let open = ime_ask(ime, IMC_GETOPENSTATUS, 0)?;
+            let mode = ime_ask(ime, IMC_GETCONVERSIONMODE, 0)?;
+            Some(open != 0 && mode & IME_CMODE_NATIVE != 0)
+        });
+        // SAFETY: a plain query; the low bit is the toggle's.
+        let caps = unsafe { GetKeyState(VK_CAPITAL) } & 1 != 0;
+        Keys { lang, native: native.flatten(), caps }
+    }
+
+    // The window in front's input method between its own script and plain letters.
+    pub fn toggle_native() -> bool {
+        let (_, ime) = front_ime();
+        if ime.is_null() {
+            return false;
+        }
+        let Some(mode) = ime_ask(ime, IMC_GETCONVERSIONMODE, 0) else { return false };
+        ime_ask(ime, IMC_SETCONVERSIONMODE, (mode ^ IME_CMODE_NATIVE) as isize).is_some()
+    }
 }
 
 #[cfg(not(windows))]
 mod imp {
-    use super::Task;
+    use super::{Keys, Task};
+
+    pub fn keys() -> Keys {
+        Keys::default()
+    }
+    pub fn toggle_native() -> bool {
+        false
+    }
 
     pub fn list() -> Vec<Task> {
         Vec::new()
@@ -253,4 +325,4 @@ mod imp {
     }
 }
 
-pub use imp::{alive, close, front, icon_of, list, press};
+pub use imp::{alive, close, front, icon_of, keys, list, press, toggle_native};

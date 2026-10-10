@@ -201,6 +201,7 @@ mod imp {
     const KEYEVENTF_KEYUP: u32 = 0x2;
     const VK_LWIN: u16 = 0x5B;
     const VK_TAB: u16 = 0x09;
+    const VK_SPACE: u16 = 0x20;
     const DI_NORMAL: u32 = 3;
     // The ticks (half seconds) to wait before asking programs for their icons.
     const SETTLE_TICKS: u32 = 3;
@@ -243,6 +244,9 @@ mod imp {
     static MARKS: Mutex<Option<HashMap<isize, Vec<Value>>>> = Mutex::new(None);
     static SENT_WINDOWS: Mutex<Value> = Mutex::new(Value::Null);
     static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
+    // The keyboard's thread, and what it sent last.
+    static KEYS: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
+    static SENT_KEYS: Mutex<Value> = Mutex::new(Value::Null);
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -302,14 +306,33 @@ mod imp {
         }
         TASKS_STOP.store(false, Ordering::SeqCst);
         let sh = crate::shared(&sh.app);
+        let keys_sh = sh.clone();
         *TASKS.lock().unwrap() = Some(std::thread::spawn(move || tasks_loop(sh)));
+        *KEYS.lock().unwrap() = Some(std::thread::spawn(move || keys_loop(keys_sh)));
+    }
+
+    // The keyboard (tasks::keys) looked at four times a second; sent when it changes.
+    fn keys_loop(sh: Arc<Shared>) {
+        let mut sent = None;
+        while !TASKS_STOP.load(Ordering::SeqCst) {
+            let keys = tasks::keys();
+            if sent.as_ref() != Some(&keys) {
+                let _ = sh.app.emit_to("island", "taskbar:keys", json!({ "lang": keys.lang, "native": keys.native, "caps": keys.caps }));
+                *SENT_KEYS.lock().unwrap() = json!({ "lang": keys.lang, "native": keys.native, "caps": keys.caps });
+                sent = Some(keys);
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
     }
 
     // The tray handed back to Explorer and its taskbar shown again.
     pub fn give_back(sh: &Shared) {
+        TASKS_STOP.store(true, Ordering::SeqCst);
         if let Some(thread) = TASKS.lock().unwrap().take() {
-            TASKS_STOP.store(true, Ordering::SeqCst);
             wake_tasks();
+            let _ = thread.join();
+        }
+        if let Some(thread) = KEYS.lock().unwrap().take() {
             let _ = thread.join();
         }
         let host = HOST.lock().unwrap().take();
@@ -514,6 +537,10 @@ mod imp {
         if !windows.is_null() {
             let _ = sh.app.emit_to("island", "taskbar:windows", windows);
         }
+        let keys = SENT_KEYS.lock().unwrap().clone();
+        if !keys.is_null() {
+            let _ = sh.app.emit_to("island", "taskbar:keys", keys);
+        }
     }
 
     // A press on a tray icon in the page, told to its program. The press
@@ -548,6 +575,10 @@ mod imp {
 
     // What the taskbar's own buttons open, by the keys that open them.
     pub fn open(what: &str) -> bool {
+        // The input method of the window in front: its own script or plain letters.
+        if what == "ime" {
+            return tasks::toggle_native();
+        }
         let keys: &[u16] = match what {
             "start" => &[VK_LWIN],
             "search" => &[VK_LWIN, b'S' as u16],
@@ -556,6 +587,8 @@ mod imp {
             "desktop" => &[VK_LWIN, b'D' as u16],
             "quick" => &[VK_LWIN, b'A' as u16],
             "notifications" => &[VK_LWIN, b'N' as u16],
+            // The input methods to pick from, as Win+Space has them.
+            "inputs" => &[VK_LWIN, VK_SPACE],
             _ => return false,
         };
         let key = |vk: u16, up: bool| Input {

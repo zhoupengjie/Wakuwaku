@@ -657,9 +657,11 @@
   }
 
   // The widget shown, and the monitor, pinned: always there by the settings.
+  // In the taskbar only the monitor (before the tray): the widgets take
+  // their turns at its left end, in her place (fillCompact).
   function widgetFaces() {
     const faces = []
-    const w = widgets.length ? widgets[widgetAt % widgets.length] : null
+    const w = widgets.length && home() !== 'taskbar' ? widgets[widgetAt % widgets.length] : null
     if (w) {
       const { label, value } = Widgets.words(lang, w, isDetailed())
       const face = el('span', 'face')

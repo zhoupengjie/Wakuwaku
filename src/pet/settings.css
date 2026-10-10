@@ -1544,3 +1544,295 @@
   max-width: 100%;
   margin-bottom: 4px;
 }
+
+/* --- Her island's look on the taskbar (settings.js ilookPanel) ------------------
+   Folded out under the taskbar's options: the mode, a preview, the presets,
+   the parts. The previews draw the island as island.js does on the strip
+   (--pv-bg, --pv-blur, --pv-edge, --pv-ring), over a strip of Mica over a
+   desktop; the big one opens under the pointer. */
+#island-settings .ilook {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 14px 12px;
+}
+
+#island-settings .ilook .r {
+  padding: 4px 0;
+  min-height: 36px;
+}
+
+#island-settings .ilook-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#island-settings .ilook-pv {
+  position: relative;
+  flex: none;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(115deg, #4b3a6e, #8a4b5c 45%, #3a6070);
+}
+
+/* The strip: Mica, the desktop through it. */
+#island-settings .ilook-pv::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(32, 32, 32, 0.8);
+}
+
+#island-settings .ilook-pv.light::before {
+  background: rgba(243, 243, 243, 0.84);
+}
+
+#island-settings .ilook-pv .cap {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  bottom: 5px;
+  height: 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 15px;
+  overflow: hidden;
+  background: var(--pv-bg);
+  -webkit-backdrop-filter: var(--pv-blur);
+  backdrop-filter: var(--pv-blur);
+  box-shadow: var(--pv-edge);
+  color: #f5f5f7;
+  font-size: 11px;
+  line-height: 1.3;
+  transition:
+    height 0.3s cubic-bezier(0.3, 1.3, 0.5, 1),
+    right 0.3s cubic-bezier(0.3, 1.3, 0.5, 1),
+    border-radius 0.3s ease;
+}
+
+#island-settings .ilook-pv.light .cap {
+  color: #1b1b1b;
+}
+
+#island-settings .ilook-pv .top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+#island-settings .ilook-pv .face {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e2572b;
+}
+
+#island-settings .ilook-pv .w {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#island-settings .ilook-pv .t {
+  flex: none;
+  color: var(--pv-ring);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* No capsule collapsed: part of the strip. */
+#island-settings .ilook-pv.bare .cap {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+/* The big one: the desktop above the strip, into which it opens. */
+#island-settings .ilook-pv.big {
+  height: 132px;
+}
+
+#island-settings .ilook-pv.big::before {
+  top: auto;
+  height: 44px;
+}
+
+#island-settings .ilook-pv.big .cap {
+  left: 7px;
+  bottom: 7px;
+  right: calc(100% - 200px);
+  font-size: 12px;
+}
+
+#island-settings .ilook-pv .more {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  opacity: 0.75;
+}
+
+/* Open: above the strip there is nothing to blur (a see-through window),
+   its ground alone; a capsule bare collapsed has its ground then. */
+#island-settings .ilook-pv.big:hover .cap {
+  right: calc(100% - 260px);
+  height: 112px;
+  justify-content: flex-start;
+  padding-top: 12px;
+  border-radius: 18px;
+  background: var(--pv-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    var(--pv-edge);
+}
+
+#island-settings .ilook-pv.big:hover .more {
+  display: flex;
+}
+
+#island-settings .ilook-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+#island-settings .ilook-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--g3);
+  border-radius: 12px;
+  background: var(--g2);
+  color: var(--fg);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: center;
+  cursor: pointer;
+}
+
+#island-settings .ilook-card.on {
+  border-color: #0a84ff;
+  box-shadow: 0 0 0 1px #0a84ff;
+}
+
+.tb-light #island-settings .ilook-card.on {
+  border-color: #005fb8;
+  box-shadow: 0 0 0 1px #005fb8;
+}
+
+#island-settings .ilook-card .ilook-pv {
+  height: 30px;
+  border-radius: 7px;
+}
+
+#island-settings .ilook-card .cap {
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 9px;
+}
+
+#island-settings .ilook-card .face {
+  width: 10px;
+  height: 10px;
+}
+
+/* The small ones: her face and the clock, no words. */
+#island-settings .ilook-card .w {
+  visibility: hidden;
+}
+
+/* A preset's name on up to two lines. */
+#island-settings .ilook-card > span {
+  display: -webkit-box;
+  min-height: 2.5em;
+  overflow: hidden;
+  line-height: 1.25;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+#island-settings .ilook-sw {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px;
+  max-width: 270px;
+}
+
+#island-settings .swc {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--g3);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+#island-settings .swc.on {
+  box-shadow: 0 0 0 2px var(--g1), 0 0 0 3.5px #0a84ff;
+}
+
+/* Any other colour (Windows' own dialog): its ground in a rainbow ring. */
+#island-settings .swc-in {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 2px;
+  border: 0;
+  border-radius: 50%;
+  background: conic-gradient(#ff5c6c, #ffb340, #34d27b, #5ec8ff, #5e9bff, #b18cff, #ff5c6c);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+#island-settings .swc-in::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+#island-settings .swc-in::-webkit-color-swatch {
+  border: 1.5px solid var(--g1);
+  border-radius: 50%;
+}
+
+#island-settings .ilook-rng {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#island-settings .rng {
+  width: 150px;
+  accent-color: #0a84ff;
+}
+
+.tb-light #island-settings .rng {
+  accent-color: #005fb8;
+}
+
+#island-settings .rv {
+  width: 42px;
+  color: var(--g5);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

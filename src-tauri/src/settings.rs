@@ -68,6 +68,23 @@ pub fn snapshot(sh: &Shared) -> Value {
     })
 }
 
+// One mode's island look: its ground (#rrggbb), how solid (20 to 100 %),
+// how blurred what is behind (0 to 60 px), its edge, no capsule collapsed;
+// each part may be left out (its default), nothing else.
+fn is_island_look(v: &Value) -> bool {
+    v.is_null()
+        || v.as_object().is_some_and(|m| {
+            m.iter().all(|(k, v)| match k.as_str() {
+                "bg" => v.as_str().is_some_and(|s| s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())),
+                "op" => v.as_u64().is_some_and(|n| (20..=100).contains(&n)),
+                "blur" => v.as_u64().is_some_and(|n| n <= 60),
+                "edge" => matches!(v.as_str(), Some("line" | "ring" | "none")),
+                "bare" => v.is_boolean(),
+                _ => false,
+            })
+        })
+}
+
 // What a settings patch may hold, checked: anything else is dropped.
 fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
     let is_bool = v.is_boolean();
@@ -98,6 +115,9 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
             })
         }),
         "widgetNudge" => is_bool,
+        // Her island's look on the taskbar, by Windows' mode (island.js
+        // drawIslandLook): none, or a mode's none, is Windows' own grey.
+        "islandLook" => v.is_null() || v.as_object().is_some_and(|m| m.iter().all(|(mode, look)| matches!(mode.as_str(), "dark" | "light") && is_island_look(look))),
         "mailAgent" => matches!(v.as_str(), Some("claude" | "codex")),
         // The Mail page in two panes (list, letter), or one.
         "mailPanes" => matches!(v.as_str(), Some("one" | "two")),
@@ -328,5 +348,24 @@ pub async fn settings_open_site(app: AppHandle, place: String) {
     // handle is invalid").
     if !crate::jump::open_url(url) {
         shared(&app).log(&format!("open {url}: ShellExecute failed"));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    #[test]
+    fn island_looks() {
+        assert!(super::is_island_look(&json!(null)));
+        assert!(super::is_island_look(&json!({})));
+        assert!(super::is_island_look(&json!({ "bg": "#2C2c2c", "op": 62, "blur": 40, "edge": "ring", "bare": true })));
+        assert!(!super::is_island_look(&json!({ "bg": "#2c2c2" })));
+        assert!(!super::is_island_look(&json!({ "bg": "red" })));
+        assert!(!super::is_island_look(&json!({ "op": 10 })));
+        assert!(!super::is_island_look(&json!({ "blur": 61 })));
+        assert!(!super::is_island_look(&json!({ "edge": "glow" })));
+        assert!(!super::is_island_look(&json!({ "bare": 1 })));
+        assert!(!super::is_island_look(&json!({ "ink": "light" })));
     }
 }

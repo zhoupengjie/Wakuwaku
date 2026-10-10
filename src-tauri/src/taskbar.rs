@@ -328,11 +328,24 @@ mod imp {
         work_bottom()
     }
 
-    // Windows' taskbar put away and the tray taken, before the strip is
-    // taken (once the work area has lost the taskbar's room, so the strip
-    // goes to the bottom and not above its room). mon_bottom: the display's
-    // bottom, physical.
-    pub fn take(sh: &Shared, strip: (i32, i32, i32, i32), mon_bottom: i32) {
+    // The room Windows' own taskbar, put away, keeps along the bottom of the
+    // display (physical): the strip goes over it, with no bar of ours (that
+    // would stack above it). Waited for a moment: one set to hide itself
+    // until just now takes its room after a slide. None: no room there (its
+    // taskbar on another edge or display); a bar of ours then.
+    pub fn explorer_room(mon: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
+        let t = Instant::now();
+        loop {
+            let room = shell::room(mon);
+            if room.is_some() || t.elapsed() > Duration::from_millis(1500) {
+                return room;
+            }
+            std::thread::sleep(Duration::from_millis(30));
+        }
+    }
+
+    // Windows' taskbar put away and the tray taken, before the strip is laid.
+    pub fn take(sh: &Shared, strip: (i32, i32, i32, i32)) {
         if is_up() {
             return;
         }
@@ -343,11 +356,6 @@ mod imp {
             return;
         }
         sh.log(&format!("taskbar: Windows' put away; guard started: {}", shell::spawn_guard(&file)));
-        let t = Instant::now();
-        while work_bottom() != mon_bottom && t.elapsed() < Duration::from_millis(3000) {
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        sh.log(&format!("taskbar: work area free after {} ms", t.elapsed().as_millis()));
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let thread = std::thread::spawn(move || run(strip, ready_tx));
         match ready_rx.recv_timeout(Duration::from_secs(3)) {
@@ -1143,7 +1151,10 @@ mod imp {
     pub fn is_up() -> bool {
         false
     }
-    pub fn take(_sh: &Shared, _strip: (i32, i32, i32, i32), _mon_bottom: i32) {}
+    pub fn take(_sh: &Shared, _strip: (i32, i32, i32, i32)) {}
+    pub fn explorer_room(_mon: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
+        None
+    }
     pub fn give_back(_sh: &Shared) {}
     pub fn strip_moved(_strip: (i32, i32, i32, i32)) {}
     pub fn resend(_sh: &Shared) {}
@@ -1165,7 +1176,7 @@ mod imp {
     }
 }
 
-pub use imp::{give_back, resend, strip_moved, take, work_area_bottom};
+pub use imp::{explorer_room, give_back, resend, strip_moved, take, work_area_bottom};
 
 // At start: Windows' taskbar left put away by a run that is gone (its guard
 // gone too) is given back.

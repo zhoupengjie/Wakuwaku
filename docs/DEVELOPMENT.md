@@ -285,7 +285,7 @@ mail/agent.rs      把一封信交给 Claude Code / Codex
 | `corner` | 工作区的一角（`corner`：br / bl / tr / tl），平时 760×440，放得下悬停展开的卡片和把她拉出来 | 56px 的圆，外圈是状态色，等你时脉动，别的会话在忙时有个小点 | 离开那个角 | 圆心 |
 | `island` | 工作区顶部正中，平时 760×132，只往下长 | 胶囊 | 往下 | 岛下沿中间 |
 | `bar` | AppBar 给的那条（显示器顶部，30px 高），和屏幕一样宽 | 左端是她和最需要你的会话，右边是别的会话的标签（`#bar-rest`）、插件、设置 | 从左端往下垂 | 左端头像下面 |
-| `taskbar` | AppBar 给的那条（主显示器底部，48px 高，和 Windows 的一样），窗口和屏幕一样宽、上面再留 440px 透明空间 | 左端同顶栏；右边是开始、按程序合并的窗口按钮、标签、插件、托盘（折叠）、输入法、时钟、设置 | 从左端往上长 | 左端头像上面 |
+| `taskbar` | Windows 自己的任务栏藏起后留下的那条（显示器底部，48px 高，和它一样；那里没有它的空间时才自己登记 AppBar），窗口和屏幕一样宽、上面再留 440px 透明空间 | 左端同顶栏；右边是开始、按程序合并的窗口按钮、标签、插件、托盘（折叠）、输入法、时钟、设置 | 从左端往上长 | 左端头像上面 |
 
 **谁说话**：`Shared::she_talks()` = `corner` 且 `out`：她自己用气泡和头顶的面板说话（就是以前的 `display: 'pet'`，旧设置读进来时换成 `corner` + `out`）。角落的圆圈照样留着，里面是她的小头像（`stillHer`，按她的心情播动画），移上去才展开，展开的卡片里没有她的全身像；状态变化、插件冒头时它不自己展开（`island.js` 的 `sheTalks`），那是她的气泡的事。灵动岛和顶栏在她出门时照样留着、照样说话。`pet.js` 的气泡、`panel.js` 的 `holdsPanel`、提示音和通知发给哪个窗口，都看这个。
 
@@ -295,13 +295,13 @@ mail/agent.rs      把一封信交给 Claude Code / Codex
 
 **任务栏**（`taskbar.rs` 等，第 0 步的验证程序是 `src-tauri/examples/taskbar_spike.rs`，`cargo run --example taskbar_spike`）：
 
-- **藏 Windows 的任务栏**（`shell.rs`）：先把原来的状态写进 `<数据>/taskbar.json`，再设成自动隐藏（`ABM_SETSTATE`，这样它不再占工作区；只 `SW_HIDE` 的话它的空间还在），再把每块显示器的 `Shell_TrayWnd`、`Shell_SecondaryTrayWnd` 藏起来，等工作区空出来再登记自己的条带。还回去：按记下的状态设回、显示、删文件。谁还：换成别的家、退出时她自己；进程被杀时**守护进程**（同一个 exe，`--taskbar-guard <pid> <文件>`，等她的进程结束）；两个都没了时她下次启动（`taskbar::recover`）。Explorer 重新显示它时（WinEvent 的显示事件、半秒一次的检查）马上再藏；Explorer 重启时（新的 `Shell_TrayWnd` 发来 `TaskbarCreated`）重新藏、重新登记条带。
-- **有程序全屏时**：条带窗口藏起来（不管 `hideInFullscreen`，和 Windows 的一样），条带照样占着；但**还没登记时不在窗口藏着的时候登记**：窗口藏着时登记的条带，工作区不给它留地方。启动前先查一次全屏。
-- **工作区自愈**：工作区伸进条带时（Windows 有时不算这条 AppBar），直接把工作区底边设到条带上沿（`SPI_SETWORKAREA`，不广播：广播了 Explorer 会马上改回去）。窗口被 Windows 往上推进工作区时（游戏切全屏后出现过），每 2 秒核对一次实际位置、挪回去。
+- **藏 Windows 的任务栏**（`shell.rs`）：先把原来的状态写进 `<数据>/taskbar.json`，再把每块显示器的 `Shell_TrayWnd`、`Shell_SecondaryTrayWnd` 藏起来（`SW_HIDE`），并且**不让它自动隐藏**（原来是自动隐藏的就关掉，`ABM_SETSTATE`）。这样藏起来的它照样在底部占着它那条工作区，条带就铺在那条上（`shell::room`、`taskbar::explorer_room`），不再自己登记 AppBar（登记了会叠在它上面）。Windows 从任务栏打开的东西（开始菜单、通知和日历、快速设置、搜索、通知横幅）都按它那条摆，所以都在条带上面；设成自动隐藏的话它不占地方，这些就贴着屏幕底边摆，盖住条带（2026-10-10 量过：改了以后它们的底边都在条带上沿）。最大化窗口的边界也是 Windows 自己算的。那里没有它的空间时（它在别的边、别的显示器），才自己登记一条 AppBar（`Island.bar_own`）。还回去：按记下的状态设回、显示、删文件。谁还：换成别的家、退出时她自己；进程被杀时**守护进程**（同一个 exe，`--taskbar-guard <pid> <文件>`，等她的进程结束）；两个都没了时她下次启动（`taskbar::recover`）。Explorer 重新显示它时（WinEvent 的显示事件、半秒一次的检查）马上再藏；Explorer 重启时（新的 `Shell_TrayWnd` 发来 `TaskbarCreated`）重新藏、重新登记条带。
+- **有程序全屏时**：条带窗口藏起来（不管 `hideInFullscreen`，和 Windows 的一样），条带照样占着；但**还没接管时不在窗口藏着的时候接管**：窗口藏着时登记的条带，工作区不给它留地方。启动前先查一次全屏。
+- **工作区自愈**：工作区伸进条带时（自己登记的 AppBar 有时不被 Windows 算进去；Windows 那条比条带矮时也会），直接把工作区底边设到条带上沿（`SPI_SETWORKAREA`，不广播：广播了 Explorer 会马上改回去）。窗口被 Windows 往上推进工作区时（游戏切全屏后出现过），每 2 秒核对一次实际位置、挪回去。
 - **托盘**（`systray.rs`）：程序用 `Shell_NotifyIcon` 把图标交给 `FindWindow("Shell_TrayWnd")` 找到的第一个窗口（`WM_COPYDATA`，1：图标，0：AppBar，3：图标在哪）。我们建一个同类名的隐藏窗口排在 Explorer 前面（topmost，被挤到后面时再排回去），每条消息原样转给 Explorer（所以 `SHAppBarMessage` 也经过这里），交还时它的托盘是完整的。已在托盘里的图标：逐个窗口发 `TaskbarCreated` 请它们重新添加（跳过 Explorer 的任务栏，否则它会亮一下任务栏、插到前面）；请求后 3 秒内的"添加"不转给 Explorer（它本来就有，转过去也会让它亮任务栏）。被插队后马上再请一次。图标转成 PNG（先画在黑底、再画在白底，差值就是透明度）。"图标在哪"（`Shell_NotifyIconGetRect`，40 字节，窗口句柄 32 位）用页面画出的位置回答：微信靠它判断鼠标是否在图标上（悬停预览），QQ 靠它决定菜单弹在哪。点击按程序声明的版本（`NIM_SETVERSION`）转告：按下时先让她的窗口到前台，再把前台让给那个程序（菜单不在前台就点外面关不掉）；松开时前台已经是它就不动（QQ 按下就弹的菜单会被抢走焦点而关掉）。空图标是闪烁的暗半拍（微信）。折叠：Windows 自己的记录（`HKCU\Control Panel\NotifyIconSettings` 的 `IsPromoted`）决定初始哪些在外面，拖动改了记在设置 `trayPinned`。
 - **窗口按钮**（`tasks.rs`）：可见、没被藏到别的虚拟桌面（DWM cloaked）、没有所有者、不是工具窗口（或标了 `WS_EX_APPWINDOW`）、有标题的顶层窗口；按程序路径合并（商店应用取里面那个进程的），固定的程序（设置 `taskbarPinned`）排在前面。窗口有变化时（WinEvent 钩子）在单独的线程里重算，闪烁提醒来自 shell hook（`HSHELL_FLASH`）。会话标在它所在窗口的按钮上（`jump::window_for`，3 秒一次）。缩略图是 DWM thumbnail。
 - **键盘**：前台窗口的键盘布局和输入法状态（向它的默认 IME 窗口发 `WM_IME_CONTROL`），大写锁定（`GetKeyState`），四分之一秒一次。
-- 已知：通知和日历的弹窗会叠在条带上（Windows 按它自己的任务栏摆）。
+- 已知：有几块显示器、而且 Windows 设成每块都显示任务栏时，别的显示器底部会空出它那条（藏起来了，地方还占着）。
 
 ## 灵动岛
 

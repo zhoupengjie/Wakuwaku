@@ -84,6 +84,9 @@ pub struct Island {
     // home): asked again only on a change.
     bar: Option<(i32, i32, i32, i32)>,
     bar_for: Option<((i32, i32, i32, i32), i32, &'static str)>,
+    // The strip is a bar of ours Windows knows (appbar.rs), not one laid over
+    // the room Windows' own taskbar keeps (taskbar.rs explorer_room).
+    bar_own: bool,
     // The button held on her (a pull, or carrying her out): the window keeps the pointer.
     holding: bool,
     reaching: bool,
@@ -258,6 +261,7 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
             let mut isl = sh.island.lock().unwrap();
             isl.bar = None;
             isl.bar_for = None;
+            isl.bar_own = false;
         }
         if was == "taskbar" {
             taskbar::give_back(sh);
@@ -265,12 +269,27 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
         sh.log(&format!("island: {was} strip given back"));
     }
     let Some((area, edge, height)) = want else { return };
-    let mon_bottom = area.mon.1 + area.mon.3;
     if home == "taskbar" {
-        // Windows' own away first: the strip then goes to the bottom, not above its room.
-        taskbar::take(sh, (area.mon.0, mon_bottom - height, area.mon.2, height), mon_bottom);
+        let strip = (area.mon.0, area.mon.1 + area.mon.3 - height, area.mon.2, height);
+        taskbar::take(sh, strip);
+        // Laid over the room Windows' own keeps, put away: what it opens
+        // (the Start menu, the notifications) opens above it.
+        if let Some(room) = taskbar::explorer_room(area.mon) {
+            let own = {
+                let mut isl = sh.island.lock().unwrap();
+                isl.bar = Some(strip);
+                isl.bar_for = ask;
+                std::mem::replace(&mut isl.bar_own, false)
+            };
+            if own {
+                appbar::remove(hwnd);
+            }
+            taskbar::strip_moved(strip);
+            sh.log(&format!("island: taskbar strip {strip:?} over Windows' room {room:?}; work area's bottom {}", taskbar::work_area_bottom()));
+            return;
+        }
     }
-    let registered = sh.island.lock().unwrap().bar_for.is_some();
+    let registered = sh.island.lock().unwrap().bar_own;
     if !registered && !appbar::register(hwnd) {
         sh.log("island: Windows would not take the bar");
         return;
@@ -280,6 +299,7 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
         let mut isl = sh.island.lock().unwrap();
         isl.bar = Some(granted);
         isl.bar_for = ask;
+        isl.bar_own = true;
     }
     if home == "taskbar" {
         taskbar::strip_moved(granted);
@@ -305,6 +325,7 @@ pub fn take_strip_again(sh: &Shared) {
         if isl.bar_for.take().is_none() {
             return;
         }
+        isl.bar_own = false;
         isl.hwnd
     };
     // Should it remember after all, a second registration would be refused.

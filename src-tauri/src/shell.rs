@@ -1,10 +1,14 @@
 // Windows' own taskbar, put away while hers takes its place (display
 // 'taskbar'), and given back.
 //
-// Put away: set to hide itself, as "Automatically hide the taskbar" does, so
-// it keeps no room on the screen (a hidden one still would), then hidden on
-// every display. Its state is written down first, in a small file, so that
-// whoever is left can give it back:
+// Put away: hidden on every display, and not set to hide itself, so it keeps
+// its room along the bottom (a hidden one does), where hers lays its strip
+// (room()). What Windows opens from its taskbar (the Start menu, the
+// notifications and calendar, the quick settings, a notification's banner)
+// opens above that room, clear of hers. Set to hide itself, as "Automatically
+// hide the taskbar" does, it would keep no room, and those open at the
+// screen's edge, over her strip (2026-10-10). Its state is written down
+// first, in a small file, so that whoever is left can give it back:
 //   - her, when the taskbar home goes and on quitting (restore)
 //   - a guard: her own exe again, waiting for her process to end (spawn_guard,
 //     guard), as a killed process cannot give it back itself
@@ -47,6 +51,16 @@ mod imp {
         fn IsWindowVisible(hwnd: Hwnd) -> i32;
         fn ShowWindow(hwnd: Hwnd, cmd: i32) -> i32;
         fn RegisterWindowMessageW(name: *const u16) -> u32;
+        fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
+    }
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct Rect {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
     }
 
     #[link(name = "kernel32")]
@@ -160,13 +174,26 @@ mod imp {
     pub fn rehide() {
         let main = tray();
         let state = appbar::taskbar_state();
-        if main != 0 && state & appbar::ABS_AUTOHIDE == 0 {
-            appbar::set_taskbar_state(main, state | appbar::ABS_AUTOHIDE);
+        if main != 0 && state & appbar::ABS_AUTOHIDE != 0 {
+            appbar::set_taskbar_state(main, state & !appbar::ABS_AUTOHIDE);
         }
         for h in taskbars() {
             // SAFETY: a window Explorer made; hiding a gone one does nothing.
             unsafe { ShowWindow(h as Hwnd, SW_HIDE) };
         }
+    }
+
+    // The room a taskbar of Explorer's keeps along the bottom of a display
+    // (x, y, w, h, physical), hidden or not: one there, across its width.
+    pub fn room(mon: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
+        let (bottom, right) = (mon.1 + mon.3, mon.0 + mon.2);
+        taskbars().into_iter().find_map(|h| {
+            let mut r = Rect::default();
+            // SAFETY: our own struct; a gone window fails the call.
+            let ok = unsafe { GetWindowRect(h as Hwnd, &mut r) } != 0;
+            let there = ok && r.bottom == bottom && r.left <= mon.0 && r.right >= right && r.top > mon.1 + mon.3 / 2;
+            there.then_some((r.left, r.top, r.right - r.left, r.bottom - r.top))
+        })
     }
 
     // Its state set back and shown, and the file gone; false (the file kept)
@@ -255,6 +282,9 @@ mod imp {
         Ok(())
     }
     pub fn rehide() {}
+    pub fn room(_mon: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
+        None
+    }
     pub fn restore(_file: &Path) -> bool {
         false
     }
@@ -267,7 +297,7 @@ mod imp {
     pub fn guard(_pid: u32, _file: &Path) {}
 }
 
-pub use imp::{guard, hide, recover, rehide, restore, spawn_guard, taskbar_created, taskbars, visible};
+pub use imp::{guard, hide, recover, rehide, restore, room, spawn_guard, taskbar_created, taskbars, visible};
 
 // The guard's arguments, when this process is one: its pid and file.
 pub fn guard_args(args: &[String]) -> Option<(u32, &Path)> {

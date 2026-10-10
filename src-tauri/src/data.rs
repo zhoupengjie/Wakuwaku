@@ -81,10 +81,10 @@ fn defaults() -> Map<String, Value> {
         "islandWidth": "normal",
         // The taskbar's strip: mica (the desktop's picture through it, mica.js),
         // black (solid: black, or light in Windows' light mode) or clear (the
-        // desktop itself through it); clear, solid while a window is maximized
-        // on its display (maximized) or clear always.
+        // desktop itself through it); clear, Mica or solid while a window is
+        // maximized or full screen on its display (mica, solid), or clear always.
         "taskbarMaterial": "mica",
-        "taskbarClearWhen": "maximized",
+        "taskbarClearWhen": "mica",
         // Its programs' buttons: icons alone or with their titles; in the
         // middle of the screen or after her end (island.js alignApps).
         "taskbarButtons": "icons",

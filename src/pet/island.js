@@ -221,11 +221,13 @@
   // The taskbar's strip the desktop's picture through (mica.js), neither
   // solid nor clear.
   const isMica = () => isOn() && home() === 'taskbar' && !['black', 'clear'].includes(config.taskbarMaterial)
-  // The taskbar's strip clear, the desktop itself through it; solid while a
-  // window is maximized on its display (taskbar.rs "max"), unless it is to
-  // stay clear always (taskbarClearWhen).
+  // The taskbar's strip clear, the desktop itself through it; while a window
+  // is maximized or full screen on its display (taskbar.rs "max") it fills
+  // in, as Mica (its default) or solid, unless it is to stay clear always
+  // (taskbarClearWhen).
   const isClear = () => isOn() && home() === 'taskbar' && config.taskbarMaterial === 'clear'
-  const isSolidNow = () => isClear() && config.taskbarClearWhen !== 'always' && taskWindows.some(a => (a.windows || []).some(w => w.max && !w.min))
+  const clearWhen = () => (['solid', 'always'].includes(config.taskbarClearWhen) ? config.taskbarClearWhen : 'mica')
+  const isFilled = () => isClear() && clearWhen() !== 'always' && taskWindows.some(a => (a.windows || []).some(w => w.max && !w.min))
   // The taskbar light, as Windows' own is in its light mode (taskbar.rs).
   const isLight = () => isOn() && home() === 'taskbar' && look.mode === 'light'
   // Her end a capsule of its own in the strip (black, or light in Windows'
@@ -1361,10 +1363,12 @@
   // Behind the strip's parts: the desktop's picture under it, blurred and
   // tinted (mica.js) for Windows' mode, as taskbar.rs sent it last; drawn
   // again only when the picture, the mode or the strip's width changes. None
-  // on a solid strip, nor on a clear one (tb-clear), which is solid while a
-  // window is maximized on its display (tb-solid, drawn again as the windows
-  // change). The strip light in Windows' light mode (tb-light), her end a
-  // capsule wherever the strip is not black (tb-capsule).
+  // on a solid strip. On a clear one (tb-clear) it is drawn too, unseen, if
+  // the strip is to fill in as Mica (tb-clear-mica): it fades in at once
+  // while a window is maximized or full screen on its display (tb-filled,
+  // drawn again as the windows change); filled in solid, tb-solid. The
+  // strip light in Windows' light mode (tb-light), her end a capsule
+  // wherever the strip is not black (tb-capsule).
   const micaBox = el('div')
   micaBox.id = 'mica'
   island.parentElement.prepend(micaBox)
@@ -1372,12 +1376,15 @@
   let paper = null
 
   function drawMica() {
+    const clearMica = isClear() && clearWhen() === 'mica'
     body.classList.toggle('tb-mica', isMica())
     body.classList.toggle('tb-light', isLight())
     body.classList.toggle('tb-capsule', isCapsule())
     body.classList.toggle('tb-clear', isClear())
-    body.classList.toggle('tb-solid', isSolidNow())
-    if (isMica()) mica.set(paper, innerWidth, TASKBAR_H, look.mode)
+    body.classList.toggle('tb-clear-mica', clearMica)
+    body.classList.toggle('tb-filled', isFilled())
+    body.classList.toggle('tb-solid', isFilled() && clearWhen() === 'solid')
+    if (isMica() || clearMica) mica.set(paper, innerWidth, TASKBAR_H, look.mode)
     else mica.clear()
   }
 

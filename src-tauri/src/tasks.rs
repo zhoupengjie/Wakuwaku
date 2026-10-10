@@ -24,7 +24,7 @@ pub struct Keys {
     pub caps: bool,
 }
 
-// The clear taskbar (taskbar.rs): a window maximized on the strip's display.
+// The clear taskbar (taskbar.rs fills_strip): a window maximized on the strip's display.
 pub use imp::maximized;
 
 #[cfg(windows)]
@@ -256,16 +256,16 @@ mod imp {
         path.rsplit('\\').next().unwrap_or(path).to_string()
     }
 
-    // Windows' Start menu, open: its window in front. StartMenuExperienceHost's
-    // until Windows 11's new Start, which SearchHost holds (26200 on: the
-    // other still runs but never comes to the front). There Start and search
-    // are one window (typing in Start searches), so search counts as Start.
     // Maximized (not minimized: one put away keeps its maximized state).
     pub fn maximized(hwnd: isize) -> bool {
         // SAFETY: plain queries.
         unsafe { IsZoomed(hwnd as Hwnd) != 0 && IsIconic(hwnd as Hwnd) == 0 }
     }
 
+    // Windows' Start menu, open: its window in front. StartMenuExperienceHost's
+    // until Windows 11's new Start, which SearchHost holds (26200 on: the
+    // other still runs but never comes to the front). There Start and search
+    // are one window (typing in Start searches), so search counts as Start.
     pub fn is_start(hwnd: isize) -> bool {
         if hwnd == 0 {
             return false;

@@ -268,8 +268,8 @@ mod imp {
     const EVENT_SYSTEM_FOREGROUND: u32 = 0x0003;
     // What changes the buttons: a window made, shown, hidden, gone (0x8001
     // to 0x8003), renamed, cloaked or not (another desktop), brought to the
-    // front, minimized or restored; moved or sized, for one maximized or
-    // no longer (on_event lets only those through).
+    // front, minimized or restored; moved or sized, for one over the strip's
+    // display or no longer (fills_strip; on_event lets only those through).
     const WINDOW_EVENTS: [(u32, u32); 6] = [(0x8001, 0x8003), (0x800C, 0x800C), (0x8017, 0x8018), (0x0003, 0x0003), (0x0016, 0x0017), (0x800B, 0x800B)];
     const EVENT_OBJECT_LOCATIONCHANGE: u32 = 0x800B;
     const OBJID_WINDOW: i32 = 0;
@@ -345,8 +345,8 @@ mod imp {
     static LOOK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     // Windows' Start menu open, as told to the page last (start_seen).
     static START_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    // The windows maximized, as last seen moving (on_event).
-    static ZOOMED: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+    // The windows over the strip's display, as last seen moving (on_event).
+    static OVER: Mutex<Vec<isize>> = Mutex::new(Vec::new());
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -553,6 +553,34 @@ mod imp {
         unsafe { MonitorFromWindow(hwnd as Hwnd, MONITOR_DEFAULTTONEAREST) == MonitorFromPoint(Point { x: s.0 + s.2 / 2, y: s.1 + s.3 / 2 }, MONITOR_DEFAULTTONEAREST) }
     }
 
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
+    }
+
+    // Over the strip's display: maximized on it, or full screen there (all
+    // of the display, as a game or a video has it; one minimized lies far
+    // off), in front or behind another. The clear strip is not clear then
+    // (island.js isFilled).
+    fn fills_strip(hwnd: isize) -> bool {
+        if !on_strip(hwnd) {
+            return false;
+        }
+        if tasks::maximized(hwnd) {
+            return true;
+        }
+        let mut rect = Rect::default();
+        let mut info = MonitorInfo { size: std::mem::size_of::<MonitorInfo>() as u32, ..Default::default() };
+        // SAFETY: plain queries into our own structs, their sizes set.
+        unsafe {
+            if GetWindowRect(hwnd as Hwnd, &mut rect) == 0 || GetMonitorInfoW(MonitorFromWindow(hwnd as Hwnd, MONITOR_DEFAULTTONEAREST), &mut info) == 0 {
+                return false;
+            }
+        }
+        let m = &info.monitor;
+        rect.left <= m.left && rect.top <= m.top && rect.right >= m.right && rect.bottom >= m.bottom
+    }
+
     // A program that only hosts what its windows show, whose icons are
     // theirs: a store app (its frame, before its app is in it; then the
     // app's program, under WindowsApps), Windows' own apps, Java, Python.
@@ -665,7 +693,7 @@ mod imp {
                                 "png": png,
                                 "front": t.hwnd == front,
                                 "min": t.min,
-                                "max": tasks::maximized(t.hwnd) && on_strip(t.hwnd),
+                                "max": fills_strip(t.hwnd),
                                 "flash": flashing.contains(&t.hwnd),
                                 "sessions": marks.get(&t.hwnd).cloned().unwrap_or_default(),
                             })
@@ -1288,20 +1316,20 @@ mod imp {
                 return;
             }
         }
-        // Moved or sized: only a window maximized, or no longer, changes
-        // the buttons (the strip clear but for one, island.js); every move
-        // of every window comes here.
+        // Moved or sized: only a window over the strip's display, or no
+        // longer, changes the buttons (the strip clear but for one,
+        // island.js); every move of every window comes here.
         if event == EVENT_OBJECT_LOCATIONCHANGE {
             let h = hwnd as isize;
-            let now = tasks::maximized(h);
-            let mut zoomed = ZOOMED.lock().unwrap();
-            if now == zoomed.contains(&h) {
+            let now = fills_strip(h);
+            let mut over = OVER.lock().unwrap();
+            if now == over.contains(&h) {
                 return;
             }
             if now {
-                zoomed.push(h);
+                over.push(h);
             } else {
-                zoomed.retain(|z| *z != h);
+                over.retain(|z| *z != h);
             }
         }
         if event == EVENT_SYSTEM_FOREGROUND {

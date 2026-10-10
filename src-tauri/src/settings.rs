@@ -75,7 +75,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "display" => matches!(v.as_str(), Some("island" | "taskbar")),
         "islandWidth" => matches!(v.as_str(), Some("narrow" | "normal" | "wide")),
         "taskbarMaterial" => matches!(v.as_str(), Some("mica" | "black" | "clear")),
-        "taskbarClearWhen" => matches!(v.as_str(), Some("maximized" | "always")),
+        "taskbarClearWhen" => matches!(v.as_str(), Some("mica" | "solid" | "always")),
         "taskbarButtons" => matches!(v.as_str(), Some("icons" | "labels")),
         "taskbarAlign" => matches!(v.as_str(), Some("center" | "left")),
         // The programs' buttons in the order dragged: their keys (paths).

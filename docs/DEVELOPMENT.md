@@ -22,8 +22,12 @@ src-tauri/
   src/
     main.rs               入口：--wakuwaku-ensure-running、--wakuwaku-codex-hook、单实例、各部分共享的 Shared、页面能调的命令
     pet.rs                她的窗口：大小和位置、眼睛、拖动和被"携带"、走动、头顶的面板、飞回岛里
-    island.rs             她的家的窗口：角落头像、灵动岛、顶栏各放在哪，按页面要求扩大、伸手够她、把她吸回去、为设置临时升起
-    appbar.rs             顶栏占住的那条空间（Windows 的 AppBar）
+    island.rs             她的家的窗口：角落头像、灵动岛、顶栏、任务栏各放在哪，按页面要求扩大、伸手够她、把她吸回去、为设置临时升起
+    appbar.rs             顶栏、任务栏占住的那条空间（Windows 的 AppBar），以及 Windows 任务栏的自动隐藏状态
+    taskbar.rs            任务栏模式的 Windows 一侧：自己的线程和消息循环，藏 Windows 的任务栏、接管托盘、窗口按钮、键盘指示、缩略图、工作区自愈
+    shell.rs              把 Windows 自己的任务栏藏起来、还回去；状态文件、守护进程、下次启动时补还
+    systray.rs            接管托盘：自己的 Shell_TrayWnd 排在 Explorer 前面，图标、点击、图标位置的查询，原样转给 Explorer
+    tasks.rs              任务栏上该有按钮的窗口、程序名和图标、启动程序；输入法和大写锁定
     settings.rs           设置看到的快照、校验后的设置补丁、设置的各个命令
     pointer.rs            两个窗口共用的点击穿透
     screen.rs             各个显示器的工作区
@@ -274,19 +278,30 @@ mail/agent.rs      把一封信交给 Claude Code / Codex
 
 ## 她的家：角落头像、灵动岛、顶栏
 
-`display` 是她的家：`corner` | `island` | `bar`；`out` 是她在不在桌面上。三种用的是同一个窗口（`island`）、同一个页面元素 `#island`，同样的四种形状（收起、展开、确认、设置），只是放的位置和收起时的样子不同（`island.js` 的 `home()`，`body` 上的 `home-*`、`at-*` 类）：
+`display` 是她的家：`corner` | `island` | `bar` | `taskbar`；`out` 是她在不在桌面上。四种用的是同一个窗口（`island`）、同一个页面元素 `#island`，同样的四种形状（收起、展开、确认、设置），只是放的位置和收起时的样子不同（`island.js` 的 `home()`，`body` 上的 `home-*`、`at-*` 类）：
 
 | | 窗口放在 | 收起时 | 展开往哪长 | 她回家的落点（`seat`） |
 | --- | --- | --- | --- | --- |
 | `corner` | 工作区的一角（`corner`：br / bl / tr / tl），平时 760×440，放得下悬停展开的卡片和把她拉出来 | 56px 的圆，外圈是状态色，等你时脉动，别的会话在忙时有个小点 | 离开那个角 | 圆心 |
 | `island` | 工作区顶部正中，平时 760×132，只往下长 | 胶囊 | 往下 | 岛下沿中间 |
 | `bar` | AppBar 给的那条（显示器顶部，30px 高），和屏幕一样宽 | 左端是她和最需要你的会话，右边是别的会话的标签（`#bar-rest`）、插件、设置 | 从左端往下垂 | 左端头像下面 |
+| `taskbar` | AppBar 给的那条（主显示器底部，48px 高，和 Windows 的一样），窗口和屏幕一样宽、上面再留 440px 透明空间 | 左端同顶栏；右边是开始、按程序合并的窗口按钮、标签、插件、托盘（折叠）、输入法、时钟、设置 | 从左端往上长 | 左端头像上面 |
 
 **谁说话**：`Shared::she_talks()` = `corner` 且 `out`：她自己用气泡和头顶的面板说话（就是以前的 `display: 'pet'`，旧设置读进来时换成 `corner` + `out`）。角落的圆圈照样留着，里面是她的小头像（`stillHer`，按她的心情播动画），移上去才展开，展开的卡片里没有她的全身像；状态变化、插件冒头时它不自己展开（`island.js` 的 `sheTalks`），那是她的气泡的事。灵动岛和顶栏在她出门时照样留着、照样说话。`pet.js` 的气泡、`panel.js` 的 `holdsPanel`、提示音和通知发给哪个窗口，都看这个。
 
 **把她拉出来、放回去**对三种都一样：脖子从家的边上离光标最近的点伸出来（`edgeNear`），所以在角落可以往上、往左拉。她在桌面上被拖近家时，角落的窗口会临时升起来伸手够她（`Island.reaching`），吸回去的动画期间也一直在（`absorbing`）。
 
-**顶栏的空间**（`appbar.rs`）：顶栏显示时用 `SHAppBarMessage` 登记（`ABM_NEW`），按显示器顶部要一条 30 逻辑像素高的（`ABM_QUERYPOS` 后 `ABM_SETPOS`），系统把它从工作区里扣掉；窗口放到批下来的位置。只在显示器或高度变了时再要一次（`bar_for`），否则每次重排都会让所有窗口重新布局。换成别的方式、被隐藏（勿扰、全屏、隐藏）、退出（`RunEvent::Exit`）时 `ABM_REMOVE` 还回去。**进程被强行结束时还不回去**：要换新版本或调试时用 `POST /quit` 正常退出，别直接杀进程。
+**顶栏的空间**（`appbar.rs`）：顶栏显示时用 `SHAppBarMessage` 登记（`ABM_NEW`），按显示器顶部要一条 30 逻辑像素高的（`ABM_QUERYPOS` 后 `ABM_SETPOS`），系统把它从工作区里扣掉；窗口放到批下来的位置。只在显示器、高度或家变了时再要一次（`bar_for`），否则每次重排都会让所有窗口重新布局。换成别的方式、被隐藏（勿扰、全屏、隐藏）、退出（`RunEvent::Exit`）时 `ABM_REMOVE` 还回去。**进程被强行结束时还不回去**：要换新版本或调试时用 `POST /quit` 正常退出，别直接杀进程。`sync_bar` 一次只跑一个（两个同时跑曾经把任务栏接管了两次），跑的时候再来的请求等它跑完按最后一次再跑。
+
+**任务栏**（`taskbar.rs` 等，第 0 步的验证程序是 `src-tauri/examples/taskbar_spike.rs`，`cargo run --example taskbar_spike`）：
+
+- **藏 Windows 的任务栏**（`shell.rs`）：先把原来的状态写进 `<数据>/taskbar.json`，再设成自动隐藏（`ABM_SETSTATE`，这样它不再占工作区；只 `SW_HIDE` 的话它的空间还在），再把每块显示器的 `Shell_TrayWnd`、`Shell_SecondaryTrayWnd` 藏起来，等工作区空出来再登记自己的条带。还回去：按记下的状态设回、显示、删文件。谁还：换成别的家、退出时她自己；进程被杀时**守护进程**（同一个 exe，`--taskbar-guard <pid> <文件>`，等她的进程结束）；两个都没了时她下次启动（`taskbar::recover`）。Explorer 重新显示它时（WinEvent 的显示事件、半秒一次的检查）马上再藏；Explorer 重启时（新的 `Shell_TrayWnd` 发来 `TaskbarCreated`）重新藏、重新登记条带。
+- **有程序全屏时**：条带窗口藏起来（不管 `hideInFullscreen`，和 Windows 的一样），条带照样占着；但**还没登记时不在窗口藏着的时候登记**：窗口藏着时登记的条带，工作区不给它留地方。启动前先查一次全屏。
+- **工作区自愈**：工作区伸进条带时（Windows 有时不算这条 AppBar），直接把工作区底边设到条带上沿（`SPI_SETWORKAREA`，不广播：广播了 Explorer 会马上改回去）。窗口被 Windows 往上推进工作区时（游戏切全屏后出现过），每 2 秒核对一次实际位置、挪回去。
+- **托盘**（`systray.rs`）：程序用 `Shell_NotifyIcon` 把图标交给 `FindWindow("Shell_TrayWnd")` 找到的第一个窗口（`WM_COPYDATA`，1：图标，0：AppBar，3：图标在哪）。我们建一个同类名的隐藏窗口排在 Explorer 前面（topmost，被挤到后面时再排回去），每条消息原样转给 Explorer（所以 `SHAppBarMessage` 也经过这里），交还时它的托盘是完整的。已在托盘里的图标：逐个窗口发 `TaskbarCreated` 请它们重新添加（跳过 Explorer 的任务栏，否则它会亮一下任务栏、插到前面）；请求后 3 秒内的"添加"不转给 Explorer（它本来就有，转过去也会让它亮任务栏）。被插队后马上再请一次。图标转成 PNG（先画在黑底、再画在白底，差值就是透明度）。"图标在哪"（`Shell_NotifyIconGetRect`，40 字节，窗口句柄 32 位）用页面画出的位置回答：微信靠它判断鼠标是否在图标上（悬停预览），QQ 靠它决定菜单弹在哪。点击按程序声明的版本（`NIM_SETVERSION`）转告：按下时先让她的窗口到前台，再把前台让给那个程序（菜单不在前台就点外面关不掉）；松开时前台已经是它就不动（QQ 按下就弹的菜单会被抢走焦点而关掉）。空图标是闪烁的暗半拍（微信）。折叠：Windows 自己的记录（`HKCU\Control Panel\NotifyIconSettings` 的 `IsPromoted`）决定初始哪些在外面，拖动改了记在设置 `trayPinned`。
+- **窗口按钮**（`tasks.rs`）：可见、没被藏到别的虚拟桌面（DWM cloaked）、没有所有者、不是工具窗口（或标了 `WS_EX_APPWINDOW`）、有标题的顶层窗口；按程序路径合并（商店应用取里面那个进程的），固定的程序（设置 `taskbarPinned`）排在前面。窗口有变化时（WinEvent 钩子）在单独的线程里重算，闪烁提醒来自 shell hook（`HSHELL_FLASH`）。会话标在它所在窗口的按钮上（`jump::window_for`，3 秒一次）。缩略图是 DWM thumbnail。
+- **键盘**：前台窗口的键盘布局和输入法状态（向它的默认 IME 窗口发 `WM_IME_CONTROL`），大写锁定（`GetKeyState`），四分之一秒一次。
+- 已知：通知和日历的弹窗会叠在条带上（Windows 按它自己的任务栏摆）。
 
 ## 灵动岛
 

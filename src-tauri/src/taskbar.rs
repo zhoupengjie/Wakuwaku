@@ -399,16 +399,105 @@ mod imp {
         }
     }
 
-    // Windows' taskbar put away and the tray taken, before the strip is laid.
-    pub fn take(sh: &Shared, strip: (i32, i32, i32, i32)) {
-        if is_up() {
+    // Another copy of her (another port, its own data) holding the taskbar
+    // now, by its host window: its pid, and when it started. Two holding it
+    // at once hand the tray's place back and forth twice a second, and her
+    // menus change under the pointer (2026-10-10: a session's hook started
+    // the live copy while a test copy held it).
+    #[link(name = "user32")]
+    extern "system" {
+        fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
+        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
+    }
+
+    static WAITING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+    fn other_holder() -> Option<(u32, Option<u64>)> {
+        let class = wide("WakuwakuTaskbarHost");
+        let me = std::process::id();
+        let mut at: Hwnd = std::ptr::null_mut();
+        loop {
+            // SAFETY: a class name of our own; walking the top-level windows.
+            at = unsafe { FindWindowExW(std::ptr::null_mut(), at, class.as_ptr(), std::ptr::null()) };
+            if at.is_null() {
+                return None;
+            }
+            let mut pid = 0;
+            // SAFETY: our own out-parameter.
+            unsafe { GetWindowThreadProcessId(at, &mut pid) };
+            if pid != 0 && pid != me {
+                return Some((pid, shell::started(pid)));
+            }
+        }
+    }
+
+    // Waiting for another copy to let the taskbar go: this one's window
+    // stays hidden (island.rs is_shown) and takes nothing.
+    pub fn waiting() -> bool {
+        WAITING.load(Ordering::SeqCst)
+    }
+
+    // Waits, looking every two seconds; the taskbar taken once the other has
+    // gone (its window shown again, which takes the strip).
+    fn wait_for_other(sh: &Shared, pid: u32) {
+        if WAITING.swap(true, Ordering::SeqCst) {
             return;
+        }
+        sh.log(&format!("taskbar: another copy of her (pid {pid}) holds the taskbar: this one waits"));
+        let sh = crate::shared(&sh.app);
+        std::thread::spawn(move || {
+            while other_holder().is_some() {
+                std::thread::sleep(Duration::from_secs(2));
+            }
+            WAITING.store(false, Ordering::SeqCst);
+            sh.log("taskbar: the other copy let the taskbar go: this one takes it");
+            crate::island::apply_visibility(&sh);
+        });
+    }
+
+    // Before this one's window shows for the taskbar (island.rs): should
+    // another copy hold it, this one waits.
+    pub fn look_for_other(sh: &Shared) {
+        if is_up() || waiting() {
+            return;
+        }
+        if let Some((pid, _)) = other_holder() {
+            wait_for_other(sh, pid);
+        }
+    }
+
+    // Both took it at once (each before the other's window was there): the
+    // younger lets it go, the elder keeps it; by pid should they have
+    // started together.
+    fn yield_to_elder() {
+        let Some((pid, theirs)) = other_holder() else { return };
+        let me = std::process::id();
+        if (theirs, pid) >= (shell::started(me), me) {
+            return;
+        }
+        if let Some(sh) = sh() {
+            std::thread::spawn(move || {
+                wait_for_other(&sh, pid);
+                crate::island::apply_visibility(&sh);
+            });
+        }
+    }
+
+    // Windows' taskbar put away and the tray taken, before the strip is
+    // laid; false while another copy holds it (this one then waits).
+    pub fn take(sh: &Shared, strip: (i32, i32, i32, i32)) -> bool {
+        if is_up() {
+            return true;
+        }
+        if let Some((pid, _)) = other_holder() {
+            wait_for_other(sh, pid);
+            return false;
         }
         *SH.lock().unwrap() = Some(crate::shared(&sh.app));
         let file = sh.dir.join("taskbar.json");
         if let Err(e) = shell::hide(&file) {
             sh.log(&format!("taskbar: could not write {}: {e}", file.display()));
-            return;
+            return false;
         }
         sh.log(&format!("taskbar: Windows' put away; guard started: {}", shell::spawn_guard(&file)));
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
@@ -422,6 +511,7 @@ mod imp {
         let keys_sh = sh.clone();
         *TASKS.lock().unwrap() = Some(std::thread::spawn(move || tasks_loop(sh)));
         *KEYS.lock().unwrap() = Some(std::thread::spawn(move || keys_loop(keys_sh)));
+        true
     }
 
     // The keyboard (tasks::keys) and the volume (audio.rs) looked at four
@@ -1394,6 +1484,11 @@ mod imp {
     }
 
     fn tick() {
+        // Another copy holding it too (both took it at once): every two
+        // seconds, the younger lets go.
+        if TICKS.load(Ordering::SeqCst) % 4 == 0 && !waiting() {
+            yield_to_elder();
+        }
         if shell::visible() {
             put_away_again("seen by the timer");
         }
@@ -1842,7 +1937,13 @@ mod imp {
     pub fn is_up() -> bool {
         false
     }
-    pub fn take(_sh: &Shared, _strip: (i32, i32, i32, i32)) {}
+    pub fn take(_sh: &Shared, _strip: (i32, i32, i32, i32)) -> bool {
+        true
+    }
+    pub fn look_for_other(_sh: &Shared) {}
+    pub fn waiting() -> bool {
+        false
+    }
     pub fn explorer_room(_mon: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
         None
     }
@@ -1872,7 +1973,7 @@ mod imp {
     }
 }
 
-pub use imp::{explorer_room, give_back, note, resend, strip_moved, take, work_area_bottom};
+pub use imp::{explorer_room, give_back, look_for_other, note, resend, strip_moved, take, waiting, work_area_bottom};
 
 // RGBA pixels (sw × sh) made dw × dh smoothly: each pixel out the weighted
 // mean of those it covers, under a tent as wide as a pixel of the coarser

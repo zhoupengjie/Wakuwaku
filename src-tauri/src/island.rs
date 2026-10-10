@@ -117,7 +117,8 @@ fn window(sh: &Shared) -> Option<WebviewWindow> {
 // The taskbar is up whatever hides her (out of sight, do not disturb): it is
 // the person's taskbar; only an app full screen hides it, as Windows' own.
 pub fn is_shown(sh: &Shared) -> bool {
-    let up = if sh.home() == "taskbar" { !sh.is_fullscreen() } else { sh.is_visible() };
+    // Nor while another copy of her holds the taskbar (taskbar.rs waiting).
+    let up = if sh.home() == "taskbar" { !sh.is_fullscreen() && !taskbar::waiting() } else { sh.is_visible() };
     let isl = sh.island.lock().unwrap();
     up || isl.temp || isl.settings_open
 }
@@ -241,7 +242,10 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
     let Some((area, edge, height)) = want else { return };
     if home == "taskbar" {
         let strip = (area.mon.0, area.mon.1 + area.mon.3 - height, area.mon.2, height);
-        taskbar::take(sh, strip);
+        // Another copy of her holds it: nothing taken (it waits).
+        if !taskbar::take(sh, strip) {
+            return;
+        }
         // Laid over the room Windows' own keeps, put away: what it opens
         // (the Start menu, the notifications) opens above it.
         if let Some(room) = taskbar::explorer_room(area.mon) {
@@ -390,6 +394,11 @@ pub fn ready(sh: &Arc<Shared>) {
 }
 
 pub fn apply_visibility(sh: &Arc<Shared>) {
+    // Another copy of her holding the taskbar: this one waits, its window
+    // not shown over the other's.
+    if sh.home() == "taskbar" {
+        taskbar::look_for_other(sh);
+    }
     let want = is_shown(sh);
     let (created, ready, shown) = {
         let isl = sh.island.lock().unwrap();
@@ -410,8 +419,9 @@ pub fn apply_visibility(sh: &Arc<Shared>) {
         // The taskbar keeps the strip it holds while an app full screen
         // hides it; it takes none then: one taken with its window hidden
         // keeps no room (2026-10-10), so it waits for the window to show.
+        // Given back, though, to another copy of her holding it too.
         let held = sh.island.lock().unwrap().bar_for.is_some();
-        sync_bar(sh, sh.home() == "taskbar" && held);
+        sync_bar(sh, sh.home() == "taskbar" && held && !taskbar::waiting());
     }
     if want == shown {
         return;

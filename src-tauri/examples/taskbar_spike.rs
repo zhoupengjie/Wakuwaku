@@ -232,6 +232,11 @@ mod win {
         fn DeleteDC(hdc: isize) -> i32;
     }
 
+    #[link(name = "shcore")]
+    extern "system" {
+        fn GetDpiForMonitor(monitor: *mut c_void, kind: u32, x: *mut u32, y: *mut u32) -> i32;
+    }
+
     #[link(name = "dwmapi")]
     extern "system" {
         fn DwmGetWindowAttribute(hwnd: Hwnd, attr: u32, value: *mut c_void, size: u32) -> i32;
@@ -249,6 +254,7 @@ mod win {
     const CLASS: &str = "WakuwakuTaskbarSpike";
     const WM_DESTROY: u32 = 0x0002;
     const WM_PAINT: u32 = 0x000F;
+    const WM_ERASEBKGND: u32 = 0x0014;
     const WM_QUERYENDSESSION: u32 = 0x0011;
     const WM_ENDSESSION: u32 = 0x0016;
     const WM_SETTINGCHANGE: u32 = 0x001A;
@@ -306,6 +312,8 @@ mod win {
     static PLACED_FOR: Mutex<Option<(Rect, i32)>> = Mutex::new(None);
     static GRANTED: Mutex<Option<(i32, i32, i32, i32)>> = Mutex::new(None);
     static LAST: Mutex<String> = Mutex::new(String::new());
+    // What the bar last showed: it is drawn again only when this changes.
+    static PAINTED: Mutex<String> = Mutex::new(String::new());
     static LOG: Mutex<Option<File>> = Mutex::new(None);
 
     fn wide(s: &str) -> Vec<u16> {
@@ -538,13 +546,41 @@ mod win {
         r
     }
 
+    // The main display's scale, asked of the display itself: a window is not
+    // always told (no WM_DPICHANGED came when the scale was changed in the
+    // settings, 2026-10-10).
+    fn dpi() -> u32 {
+        let (mut x, mut y) = (0u32, 0u32);
+        // SAFETY: our own out-parameters; (0, 0) is always on the primary display.
+        unsafe { GetDpiForMonitor(MonitorFromPoint(Point::default(), 1), 0, &mut x, &mut y) };
+        x.max(96)
+    }
+
+    fn status_text() -> String {
+        let t = now();
+        format!(
+            "{:02}:{:02}  ·  原生任务栏{}  ·  冒出来 {} 次{}  ·  {}  ·  Ctrl+Alt+Shift+R 还原",
+            t.hour,
+            t.minute,
+            if shell::visible() { "：显示中" } else { "已藏起" },
+            SHOWN_AGAIN.load(Ordering::SeqCst),
+            if FULLSCREEN.load(Ordering::SeqCst) { "  ·  有程序全屏" } else { "" },
+            LAST.lock().unwrap()
+        )
+    }
+
+    // Drawn off screen and put up at once, so no half-drawn bar ever shows.
     fn paint(hwnd: Hwnd) {
         // SAFETY: GDI objects we make and delete within the paint; the PAINTSTRUCT is ours.
         unsafe {
             let mut ps: PaintStruct = std::mem::zeroed();
-            let hdc = BeginPaint(hwnd, &mut ps);
-            let dpi = GetDpiForWindow(hwnd).max(96);
+            let screen = BeginPaint(hwnd, &mut ps);
+            let dpi = dpi();
             let client = client_of(hwnd);
+            let (w, h) = (client.right - client.left, client.bottom - client.top);
+            let hdc = CreateCompatibleDC(screen);
+            let bmp = CreateCompatibleBitmap(screen, w, h);
+            let old_bmp = SelectObject(hdc, bmp);
             let bg = CreateSolidBrush(0x0020_2020);
             let btn = CreateSolidBrush(0x0040_3a3a);
             let quit = CreateSolidBrush(0x0030_3080);
@@ -559,24 +595,19 @@ mod win {
                 let mut r = r;
                 DrawTextW(hdc, wide(b.label()).as_ptr(), -1, &mut r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             }
-            let t = now();
-            let status = format!(
-                "{:02}:{:02}:{:02}  ·  原生任务栏{}  ·  冒出来 {} 次{}  ·  {}  ·  Ctrl+Alt+Shift+R 还原",
-                t.hour,
-                t.minute,
-                t.second,
-                if shell::visible() { "：显示中" } else { "已藏起" },
-                SHOWN_AGAIN.load(Ordering::SeqCst),
-                if FULLSCREEN.load(Ordering::SeqCst) { "  ·  有程序全屏" } else { "" },
-                LAST.lock().unwrap()
-            );
+            let status = status_text();
             SetTextColor(hdc, 0x00b0_b0b0);
             DrawTextW(hdc, wide(&status).as_ptr(), -1, &mut rest, DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+            *PAINTED.lock().unwrap() = status;
+            BitBlt(screen, 0, 0, w, h, hdc, 0, 0, 0x00CC_0020);
             SelectObject(hdc, old);
+            SelectObject(hdc, old_bmp);
             DeleteObject(font);
             DeleteObject(bg);
             DeleteObject(btn);
             DeleteObject(quit);
+            DeleteObject(bmp);
+            DeleteDC(hdc);
             EndPaint(hwnd, &ps);
         }
     }
@@ -585,9 +616,7 @@ mod win {
     // only when the display or the thickness change (or Windows says to).
     fn place(hwnd: Hwnd, force: bool) {
         let mon = primary();
-        // SAFETY: our own window.
-        let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96);
-        let thickness = BAR_H * dpi as i32 / 96;
+        let thickness = BAR_H * dpi() as i32 / 96;
         {
             let mut placed = PLACED_FOR.lock().unwrap();
             if !force && *placed == Some((mon, thickness)) {
@@ -650,10 +679,11 @@ mod win {
                     paint(hwnd);
                     return 0;
                 }
+                WM_ERASEBKGND => return 1,
                 WM_MOUSEACTIVATE => return MA_NOACTIVATE,
                 WM_LBUTTONUP => {
                     let x = (lparam & 0xffff) as i16 as i32;
-                    let (buttons, _) = layout(client_of(hwnd), GetDpiForWindow(hwnd).max(96));
+                    let (buttons, _) = layout(client_of(hwnd), dpi());
                     if let Some((_, b)) = buttons.into_iter().find(|(r, _)| x >= r.left && x < r.right) {
                         if b == Button::Quit {
                             note("quit button");
@@ -669,7 +699,16 @@ mod win {
                     if shell::visible() {
                         put_away_again("seen by the timer");
                     }
-                    InvalidateRect(hwnd, std::ptr::null(), 0);
+                    // The scale may have changed with no word of it.
+                    let (seen, says) = (dpi(), GetDpiForWindow(hwnd));
+                    if PLACED_FOR.lock().unwrap().is_some_and(|(_, t)| t != BAR_H * seen as i32 / 96) {
+                        log(&format!("scale now {}% (the window says {}%)", seen * 100 / 96, says * 100 / 96));
+                        place(hwnd, false);
+                        InvalidateRect(hwnd, std::ptr::null(), 0);
+                    }
+                    if status_text() != *PAINTED.lock().unwrap() {
+                        InvalidateRect(hwnd, std::ptr::null(), 0);
+                    }
                     return 0;
                 }
                 WM_TASKBAR_SHOWN => {
@@ -691,6 +730,7 @@ mod win {
                 WM_DPICHANGED => {
                     note(&format!("dpi change {}", wparam & 0xffff));
                     place(hwnd, false);
+                    InvalidateRect(hwnd, std::ptr::null(), 0);
                     return 0;
                 }
                 WM_SETTINGCHANGE => {

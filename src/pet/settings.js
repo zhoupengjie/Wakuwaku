@@ -30,8 +30,14 @@
 
   // The island's colours (on black), the same as island.js.
   const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
-  const TABS = ['now', 'pets', 'look', 'alerts', 'widgets', 'mail', 'connect']
-  const TAB_KEY = { now: 's.tabNow', pets: 's.tabPets', look: 's.tabLook', alerts: 's.tabAlerts', widgets: 's.tabWidgets', mail: 's.tabMail', connect: 's.tabConnect' }
+  // Four pages: General (the sessions, the alerts, connecting, startup and
+  // the language), Look (her home, Windows, her and the pets), Plugins and
+  // Mail. The pets, the alerts and connecting were pages of their own: asked
+  // for by those names (island.rs asks for the pets, or connecting), the
+  // page they are part of opens, scrolled to them (PART_OF, showPart).
+  const TABS = ['now', 'look', 'widgets', 'mail']
+  const TAB_KEY = { now: 's.tabGeneral', look: 's.tabLook', widgets: 's.tabWidgets', mail: 's.tabMail' }
+  const PART_OF = { pets: 'look', alerts: 'now', connect: 'now' }
   const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
   const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
   const HOMES = ['island', 'taskbar']
@@ -130,6 +136,7 @@
     <div class="s-foot"><span class="foot-text"></span><span class="grow"></span><span class="ver"></span></div>`
   const head = layer.querySelector('.s-head')
   const tabs = layer.querySelector('.s-tabs')
+  tabs.style.setProperty('--tabs', TABS.length)
   const askSlot = layer.querySelector('.s-ask')
   const body = layer.querySelector('.s-body')
   const foot = layer.querySelector('.s-foot')
@@ -200,6 +207,8 @@
   const row = (title, note, control) =>
     `<div class="r"><div class="grow"><div>${title}</div>${note ? `<div class="d">${note}</div>` : ''}</div>${control}</div>`
   const sec = text => `<div class="sec">${esc(text)}</div>`
+  // Where a part of a page begins, to scroll to (PART_OF).
+  const part = (id, html) => `<i class="part" data-part="${id}"></i>${html}`
 
   function thumb(px, url, version, clip = 'idle') {
     const s = px / 192
@@ -299,14 +308,14 @@
       </div>
       ${s.display === 'taskbar' ? `<div class="grp"><div class="note">${esc(T('s.taskbarNote'))}</div></div><div class="grp">${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${row(esc(T('s.taskbarAlign')), '', seg('taskbarAlign', ['center', 'left'].map(a => [a, T(`s.align.${a}`)]), s.taskbarAlign || 'center'))}</div>` : ''}
       <div class="grp">${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}</div>
+      ${pageWindows()}
       ${sec(T('s.her'))}<div class="grp">
         ${row(esc(T('menu.size')), '', seg('scale', SIZES.map(([name, scale]) => [scale, T(`menu.${name}`)]), s.scale))}
         ${row(esc(T('s.details')), esc(T('s.detailsNote')), sw('details', s.details !== false))}
         ${row(esc(T('s.walk')), esc(T('s.walkNote')), sw('walk', s.walk))}
         ${row(esc(T('s.look')), '', sw('look', s.look))}
       </div>
-      ${sec(T('s.general'))}<div class="grp">${row(esc(T('home.language')), '', seg('lang', [['auto', T('settings.languageAuto')], ['zh', '中文'], ['en', 'EN']], s.lang))}</div>
-      ${pageWindows()}`
+      ${part('pets', pagePets())}`
   }
 
   // Windows' own mode and accent colour, set as Settings → Personalization →
@@ -1305,9 +1314,6 @@
       ${sec(T('home.plugin'))}<div class="grp"><div class="note">${esc(T('home.pluginWhy'))}</div>
         ${snap.pluginCommands.map(c => `<div class="r"><span class="cmd mono">${esc(c)}</span><button class="pbtn" data-copy="${esc(c)}">${esc(T('home.copy'))}</button></div>`).join('')}
       </div>
-      ${sec(T('s.startup'))}<div class="grp">
-        ${row(esc(T('settings.startAtLogin')), esc(T('home.pluginStart')), sw('login', snap.loginAtStart))}
-      </div>
       ${sec(T('home.advanced'))}<div class="grp">
         <div class="note">${esc(T('home.advancedWhy'))}</div>
         <div class="r"><div class="grow"><div>${esc(T('settings.hooks'))}: ${esc(T(hooksWord))}</div><div class="d mono ellip">${esc(snap.settingsFile)}</div></div>${hooksButtons}</div>
@@ -1325,7 +1331,19 @@
       </div>`
   }
 
-  const PAGES = { now: pageNow, pets: pagePets, look: pageLook, alerts: pageAlerts, widgets: pageWidgets, mail: pageMail, connect: pageConnect }
+  // General: the sessions and the quick switches, the alerts, startup and
+  // the language, connecting (the plugin, the hooks) and what this is.
+  function pageGeneral() {
+    return `${pageNow()}
+      ${part('alerts', pageAlerts())}
+      ${sec(T('s.startLang'))}<div class="grp">
+        ${row(esc(T('settings.startAtLogin')), esc(T('home.pluginStart')), sw('login', snap.loginAtStart))}
+        ${row(esc(T('home.language')), '', seg('lang', [['auto', T('settings.languageAuto')], ['zh', '中文'], ['en', 'EN']], snap.settings.lang))}
+      </div>
+      ${part('connect', pageConnect())}`
+  }
+
+  const PAGES = { now: pageGeneral, look: pageLook, widgets: pageWidgets, mail: pageMail }
 
   // --- Drawing --------------------------------------------------------------------------------
 
@@ -1398,8 +1416,22 @@
 
   // --- Open and close ----------------------------------------------------------------------------
 
+  // A part of a page asked for by its old page's name, to scroll to once drawn.
+  let partToShow = ''
+
+  function showPart() {
+    const at = partToShow && body.querySelector(`[data-part="${partToShow}"]`)
+    partToShow = ''
+    if (at) body.scrollTop += at.getBoundingClientRect().top - body.getBoundingClientRect().top
+  }
+
   function open(next) {
-    if (TABS.includes(next)) tab = next
+    if (PART_OF[next]) {
+      tab = PART_OF[next]
+      partToShow = next
+    } else if (TABS.includes(next)) {
+      tab = next
+    }
     const wasOpen = isOpen
     isOpen = true
     if (!wasOpen) {
@@ -1410,7 +1442,8 @@
     window.pet.settings.get().then(got => {
       snap = got
       draw(true)
-      if (tab === 'pets') loadGallery(false)
+      showPart()
+      if (tab === 'look') loadGallery(false)
       if (tab === 'mail' && letterToOpen) {
         const { account, uid } = letterToOpen
         letterToOpen = null
@@ -1437,7 +1470,7 @@
     if (next === tab || !TABS.includes(next)) return
     tab = next
     draw(true)
-    if (tab === 'pets') loadGallery(false)
+    if (tab === 'look') loadGallery(false)
     relayout()
   }
 

@@ -11,7 +11,7 @@ src/                      页面，Tauri 直接把整个文件夹打进 exe（ta
     bridge.js             window.pet：页面和 Rust 之间的调用和事件；替页面补发鼠标进出（见"点击穿透"）
     pet.js                她的动画、空闲时走动和东张西望
     island.js             灵动岛：几种形状、她在岛里、把她拉出来和放回去
-    settings.js           长在岛里的设置（五个页签）
+    settings.js           长在岛里的设置（四个页签：通用、外观、插件、邮件）
     panel.js              确认面板：在岛里，或在设置的横幅里
     sprite.js             图集布局、16 个注视方向
     status.js             把一个会话说成话：名字、当前这一步、任务清单进度、结果（岛、设置、她的提示共用）
@@ -109,10 +109,10 @@ Codex（CLI 0.114 起）的 hooks 和 Claude Code 很像，但**只有 command �
 - **Codex 用会话的 shell 运行 hook 命令，Windows 上是 PowerShell 7**（源码里的默认 `cmd /C` 只在没配置 shell 时用）。`"带空格的路径" 参数` 在 PowerShell 里是语法错误，要写 `& '路径' 参数`；路径不需要引号时直接写裸路径（`codex_command()`）。
 - Codex 跑 hook 用的是 `pwsh -NoProfile -Command`（`derive_exec_args`，不走 profile），实测启动约 0.28 秒；PowerShell 5.1 约 0.18 秒，cmd 约 0.02 秒，转发本身约 0.03 秒。hook 的 shell 跟着 Codex 会话的 shell 走，没法单独换。
 - 所以 Codex 要等的（同步）hook 只装必要的几个（`connection.rs` 的 `CODEX_HOOKS`）：`SessionStart`、`UserPromptSubmit`、`Stop`、`Interrupt`、`SessionEnd`、`PermissionRequest`，`PostToolUse` 只对 `apply_patch|request_user_input`，`PreToolUse` 只对 `request_user_input`（matcher 是正则）。每一步的工具名靠两条不带 matcher 的 `async: true` 的 `PreToolUse` / `PostToolUse`。
-- **async hook 从 Codex 0.148 开始才有**；0.146.1 实测会跳过它们（`skipping async hook …: async hooks are not supported yet`），而且是整条跳过，不会改成同步运行。所以安装时用 `codex --version` 判断（缓存一分钟），旧版本不装那两条；之后 Codex 升级了，状态会变成 `upgradable`（只缺后台的那两条；连接页说"Codex 已升级"而不是"需要修复"），点「修复」补上，原来那些 hook 内容和位置都不变，Codex 里只需信任新加的两条（信任按 `hooks.json:<事件>:<组>:<序号>` 和内容的 hash 记在 `config.toml` 的 `[hooks.state]`）。缺别的才是 `partial`。问不到版本（只有桌面版）时当作新版本。
+- **async hook 从 Codex 0.148 开始才有**；0.146.1 实测会跳过它们（`skipping async hook …: async hooks are not supported yet`），而且是整条跳过，不会改成同步运行。所以安装时用 `codex --version` 判断（缓存一分钟），旧版本不装那两条；之后 Codex 升级了，状态会变成 `upgradable`（只缺后台的那两条；设置「通用」页的连接部分说"Codex 已升级"而不是"需要修复"），点「修复」补上，原来那些 hook 内容和位置都不变，Codex 里只需信任新加的两条（信任按 `hooks.json:<事件>:<组>:<序号>` 和内容的 hash 记在 `config.toml` 的 `[hooks.state]`）。缺别的才是 `partial`。问不到版本（只有桌面版）时当作新版本。
 - 后台运行的 hook 可能乱序到达：每个事件都带 `turn_id`，`state.rs` 记住最近结束的几个回合（`Stop` / `Interrupt` 的消息带 `event: "turn-end"`），之后到达的同一回合的事件不再改状态，只有迟到的 `apply_patch` 会把「做完」改成「改好了」。新版本上 `apply_patch` 的 `PostToolUse` 会同步、后台各来一次，重复无害。
 - 事件字段：`session_id`、`turn_id`、`cwd`、`hook_event_name`、`model`、`permission_mode`；shell 工具叫 `Bash`，改文件都是 `apply_patch`，两者的 `tool_input` 都只有 `command`（补丁全文）。失败的工具调用没有 `PostToolUse`；请求失败（比如模型不可用）连 `Stop` 都没有，所以 Codex 会话不会显示出错，干活状态靠 15 分钟的超时收尾。
-- Codex 只运行**信任过**的 hook（按 hash 记在 `config.toml`），新装或改动后要在 Codex 里 `/hooks` 信任。我们不替用户信任。设置里能看出的只有"装了"和"收到过 Codex 的事件"（`Shared.codex_seen`），连接页据此提示去信任。
+- Codex 只运行**信任过**的 hook（按 hash 记在 `config.toml`），新装或改动后要在 Codex 里 `/hooks` 信任。我们不替用户信任。设置里能看出的只有"装了"和"收到过 Codex 的事件"（`Shared.codex_seen`），「通用」页的连接部分据此提示去信任。
 - `PermissionRequest` 在 Codex 弹自己的确认框**之前**同步运行，hook 不回答 Codex 就不弹框。所以 Codex 的确认在面板上最多等 60 秒（`server.rs` 的 `CODEX_ASK_MS`），"去终端处理"或超时回 `{}` 后 Codex 才弹框。Codex 只接受 allow / deny，不接受 `updatedPermissions` / `updatedInput`，所以没有"以后都允许"（事件里也没有 `permission_suggestions`）。`hookSpecificOutput.decision` 的格式和 Claude Code 相同。
 - `codex exec` 会把确认策略强制设成 never，测不到 `PermissionRequest`；测这一条要用交互式的 Codex。
 - 测试运行 Codex 时用便宜的模型：`codex exec --ephemeral --skip-git-repo-check -m gpt-5.6-luna -c model_reasoning_effort='"low"' --dangerously-bypass-hook-trust -c 'hooks.Stop=[...]' "…" < /dev/null`（`-c hooks.*` 只对这一次生效，不改用户的配置；不重定向 stdin 会一直等输入）。
@@ -178,7 +178,7 @@ hook 事件在 `events.rs`（Codex 的在 `events_codex.rs`）换算成消息，
 
 ## 点会话就到它的窗口
 
-在哪里点：展开的岛里的会话（`island.js` 的 `data-jump`）、设置「现在」页的会话行、确认面板的「去终端处理」（先交还给终端再跳）、单击她（等 500ms 确认不是双击；去的是指针刚移到她身上时她显示的那个会话，因为移上去就算看过，结束的状态会变回空闲）。都走 `session_jump` 命令 → `main.rs` 的 `jump_to` → `jump.rs` 的 `go`。
+在哪里点：展开的岛里的会话（`island.js` 的 `data-jump`）、设置「通用」页的会话行、确认面板的「去终端处理」（先交还给终端再跳）、单击她（等 500ms 确认不是双击；去的是指针刚移到她身上时她显示的那个会话，因为移上去就算看过，结束的状态会变回空闲）。都走 `session_jump` 命令 → `main.rs` 的 `jump_to` → `jump.rs` 的 `go`。
 
 **会话在哪个进程里**（`state.rs` 的 `chain`，消息里是 `[[pid, 启动时间], …]`）：
 - Claude Code 的 HTTP hook：`server.rs` 用请求的对端端口查 TCP 表（`GetExtendedTcpTable`），连接另一头就是 Claude Code 自己的进程，再往上找父进程。会话还没有进程链、或者一轮开始（UserPromptSubmit / SessionStart，可能换了进程续上）时才查。

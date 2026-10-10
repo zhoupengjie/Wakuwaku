@@ -63,15 +63,22 @@
     review: '#7346c9',
     error: '#c42b3c',
   }
-  const hue = () => (isLight() ? COLOR_LIGHT : COLOR)
-  // A widget's own colour (a script's, or the monitor's), on the light
-  // island as deep as the moods' there: one of the moods' colours as its
-  // deeper one, any other darkened until it reads on white (widgets.js).
-  function ink(colour) {
-    if (!colour || !isLight()) return colour
+  // The moods' colours in her island, as its words are (setInk): deeper on
+  // a light ground; on the taskbar's strip (stripHue), as Windows' mode.
+  let inkLight = false
+  let groundLight = null
+  const hue = () => (inkLight ? COLOR_LIGHT : COLOR)
+  const stripHue = () => (isLight() ? COLOR_LIGHT : COLOR)
+  // A widget's own colour (a script's, or the monitor's), on a light ground
+  // as deep as the moods' there: one of the moods' colours as its deeper
+  // one, any other darkened until it reads on white (widgets.js).
+  function deeper(colour, light) {
+    if (!colour || !light) return colour
     const mood = Object.keys(COLOR).find(k => COLOR[k] === String(colour).toLowerCase())
     return mood ? COLOR_LIGHT[mood] : Widgets.deepen(colour)
   }
+  const ink = colour => deeper(colour, inkLight)
+  const stripInk = colour => deeper(colour, isLight())
 
   // What she plays when the island opens by itself for each mood.
   const NUDGE_CLIP = { waiting: 'waiting', done: 'waving', review: 'review', error: 'failed' }
@@ -677,9 +684,9 @@
           tag.title = t(lang, 'jump.hint')
         }
         const dot = el('i', 'dot')
-        dot.style.background = hue()[x.mood] || hue().idle
+        dot.style.background = stripHue()[x.mood] || stripHue().idle
         const when = el('span', 'when', Status.time(x))
-        when.style.color = hue()[x.mood] || hue().idle
+        when.style.color = stripHue()[x.mood] || stripHue().idle
         tag.append(dot, el('span', 'who', Status.nameOf(x, detailed)), el('span', 'what', Status.brief(lang, x, { detailed })), when)
         return tag
       })
@@ -696,17 +703,17 @@
       const { label, value } = Widgets.words(lang, w, isDetailed())
       const face = el('span', 'face')
       face.insertAdjacentHTML('afterbegin', Widgets.icon(w.icon))
-      face.firstChild.style.color = ink(w.color) || hue().idle
+      face.firstChild.style.color = stripInk(w.color) || stripHue().idle
       const v = el('span', 'v', value)
-      v.style.color = ink(w.color) || hue().idle
-      if (Widgets.partsOf(w)) v.innerHTML = Widgets.partsHTML(w, ink)
+      v.style.color = stripInk(w.color) || stripHue().idle
+      if (Widgets.partsOf(w)) v.innerHTML = Widgets.partsHTML(w, stripInk)
       face.append(Widgets.partsOf(w) ? '' : label, v)
       faces.push(face)
     }
     if (isPinned()) {
       const inRows = home() === 'taskbar'
       const readings = el('span', inRows ? 'face mon rows' : 'face mon')
-      readings.innerHTML = inRows ? Widgets.rowsHTML(monitor) : Widgets.partsHTML(monitor, ink)
+      readings.innerHTML = inRows ? Widgets.rowsHTML(monitor) : Widgets.partsHTML(monitor, stripInk)
       faces.push(readings)
     }
     return faces
@@ -1456,6 +1463,27 @@
     if (edge) island.style.setProperty('--i-edge', edge)
     else island.style.removeProperty('--i-edge')
     body.classList.toggle('island-bare', mine.bare === true)
+    groundLight = bg === null ? null : lightness(bg) > 0.35
+    setInk()
+  }
+
+  // A colour's relative lightness (WCAG), 0 to 1.
+  function lightness(rgb) {
+    const [r, g, b] = [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255].map(v => {
+      v /= 255
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+
+  // Her island's words dark (style.css isl-light, hue, ink) on a light
+  // ground: Windows' light mode's, or a light one of the settings' own
+  // (groundLight; null: none given); in the settings, theirs, as Windows'
+  // mode.
+  function setInk() {
+    const own = view === 'settings' ? null : groundLight
+    inkLight = own === null ? isLight() : own
+    body.classList.toggle('isl-light', inkLight)
   }
 
   window.pet.onWallpaper(p => {
@@ -1794,6 +1822,7 @@
     if (view === 'ask' && !isAsking()) nudge = null
     view = isSetting() ? 'settings' : isAsking() ? 'ask' : isHover || isNudging() ? 'expanded' : 'compact'
     island.dataset.view = view
+    setInk()
     island.style.setProperty('--ring', hue()[now.mood])
     island.classList.toggle('wants', now.mood === 'waiting')
     seatPanel()

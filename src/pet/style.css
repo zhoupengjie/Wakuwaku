@@ -2034,6 +2034,11 @@ body {
    in it light as well (settings.css). */
 .tb-light #island {
   background: #fbfbfb;
+}
+
+/* Its words dark on a light ground (island.js inkLight: as Windows' mode, or as
+   its own ground when the settings give it one). */
+.isl-light #island {
   color: #1b1b1b;
 }
 
@@ -2053,112 +2058,112 @@ body {
   background: #fbfbfb;
 }
 
-.tb-light #island-compact .label,
-.tb-light #island-expanded .reply {
+.isl-light #island-compact .label,
+.isl-light #island-expanded .reply {
   color: #3a3a3a;
 }
 
-.tb-light #island-compact .pinned {
+.isl-light #island-compact .pinned {
   border-left-color: rgba(0, 0, 0, 0.12);
 }
 
-.tb-light #island-compact .more {
+.isl-light #island-compact .more {
   background: rgba(0, 0, 0, 0.06);
 }
 
-.tb-light #island-expanded [data-jump]:hover,
-.tb-light #island-expanded .wrow.on {
+.isl-light #island-expanded [data-jump]:hover,
+.isl-light #island-expanded .wrow.on {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.tb-light #island-expanded .sub,
-.tb-light #island-expanded .progress .item,
-.tb-light #island-expanded .other .what,
-.tb-light #island-expanded .wrow {
+.isl-light #island-expanded .sub,
+.isl-light #island-expanded .progress .item,
+.isl-light #island-expanded .other .what,
+.isl-light #island-expanded .wrow {
   color: #5d5d5d;
 }
 
-.tb-light #island-expanded .other .who,
-.tb-light #island-expanded .wrow.on {
+.isl-light #island-expanded .other .who,
+.isl-light #island-expanded .wrow.on {
   color: #1b1b1b;
 }
 
-.tb-light #island-expanded .other.rest {
+.isl-light #island-expanded .other.rest {
   color: #8a8a8a;
 }
 
-.tb-light #island-expanded .bar {
+.isl-light #island-expanded .bar {
   background: #e3e3e3;
 }
 
-.tb-light #island-expanded .others,
-.tb-light #island-expanded .wlist {
+.isl-light #island-expanded .others,
+.isl-light #island-expanded .wlist {
   border-top-color: rgba(0, 0, 0, 0.08);
 }
 
-.tb-light #island .portrait,
-.tb-light #island .still-her {
+.isl-light #island .portrait,
+.isl-light #island .still-her {
   background-color: #e8e8e8;
 }
 
-.tb-light.island #panel {
+.isl-light.island #panel {
   color: #1b1b1b;
 }
 
-.tb-light.island #panel .chip,
-.tb-light.island #panel .more {
+.isl-light.island #panel .chip,
+.isl-light.island #panel .more {
   background: #ececec;
   color: #3a3a3a;
 }
 
-.tb-light.island #panel .code {
+.isl-light.island #panel .code {
   background: #f0f0f0;
   color: #1b1b1b;
 }
 
-.tb-light.island #panel .btn {
+.isl-light.island #panel .btn {
   border-color: #d6d6d6;
   background: #ffffff;
   color: #1b1b1b;
 }
 
-.tb-light.island #panel .btn.primary {
+.isl-light.island #panel .btn.primary {
   border-color: #34d27b;
   background: #34d27b;
   color: #04220f;
 }
 
-.tb-light.island #panel .btn.always {
+.isl-light.island #panel .btn.always {
   border-color: #5e9bff;
   background: #5e9bff;
   color: #04122b;
 }
 
-.tb-light.island #panel .btn.danger {
+.isl-light.island #panel .btn.danger {
   color: #c42b3c;
 }
 
-.tb-light.island #panel .btn.option.picked {
+.isl-light.island #panel .btn.option.picked {
   border-color: #0067c0;
   background: #e6f0fb;
 }
 
-.tb-light.island #panel .btn.ghost {
+.isl-light.island #panel .btn.ghost {
   background: none;
   color: #6e6e73;
 }
 
-.tb-light.island #panel .input {
+.isl-light.island #panel .input {
   border-color: #d6d6d6;
   background: #ffffff;
   color: #1b1b1b;
 }
 
-.tb-light.island #panel .note,
-.tb-light.island #panel .unit,
-.tb-light.island #panel .hint,
-.tb-light.island #panel .qdesc,
-.tb-light.island #panel .btn.option .desc {
+.isl-light.island #panel .note,
+.isl-light.island #panel .unit,
+.isl-light.island #panel .hint,
+.isl-light.island #panel .qdesc,
+.isl-light.island #panel .btn.option .desc {
   color: #6e6e73;
 }
 
@@ -2447,6 +2452,10 @@ body:not(.tb-light) #bar-rest .ticon[data-mono='dark'] img {
 
 .tb-light.home-taskbar.tb-capsule {
   --i-bg: #f3f3f3;
+}
+
+/* The hairline as its words are: dark on a light ground (isl-light). */
+.isl-light.home-taskbar.tb-capsule {
   --i-line: rgba(0, 0, 0, 0.08);
 }
 
@@ -2509,30 +2518,30 @@ body:not(.tb-light) #bar-rest .ticon[data-mono='dark'] img {
   --g3: #454545;
 }
 
-/* A prompt's parts on the grey: a step lighter than the ground (on black
-   they were greys of their own), what is quoted a step deeper. */
-.home-taskbar.tb-capsule:not(.tb-light) #panel .chip,
-.home-taskbar.tb-capsule:not(.tb-light) #panel .more {
+/* A prompt's parts on a dark ground: a step lighter than it, whatever it is
+   (on black they were greys of their own), what is quoted too. */
+.home-taskbar.tb-capsule:not(.isl-light) #panel .chip,
+.home-taskbar.tb-capsule:not(.isl-light) #panel .more {
   background: rgba(255, 255, 255, 0.09);
 }
 
-.home-taskbar.tb-capsule:not(.tb-light) #panel .code,
-.home-taskbar.tb-capsule:not(.tb-light) #panel .input {
+.home-taskbar.tb-capsule:not(.isl-light) #panel .code,
+.home-taskbar.tb-capsule:not(.isl-light) #panel .input {
   border-color: rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.24);
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.home-taskbar.tb-capsule:not(.tb-light) #panel .btn:not(.primary):not(.always):not(.ghost):not(.picked) {
+.home-taskbar.tb-capsule:not(.isl-light) #panel .btn:not(.primary):not(.always):not(.ghost):not(.picked) {
   border-color: rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.08);
 }
 
-.home-taskbar.tb-capsule:not(.tb-light) #panel .btn.option.picked {
+.home-taskbar.tb-capsule:not(.isl-light) #panel .btn.option.picked {
   border-color: #5e9bff;
   background: rgba(94, 155, 255, 0.2);
 }
 
 /* On the light grey: what is quoted white, as Windows' own fields are. */
-.tb-light.island.home-taskbar.tb-capsule #panel .code {
+.isl-light.island.home-taskbar.tb-capsule #panel .code {
   background: #ffffff;
 }

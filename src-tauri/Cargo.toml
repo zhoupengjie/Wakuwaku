@@ -19,6 +19,8 @@ ureq = { version = "3.4.2", features = ["json"] }
 # under himalaya; pinned, as it is young and changes often), and letters read.
 native-tls = "0.2"
 mail-parser = { version = "0.11", features = ["full_encoding"] }
+# Letters written (mail/send.rs): the MIME of a letter, its headers encoded.
+mail-builder = { version = "1", default-features = false }
 io-imap = { version = "=0.7.1", default-features = false, features = ["client"] }
 # io-imap's parser (imap-codec) needs nom with alloc, which io-imap alone does
 # not turn on.

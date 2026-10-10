@@ -1,10 +1,12 @@
 // A small IMAP server on 127.0.0.1 for trying the pet's mail without a real
 // account: no TLS (set the account up with security "plain"), one user, an
-// inbox read from a folder of .eml files, and a Sent folder that is empty.
+// inbox read from a folder of .eml files, and a Sent folder that is empty
+// until a letter is put in it (APPEND).
 //
 //   node test/fake-imap.js [--port 14300] [--dir test/fixtures/mail]
 //                          [--password test] [--no-idle] [--login-only]
-//                          [--want-id] [--log]
+//                          [--want-id] [--sent <folder>] [--unmarked-sent]
+//                          [--log]
 //
 // The inbox is the folder's .eml files in name order (UID 1, 2, …); a name
 // with "-seen" in it starts read, one with "-flagged" starred. A file added
@@ -12,10 +14,12 @@
 // a client in IDLE is told at once (* n EXISTS), others at their next
 // command. --want-id refuses to open a folder before ID, as 163 does;
 // --login-only offers LOGIN but no AUTHENTICATE PLAIN; --no-idle leaves
-// IDLE out, so the pet polls.
+// IDLE out, so the pet polls. --sent writes each letter put into a folder
+// there too (sent-1.eml…); --unmarked-sent lists Sent without \Sent, as
+// servers without SPECIAL-USE do.
 //
 // Only what the pet asks for is understood: CAPABILITY, NOOP, LOGOUT, ID,
-// LOGIN, AUTHENTICATE PLAIN, LIST, SELECT, EXAMINE, CLOSE, UNSELECT,
+// LOGIN, AUTHENTICATE PLAIN, LIST, SELECT, EXAMINE, CLOSE, UNSELECT, APPEND,
 // [UID] SEARCH (ALL, SEEN, UNSEEN, FLAGGED, UNFLAGGED, UID set, a sequence
 // set), [UID] FETCH
 // (UID, FLAGS, INTERNALDATE, RFC822.SIZE, BODY[…] and BODY.PEEK[…] whole,
@@ -37,6 +41,8 @@ const IDLE = !opt('no-idle')
 const LOGIN_ONLY = !!opt('login-only')
 const WANT_ID = !!opt('want-id')
 const LOG = !!opt('log')
+const SENT_DIR = opt('sent', '') ? path.resolve(opt('sent', '')) : ''
+const UNMARKED_SENT = !!opt('unmarked-sent')
 
 const CAPS = ['IMAP4rev1', 'ID', 'UIDPLUS', ...(IDLE ? ['IDLE'] : []), ...(LOGIN_ONLY ? [] : ['AUTH=PLAIN', 'SASL-IR'])]
 const UIDVALIDITY = 1700000000
@@ -212,8 +218,24 @@ function serve(socket) {
       case 'LIST':
       case 'LSUB':
         line('* LIST (\\HasNoChildren) "/" "INBOX"')
-        line('* LIST (\\HasNoChildren \\Sent) "/" "Sent"')
+        line(`* LIST (\\HasNoChildren${UNMARKED_SENT ? '' : ' \\Sent'}) "/" "Sent"`)
         return line(`${tag} OK ${cmd} completed`)
+      case 'APPEND': {
+        // APPEND box [(flags)] [date] {n}: the letter is the literal, last.
+        const name = Object.keys(boxes).find(k => k.toUpperCase() === str(rest[0]).toUpperCase())
+        if (!name) return line(`${tag} NO [TRYCREATE] no such mailbox`)
+        const box = boxes[name]
+        const raw = Buffer.from(str(rest[rest.length - 1]), 'utf8')
+        const flags = new Set(Array.isArray(rest[1]) ? rest[1].map(String) : [])
+        const letter = { uid: box.next++, raw, flags, date: new Date(), name: `${name.toLowerCase()}-${box.next - 1}` }
+        box.letters.push(letter)
+        if (SENT_DIR) {
+          fs.mkdirSync(SENT_DIR, { recursive: true })
+          fs.writeFileSync(path.join(SENT_DIR, `${letter.name}.eml`), raw)
+        }
+        console.log(`APPEND ${name}: ${raw.length} bytes, flags ${[...flags].join(' ') || 'none'}`)
+        return line(`${tag} OK [APPENDUID ${UIDVALIDITY} ${letter.uid}] APPEND completed`)
+      }
       case 'SELECT':
       case 'EXAMINE': {
         const name = Object.keys(boxes).find(k => k.toUpperCase() === str(rest[0]).toUpperCase())
@@ -340,6 +362,7 @@ function serve(socket) {
       if (kind.startsWith('+')) list.forEach(f => l.flags.add(f))
       else if (kind.startsWith('-')) list.forEach(f => l.flags.delete(f))
       else l.flags = new Set(list)
+      if (LOG || list.includes('\\Answered')) console.log(`STORE ${c.box} ${l.name}: ${[...l.flags].join(' ')}`)
       if (!kind.endsWith('.SILENT')) line(`* ${seq} FETCH (${uid ? `UID ${l.uid} ` : ''}FLAGS (${[...l.flags].join(' ')}))`)
     }
     line(`${tag} OK STORE completed`)

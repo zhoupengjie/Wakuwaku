@@ -42,7 +42,7 @@ src-tauri/
     widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、今天的 token、监控），什么时候冒头
     tokens.rs             今天的 token：读 Claude Code 和 Codex 自己的会话记录
     scripts.rs            她替你在后台跑的插件：示例脚本的开关、参数、启动、重启、停下
-    mail.rs, mail/        邮件：找服务器（像 Thunderbird 那样）、IMAP（io-imap）、每个邮箱一个线程盯着收件箱、收件箱和读信、交给 Claude / Codex、密码存进凭据管理器
+    mail.rs, mail/        邮件：找服务器（像 Thunderbird 那样）、IMAP（io-imap）、每个邮箱一个线程盯着收件箱、收件箱和读信、写信和发信（SMTP）、交给 Claude / Codex、密码存进凭据管理器
     notify.rs             系统通知（登记 AppUserModelId 后发 toast）
     tray.rs               托盘图标（随心情变脸）和菜单
     server.rs             127.0.0.1:47213 上的 HTTP 接口
@@ -55,7 +55,7 @@ src-tauri/
 integrations/claude-code/ Claude Code 插件 wakuwaku（只有 HTTP hooks）
 .claude-plugin/           插件市场入口 marketplace.json（位置是 Claude Code 规定的）
 scripts/make-icons.js     画图标（node + ImageMagick），输出提交在 src-tauri/icons
-test/                     页面的单元测试（node --test，不需要 npm install）；fake-imap.js 是试邮件用的假 IMAP 服务器
+test/                     页面的单元测试（node --test，不需要 npm install）；fake-imap.js、fake-smtp.js 是试邮件用的假 IMAP、SMTP 服务器
 examples/widgets/         岛上插件的示例脚本：waku、CI、番茄钟、截止日期、开发服务器、股票、天气、邮件……
 integrations/thunderbird/ Thunderbird 扩展：未读邮件发到岛上（build.ps1 打包成 .xpi）
 docs/prototypes/          设计原型：island-settings.html 是设置长在岛里的手感原型
@@ -230,7 +230,7 @@ examples/widgets 里的天气、股票、番茄钟、倒计时、久坐提醒、
 
 ## 邮件（mail.rs、mail/）
 
-设置里的「邮件」页，照 Thunderbird 添加账户的样子：填邮箱地址和密码，点「继续」去找服务器；找到了显示一行设置和来源，下面是折起来的「高级设置」；没找到就直接展开它。点「完成」先真的登录一次，能登录才保存。下面是收件箱：最新的信，点开读一封，右键交给 Claude Code 或 Codex。只收信，不发信。
+设置里的「邮件」页，照 Thunderbird 添加账户的样子：填邮箱地址和密码，点「继续」去找服务器；找到了显示一行设置和来源，下面是折起来的「高级设置」；没找到就直接展开它。点「完成」先真的登录一次（收件和发件服务器都登录），能登录才保存。下面是收件箱：最新的信，点开读一封，右键交给 Claude Code 或 Codex；写信、回复、回复全部、转发，经发件服务器（SMTP）发出去。
 
 ```
 mail.rs            账户、盯收件箱的线程、岛上的插件、设置页的命令、凭据管理器
@@ -238,11 +238,13 @@ mail/discover.rs   找服务器（像 Thunderbird 那样）
 mail/imap.rs       IMAP：连接我们开（TCP、系统 TLS、STARTTLS），协议交给 io-imap
 mail/letters.rs    邮件页的收件箱：一个邮箱的或全部邮箱合起来的、全部 / 未读 / 星标、加星、读一封
 mail/agent.rs      把一封信交给 Claude Code / Codex：信下面的对话（或终端里的会话）
+mail/send.rs       发信：新信、回复、转发，用 mail-builder 写成 MIME，经 SMTP 发出，存一份进「已发送」
+mail/smtp.rs       SMTP：自己写的一个小客户端（EHLO、STARTTLS、AUTH PLAIN / LOGIN、MAIL、RCPT、DATA），连接和 IMAP 共用
 ```
 
-- **内置的几家**（`discover.rs` 的 `KNOWN`）先查，来源是 `builtin`：现在只有 TU Dresden（`tu-dresden.de` 和学生的 `mailbox.tu-dresden.de`）→ `msx.tu-dresden.de:993` SSL/TLS，用户名是邮箱地址（ZIH FAQ 的写法），密码是 ZIH 密码。它是学校自己的 Exchange，没有 autoconfig，ISPDB 里也没有，MX 是 DFN 的网关，下面的查找都找不到。msx 在 993 上提供 `AUTH=PLAIN AUTH=NTLM AUTH=GSSAPI`，143 上 STARTTLS 之前 `LOGINDISABLED`。
-- **找服务器**（`discover`），和 Thunderbird 的顺序一样：邮箱域名自己的 `autoconfig.<域名>/mail/config-v1.1.xml`、`<域名>/.well-known/autoconfig/…`，Thunderbird 的数据库 ISPDB（`autoconfig.thunderbird.net/v1.1/<域名>`），再查域名的 MX 记录（Windows 的 `DnsQuery_W`），拿 MX 主机所属的域名（`base_domain`：`mx1.qq.com` 是 qq.com，`a3011.mx.srv.dfn.de` 是 dfn.de）再问 ISPDB，最后猜 `imap.<域名>`、`mail.<域名>`、`<域名>`（993 上能 TLS 握手并收到 IMAP 问候，或者 143 上有 STARTTLS）。配置里只取 IMAP、能用密码登录的那一个；全都只能 OAuth（Outlook、Hotmail）时告诉页面 `oauth`，还不支持。用户名里的 `%EMAILADDRESS%` 等照填。实测：QQ、163、Gmail、iCloud、GMX 在 ISPDB 里；托管在 Google 上的公司域名经 MX 找到 imap.gmail.com；交大猜中 imap.sjtu.edu.cn；TU Dresden 找不到，手动填 `msx.tu-dresden.de`。
-- **高级设置**（账户表单里的折叠区，照 Thunderbird 的「手动配置」）：收件服务器的协议（只有 IMAP）、主机名、端口、连接安全性（自动检测 / 不加密 / STARTTLS / SSL/TLS）、验证方式（自动检测 / 普通密码 / 普通密码（LOGIN 命令），加密的密码、Kerberos/GSSAPI、NTLM、OAuth2 列着但是灰的）、用户名；发件服务器只写一句「还不能发信」。选项用和右键菜单同一个小菜单。「重新测试」（`mail_probe` → `discover::probe_server`）只连不登录：连接安全性是自动检测时先试 993 上的 TLS 再试 143 上的 STARTTLS（给了端口就只在那个端口上试，从不自动选不加密），把连上的方式和端口填回去，再按服务器说的能力列出验证方式（`auths_of`）；有 NTLM 或 GSSAPI 时提示用户名可以是邮箱地址、登录名或「域\登录名」。「完成」时连接安全性还是自动检测、或者端口空着，就先重新测试一次。登录失败时 `mail_save` 也带回 `auths`，同样给这个提示。验证方式存在账户的 `auth` 里（`auto` | `plain` | `login`；`Session::login` 照它选 AUTHENTICATE PLAIN 或 LOGIN，自动是有 `AUTH=PLAIN` 就用它）。
+- **内置的几家**（`discover.rs` 的 `KNOWN`）先查，来源是 `builtin`：现在只有 TU Dresden（`tu-dresden.de` 和学生的 `mailbox.tu-dresden.de`）→ `msx.tu-dresden.de:993` SSL/TLS，发件 `msx.tu-dresden.de:587` STARTTLS，用户名是邮箱地址（ZIH FAQ 的写法），密码是 ZIH 密码。它是学校自己的 Exchange，没有 autoconfig，ISPDB 里也没有，MX 是 DFN 的网关，下面的查找都找不到。msx 在 993 上提供 `AUTH=PLAIN AUTH=NTLM AUTH=GSSAPI`，143 上 STARTTLS 之前 `LOGINDISABLED`；587 上 STARTTLS 之前只有 `AUTH GSSAPI NTLM`，加密后才有 `LOGIN`（465、25 不开）。
+- **找服务器**（`discover`），和 Thunderbird 的顺序一样：邮箱域名自己的 `autoconfig.<域名>/mail/config-v1.1.xml`、`<域名>/.well-known/autoconfig/…`，Thunderbird 的数据库 ISPDB（`autoconfig.thunderbird.net/v1.1/<域名>`），再查域名的 MX 记录（Windows 的 `DnsQuery_W`），拿 MX 主机所属的域名（`base_domain`：`mx1.qq.com` 是 qq.com，`a3011.mx.srv.dfn.de` 是 dfn.de）再问 ISPDB，最后猜 `imap.<域名>`、`mail.<域名>`、`<域名>`（993 上能 TLS 握手并收到 IMAP 问候，或者 143 上有 STARTTLS）。配置里取 IMAP（`incomingServer`）和 SMTP（`outgoingServer`）各一个能用密码登录、加密的（`server_in`；SMTP 没写端口时 SSL 是 465、STARTTLS 是 587）；IMAP 全都只能 OAuth（Outlook、Hotmail）时告诉页面 `oauth`，还不支持。猜到 IMAP 时也猜 SMTP：`smtp.<域名>`、`mail.<域名>`、`<域名>`，465 上 TLS、再 587 上 STARTTLS，能收到 SMTP 的 220 问候就算。没找到 SMTP 也能保存（只收信），页面说一句。用户名里的 `%EMAILADDRESS%` 等照填。实测：QQ、163、Gmail、iCloud、GMX 在 ISPDB 里；托管在 Google 上的公司域名经 MX 找到 imap.gmail.com；交大猜中 imap.sjtu.edu.cn；TU Dresden 找不到，手动填 `msx.tu-dresden.de`。
+- **高级设置**（账户表单里的折叠区，照 Thunderbird 的「手动配置」）：收件服务器的协议（只有 IMAP）、主机名、端口、连接安全性（自动检测 / 不加密 / STARTTLS / SSL/TLS）、验证方式（自动检测 / 普通密码 / 普通密码（LOGIN 命令），加密的密码、Kerberos/GSSAPI、NTLM、OAuth2 列着但是灰的）、用户名；发件服务器同样一组（协议只有 SMTP，主机名留空就只收信；收发用同一个密码，在凭据管理器里只存一份）。选项用和右键菜单同一个小菜单。「重新测试」（`mail_probe` → `discover::probe_server`，发件服务器 `kind: smtp`，两个都测）只连不登录：连接安全性是自动检测时先试 993 上的 TLS 再试 143 上的 STARTTLS（给了端口就只在那个端口上试，从不自动选不加密），把连上的方式和端口填回去，再按服务器说的能力列出验证方式（`auths_of`）；有 NTLM 或 GSSAPI 时提示用户名可以是邮箱地址、登录名或「域\登录名」。「完成」时连接安全性还是自动检测、或者端口空着，就先重新测试一次。登录失败时 `mail_save` 也带回 `auths`，同样给这个提示。`mail_save` 同时登录两个服务器（各一个线程），发件服务器的错误带 `out: true`，页面前面加「发件服务器：」。验证方式存在账户的 `auth` 里（`auto` | `plain` | `login`；`Session::login` 照它选 AUTHENTICATE PLAIN 或 LOGIN，自动是有 `AUTH=PLAIN` 就用它）。
 - **IMAP**（`imap.rs` 的 `Session`）用 [io-imap](https://github.com/pimalaya/io-imap)，himalaya 底下的那个库（pimalaya，MIT/Apache-2.0）。只用它的「light client」：连接我们自己开（993 直接 TLS，或者 143 上 `STARTTLS` 后换成 TLS；TLS 用系统的 native-tls，认系统证书；`STARTTLS` 的 OK 后面要是跟着别的字节就不升级，那是有人在中间），它负责说 IMAP、解析回复（imap-codec）。登录时服务器提供 `AUTH=PLAIN` 就用 `AUTHENTICATE PLAIN`，否则 `LOGIN`；密码总是等服务器说 `+` 再发，不用 SASL-IR，因为网易（Coremail）号称支持其实不支持。服务器支持 `ID` 就报名字（网易不报不让开文件夹）。盯信用 `EXAMINE INBOX`（只读）、`UID SEARCH UNSEEN`、`UID FETCH <uid> (BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])`（PEEK 不会标成已读）；`IDLE` 用 io-imap 的协程，我们自己读写 socket（每 60 秒醒一次，到 9 分钟刷新一次 IDLE）。发件人和主题用 mail-parser 读（编码字、GBK 等字符集都认，要开 `full_encoding`）。
   - **io-imap 的版本锁死**（`=0.7.1`）：它还在 0.x，两三周就出一个不兼容的版本。升级时改 `Cargo.toml`，编译报错的地方跟着改，再用假服务器跑一遍。
   - **只开 `client` 功能时编不过**：io-imap 用的 imap-codec 需要 nom 的 `alloc`，它自己没打开（himalaya 靠别的依赖顺带打开）。所以 `Cargo.toml` 里多一行 `nom = { version = "7", default-features = false, features = ["alloc"] }`。
@@ -273,8 +275,18 @@ mail/agent.rs      把一封信交给 Claude Code / Codex：信下面的对话�
     - 实测（Claude Code 2.1.296）：`--restricted` 的会话和对话都出现在岛上（hook 来自 `--settings` 的文件），只读会话用 Read 读了 letter.md 和 meta.json，没有弹确认；第一次进 `<数据目录>/mail` 会问一次信不信任这个文件夹。
   - 找 `claude` / `codex`：PATH 里的 `.exe`、`.cmd`、`.bat`，再加 `~/.local/bin`（Claude 的安装器）、`%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`、`%APPDATA%\npm`；设置快照里的 `mailAgents` 说两个各找没找到（10 秒内不重找），没找到的在菜单里是灰的。
 - **插件**：`inbox-<id>`，她自己的（`put_owned`，不过期，脚本不能用这个 id），私密（`private`）：标题是「发件人：主题」，数值是「3 封未读」/「没有未读」（`{ key, vars }`，按页面语言显示）。插件页上它们写着「邮件 · 在「邮件」页设置」，开关只管岛上显不显示。
-- **存哪**：账户在设置的 `mail` 里（`[{ id, address, host, port, security, auth, username, on }]`，只能通过 `mail_save` / `mail_remove` / `mail_switch` 改，设置补丁里的 `mail` 不收）；密码在 Windows 凭据管理器，名字是 `Wakuwaku mail <id>`（`CredWriteW`），删除邮箱时一起删。交给 agent 的信在 `<数据目录>/mail/`，不会自动删。
-- **测试**：单元测试读 ISPDB 配置、MX 域名、GBK 主题、一封信的正文和附件、文件夹名和提示里没有终端会当真的字符、`letter.md`、凭据管理器写读删。整体用 `test/fake-imap.js`（不加密，`node test/fake-imap.js --port 14310 --want-id --dir <文件夹>`，密码 `test`）：收件箱是文件夹里的 `.eml`（`test/fixtures/mail/` 有四封：已读的、加了星的 GBK 主题加抄送、只有 HTML、带附件的回信；名字里有 `-seen` 是已读，有 `-flagged` 是星标），支持 `SEARCH FLAGGED` 和 `STORE`，运行时放进一个新文件就推 `EXISTS`；`--want-id` 像网易不报 ID 不让开文件夹，`--login-only` 只有 `LOGIN`，`--no-idle` 让宠物轮询，`--log` 打出每条命令。测试宠物上用 `/debug/eval` 调 `window.pet.mail.save({ address, host: '127.0.0.1', port, security: 'plain', username }, 'test')` 加账户。
+- **写信、发信**（`send.rs` 的 `mail_send`，`smtp.rs`）：收件箱标题上「写信」，读信页上「回复」，⋯ 和右键菜单里「回复 / 回复全部 / 转发」（在最前面）。写信页：发件人（几个邮箱时可选）、收件人、「抄送 / 密送」点了才出来、主题、正文、附件（📎 按钮打开系统的选文件窗口，`picking` 时岛失去焦点不收起设置；每个附件一个 ×），上面「‹ 收件箱 / 回到信」「丢掉」（点两次）「发送」（Ctrl+Enter）。
+  - **回复**：收件人是 Reply-To，没有就是发件人；回复全部再加上原来的收件人和抄送（去掉自己、去重）；主题前加 `Re: `（已经是 Re: / 回复: / AW: 的不加）；正文空两行，下面「<日期>，<谁> 写道：」和 `> ` 引用的原文，光标在最上面；`In-Reply-To` 是原信的 Message-ID，`References` 是原信的 References 加它。发出去后原信 `UID STORE +FLAGS (\Answered)`，收件箱里主题前一个 ↩（`answered`）。
+  - **转发**：主题前加 `Fwd: `，正文下面是「---------- 转发的邮件 ----------」、发件人、日期、主题、收件人、抄送和原文；原信的附件都带上（显示在写信页，可以 × 掉；发的时候 `send.rs` 重新取一次原信，按序号取 `keep` 里的附件）。
+  - **agent 写的回信**：信下面对话里 agent 的每段话下面有「用这段回信」：开一封回复，正文是它写的（有 ``` 代码块就取最长的那块，没有就是整段），下面照样引用原文。对话里的 ``` 块显示成单独的一块（`md` 的 `md-pre`）。agent 自己不会发信，只有点「发送」才发。
+  - **草稿**：一次只写一封。写到一半回收件箱，收件箱最上面一行「没发的信 · 主题 · 收件人 · 接着写」；写过字（`touched`）或加了附件时再点回复 / 写信，打开的是这封，上面说先发出去或丢掉。存在页面的 `localStorage`（`wakuwaku.mailDraft`，不存附件），重启后还在。
+  - **发**：页面把每一栏原样交给 `mail_send`，`people_in` 按 `,` `;` 换行拆开（引号、尖括号里的不拆），每个是 `名字 <地址>` 或地址，不是地址就说哪一段不对；至少一个人，最多 100 个；附件合计 25 MB，正文 1 MB。mail-builder 写成 MIME（编码字、quoted-printable / base64 都是它），Message-ID 是 `<随机>.<毫秒>@<发件域名>`（不用电脑名），日期是 UTC。From 带账户的名字（账户表单的「名字」，可以不填）。密送只在 RCPT TO 里，发出去的信里没有 `Bcc:`；存进「已发送」的那份有。
+  - **SMTP**（`smtp.rs`，没用库：几行来回，用 IMAP 的同一个连接 `imap::connect`）：问候 220，`EHLO [127.0.0.1]`（不报电脑名，Thunderbird 也这样），不认 EHLO 的用 `HELO`；STARTTLS 和 IMAP 一样，`220` 后面跟着字节就不升级，升级后再 EHLO。登录照账户的 `auth`：自动是有 PLAIN 用 `AUTH PLAIN <base64>`，否则 `AUTH LOGIN`，服务器一个 AUTH 都不提供就不登录。`MAIL FROM:<…>`（有 SIZE 带上大小，地址不是 ASCII 时要服务器有 SMTPUTF8），每个收件人 `RCPT TO`，有一个被拒就 `RSET`、整封不发，告诉页面是谁、服务器怎么说（`Fail::Recipient`）；`DATA` 时每行以 `.` 开头的再加一个 `.`，行尾都换成 CRLF，最后等 250 最多 2 分钟。
+  - **之后**（在收件服务器上，失败了不算发信失败，只说一句）：`LIST "" "*"` 找有 `\Sent` 的文件夹（SPECIAL-USE），没有就按名字找（Sent、Sent Items、Sent Messages、Sent Mail、Gesendete Elemente、Gesendet、已发送……），`APPEND` 进去并标成已读；Gmail（`imap.gmail.com`）自己会存，不 APPEND。页面说「发出去了，也存进了「已发送」」/「发出去了」/「没有「已发送」文件夹」/「没能存进」。
+  - **以前的账户**：这次之前加的邮箱没有发件服务器（`smtp: null`）。发信时先照找服务器的办法找一个（`discover::outgoing_for`，用户名用收件的），发成功了就存进账户；打开它的设置时也在后台找，找到了填进「高级设置」。找不到就说「这个邮箱还没有发件服务器」。
+  - **要应用专用密码的**：账户表单找到服务器后，按 IMAP 主机说一句：Gmail（先开两步验证再生成 16 位应用专用密码，「去生成」打开 myaccount.google.com/apppasswords）、iCloud、Yahoo（也有链接）、QQ、163/126（授权码，说在网页版哪里开）。链接只能是 `settings_open_site` 里写死的几个。Gmail 的应用专用密码照它显示的四个一组粘贴进来时，空格去掉。
+- **存哪**：账户在设置的 `mail` 里（`[{ id, address, name, host, port, security, auth, username, smtp: { host, port, security, auth, username } | null, on }]`，只能通过 `mail_save` / `mail_remove` / `mail_switch` 改，设置补丁里的 `mail` 不收）；密码在 Windows 凭据管理器，名字是 `Wakuwaku mail <id>`（`CredWriteW`），删除邮箱时一起删。交给 agent 的信在 `<数据目录>/mail/`，不会自动删。
+- **测试**：单元测试读 ISPDB 配置、MX 域名、GBK 主题、一封信的正文和附件、文件夹名和提示里没有终端会当真的字符、`letter.md`、凭据管理器写读删。单元测试还有：autoconfig 里的 SMTP、TU Dresden 的发件服务器、SMTP 的整个来回（`smtp.rs` 里一个按脚本回话的本地服务器：AUTH PLAIN / LOGIN、两个收件人、`.` 开头的行，被拒的收件人，密码不对）、一封信写出来的样子（中文名字和主题、In-Reply-To / References、附件、Bcc 只在存的那份里）、`people_in`、附件名和类型。整体用 `test/fake-imap.js`（不加密，`node test/fake-imap.js --port 14310 --want-id --dir <文件夹>`，密码 `test`）：收件箱是文件夹里的 `.eml`（`test/fixtures/mail/` 有四封：已读的、加了星的 GBK 主题加抄送、只有 HTML、带附件的回信；名字里有 `-seen` 是已读，有 `-flagged` 是星标），支持 `SEARCH FLAGGED` 和 `STORE`，运行时放进一个新文件就推 `EXISTS`；`--want-id` 像网易不报 ID 不让开文件夹，`--login-only` 只有 `LOGIN`，`--no-idle` 让宠物轮询，`--log` 打出每条命令；支持 `APPEND`（`--sent <文件夹>` 把存进去的信写成文件，`--unmarked-sent` 让 Sent 没有 `\Sent`，试按名字找），加 `\Answered` 时打一行。发信用 `test/fake-smtp.js`（不加密，`--port 14325 --dir <文件夹>`，密码 `test`）：收到的每封信存成 `<n>.eml`，旁边 `<n>.json` 是信封（谁发、发给谁，含密送）；`--auth none` 不要登录，`--reject a@b` 拒收这些地址。测试宠物上用 `/debug/eval` 调 `window.pet.mail.save({ address, host: '127.0.0.1', port, security: 'plain', username }, 'test')` 加账户（发件服务器：`smtp: { host: '127.0.0.1', port: 14325, security: 'plain', username }`），`window.pet.mail.send({ account, to, cc, bcc, subject, text, reply, forward, files })` 发信。
 
 ## 点击穿透
 

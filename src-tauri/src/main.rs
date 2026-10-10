@@ -904,6 +904,7 @@ fn main() {
             mail::agent::mail_hand,
             mail::agent::mail_say,
             mail::letters::mail_flag,
+            mail::send::mail_send,
             taskbar::taskbar_tray,
             taskbar::taskbar_open,
             taskbar::taskbar_tray_rects,

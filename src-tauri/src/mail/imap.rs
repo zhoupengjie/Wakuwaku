@@ -2,7 +2,8 @@
 // connection (TCP, the system's TLS, STARTTLS) and it speaks the protocol.
 // Only what the pet does: sign in, open the inbox, count the unread, list
 // letters by their headers, read one whole without marking it read, mark
-// one read, and IDLE.
+// one read (or answered), IDLE, and keep a letter sent in the Sent folder.
+// The connection is the SMTP client's too (smtp.rs).
 use std::any::Any;
 use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
@@ -14,6 +15,7 @@ use io_imap::client::{ImapClient, ImapClientError, ImapClientStd, ImapStream};
 use io_imap::coroutine::{ImapCoroutine, ImapCoroutineState};
 use io_imap::rfc2177::idle::{ImapIdle, ImapIdleOptions, ImapIdleYield};
 use io_imap::rfc2971::id::ImapServerIdOptions;
+use io_imap::rfc3501::append::ImapMessageAppendOptions;
 use io_imap::rfc3501::fetch::ImapMessageFetchOptions;
 use io_imap::rfc3501::login::{ImapLoginError, ImapLoginOptions};
 use io_imap::rfc3501::search::ImapMessageSearchOptions;
@@ -22,7 +24,7 @@ use io_imap::sasl::auth_plain::{ImapAuthPlainError, ImapAuthPlainOptions};
 use io_imap::types::core::{AString, IString, NString, Vec1};
 use io_imap::types::fetch::{MessageDataItem, MessageDataItemName, Section};
 use io_imap::types::flag::{Flag, FlagFetch, StoreType};
-use io_imap::types::mailbox::Mailbox;
+use io_imap::types::mailbox::{ListMailbox, Mailbox};
 use io_imap::types::response::Capability;
 use io_imap::types::search::SearchKey;
 use io_imap::types::sequence::SequenceSet;
@@ -43,10 +45,14 @@ pub enum Fail {
     Tls(String),
     // Something answered, not as IMAP.
     NotImap(String),
+    // Something answered, not as SMTP (smtp.rs).
+    NotSmtp(String),
     // No STARTTLS where it was asked for.
     NoStartTls,
     // The server said no to the user and password.
     Login(String),
+    // The outgoing server would not take a letter to someone: who, and its words.
+    Recipient(String),
     // The server said no (NO, BAD) to something else.
     Refused(String),
     // The connection broke, or something else on the way.
@@ -59,8 +65,10 @@ impl Fail {
             Fail::Connect(t) => ("connect", t.as_str()),
             Fail::Tls(t) => ("tls", t.as_str()),
             Fail::NotImap(t) => ("notImap", t.as_str()),
+            Fail::NotSmtp(t) => ("notSmtp", t.as_str()),
             Fail::NoStartTls => ("noStartTls", ""),
             Fail::Login(t) => ("login", t.as_str()),
+            Fail::Recipient(t) => ("recipient", t.as_str()),
             Fail::Refused(t) => ("refused", t.as_str()),
             Fail::Other(t) => ("other", t.as_str()),
         };
@@ -68,7 +76,7 @@ impl Fail {
     }
 }
 
-fn io_fail(e: io::Error) -> Fail {
+pub(super) fn io_fail(e: io::Error) -> Fail {
     Fail::Other(e.to_string())
 }
 
@@ -82,7 +90,7 @@ fn fail(e: ImapClientError) -> Fail {
 
 // The connection: plain (until STARTTLS) or through the system's TLS; Gone
 // for the moment it is being upgraded.
-enum Stream {
+pub(super) enum Stream {
     Plain(TcpStream),
     Tls(Box<native_tls::TlsStream<TcpStream>>),
     Gone,
@@ -134,9 +142,25 @@ impl ImapStream for Stream {
     }
 }
 
-fn tls(host: &str, tcp: TcpStream) -> Result<Stream, Fail> {
+pub(super) fn tls(host: &str, tcp: TcpStream) -> Result<Stream, Fail> {
     let connector = native_tls::TlsConnector::new().map_err(|e| Fail::Tls(e.to_string()))?;
     connector.connect(host, tcp).map(|s| Stream::Tls(Box::new(s))).map_err(|e| Fail::Tls(e.to_string()))
+}
+
+// A server reached: the connection (encrypted at once for SSL/TLS), and its
+// socket, to be shut down from elsewhere.
+pub(super) fn connect(server: &Server, timeout: Duration) -> Result<(Stream, TcpStream), Fail> {
+    let addr = (server.host.as_str(), server.port)
+        .to_socket_addrs()
+        .map_err(|e| Fail::Connect(e.to_string()))?
+        .next()
+        .ok_or_else(|| Fail::Connect("no address".into()))?;
+    let tcp = TcpStream::connect_timeout(&addr, timeout).map_err(|e| Fail::Connect(e.to_string()))?;
+    let _ = tcp.set_read_timeout(Some(timeout.max(IO_WAIT)));
+    let _ = tcp.set_write_timeout(Some(timeout.max(IO_WAIT)));
+    let socket = tcp.try_clone().map_err(io_fail)?;
+    let stream = if server.security == Security::Ssl { tls(&server.host, tcp)? } else { Stream::Plain(tcp) };
+    Ok((stream, socket))
 }
 
 fn caps_of(list: &[Capability]) -> Vec<String> {
@@ -158,8 +182,9 @@ fn our_id() -> Vec<(IString<'static>, NString<'static>)> {
 pub struct Head {
     pub uid: u32,
     pub seen: bool,
-    // Starred (\Flagged).
+    // Starred (\Flagged); replied to (\Answered).
     pub flagged: bool,
+    pub answered: bool,
     pub size: u32,
     // When the server got it (seconds), for letters whose Date says nothing.
     pub received: Option<i64>,
@@ -176,16 +201,7 @@ pub struct Session {
 impl Session {
     // Connected, encrypted as asked, the greeting read, and what it can do.
     pub fn open(server: &Server, timeout: Duration) -> Result<Session, Fail> {
-        let addr = (server.host.as_str(), server.port)
-            .to_socket_addrs()
-            .map_err(|e| Fail::Connect(e.to_string()))?
-            .next()
-            .ok_or_else(|| Fail::Connect("no address".into()))?;
-        let tcp = TcpStream::connect_timeout(&addr, timeout).map_err(|e| Fail::Connect(e.to_string()))?;
-        let _ = tcp.set_read_timeout(Some(timeout.max(IO_WAIT)));
-        let _ = tcp.set_write_timeout(Some(timeout.max(IO_WAIT)));
-        let socket = tcp.try_clone().map_err(io_fail)?;
-        let stream = if server.security == Security::Ssl { tls(&server.host, tcp)? } else { Stream::Plain(tcp) };
+        let (stream, socket) = connect(server, timeout)?;
         let mut client = ImapClientStd::new(stream);
         let greeting = client.greeting().map_err(|e| Fail::NotImap(e.to_string()))?;
         let mut s = Session { client, socket, caps: caps_of(&greeting.capability) };
@@ -289,6 +305,7 @@ impl Session {
                         MessageDataItem::Flags(flags) => {
                             head.seen = flags.iter().any(|f| matches!(f, FlagFetch::Flag(Flag::Seen)));
                             head.flagged = flags.iter().any(|f| matches!(f, FlagFetch::Flag(Flag::Flagged)));
+                            head.answered = flags.iter().any(|f| matches!(f, FlagFetch::Flag(Flag::Answered)));
                         }
                         MessageDataItem::Rfc822Size(n) => head.size = n,
                         MessageDataItem::InternalDate(d) => head.received = Some(d.as_ref().timestamp()),
@@ -329,6 +346,28 @@ impl Session {
         let set = SequenceSet::try_from(uid.to_string().as_str()).map_err(|e| Fail::Other(e.to_string()))?;
         let how = if on { StoreType::Add } else { StoreType::Remove };
         self.client.store(set, how, vec![flag], ImapMessageStoreOptions { uid: true }).map_err(fail)?;
+        Ok(())
+    }
+
+    // The folder sent letters are kept in: the one the server marks \Sent
+    // (SPECIAL-USE), else one named as mail programs name it; None when
+    // there is neither.
+    pub fn sent_box(&mut self) -> Result<Option<Mailbox<'static>>, Fail> {
+        let reference = Mailbox::try_from("").map_err(|e| Fail::Other(e.to_string()))?;
+        let pattern = ListMailbox::try_from("*").map_err(|e| Fail::Other(e.to_string()))?;
+        let all = self.client.list(reference, pattern).map_err(fail)?;
+        let has = |attrs: &[io_imap::types::flag::FlagNameAttribute], name: &str| attrs.iter().any(|a| a.to_string().eq_ignore_ascii_case(name));
+        if let Some((m, ..)) = all.iter().find(|(_, _, attrs)| has(attrs, "\\Sent")) {
+            return Ok(Some(m.clone()));
+        }
+        let open: Vec<&Mailbox<'static>> = all.iter().filter(|(_, _, attrs)| !has(attrs, "\\Noselect")).map(|(m, ..)| m).collect();
+        Ok(SENT_NAMES.iter().find_map(|name| open.iter().find(|m| leaf(m).eq_ignore_ascii_case(name))).map(|m| (*m).clone()))
+    }
+
+    // A letter put into a folder, marked read.
+    pub fn append(&mut self, mailbox: Mailbox<'static>, raw: &[u8]) -> Result<(), Fail> {
+        let opts = ImapMessageAppendOptions { flags: vec![Flag::Seen], ..Default::default() };
+        self.client.append(mailbox, raw, opts).map_err(fail)?;
         Ok(())
     }
 
@@ -375,6 +414,20 @@ impl Session {
     pub fn logout(mut self) {
         let _ = self.client.logout();
     }
+}
+
+// The names a Sent folder goes by where the server does not mark it: the
+// English ones (Gmail's "[Gmail]/Sent Mail", Exchange's "Sent Items", QQ's
+// "Sent Messages"), German (Exchange's), Chinese (163, 126).
+const SENT_NAMES: [&str; 9] = ["Sent", "Sent Items", "Sent Messages", "Sent Mail", "Gesendete Elemente", "Gesendete Objekte", "Gesendet", "已发送", "已发送邮件"];
+
+// A folder's own name, the part after its parents (INBOX.Sent is Sent).
+fn leaf(m: &Mailbox) -> String {
+    let name = match m {
+        Mailbox::Inbox => return "INBOX".into(),
+        Mailbox::Other(o) => String::from_utf8_lossy(o.as_ref()).into_owned(),
+    };
+    name.rsplit(['/', '.']).next().unwrap_or("").to_string()
 }
 
 // Connected and signed in.

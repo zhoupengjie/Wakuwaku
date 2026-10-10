@@ -116,10 +116,12 @@
     // signing in (Re-test); an inbox's newest letters (id "*" every
     // account's; filter all | unseen | flagged), a star put on or off, one
     // letter opened (and marked read), one handed to an agent (agent claude
-    // | codex, how talk | open), more asked in its talk.
+    // | codex, how talk | open), more asked in its talk; a letter sent
+    // (send.rs); Re-test of the outgoing server (kind smtp).
     mail: {
       discover: address => invoke('mail_discover', { address: String(address || '') }),
-      probe: (host, port, security) => invoke('mail_probe', { host: String(host || ''), port: String(port ?? ''), security: String(security || 'auto') }),
+      probe: (host, port, security, kind) => invoke('mail_probe', { host: String(host || ''), port: String(port ?? ''), security: String(security || 'auto'), kind: kind === 'smtp' ? 'smtp' : 'imap' }),
+      send: letter => invoke('mail_send', { letter }),
       save: (account, password) => invoke('mail_save', { account, password: String(password || '') }),
       remove: id => invoke('mail_remove', { id: String(id) }),
       switch: (id, on) => invoke('mail_switch', { id: String(id), on: on === true }),

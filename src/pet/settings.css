@@ -72,12 +72,17 @@
 }
 
 .tb-light #island-settings .r.jumps:hover,
-.tb-light #island-settings .letter:hover {
+.tb-light #island-settings .letter:hover,
+.tb-light #island-settings .draft-row:hover {
   background: rgba(0, 0, 0, 0.04);
 }
 
 .tb-light #island-settings .in {
   background: #ffffff;
+}
+
+.tb-light #island-settings .md-pre {
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .tb-light #island-settings .adv-b,
@@ -932,6 +937,110 @@
   display: flex;
   gap: 6px;
   margin-top: 8px;
+}
+
+/* A block an agent wrote (a reply, often): apart, as written. */
+#island-settings .md-pre {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A letter replied to: a small arrow before its subject. */
+#island-settings .answered {
+  color: var(--g4);
+}
+
+/* The account a letter goes from: as wide as its address. */
+#island-settings .mail-write .pick {
+  max-width: 100%;
+}
+
+/* Under each thing an agent said: reply with it. */
+#island-settings .t-use {
+  margin: -2px 0 6px;
+  font-size: 11.5px;
+}
+
+/* Writing a letter: from, to (cc and bcc on asking), the subject, a label
+   and a box each; the text in a box of its own; the files, a × each. */
+#island-settings .mail-write {
+  padding: 8px 14px 12px;
+}
+
+#island-settings .mail-write .fr .fl {
+  width: 56px;
+}
+
+#island-settings .mail-write .fr .link {
+  flex: none;
+  font-size: 12px;
+}
+
+#island-settings .mail-write .note {
+  padding: 2px 0 6px;
+}
+
+#island-settings .in.ta {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 170px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+#island-settings .w-files {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+#island-settings .w-files .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#island-settings .unfile {
+  flex: none;
+  padding: 0 0 0 4px;
+  border: 0;
+  background: none;
+  color: var(--g4);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#island-settings .unfile:hover {
+  color: #ff6b7a;
+}
+
+/* The letter put aside, at the top of the inbox. */
+#island-settings .draft-row {
+  gap: 10px;
+  cursor: pointer;
+}
+
+#island-settings .draft-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+#island-settings .row-sec .link + .link {
+  margin-left: 12px;
 }
 
 #island-settings .m-text {

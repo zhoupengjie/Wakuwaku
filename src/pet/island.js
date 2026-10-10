@@ -2108,17 +2108,19 @@
   let oledTimer
   function oledShift() {
     clearTimeout(oledTimer)
-    const root = document.documentElement.style
+    const root = document.documentElement
     if (!oledOn) {
-      root.removeProperty('--oled-x')
-      root.removeProperty('--oled-y')
+      root.classList.remove('oled-shift')
+      root.style.removeProperty('--oled-x')
+      root.style.removeProperty('--oled-y')
       return
     }
     const at = Date.now()
     const [x, y] = OLED_PATH[Math.floor(at / OLED_STEP_MS) % OLED_PATH.length]
     const dpr = devicePixelRatio || 1
-    root.setProperty('--oled-x', `${x / dpr}px`)
-    root.setProperty('--oled-y', `${y / dpr}px`)
+    root.style.setProperty('--oled-x', `${x / dpr}px`)
+    root.style.setProperty('--oled-y', `${y / dpr}px`)
+    root.classList.add('oled-shift')
     oledTimer = setTimeout(oledShift, OLED_STEP_MS - (at % OLED_STEP_MS) + 50)
   }
 

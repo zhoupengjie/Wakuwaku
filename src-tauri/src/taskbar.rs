@@ -200,6 +200,12 @@ mod imp {
     static EXPLORER: AtomicIsize = AtomicIsize::new(0);
     static CREATED_MSG: AtomicU32 = AtomicU32::new(0);
     static TICKS: AtomicU32 = AtomicU32::new(0);
+    static WORK_BOTTOM: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+    // The strip as granted (physical); since when (tick) the work area has
+    // reached into it, and when it was last taken again for that.
+    static STRIP: Mutex<Option<(i32, i32, i32, i32)>> = Mutex::new(None);
+    static LOST_SINCE: AtomicU32 = AtomicU32::new(0);
+    static LAST_TAKEN: AtomicU32 = AtomicU32::new(0);
     // Asking programs for their icons: from this tick (0: asked), the last
     // time, and how many times right after one.
     static ASK_AT: AtomicU32 = AtomicU32::new(0);
@@ -232,6 +238,11 @@ mod imp {
 
     pub fn is_up() -> bool {
         HOST.lock().unwrap().is_some()
+    }
+
+    // The main display's work area's bottom (physical), for the log.
+    pub fn work_area_bottom() -> i32 {
+        work_bottom()
     }
 
     // Windows' taskbar put away and the tray taken, before the strip is
@@ -275,13 +286,24 @@ mod imp {
             sh.log(&format!("taskbar: Windows' given back: {}", shell::restore(&file)));
         }
         *SENT.lock().unwrap() = Value::Null;
+        *STRIP.lock().unwrap() = None;
     }
 
     // Where the strip is now (physical): ours of the taskbar's class goes
     // there too, for those who ask the taskbar's window where it is.
     pub fn strip_moved(strip: (i32, i32, i32, i32)) {
+        *STRIP.lock().unwrap() = Some(strip);
         if is_up() {
             systray::place(strip);
+        }
+    }
+
+    // The strip taken again, off this thread: the island's side waits on the
+    // main thread, which may be waiting on this one (its app bar's messages
+    // come to the tray's window, here).
+    fn take_strip_again() {
+        if let Some(sh) = sh() {
+            std::thread::spawn(move || crate::island::take_strip_again(&sh));
         }
     }
 
@@ -442,6 +464,29 @@ mod imp {
         if shell::visible() {
             put_away_again("seen by the timer");
         }
+        // The work area reaching into the strip, the window up: Windows has
+        // not kept it. A strip taken while its window is hidden (an app full
+        // screen as she starts) keeps no room, nor does one taken again
+        // while it is still hidden; once the window shows, it is taken again
+        // (after a second of it, at most every ten seconds).
+        let bottom = work_bottom();
+        if bottom != WORK_BOTTOM.swap(bottom, Ordering::SeqCst) {
+            log(&format!("work area's bottom now {bottom}"));
+        }
+        let strip = *STRIP.lock().unwrap();
+        let up = sh().is_some_and(|sh| crate::island::is_up_now(&sh));
+        let lost = up && strip.is_some_and(|s| bottom > s.1);
+        let ticks = TICKS.load(Ordering::SeqCst);
+        if !lost {
+            LOST_SINCE.store(0, Ordering::SeqCst);
+        } else if LOST_SINCE.load(Ordering::SeqCst) == 0 {
+            LOST_SINCE.store(ticks.max(1), Ordering::SeqCst);
+        } else if ticks >= LOST_SINCE.load(Ordering::SeqCst) + 2 && ticks >= LAST_TAKEN.load(Ordering::SeqCst) + 20 {
+            log(&format!("work area's bottom {bottom} is in the strip ({:?}): taken again", strip));
+            LAST_TAKEN.store(ticks, Ordering::SeqCst);
+            LOST_SINCE.store(0, Ordering::SeqCst);
+            take_strip_again();
+        }
         systray::sweep();
         if systray::keep_first() {
             log("tray: Explorer's window had come first (timer); ours put ahead again");
@@ -466,9 +511,7 @@ mod imp {
         }
         log("Explorer started again");
         shell::rehide();
-        if let Some(sh) = sh() {
-            crate::island::take_strip_again(&sh);
-        }
+        take_strip_again();
         systray::keep_first();
         ask_soon();
     }
@@ -601,9 +644,12 @@ mod imp {
     pub fn open(_what: &str) -> bool {
         false
     }
+    pub fn work_area_bottom() -> i32 {
+        0
+    }
 }
 
-pub use imp::{give_back, resend, strip_moved, take};
+pub use imp::{give_back, resend, strip_moved, take, work_area_bottom};
 
 // At start: Windows' taskbar left put away by a run that is gone (its guard
 // gone too) is given back.

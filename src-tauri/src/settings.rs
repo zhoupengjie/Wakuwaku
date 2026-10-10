@@ -69,7 +69,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "pet" => v.as_str().is_some_and(|id| data::pets(&sh.dir).iter().any(|p| p.id == id)),
         "scale" => v.as_f64().is_some_and(|s| data::SCALES.iter().any(|(_, x)| (x - s).abs() < 1e-9)),
         "bubble" | "details" | "walk" | "look" | "sound" | "dnd" | "hideInFullscreen" | "onboarded" | "out" => is_bool,
-        "display" => matches!(v.as_str(), Some("corner" | "island" | "bar")),
+        "display" => matches!(v.as_str(), Some("corner" | "island" | "bar" | "taskbar")),
         "corner" => matches!(v.as_str(), Some("br" | "bl" | "tr" | "tl")),
         "islandWidth" => matches!(v.as_str(), Some("narrow" | "normal" | "wide")),
         "hold" => v.as_str() == Some("seen") || matches!(v.as_u64(), Some(8 | 30 | 120)),

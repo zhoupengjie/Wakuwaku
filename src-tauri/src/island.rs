@@ -140,6 +140,11 @@ pub fn hwnd(sh: &Shared) -> isize {
     sh.island.lock().unwrap().hwnd
 }
 
+// Its window is up now (shown).
+pub fn is_up_now(sh: &Shared) -> bool {
+    sh.island.lock().unwrap().shown
+}
+
 // Where its window is (physical) and its scale: the page's px to the screen's.
 pub fn origin(sh: &Shared) -> ((i32, i32), f64) {
     let isl = sh.island.lock().unwrap();
@@ -260,7 +265,7 @@ fn sync_bar(sh: &Shared, keep: bool) {
     if home == "taskbar" {
         taskbar::strip_moved(granted);
     }
-    sh.log(&format!("island: {home} strip {granted:?}"));
+    sh.log(&format!("island: {home} strip {granted:?}; work area's bottom {}", taskbar::work_area_bottom()));
 }
 
 // Quitting, or the window going: the strip back to the other windows (and

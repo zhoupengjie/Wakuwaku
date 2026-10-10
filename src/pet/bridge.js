@@ -82,6 +82,8 @@
       trayRects: rects => send('taskbar_tray_rects', { rects }),
       // A press on a window's button: press (to the front, or minimized), close.
       window: (id, what) => invoke('taskbar_window', { id: Number(id), what: String(what) }).catch(() => false),
+      // A tray icon kept out on the taskbar, or folded away (its name, systray.rs).
+      trayPin: (name, pinned) => send('taskbar_tray_pin', { name: String(name), pinned: pinned === true }),
     },
     onTray: on('taskbar:tray'),
     // The windows' buttons as they change ({ id, title, exe, png, front, min, flash, sessions }).

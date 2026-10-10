@@ -1544,3 +1544,91 @@ body {
 #bar-rest .kbd .ime.unknown {
   color: #8e8e93;
 }
+
+/* The tray's ^, the icons kept out after it, the folded ones above it
+   (open on a press), and an icon being dragged between the two. */
+#bar-rest .tray {
+  position: relative;
+}
+
+#bar-rest .tchev {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 40px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#bar-rest .tchev[hidden] {
+  display: none;
+}
+
+#bar-rest .tchev:hover {
+  background: #1c1c1e;
+}
+
+#bar-rest .tchev svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: #d1d1d6;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.2s ease;
+}
+
+#bar-rest .tchev.open svg {
+  transform: rotate(180deg);
+}
+
+#bar-rest .tout {
+  display: flex;
+  align-items: center;
+}
+
+#bar-rest .tfly {
+  position: absolute;
+  left: -10px;
+  bottom: 54px;
+  display: grid;
+  grid-template-columns: repeat(5, 36px);
+  gap: 2px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #1c1c1e;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+#bar-rest .tfly[hidden] {
+  display: none;
+}
+
+#bar-rest .tfly .ticon {
+  width: 36px;
+  height: 36px;
+}
+
+#bar-rest .tfly .ticon:hover {
+  background: #2c2c2e;
+}
+
+.tray-dragging #bar-rest .tfly,
+.tray-dragging #bar-rest .tout {
+  outline: 1.5px dashed rgba(94, 155, 255, 0.6);
+  outline-offset: 2px;
+}
+
+.tghost {
+  position: fixed;
+  z-index: 10;
+  width: 20px;
+  height: 20px;
+  opacity: 0.85;
+  pointer-events: none;
+}

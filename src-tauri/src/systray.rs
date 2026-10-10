@@ -34,6 +34,11 @@ pub struct Shown {
     pub icon: isize,
     pub tip: String,
     pub exe: String,
+    // Its id among its program's icons (uID), and a name for it that stays
+    // from one run to the next (the program and its guid or id), for where
+    // the person keeps it (in the taskbar, or folded away).
+    pub uid: u32,
+    pub name: String,
 }
 
 #[cfg(windows)]
@@ -621,7 +626,16 @@ mod imp {
     }
 
     pub fn shown() -> Vec<Shown> {
-        ICONS.lock().unwrap().iter().filter(|i| !i.hidden && i.had_icon).map(|i| Shown { key: i.key, icon: i.icon, tip: i.tip.clone(), exe: i.exe.clone() }).collect()
+        ICONS
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|i| !i.hidden && i.had_icon)
+            .map(|i| {
+                let which = i.guid.map_or_else(|| i.id.to_string(), |g| g.iter().map(|b| format!("{b:02x}")).collect());
+                Shown { key: i.key, icon: i.icon, tip: i.tip.clone(), exe: i.exe.clone(), uid: i.id, name: format!("{}:{which}", i.exe.to_lowercase()) }
+            })
+            .collect()
     }
 
     // The spike writes it down (tray.txt); the pet only logs the icons as they come.

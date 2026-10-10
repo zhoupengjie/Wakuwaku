@@ -247,6 +247,8 @@ mod imp {
     // The keyboard's thread, and what it sent last.
     static KEYS: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
     static SENT_KEYS: Mutex<Value> = Mutex::new(Value::Null);
+    // Windows' own record of the tray icons it keeps out (windows_kept), read once.
+    static KEPT: Mutex<Option<Vec<(String, Option<u32>, bool)>>> = Mutex::new(None);
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -773,6 +775,44 @@ mod imp {
         ask_soon();
     }
 
+    // Where Windows' own taskbar keeps each tray icon: Control Panel\
+    // NotifyIconSettings, a key per icon with its program's path, its uID
+    // and IsPromoted 1 when kept out on the taskbar (folded away otherwise).
+    // (file name, uID, kept out), read once while the taskbar is up.
+    fn windows_kept() -> Vec<(String, Option<u32>, bool)> {
+        use winreg::enums::HKEY_CURRENT_USER;
+        use winreg::RegKey;
+        let mut kept = KEPT.lock().unwrap();
+        if let Some(list) = kept.as_ref() {
+            return list.clone();
+        }
+        let list: Vec<(String, Option<u32>, bool)> = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey(r"Control Panel\NotifyIconSettings")
+            .map(|root| {
+                root.enum_keys()
+                    .flatten()
+                    .filter_map(|name| {
+                        let key = root.open_subkey(&name).ok()?;
+                        let path: String = key.get_value("ExecutablePath").ok()?;
+                        let file = path.rsplit('\\').next().unwrap_or(&path).to_lowercase();
+                        let promoted: u32 = key.get_value("IsPromoted").unwrap_or(0);
+                        Some((file, key.get_value("UID").ok(), promoted != 0))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        *kept = Some(list.clone());
+        list
+    }
+
+    // Whether Windows keeps this icon out on its taskbar: its program's, by
+    // its uID when the program has several.
+    fn kept_out(kept: &[(String, Option<u32>, bool)], exe: &str, uid: u32) -> bool {
+        let exe = exe.to_lowercase();
+        let its: Vec<&(String, Option<u32>, bool)> = kept.iter().filter(|k| k.0 == exe).collect();
+        its.iter().find(|k| k.1 == Some(uid)).or(its.first()).is_some_and(|k| k.2)
+    }
+
     // The icons as the page draws them: each drawn once per handle.
     fn send_icons() {
         let Some(sh) = sh() else { return };
@@ -781,6 +821,7 @@ mod imp {
         }
         let size = (16.0 * sh.screens().primary.map_or(1.0, |a| a.sf)).round() as i32;
         let shown = systray::shown();
+        let kept = windows_kept();
         let list: Vec<Value> = {
             let mut pngs = PNGS.lock().unwrap();
             let pngs = pngs.get_or_insert_with(HashMap::new);
@@ -800,7 +841,7 @@ mod imp {
                             }
                         }
                     };
-                    json!({ "key": s.key, "png": png, "tip": s.tip, "exe": s.exe })
+                    json!({ "key": s.key, "png": png, "tip": s.tip, "exe": s.exe, "name": s.name, "windowsOut": kept_out(&kept, &s.exe, s.uid) })
                 })
                 .collect()
         };
@@ -937,6 +978,17 @@ pub fn taskbar_open(what: String) -> bool {
 #[tauri::command]
 pub fn taskbar_window(id: i64, what: String) -> bool {
     imp::window(&what, id as isize)
+}
+
+// A tray icon kept out on the taskbar or folded away (dragged there), by
+// its name (systray.rs Shown), in the settings (trayPinned); Windows' own
+// choice until the person makes one.
+#[tauri::command]
+pub fn taskbar_tray_pin(app: tauri::AppHandle, name: String, pinned: bool) {
+    let sh = crate::shared(&app);
+    let mut kept = sh.setting("trayPinned").as_object().cloned().unwrap_or_default();
+    kept.insert(name, serde_json::json!(pinned));
+    sh.change(serde_json::json!({ "trayPinned": kept }));
 }
 
 // Where the page drew each tray icon (key, x, y, w, h in its own px), for

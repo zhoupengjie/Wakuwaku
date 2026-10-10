@@ -118,7 +118,7 @@
   const CAPSULE_Y = 5
   // A portrait px across is the sheet at this scale.
   const PER_PX = 0.00875
-  // The settings' width.
+  // The settings' width (the Mail page in two panes is wider: settings.js).
   const SETTINGS_W = 520
   const BODY_SCALE = 0.5
   const BODY_W = Math.round(CELL_W * BODY_SCALE)
@@ -597,7 +597,7 @@
 
   function sizeOf(name) {
     const withHer = isHome()
-    if (name === 'settings') return { width: SETTINGS_W, height: window.Settings.layer.offsetHeight }
+    if (name === 'settings') return { width: window.Settings.layer.offsetWidth || SETTINGS_W, height: window.Settings.layer.offsetHeight }
     if (name === 'ask') {
       return {
         width: panel.offsetWidth + 28 + (withHer ? 108 : 0),

@@ -690,7 +690,9 @@
     const talk = talkOf(letterKey(l))
     const chip = talk ? `<span class="chip ${talk.state}">${esc(T(`mail.chip.${talk.state}`, { agent: AGENTS[talk.agent] || 'Agent' }))}</span>` : ''
     const whose = every ? `<span class="acct ellip">${esc(accountOf(l.account)?.address || '')}</span>` : ''
-    return `<div class="r letter${l.seen ? '' : ' unread'}" data-letter="${l.uid}" data-account="${esc(l.account)}"><span class="udot"></span>
+    // The one open beside the list (two panes).
+    const open = reading && reading.account === l.account && reading.uid === l.uid ? ' open' : ''
+    return `<div class="r letter${l.seen ? '' : ' unread'}${open}" data-letter="${l.uid}" data-account="${esc(l.account)}"><span class="udot"></span>
       <div class="grow"><div class="lt"><span class="who ellip">${esc(l.from || l.address || '?')}</span><span class="when">${esc(mailDate(l.date))}</span></div>
       <div class="lt"><span class="d ellip grow">${l.answered ? `<span class="answered" title="${esc(T('mail.answered'))}">↩</span> ` : ''}${l.attached ? '📎 ' : ''}${esc(l.subject || T('mail.noSubject'))}</span>${whose}</div></div>${chip}${starHTML(l.account, l.uid, l.flagged)}</div>`
   }
@@ -704,20 +706,32 @@
     return a ? T('mail.box.one', { address: a.address, n: unreadOf(a) }) : ''
   }
 
+  // The Mail page in two panes, list and letter side by side, as Thunderbird
+  // has it (the setting mailPanes, two unless one), where the screen has the
+  // room; the settings as wide as that then (island.js measures them).
+  const WIDE_W = 960
+  const roomForTwo = () => screen.availWidth >= 820
+  const twoPanes = () => tab === 'mail' && snap?.settings?.mailPanes !== 'one' && roomForTwo()
+
   // The inbox: which (every account's, or one), all, unread or starred, its
-  // newest letters, more on asking, and who a letter goes to.
+  // newest letters, more on asking; one pane or two.
   function inboxHTML(id) {
     const all = snap.mail || []
     const every = id === '*'
+    const two = twoPanes()
     const pick = all.length > 1 ? `<button class="pick" data-mail-box>${esc(boxName(id))} ▾</button>` : ''
     const filters = seg('mail.filter', [['all', T('mail.filter.all')], ['unseen', T('mail.filter.unseen')], ['flagged', T('mail.filter.flagged')]], inbox.filter)
-    const head = `<div class="sec row-sec"><span>${esc(T('mail.inbox'))}${inbox.total ? ` · ${inbox.total}` : ''}</span><span class="grow"></span><span class="link" data-w-new>${esc(T('mail.write'))}</span><span class="link" data-mail-refresh>${esc(T(inbox.busy ? 'mail.loading' : 'mail.refresh'))}</span></div>`
+    // Two panes: the accounts and agents shown on the right again (the letter
+    // open put away); one pane or two.
+    const setup = two ? `<span class="link" data-mail-setup title="${esc(T('mail.setupTip'))}">${esc(T('mail.setup'))}</span>` : ''
+    const panes = two ? `<span class="link" data-mail-panes="one">${esc(T('mail.panes.one'))}</span>` : roomForTwo() ? `<span class="link" data-mail-panes="two">${esc(T('mail.panes.two'))}</span>` : ''
+    const head = `<div class="sec row-sec"><span class="ellip">${esc(T('mail.inbox'))}${inbox.total ? ` · ${inbox.total}` : ''}</span><span class="grow"></span><span class="link" data-w-new>${esc(T('mail.write'))}</span><span class="link" data-mail-refresh>${esc(T(inbox.busy ? 'mail.loading' : 'mail.refresh'))}</span>${setup}${panes}</div>`
     const tools = `<div class="r mail-tools">${pick}<span class="grow"></span>${filters}</div>`
-    // The letter put aside, to go on with.
-    const kept = draft
+    // The letter put aside, to go on with (not while it is written beside the list).
+    const kept = draft && !(two && writing)
       ? `<div class="r draft-row" data-w-open><span class="chip">${esc(T('mail.w.draft'))}</span><div class="grow ellip">${esc(draft.subject || T('mail.noSubject'))}${draft.to ? ` · ${esc(draft.to)}` : ''}</div><span class="link">${esc(T('mail.w.goOn'))}</span></div>`
       : ''
-    const note = handNote ? `<div class="note${handNote.bad ? ' err' : ''}">${esc(handNote.text)}</div>` : ''
+    const note = handNote && !two ? `<div class="note${handNote.bad ? ' err' : ''}">${esc(handNote.text)}</div>` : ''
     // Accounts that could not be asked, in every account's.
     const missed = (inbox.errors || []).map(e => `<div class="note err">${esc(`${accountOf(e.account)?.address || ''}: ${mailError(e.error, accountOf(e.account))}`)}</div>`).join('')
     let list
@@ -726,8 +740,13 @@
     else list = inbox.letters.map(l => letterRow(l, every)).join('')
     const left = inbox.total - inbox.letters.length
     const more = !inbox.error && left > 0 ? `<div class="r"><button class="pbtn wide" data-mail-more ${inbox.busy ? 'disabled' : ''}>${esc(T('mail.more', { n: Math.min(50, left) }))}</button></div>` : ''
+    return `${head}<div class="grp inbox">${tools}${kept}${note}${missed}${list}${more}</div>`
+  }
+
+  // Who a letter goes to first, and how each agent takes it.
+  function agentsHTML() {
     const agent = row(esc(T('mail.agent')), esc(T('mail.agentNote')), seg('mailAgent', [['claude', 'Claude Code'], ['codex', 'Codex']], firstAgent()))
-    return `${head}<div class="grp inbox">${tools}${kept}${note}${missed}${list}${more}</div><div class="grp agent-pick">${agent}</div>${agentOrder().map(agentConfHTML).join('')}`
+    return `<div class="grp agent-pick">${agent}</div>${agentOrder().map(agentConfHTML).join('')}`
   }
 
   // How a letter goes to each agent (mailAgentConf, agent.rs): how much its
@@ -936,7 +955,9 @@
     const d = draft
     const all = snap.mail || []
     const off = d.busy ? 'disabled' : ''
-    const back = d.reply || d.forward ? (reading?.letter ? 'mail.w.backLetter' : 'mail.inbox') : 'mail.inbox'
+    // Back: to the letter answered, or the inbox; beside the list (two
+    // panes), put aside.
+    const back = twoPanes() ? 'mail.w.aside' : d.reply || d.forward ? (reading?.letter ? 'mail.w.backLetter' : 'mail.inbox') : 'mail.inbox'
     const bar = `<div class="mail-bar"><span class="link" data-w-back>‹ ${esc(T(back))}</span><span class="grow"></span>
       <button class="pbtn sm" data-w-drop ${off}>${esc(T(dropSure ? 'mail.w.dropSure' : 'mail.w.drop'))}</button>
       <button class="pbtn sm al" data-w-send title="${esc(T('mail.w.ctrlEnter'))}" ${off}>${esc(T(d.busy ? 'mail.w.sending' : 'mail.w.send'))}</button></div>`
@@ -1057,8 +1078,10 @@
     const r = reading
     const l = r.letter
     const talk = l ? talkOf(l.key) || r.talk : null
-    const bar = `<div class="mail-bar"><span class="link" data-mail-back>‹ ${esc(T('mail.inbox'))}</span><span class="grow"></span>${l ? handButtons(l, talk) : ''}</div>`
-    const note = handNote ? `<div class="note${handNote.bad ? ' err' : ''}">${esc(handNote.text)}</div>` : ''
+    // Beside the list (two panes) there is no inbox to go back to.
+    const back = twoPanes() ? '' : `<span class="link" data-mail-back>‹ ${esc(T('mail.inbox'))}</span>`
+    const bar = `<div class="mail-bar">${back}<span class="grow"></span>${l ? handButtons(l, talk) : ''}</div>`
+    const note = handNote && !twoPanes() ? `<div class="note${handNote.bad ? ' err' : ''}">${esc(handNote.text)}</div>` : ''
     if (r.busy) return `${bar}<div class="grp"><div class="note">${esc(T('mail.opening'))}</div></div>`
     if (r.error) return `${bar}<div class="grp"><div class="note err">${esc(handError(r.error))}</div></div>`
     const files = l.attachments.length ? `<div class="m-files">${l.attachments.map(f => `<span class="chip">📎 ${esc(f.name || '?')} · ${mailSize(f.size)}</span>`).join('')}</div>` : ''
@@ -1074,10 +1097,28 @@
   }
 
   // Mail: each account with its switch and setting one up; the inbox
-  // (every account's, or one), and a letter open.
+  // (every account's, or one), and a letter open or being written. In two
+  // panes the inbox is on the left, and on the right the letter being
+  // written, the one open, or (neither) the accounts and the agents; in one,
+  // each takes the page.
   function pageMail() {
+    const id = inboxId()
+    if (twoPanes()) {
+      if (id && inbox.for !== `${id}|${inbox.filter}` && !inbox.busy) setTimeout(() => loadInbox(false))
+      const left = id ? inboxHTML(id) : `<div class="note">${esc(T('mail.noBox'))}</div>`
+      const note = handNote ? `<div class="note${handNote.bad ? ' err' : ''}">${esc(handNote.text)}</div>` : ''
+      const right = writing && draft ? writeHTML() : reading ? readingHTML() : `${accountsHTML()}${id ? agentsHTML() : ''}`
+      return `<div class="panes"><div class="pane-l">${left}</div><div class="pane-r">${note}${right}</div></div>`
+    }
     if (writing && draft) return writeHTML()
     if (reading) return readingHTML()
+    // The inbox comes in the first time it is shown (and for another one or filter).
+    if (id && inbox.for !== `${id}|${inbox.filter}` && !inbox.busy) setTimeout(() => loadInbox(false))
+    return `${accountsHTML()}${id ? inboxHTML(id) + agentsHTML() : ''}`
+  }
+
+  // The accounts: each with its switch and its settings; the form for one.
+  function accountsHTML() {
     const accounts = snap.mail || []
     const rows = accounts
       .map(a => {
@@ -1086,12 +1127,17 @@
       })
       .join('')
     const add = mailForm ? '' : `<div class="r"><button class="pbtn wide" data-mail-add>${esc(T('mail.add'))}</button></div>`
-    const id = inboxId()
-    // The inbox comes in the first time it is shown (and for another one or filter).
-    if (id && inbox.for !== `${id}|${inbox.filter}` && !inbox.busy) setTimeout(() => loadInbox(false))
     return `${sec(T('mail.section'))}<div class="grp"><div class="note">${esc(T('mail.note'))}</div>${rows}${add}</div>
-      ${mailForm ? mailFormHTML() : ''}
-      ${id ? inboxHTML(id) : ''}`
+      ${mailForm ? mailFormHTML() : ''}`
+  }
+
+  // The letter beside this one in the list (two panes, ↑ ↓), opened.
+  function step(by) {
+    const at = inbox.letters.findIndex(l => reading && l.account === reading.account && l.uid === reading.uid)
+    const next = inbox.letters[at < 0 ? (by > 0 ? 0 : inbox.letters.length - 1) : at + by]
+    if (!next) return
+    openLetter(next.account, next.uid)
+    requestAnimationFrame(() => body.querySelector(`.inbox [data-letter="${next.uid}"][data-account="${CSS.escape(next.account)}"]`)?.scrollIntoView({ block: 'nearest' }))
   }
 
   // The newest letters of the inbox shown, as filtered; with more, 50 more.
@@ -1361,7 +1407,12 @@
       (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : box.dataset.mf ? `[data-mf="${box.dataset.mf}"]` : box.dataset.w ? `[data-w="${box.dataset.w}"]` : null)
     const caret = which ? box.selectionStart : null
     const changed = setHTML(body, PAGES[tab]())
-    if (reset) body.scrollTop = 0
+    if (reset) {
+      body.scrollTop = 0
+      // Two panes: what is on the right from its top; the list stays where it was.
+      const right = body.querySelector('.pane-r')
+      if (right) right.scrollTop = 0
+    }
     if (!changed) return
     const again = document.getElementById('s-ref')
     if (again) again.value = typedRef
@@ -1376,6 +1427,10 @@
   function draw(reset = false) {
     if (!isOpen || !snap) return
     lang = snap.lang || lang
+    // The Mail page in two panes is wider.
+    const wide = twoPanes()
+    layer.classList.toggle('wide', wide)
+    layer.style.width = wide ? `${Math.min(WIDE_W, screen.availWidth - 40)}px` : ''
     drawHead()
     drawTabs()
     drawBody(reset)
@@ -1711,6 +1766,21 @@
       loadInbox(false)
       return true
     }
+    // Two panes: the accounts and agents on the right again (a letter being
+    // written put aside); one pane or two.
+    if (at('[data-mail-setup]')) {
+      reading = null
+      writing = false
+      draw(true)
+      relayout()
+      return true
+    }
+    const panes = at('[data-mail-panes]')
+    if (panes) {
+      patch({ mailPanes: panes.dataset.mailPanes })
+      relayout()
+      return true
+    }
     if (at('[data-mail-back]')) {
       reading = null
       draw(true)
@@ -1727,6 +1797,8 @@
     }
     const letter = at('.inbox [data-letter]')
     if (letter) {
+      // Beside the list, a letter being written is put aside for it.
+      if (twoPanes()) writing = false
       openLetter(letter.dataset.account, Number(letter.dataset.letter))
       return true
     }
@@ -2079,6 +2151,11 @@
       if (e.key === 'Enter' && e.target.dataset.mf) layer.querySelector('[data-mail-find]:not([disabled]), [data-mail-save]:not([disabled])')?.click()
       if (e.key === 'Enter' && e.target.dataset.talk && !e.isComposing) say(e.target)
       return
+    }
+    // Two panes: the letter above or below in the list.
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && twoPanes() && !(writing && draft) && menuEl.hidden) {
+      e.preventDefault()
+      return step(e.key === 'ArrowDown' ? 1 : -1)
     }
     const i = TABS.indexOf(tab)
     if (e.key === 'ArrowRight') {

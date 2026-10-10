@@ -14,7 +14,8 @@
 //     (tasks.rs) made again on a thread of its own and sent (taskbar:windows),
 //     each with the sessions that run in it (jump.rs)
 //   - the desktop's picture changing (wallpaper.rs): sent for the strip's
-//     Mica (taskbar:wallpaper)
+//     Mica (taskbar:wallpaper); Windows' accent colour, for what the strip
+//     colours as Windows' own does (taskbar:accent)
 // Taken when the home takes its strip, given back when it gives the strip
 // back (island.rs sync_bar) and on quitting. A killed process cannot give
 // the taskbar back: shell.rs's guard does.
@@ -238,10 +239,11 @@ mod imp {
     const WM_TASKBAR_SHOWN: u32 = 0x8001;
     const WM_TRAY_CHANGED: u32 = 0x8002;
     const WM_STOP: u32 = 0x8003;
-    // The strip moved: the desktop's picture under it looked at again.
+    // The strip moved: the desktop's picture under it looked at again (so
+    // too when a setting or Windows' colours change).
     const WM_PAPER: u32 = 0x8004;
     const WM_SETTINGCHANGE: u32 = 0x001A;
-    const SPI_SETDESKWALLPAPER: usize = 0x0014;
+    const WM_DWMCOLORIZATIONCOLORCHANGED: u32 = 0x0320;
     const MONITOR_DEFAULTTONEAREST: u32 = 2;
     const MDT_EFFECTIVE_DPI: u32 = 0;
     const SM_XVIRTUALSCREEN: i32 = 76;
@@ -327,10 +329,11 @@ mod imp {
     static SENT_KEYS: Mutex<Value> = Mutex::new(Value::Null);
     // Windows' own record of the tray icons it keeps out (windows_kept), read once.
     static KEPT: Mutex<Option<Vec<(String, Option<u32>, bool)>>> = Mutex::new(None);
-    // The desktop's picture under the strip, as sent last (send_paper), and
-    // whether it is being looked at.
+    // The desktop's picture under the strip and Windows' accent colour, as
+    // sent last (send_look), and whether they are being looked at.
     static PAPER: Mutex<Value> = Mutex::new(Value::Null);
-    static PAPER_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    static ACCENT: Mutex<Value> = Mutex::new(Value::Null);
+    static LOOK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -449,6 +452,7 @@ mod imp {
         *SENT.lock().unwrap() = Value::Null;
         *SENT_WINDOWS.lock().unwrap() = Value::Null;
         *PAPER.lock().unwrap() = Value::Null;
+        *ACCENT.lock().unwrap() = Value::Null;
         *STRIP.lock().unwrap() = None;
         ORDER.lock().unwrap().clear();
         FLASHING.lock().unwrap().clear();
@@ -735,22 +739,33 @@ mod imp {
     // its last change after it, so a new picture under the same name is
     // loaded anew), how it is laid, the colour round it, and where the
     // display and all of them together are from the strip's top-left (the
-    // page's px). Looked at when the strip moves, when Windows says the
-    // wallpaper changed, and every five seconds (a slideshow, Spotlight); on
+    // page's px). With it Windows' accent colour (taskbar:accent: { base,
+    // light }), for what the strip colours as Windows' own taskbar does.
+    // Looked at when the strip moves, when Windows says a setting or its
+    // colours changed, and every five seconds (a slideshow, Spotlight); on
     // a thread of its own, one at a time: Windows' answer goes through
     // Explorer, which may be busy, and the tray's messages come to this one.
-    fn send_paper() {
-        if PAPER_BUSY.swap(true, Ordering::SeqCst) {
+    fn send_look() {
+        if LOOK_BUSY.swap(true, Ordering::SeqCst) {
             return;
         }
         std::thread::spawn(|| {
-            look_at_paper();
-            PAPER_BUSY.store(false, Ordering::SeqCst);
+            look_at_desktop();
+            LOOK_BUSY.store(false, Ordering::SeqCst);
         });
     }
 
-    fn look_at_paper() {
-        let (Some(sh), Some(strip)) = (sh(), *STRIP.lock().unwrap()) else { return };
+    fn look_at_desktop() {
+        let Some(sh) = sh() else { return };
+        let accent = wallpaper::accent().map_or(Value::Null, |(base, light)| json!({ "base": base, "light": light }));
+        let mut sent = ACCENT.lock().unwrap();
+        if *sent != accent {
+            log(&format!("accent: {accent}"));
+            *sent = accent.clone();
+            let _ = sh.app.emit_to("island", "taskbar:accent", accent);
+        }
+        drop(sent);
+        let Some(strip) = *STRIP.lock().unwrap() else { return };
         let (mon, sf) = monitor_of(strip);
         let Some(paper) = wallpaper::read(mon) else { return };
         // SAFETY: plain reads.
@@ -819,6 +834,10 @@ mod imp {
         let paper = PAPER.lock().unwrap().clone();
         if !paper.is_null() {
             let _ = sh.app.emit_to("island", "taskbar:wallpaper", paper);
+        }
+        let accent = ACCENT.lock().unwrap().clone();
+        if !accent.is_null() {
+            let _ = sh.app.emit_to("island", "taskbar:accent", accent);
         }
     }
 
@@ -1080,7 +1099,7 @@ mod imp {
             log("tray: programs asked for their icons");
         }
         if ticks % 10 == 0 {
-            send_paper();
+            send_look();
         }
     }
 
@@ -1244,8 +1263,7 @@ mod imp {
                 }
             }
             WM_TRAY_CHANGED => send_icons(),
-            WM_PAPER => send_paper(),
-            WM_SETTINGCHANGE if wparam == SPI_SETDESKWALLPAPER => send_paper(),
+            WM_PAPER | WM_DWMCOLORIZATIONCOLORCHANGED | WM_SETTINGCHANGE => send_look(),
             // SAFETY: ending this thread's loop.
             WM_STOP => unsafe { PostQuitMessage(0) },
             _ if msg == CREATED_MSG.load(Ordering::SeqCst) && msg != 0 => on_created(),

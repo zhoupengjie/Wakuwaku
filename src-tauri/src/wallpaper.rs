@@ -3,10 +3,32 @@
 // it on the display (fill, fit, stretch, center, tile, or one picture across
 // all of them), and the colour round it. Asked of Windows' own
 // IDesktopWallpaper, which knows each display's (they may differ) and the
-// slideshow's picture of the moment.
+// slideshow's picture of the moment. And Windows' accent colour, for what
+// the taskbar colours as Windows' own does (accent).
 
 // How the picture is laid, by DESKTOP_WALLPAPER_POSITION.
 const POSITIONS: [&str; 6] = ["center", "tile", "stretch", "fit", "fill", "span"];
+
+// Windows' accent colour as #rrggbb: itself, and the lighter one its own
+// dark taskbar and menus draw with (on a dark ground the colour itself is
+// too dim). From its palette (Explorer\Accent's AccentPalette): eight
+// colours of four bytes (red, green, blue, unused), from the lightest
+// (Light3, Light2, Light1) through the colour itself to the darkest.
+pub fn accent_of(palette: &[u8]) -> Option<(String, String)> {
+    let at = |i: usize| palette.get(i * 4..i * 4 + 3).map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]));
+    Some((at(3)?, at(1)?))
+}
+
+#[cfg(windows)]
+pub fn accent() -> Option<(String, String)> {
+    let key = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER).open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent").ok()?;
+    accent_of(&key.get_raw_value("AccentPalette").ok()?.bytes)
+}
+
+#[cfg(not(windows))]
+pub fn accent() -> Option<(String, String)> {
+    None
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Paper {
@@ -193,5 +215,13 @@ mod tests {
         assert!(paper.color.len() == 7 && paper.color.starts_with('#'));
         assert!(paper.file.as_ref().is_none_or(|f| f.is_file()));
         assert_eq!(paper.stamp == 0, paper.file.is_none());
+    }
+
+    // Windows' default blue, as its palette holds it.
+    #[test]
+    fn reads_the_accent_and_its_light_one_from_the_palette() {
+        let palette = [0x99, 0xEB, 0xFF, 0, 0x4C, 0xC2, 0xFF, 0, 0x00, 0x91, 0xF8, 0, 0x00, 0x78, 0xD4, 0, 0x00, 0x67, 0xC0, 0, 0x00, 0x3E, 0x92, 0, 0x00, 0x1A, 0x68, 0, 0xF7, 0x63, 0x0C, 0];
+        assert_eq!(accent_of(&palette), Some(("#0078d4".into(), "#4cc2ff".into())));
+        assert_eq!(accent_of(&palette[..12]), None);
     }
 }

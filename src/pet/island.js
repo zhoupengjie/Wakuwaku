@@ -669,8 +669,9 @@
   }
 
   // The widget shown, and the monitor, pinned: always there by the settings.
-  // In the taskbar only the monitor (before the tray): the widgets take
-  // their turns at its left end, in her place (fillCompact).
+  // In the taskbar only the monitor (before the tray), in two rows as the
+  // clock has its two, coloured as Windows' own taskbar would (style.css):
+  // the widgets take their turns at its left end, in her place (fillCompact).
   function widgetFaces() {
     const faces = []
     const w = widgets.length && home() !== 'taskbar' ? widgets[widgetAt % widgets.length] : null
@@ -686,8 +687,9 @@
       faces.push(face)
     }
     if (isPinned()) {
-      const readings = el('span', 'face mon')
-      readings.innerHTML = Widgets.partsHTML(monitor)
+      const inRows = home() === 'taskbar'
+      const readings = el('span', inRows ? 'face mon rows' : 'face mon')
+      readings.innerHTML = inRows ? Widgets.rowsHTML(monitor) : Widgets.partsHTML(monitor)
       faces.push(readings)
     }
     return faces
@@ -1042,6 +1044,14 @@
   window.pet.onWallpaper(p => {
     paper = p
     drawMica()
+  })
+
+  // Windows' accent colour (taskbar.rs), the lighter one as its own dark
+  // taskbar draws with: the monitor's icons, the line under the window in
+  // front (style.css --accent; its own blue until it comes).
+  window.pet.onAccent(a => {
+    if (a?.light) document.documentElement.style.setProperty('--accent', a.light)
+    else document.documentElement.style.removeProperty('--accent')
   })
   window.addEventListener('resize', drawMica)
 

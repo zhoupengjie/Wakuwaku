@@ -1378,6 +1378,41 @@ body {
   gap: 10px;
 }
 
+/* The monitor on the taskbar: two rows, as the clock has the time over the
+   date (widgets.js rowsHTML). The icons in Windows' accent colour (island.js
+   --accent), the numbers plain, amber when one wants a look; each reading
+   as wide as its widest, so the columns stay put as the numbers change. */
+#bar-rest .mon.rows {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1.25;
+  color: #e5e5ea;
+}
+
+#bar-rest .mon.rows .wrow {
+  display: flex;
+}
+
+#bar-rest .mon.rows .wpart + .wpart {
+  margin-left: 8px;
+}
+
+#bar-rest .mon.rows .wicon {
+  width: 11px;
+  height: 11px;
+  color: var(--accent, #5e9bff);
+}
+
+#bar-rest .mon.rows .wpart b {
+  font-weight: 500;
+}
+
+#bar-rest .mon.rows .wpart.high b {
+  color: #ffb340;
+}
+
 /* Start, as Windows' button: four squares. */
 #bar-rest .start {
   flex: none;
@@ -1485,8 +1520,8 @@ body {
 }
 
 /* The windows' buttons, in the order they came (taskbar.rs): an icon and a
-   title, a line under it, longer and blue for the one in front; lit amber
-   while one flashes for attention. */
+   title, a line under it, longer and in Windows' accent colour for the one
+   in front; lit amber while one flashes for attention. */
 #bar-rest .wins {
   flex: 0 1 auto;
   display: flex;
@@ -1537,7 +1572,7 @@ body {
 
 #bar-rest .win.front::after {
   width: 18px;
-  background: #5e9bff;
+  background: var(--accent, #5e9bff);
 }
 
 #bar-rest .win.min {

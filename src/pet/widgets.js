@@ -60,7 +60,36 @@
   const partsHTML = w =>
     (partsOf(w) || []).map(p => `<span class="wpart" style="color:${PART_COLOR[p.icon] || 'inherit'}">${icon(p.icon)}<b>${esc(p.text)}</b></span>`).join('')
 
-  const api = { ICONS, icon, words, partsOf, partsHTML }
+  // The readings in two rows, as the taskbar has its clock's time over the
+  // date: the machine's (CPU, memory, battery) over the network's; with only
+  // one kind, half over half.
+  function rowsOf(parts) {
+    const isNet = p => p.icon === 'down' || p.icon === 'up'
+    const net = parts.filter(isNet)
+    const rest = parts.filter(p => !isNet(p))
+    if (net.length && rest.length) return [rest, net]
+    const all = net.length ? net : rest
+    const half = Math.ceil(all.length / 2)
+    return [all.slice(0, half), all.slice(half)].filter(row => row.length)
+  }
+
+  // A reading that wants a look: the CPU or the memory at 90% or more, the
+  // battery (not charging) at 20% or less.
+  function isHigh(p) {
+    const n = parseFloat(p.text)
+    if (p.icon === 'cpu' || p.icon === 'memory') return n >= 90
+    return p.icon === 'battery' && n <= 20
+  }
+
+  // The rows as markup, uncoloured: the page colours them (the taskbar: its
+  // icons in Windows' accent colour, its numbers plain), one that wants a
+  // look marked high.
+  const rowsHTML = w =>
+    rowsOf(partsOf(w) || [])
+      .map(row => `<span class="wrow">${row.map(p => `<span class="wpart${isHigh(p) ? ' high' : ''}">${icon(p.icon)}<b>${esc(p.text)}</b></span>`).join('')}</span>`)
+      .join('')
+
+  const api = { ICONS, icon, words, partsOf, partsHTML, rowsOf, isHigh, rowsHTML }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api

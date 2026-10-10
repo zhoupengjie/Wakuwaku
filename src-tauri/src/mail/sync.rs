@@ -115,6 +115,10 @@ pub fn run(sh: &Arc<Shared>, account: &Account, watch: &Watch) {
         }
         // A password said no: not again soon, or the account may be locked.
         let wait = if matches!(fail, Fail::Login(_)) { 300 } else { [15, 30, 60, 120, 300][(failures as usize - 1).min(4)] };
+        // A kick from before (a letter sent, Refresh pressed) is no reason
+        // to try again at once: cleared, so the wait is waited; one during
+        // it (Refresh pressed now) tries once more, then it waits again.
+        watch.kick.store(false, Ordering::SeqCst);
         watch.rest(Duration::from_secs(wait));
     }
 }

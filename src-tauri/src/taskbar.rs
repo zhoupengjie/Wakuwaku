@@ -278,6 +278,7 @@ mod imp {
     const KEYEVENTF_EXTENDEDKEY: u32 = 0x1;
     const KEYEVENTF_KEYUP: u32 = 0x2;
     const VK_LWIN: u16 = 0x5B;
+    const VK_ESCAPE: u16 = 0x1B;
     const VK_TAB: u16 = 0x09;
     const VK_SPACE: u16 = 0x20;
     const DI_NORMAL: u32 = 3;
@@ -759,7 +760,10 @@ mod imp {
     // starts. Kept on the taskbar, or no longer.
     pub fn app(sh: &Shared, what: &str, path: &str) -> bool {
         let done = match what {
-            "launch" => tasks::launch(path),
+            "launch" => {
+                close_flyout();
+                tasks::launch(path)
+            }
             "pin" | "unpin" => {
                 let mut kept: Vec<Value> = sh.setting("taskbarPinned").as_array().cloned().unwrap_or_default();
                 kept.retain(|p| !p["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(path)));
@@ -782,7 +786,13 @@ mod imp {
             // or go down (tasks::press waits for it).
             "press" => {
                 std::thread::spawn(move || {
-                    tasks::press(hwnd);
+                    // Start closed for it: the window to the front, even the
+                    // one in front before Start (not minimized), as on Windows'.
+                    if close_flyout() {
+                        crate::jump::bring_window(hwnd);
+                    } else {
+                        tasks::press(hwnd);
+                    }
                     wake_tasks();
                 });
                 true
@@ -951,6 +961,7 @@ mod imp {
             _ => return false,
         };
         if matches!(press, Press::LeftDown | Press::RightDown) && home_hwnd != 0 {
+            close_flyout();
             // SAFETY: our own window; the press is the input that lets it.
             unsafe { SetForegroundWindow(home_hwnd as Hwnd) };
         }
@@ -962,6 +973,30 @@ mod imp {
             sh.log(&format!("taskbar: {line}"));
         }
         told
+    }
+
+    // Windows' own Start (or search, the notifications, the quick settings)
+    // in front: closed first, as a press on Windows' taskbar closes it. Ours
+    // takes no focus away from it, and the window pressed for could not come
+    // up past it (it holds the foreground). Esc to it, and a moment for it to
+    // go. Whether there was one.
+    fn close_flyout() -> bool {
+        let front = tasks::front();
+        if !tasks::is_shell_flyout(front) {
+            return false;
+        }
+        let key = |up: bool| Input {
+            kind: 1,
+            u: InputUnion { ki: KeybdInput { vk: VK_ESCAPE, scan: 0, flags: if up { KEYEVENTF_KEYUP } else { 0 }, time: 0, extra: 0 } },
+        };
+        let inputs = [key(false), key(true)];
+        // SAFETY: an array of INPUTs of the size passed.
+        unsafe { SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<Input>() as i32) };
+        let asked = Instant::now();
+        while tasks::front() == front && asked.elapsed() < Duration::from_millis(400) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        true
     }
 
     // What the taskbar's own buttons open, by the keys that open them.

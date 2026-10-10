@@ -546,6 +546,14 @@ mod imp {
         })
     }
 
+    // One of what Windows opens from its taskbar and closes once anything
+    // else is pressed (Start, search, the notifications and calendar, the
+    // quick settings), by the program it is of.
+    pub fn is_shell_flyout(hwnd: isize) -> bool {
+        let name = file_name(&path_of(pid_of(hwnd as Hwnd))).to_ascii_lowercase();
+        ["startmenuexperiencehost.exe", "searchhost.exe", "shellexperiencehost.exe", "shellhost.exe"].contains(&name.as_str())
+    }
+
     // The window in front's input method between its own script and plain letters.
     pub fn toggle_native() -> bool {
         let (_, ime) = front_ime();
@@ -569,6 +577,9 @@ mod imp {
     }
     pub fn net() -> &'static str {
         "other"
+    }
+    pub fn is_shell_flyout(_hwnd: isize) -> bool {
+        false
     }
     pub fn in_use() -> [(&'static str, Vec<String>); 3] {
         [("mic", Vec::new()), ("cam", Vec::new()), ("loc", Vec::new())]
@@ -617,4 +628,4 @@ mod imp {
     }
 }
 
-pub use imp::{alive, app_id, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, is_start, keys, launch, list, net, plain_program_icon, press, toggle_native, with_com};
+pub use imp::{alive, app_id, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, is_shell_flyout, is_start, keys, launch, list, net, plain_program_icon, press, toggle_native, with_com};

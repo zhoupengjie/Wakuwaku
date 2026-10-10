@@ -92,8 +92,8 @@
   let writing = false
   let dropSure = false
   let draftTimer
-  // A file picker is open (a letter's files; the desktop's picture, in
-  // Windows' own dialog): the focus it takes does not close the settings.
+  // The file picker is open for a letter's files: the focus it takes does
+  // not close the settings (the desktop's picture has its own, pickingPaper).
   let picking = false
   // The most a letter takes with it (as send.rs has it).
   const MOST_FILES = 25 << 20
@@ -335,14 +335,19 @@
       ${pagePaper()}`
   }
 
+  // Windows' dialog open for the desktop's picture: its own mark, held until
+  // the dialog answers (picking, a letter's files', is let go a second after
+  // the island has the focus again, which a press on it mid-dialog gives).
+  let pickingPaper = false
+
   // Asked of Windows for the desktop's picture; the snapshot as it is after.
   function paperDo(what, value) {
     if (what === 'picture' || what === 'folder') {
-      picking = true
+      pickingPaper = true
       draw()
     }
     return window.pet.settings.wallpaper(what, value).then(got => {
-      picking = false
+      pickingPaper = false
       snap = got
       draw()
     })
@@ -360,7 +365,7 @@
       ? T('s.paperNowFolder', { name: lastPart(paper.folder) || T('s.paperUnknown') })
       : T('s.paperNowPicture', { name: lastPart(paper.file) || T('s.paperUnknown') })
     const every = PAPER_EVERY.map(ms => [ms, ms >= 86400000 ? T('s.paperDay') : ms >= 3600000 ? T('s.paperHours', { n: ms / 3600000 }) : T('settings.minutes', { n: ms / 60000 })])
-    const pick = `<span class="btns"><button class="pbtn sm" data-paper="picture" ${picking ? 'disabled' : ''}>${esc(T('s.paperPicture'))}</button><button class="pbtn sm" data-paper="folder" ${picking ? 'disabled' : ''}>${esc(T('s.paperFolder'))}</button></span>`
+    const pick = `<span class="btns"><button class="pbtn sm" data-paper="picture" ${pickingPaper ? 'disabled' : ''}>${esc(T('s.paperPicture'))}</button><button class="pbtn sm" data-paper="folder" ${pickingPaper ? 'disabled' : ''}>${esc(T('s.paperFolder'))}</button></span>`
     return `${sec(T('s.wallpaper'))}<div class="grp">
         ${row(esc(T('s.paperNow')), esc(now), pick)}
         ${row(esc(T('s.paperFit')), '', seg('paperPosition', PAPER_POSITIONS.map(p => [p, T(`s.paperPos.${p}`)]), paper.position))}
@@ -2081,7 +2086,7 @@
   // The keyboard went elsewhere: a click outside the island; not a file
   // picker (a letter's files, the desktop's picture: its own window takes
   // the focus).
-  window.pet.onBlur(() => !picking && close('blur'))
+  window.pet.onBlur(() => !picking && !pickingPaper && close('blur'))
   layer.addEventListener('cancel', e => e.target.matches?.('[data-w-file]') && (picking = false), true)
   window.addEventListener('focus', () => setTimeout(() => (picking = false), 1000))
 

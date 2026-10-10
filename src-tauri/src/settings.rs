@@ -97,6 +97,8 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         }),
         "widgetNudge" => is_bool,
         "mailAgent" => matches!(v.as_str(), Some("claude" | "codex")),
+        // The Mail page in two panes (list, letter), or one.
+        "mailPanes" => matches!(v.as_str(), Some("one" | "two")),
         "mailAgentConf" => mail::agent::is_conf_ok(v),
         _ => false,
     }

@@ -81,6 +81,11 @@
   background: #ffffff;
 }
 
+.tb-light #island-settings .letter.open,
+.tb-light #island-settings .letter.open:hover {
+  background: rgba(0, 95, 184, 0.1);
+}
+
 .tb-light #island-settings .md-pre {
   background: rgba(0, 0, 0, 0.05);
 }
@@ -1088,6 +1093,78 @@
 
 #island-settings .row-sec .link + .link {
   margin-left: 12px;
+}
+
+/* The Mail page in two panes, as Thunderbird (settings.js twoPanes; the
+   settings as wide as settings.js says then): the inbox on the left, its
+   letters scrolling under its tools; on the right the letter open, the one
+   being written, or the accounts, scrolling on their own. */
+#island-settings .panes {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 12px;
+  height: 100%;
+}
+
+#island-settings .pane-l {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#island-settings .pane-l .row-sec {
+  flex: none;
+}
+
+#island-settings .pane-l .inbox {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+#island-settings .pane-l .mail-tools {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--g1);
+}
+
+#island-settings .pane-l .mail-tools .pick {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#island-settings .pane-l .letter .acct {
+  max-width: 110px;
+}
+
+#island-settings .pane-r {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+#island-settings .pane-r > .mail-bar {
+  margin-top: 0;
+}
+
+#island-settings .pane-l .inbox::-webkit-scrollbar,
+#island-settings .pane-r::-webkit-scrollbar {
+  width: 6px;
+}
+
+#island-settings .pane-l .inbox::-webkit-scrollbar-thumb,
+#island-settings .pane-r::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--g3);
+}
+
+/* The letter open beside the list, marked in it. */
+#island-settings .letter.open,
+#island-settings .letter.open:hover {
+  background: rgba(94, 155, 255, 0.16);
 }
 
 #island-settings .m-text {

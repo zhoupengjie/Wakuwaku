@@ -23,7 +23,9 @@
 // for both servers;
 // "mailAgent": "claude" | "codex", who a letter goes to first;
 // "mailAgentConf": { claude | codex: { access, model, effort, sumModel,
-// sumEffort } }, what a session may do and the models (agent.rs).
+// sumEffort } }, what a session may do and the models (agent.rs);
+// "mailPanes": "two" | "one", the Mail page as list and letter side by side
+// (the default), or one under the other (settings.js).
 use std::collections::HashMap;
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};

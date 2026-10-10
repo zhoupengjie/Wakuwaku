@@ -160,6 +160,9 @@ mod imp {
         fn RegisterShellHookWindow(hwnd: Hwnd) -> i32;
         fn DeregisterShellHookWindow(hwnd: Hwnd) -> i32;
         fn RegisterWindowMessageW(name: *const u16) -> u32;
+        fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
+        fn ShowWindow(hwnd: Hwnd, cmd: i32) -> i32;
+        fn SetLayeredWindowAttributes(hwnd: Hwnd, key: u32, alpha: u8, flags: u32) -> i32;
     }
 
     #[link(name = "gdi32")]
@@ -169,6 +172,7 @@ mod imp {
         fn SelectObject(hdc: isize, obj: isize) -> isize;
         fn DeleteObject(obj: isize) -> i32;
         fn DeleteDC(hdc: isize) -> i32;
+        fn CreateSolidBrush(color: u32) -> isize;
     }
 
     #[link(name = "kernel32")]
@@ -213,6 +217,15 @@ mod imp {
     const WM_STOP: u32 = 0x8003;
     const WS_POPUP: u32 = 0x8000_0000;
     const WS_EX_TOOLWINDOW: u32 = 0x80;
+    const WS_EX_TOPMOST: u32 = 0x8;
+    const WS_EX_TRANSPARENT: u32 = 0x20;
+    const WS_EX_LAYERED: u32 = 0x0008_0000;
+    const WS_EX_NOACTIVATE: u32 = 0x0800_0000;
+    const LWA_ALPHA: u32 = 0x2;
+    const HWND_TOPMOST: isize = -1;
+    const SWP_NOACTIVATE: u32 = 0x10;
+    const SWP_SHOWWINDOW: u32 = 0x40;
+    const SW_HIDE: i32 = 0;
     const SPI_GETWORKAREA: u32 = 0x30;
     const SPI_SETWORKAREA: u32 = 0x2F;
 
@@ -277,6 +290,7 @@ mod imp {
     static FILE_PNGS: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
     // The live pictures shown (window, thumbnail), over the windows listed above a button.
     static THUMBS: Mutex<Vec<(isize, isize)>> = Mutex::new(Vec::new());
+    static THUMB_HOST: AtomicIsize = AtomicIsize::new(0);
     static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
     // The keyboard's thread, and what it sent last.
     static KEYS: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
@@ -549,23 +563,37 @@ mod imp {
         }
     }
 
-    // Windows' live pictures of windows (DWM thumbnails), drawn over the
-    // home's window where the page left room for them (the windows listed
-    // above a program's button): each window's at (x, y, w, h), physical,
-    // in the home's window, its shape kept. None: all taken away.
-    pub fn thumbs(home: isize, items: Vec<(isize, (i32, i32, i32, i32))>) {
+    // Windows' live pictures of windows (DWM thumbnails) where the page left
+    // room for them (the windows listed above a program's button): each
+    // window's at (x, y, w, h) on the screen, physical, its shape kept, on
+    // the window of their own laid over those rooms. None: all taken away.
+    pub fn thumbs(items: Vec<(isize, (i32, i32, i32, i32))>) {
+        let host = THUMB_HOST.load(Ordering::SeqCst) as Hwnd;
         let mut shown = THUMBS.lock().unwrap();
         for (_, thumb) in shown.drain(..) {
             // SAFETY: a thumbnail of ours.
             unsafe { DwmUnregisterThumbnail(thumb) };
         }
-        if home == 0 {
+        if host.is_null() {
             return;
         }
+        if items.is_empty() {
+            // SAFETY: our own window.
+            unsafe { ShowWindow(host, SW_HIDE) };
+            return;
+        }
+        // Over all the rooms at once, above the home's window.
+        let left = items.iter().map(|i| i.1 .0).min().unwrap_or(0);
+        let top = items.iter().map(|i| i.1 .1).min().unwrap_or(0);
+        let right = items.iter().map(|i| i.1 .0 + i.1 .2).max().unwrap_or(0);
+        let bottom = items.iter().map(|i| i.1 .1 + i.1 .3).max().unwrap_or(0);
+        // SAFETY: our own window.
+        unsafe { SetWindowPos(host, HWND_TOPMOST, left, top, right - left, bottom - top, SWP_NOACTIVATE | SWP_SHOWWINDOW) };
         for (hwnd, (x, y, w, h)) in items {
+            let (x, y) = (x - left, y - top);
             let mut thumb = 0isize;
             // SAFETY: our own window and another's; the handle is ours to unregister.
-            if unsafe { DwmRegisterThumbnail(home as Hwnd, hwnd as Hwnd, &mut thumb) } != 0 || thumb == 0 {
+            if unsafe { DwmRegisterThumbnail(host, hwnd as Hwnd, &mut thumb) } != 0 || thumb == 0 {
                 continue;
             }
             let mut size = Size::default();
@@ -761,6 +789,44 @@ mod imp {
                 return;
             }
             OURS.store(hwnd as isize, Ordering::SeqCst);
+            // The windows' live pictures go on a window of their own over the
+            // cards (taskbar.rs thumbs): drawn on the home's, a webview's,
+            // they froze, and went under it once it drew again (2026-10-10).
+            // Dark as the cards' room, and letting the pointer through to them.
+            let thumbs_class = wide("WakuwakuThumbs");
+            let wc = WndClassExW {
+                size: std::mem::size_of::<WndClassExW>() as u32,
+                style: 0,
+                wndproc: thumbs_proc,
+                cls_extra: 0,
+                wnd_extra: 0,
+                instance,
+                icon: 0,
+                cursor: 0,
+                background: CreateSolidBrush(0x001E_1C1C),
+                menu_name: std::ptr::null(),
+                class_name: thumbs_class.as_ptr(),
+                icon_sm: 0,
+            };
+            RegisterClassExW(&wc);
+            let host = CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT,
+                thumbs_class.as_ptr(),
+                std::ptr::null(),
+                WS_POPUP,
+                0,
+                0,
+                0,
+                0,
+                std::ptr::null_mut(),
+                0,
+                instance,
+                std::ptr::null_mut(),
+            );
+            if !host.is_null() {
+                SetLayeredWindowAttributes(host, 0, 255, LWA_ALPHA);
+                THUMB_HOST.store(host as isize, Ordering::SeqCst);
+            }
             CREATED_MSG.store(shell::taskbar_created(), Ordering::SeqCst);
             EXPLORER.store(shell::taskbars().first().copied().unwrap_or(0), Ordering::SeqCst);
             let hooks: Vec<isize> = WINDOW_EVENTS.iter().map(|&(min, max)| SetWinEventHook(min, max, 0, on_event, 0, 0, 0)).collect();
@@ -785,6 +851,11 @@ mod imp {
             KillTimer(hwnd, 1);
             log(&format!("tray handed back; it was handed {}", systray::seen()));
             systray::stop();
+            thumbs(Vec::new());
+            let host = THUMB_HOST.swap(0, Ordering::SeqCst);
+            if host != 0 {
+                DestroyWindow(host as Hwnd);
+            }
             DestroyWindow(hwnd);
             OURS.store(0, Ordering::SeqCst);
             *PNGS.lock().unwrap() = None;
@@ -1038,6 +1109,12 @@ mod imp {
         Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(out)))
     }
 
+    // The live pictures' window: nothing of its own but its colour.
+    extern "system" fn thumbs_proc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
+        // SAFETY: the default for everything.
+        unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+    }
+
     extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
         match msg {
             WM_TIMER => tick(),
@@ -1082,7 +1159,7 @@ mod imp {
     pub fn app(_sh: &Shared, _what: &str, _path: &str) -> bool {
         false
     }
-    pub fn thumbs(_home: isize, _items: Vec<(isize, (i32, i32, i32, i32))>) {}
+    pub fn thumbs(_items: Vec<(isize, (i32, i32, i32, i32))>) {}
     pub fn work_area_bottom() -> i32 {
         0
     }
@@ -1122,10 +1199,10 @@ pub fn taskbar_window(id: i64, what: String) -> bool {
 #[tauri::command]
 pub fn taskbar_thumbs(app: tauri::AppHandle, items: Vec<(i64, f64, f64, f64, f64)>) {
     let sh = crate::shared(&app);
-    let (_, sf) = crate::island::origin(&sh);
+    let ((ox, oy), sf) = crate::island::origin(&sh);
     let px = |v: f64| (v * sf).round() as i32;
-    let items = items.into_iter().map(|(h, x, y, w, ht)| (h as isize, (px(x), px(y), px(w), px(ht)))).collect();
-    imp::thumbs(crate::island::hwnd(&sh), items);
+    let items = items.into_iter().map(|(h, x, y, w, ht)| (h as isize, (ox + px(x), oy + px(y), px(w), px(ht)))).collect();
+    imp::thumbs(items);
 }
 
 // A program's button: launch (a program kept on the taskbar, not running;

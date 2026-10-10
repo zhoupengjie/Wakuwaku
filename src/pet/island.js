@@ -784,8 +784,9 @@
   const pop = el('div', 'wpop')
   pop.hidden = true
   barRest.append(pop)
-  // { app, kind: 'list' | 'menu' } while open.
+  // { app, kind: 'list' | 'menu' } while open, and what it showed last.
   let popFor = null
+  let popDrawn = ''
   let popTimer
   const appOf = key => taskWindows.find(a => a.app === key)
 
@@ -840,7 +841,13 @@
       if (windows.length) rows.push(item(t(lang, windows.length > 1 ? 'taskbar.closeAll' : 'taskbar.close'), 'close'))
     }
     if (!rows.length) return closePop()
-    pop.replaceChildren(...rows)
+    // Drawn again only when what it shows changed: a card replaced under a
+    // press is never clicked (the windows' list comes again often).
+    const drawn = JSON.stringify([popFor, app.name, app.pinned, windows.map(w => [w.id, w.title, w.front, (w.png || '').length]), lang])
+    if (drawn !== popDrawn || pop.hidden) {
+      popDrawn = drawn
+      pop.replaceChildren(...rows)
+    }
     pop.classList.toggle('menu', popFor.kind === 'menu')
     pop.classList.toggle('list', popFor.kind === 'list')
     pop.hidden = false
@@ -905,7 +912,11 @@
     })
     node.addEventListener('mouseenter', () => popFor && clearTimeout(popTimer))
   }
-  pop.addEventListener('click', e => {
+  // On the press, not the click: what was pressed may be drawn anew before
+  // the button comes up.
+  pop.addEventListener('click', e => e.stopPropagation())
+  pop.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return
     e.stopPropagation()
     const app = popFor && appOf(popFor.app)
     if (!app) return

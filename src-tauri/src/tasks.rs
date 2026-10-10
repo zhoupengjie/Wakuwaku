@@ -458,6 +458,7 @@ mod imp {
     const SWP_NOMOVE: u32 = 0x2;
     const SWP_NOACTIVATE: u32 = 0x10;
     const SWP_NOOWNERZORDER: u32 = 0x200;
+    const GW_HWNDPREV: u32 = 3;
 
     extern "system" fn stack(hwnd: Hwnd, param: isize) -> i32 {
         // SAFETY: param is the Vec in_stack() passed, alive for the enumeration.
@@ -517,13 +518,55 @@ mod imp {
         // front in turn, only the first came: the foreground then the
         // program's, ours may not hand it on (2026-10-10). Where a window
         // lies needs no foreground.
+        // Laid once the top one is in front and its program has settled what
+        // coming to the front does (it may lay its own windows then): laid
+        // too soon, the others stayed behind (2026-10-10). Looked at after,
+        // and laid again once should they not lie there.
         let brought = crate::jump::bring_window(top);
-        let mut under = top;
-        for &h in windows.iter().filter(|&&h| h != top) {
-            // SAFETY: a plain move in the stack of windows; a stale handle fails.
-            unsafe { SetWindowPos(h as Hwnd, under, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER) };
-            under = h;
+        // SAFETY: plain queries.
+        let front = || unsafe { GetForegroundWindow() } as isize;
+        let asked = std::time::Instant::now();
+        while front() != top && asked.elapsed() < std::time::Duration::from_millis(400) {
+            std::thread::sleep(std::time::Duration::from_millis(20));
         }
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        let others: Vec<isize> = windows.iter().copied().filter(|&h| h != top).collect();
+        let lay = || {
+            let mut under = top;
+            others
+                .iter()
+                .map(|&h| {
+                    // SAFETY: a plain move in the stack of windows; a stale handle fails.
+                    let ok = unsafe { SetWindowPos(h as Hwnd, under, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER) } != 0;
+                    under = h;
+                    ok
+                })
+                .collect::<Vec<bool>>()
+        };
+        // Each right under the one before it (the top one first).
+        let laid = || {
+            let mut above = top;
+            others.iter().all(|&h| {
+                // SAFETY: a plain query.
+                let ok = unsafe { GetWindow(h as Hwnd, GW_HWNDPREV) } as isize == above;
+                above = h;
+                ok
+            })
+        };
+        let first = lay();
+        let mut again = None;
+        if !laid() {
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            again = Some(lay());
+        }
+        let note = format!(
+            "{} windows: top brought {brought}, in front {}; laid {first:?}{}; lie as asked {}",
+            windows.len(),
+            front() == top,
+            again.map_or(String::new(), |a| format!(", again {a:?}")),
+            laid()
+        );
+        crate::taskbar::note(&note);
         brought
     }
 

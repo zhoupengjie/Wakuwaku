@@ -358,6 +358,11 @@ mod imp {
         }
     }
 
+    // A line for the log from elsewhere in the taskbar's doings (tasks.rs).
+    pub fn note(line: &str) {
+        log(line);
+    }
+
     fn work_bottom() -> i32 {
         let mut r = Rect::default();
         // SAFETY: our own struct, of the size the call writes.
@@ -1797,6 +1802,7 @@ mod imp {
         false
     }
     pub fn watch_presses(_on: bool) {}
+    pub fn note(_line: &str) {}
     pub fn window(_what: &str, _hwnd: isize) -> bool {
         false
     }
@@ -1809,7 +1815,7 @@ mod imp {
     }
 }
 
-pub use imp::{explorer_room, give_back, resend, strip_moved, take, work_area_bottom};
+pub use imp::{explorer_room, give_back, note, resend, strip_moved, take, work_area_bottom};
 
 // RGBA pixels (sw × sh) made dw × dh smoothly: each pixel out the weighted
 // mean of those it covers, under a tent as wide as a pixel of the coarser

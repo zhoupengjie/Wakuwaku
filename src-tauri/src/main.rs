@@ -175,8 +175,14 @@ impl Shared {
         if !self.is_logging {
             return;
         }
+        // A whole line in one write, one at a time: written in its parts
+        // (writeln!), two threads' lines in the same moment came out woven
+        // into each other (2026-10-11, the quit's steps).
+        static WRITING: Mutex<()> = Mutex::new(());
+        let whole = format!("{} [tauri] {line}\n", now_ms());
+        let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
         if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(self.dir.join("debug.log")) {
-            let _ = writeln!(f, "{} [tauri] {line}", now_ms());
+            let _ = f.write_all(whole.as_bytes());
         }
     }
 

@@ -411,20 +411,23 @@ mod imp {
         *KEYS.lock().unwrap() = Some(std::thread::spawn(move || keys_loop(keys_sh)));
     }
 
-    // The keyboard (tasks::keys) looked at four times a second, and the
-    // network's way out (the quick settings' button) every two; sent when
-    // either changes.
+    // The keyboard (tasks::keys) looked at four times a second; the
+    // network's way out (the quick settings' button) and what is using the
+    // microphone, camera or location (tasks::in_use) every two; sent when
+    // any of it changes.
     fn keys_loop(sh: Arc<Shared>) {
         let mut sent = Value::Null;
-        let mut net = tasks::net();
+        let using = || Value::Object(tasks::in_use().into_iter().map(|(what, names)| (what.to_string(), json!(names))).collect());
+        let (mut net, mut used) = (tasks::net(), using());
         let mut looks = 0u32;
         while !TASKS_STOP.load(Ordering::SeqCst) {
             looks += 1;
             if looks % 8 == 0 {
                 net = tasks::net();
+                used = using();
             }
             let keys = tasks::keys();
-            let now = json!({ "lang": keys.lang, "native": keys.native, "caps": keys.caps, "net": net });
+            let now = json!({ "lang": keys.lang, "native": keys.native, "caps": keys.caps, "net": net, "use": used });
             if now != sent {
                 let _ = sh.app.emit_to("island", "taskbar:keys", now.clone());
                 *SENT_KEYS.lock().unwrap() = now.clone();
@@ -914,6 +917,17 @@ mod imp {
         // The input method of the window in front: its own script or plain letters.
         if what == "ime" {
             return tasks::toggle_native();
+        }
+        // A press on what shows the microphone, camera or location in use:
+        // its page in Windows' privacy settings.
+        let page = match what {
+            "privacy-mic" => Some("ms-settings:privacy-microphone"),
+            "privacy-cam" => Some("ms-settings:privacy-webcam"),
+            "privacy-loc" => Some("ms-settings:privacy-location"),
+            _ => None,
+        };
+        if let Some(page) = page {
+            return tasks::launch(page);
         }
         let keys: &[u16] = match what {
             "start" => &[VK_LWIN],

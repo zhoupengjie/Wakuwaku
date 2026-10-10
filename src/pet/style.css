@@ -1501,24 +1501,45 @@ body {
   cursor: pointer;
 }
 
-#bar-rest .tquick svg {
+/* Windows' own icon font, as its taskbar draws these system icons (Segoe
+   Fluent Icons; Segoe MDL2 Assets before Windows 11). White as Windows' on
+   the dark taskbar, near black on the light one. */
+#bar-rest .fi {
   display: block;
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: #e5e5ea;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+  font-size: 16px;
+  font-style: normal;
+  font-weight: normal;
+  line-height: 1;
+  color: #fff;
 }
 
-#bar-rest .tquick .vol path:first-child,
-#bar-rest .tquick .dot {
-  fill: #e5e5ea;
+.tb-light #bar-rest .fi {
+  color: #1b1b1b;
 }
 
-#bar-rest .tquick .off {
-  stroke: #ff5c6c;
+/* What is using the microphone, the camera, the location (island.js showPrivacy). */
+#bar-rest .tpriv {
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+#bar-rest .tpriv .fi {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 7px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#bar-rest .tpriv .fi:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.tb-light #bar-rest .tpriv .fi:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 /* The tray's icons, as the programs drew them (taskbar.rs). */
@@ -1738,18 +1759,12 @@ body {
   background: rgba(255, 255, 255, 0.11);
 }
 
-#bar-rest .tchev svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: #d1d1d6;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+#bar-rest .tchev .fi {
+  font-size: 12px;
   transition: transform 0.2s ease;
 }
 
-#bar-rest .tchev.open svg {
+#bar-rest .tchev.open .fi {
   transform: rotate(180deg);
 }
 
@@ -2030,15 +2045,8 @@ body {
   color: #8a8a8a;
 }
 
-.tb-light #bar-rest .tquick svg,
-.tb-light #bar-rest .tchev svg,
 .tb-light #bar-rest .gear svg {
   stroke: #1b1b1b;
-}
-
-.tb-light #bar-rest .tquick .vol path:first-child,
-.tb-light #bar-rest .tquick .dot {
-  fill: #1b1b1b;
 }
 
 .tb-light #bar-rest .start:hover,

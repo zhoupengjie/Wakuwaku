@@ -411,6 +411,38 @@ mod imp {
         }
     }
 
+    // What is using the microphone, the camera and the location now, each a
+    // list of programs' names, as Windows' taskbar shows it. Windows notes
+    // every use under CapabilityAccessManager\ConsentStore\<what>: a key per
+    // program (one not from the Store under NonPackaged, its path with # for
+    // \) with LastUsedTimeStart and LastUsedTimeStop, 0 while still in use.
+    pub fn in_use() -> [(&'static str, Vec<String>); 3] {
+        use winreg::enums::HKEY_CURRENT_USER;
+        use winreg::RegKey;
+        let root = RegKey::predef(HKEY_CURRENT_USER).open_subkey(r"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore");
+        let using = |key: &RegKey| key.get_value::<u64, _>("LastUsedTimeStart").unwrap_or(0) > 0 && key.get_value::<u64, _>("LastUsedTimeStop").unwrap_or(1) == 0;
+        [("mic", "microphone"), ("cam", "webcam"), ("loc", "location")].map(|(what, store)| {
+            let mut names = Vec::new();
+            if let Some(store) = root.as_ref().ok().and_then(|r| r.open_subkey(store).ok()) {
+                for name in store.enum_keys().flatten() {
+                    let Ok(key) = store.open_subkey(&name) else { continue };
+                    if name == "NonPackaged" {
+                        for path in key.enum_keys().flatten() {
+                            if key.open_subkey(&path).is_ok_and(|k| using(&k)) {
+                                names.push(app_name(&path.replace('#', "\\")));
+                            }
+                        }
+                    } else if using(&key) {
+                        names.push(name.split('_').next().unwrap_or(&name).to_string());
+                    }
+                }
+            }
+            names.sort();
+            names.dedup();
+            (what, names)
+        })
+    }
+
     // The window in front's input method between its own script and plain letters.
     pub fn toggle_native() -> bool {
         let (_, ime) = front_ime();
@@ -434,6 +466,9 @@ mod imp {
     }
     pub fn net() -> &'static str {
         "other"
+    }
+    pub fn in_use() -> [(&'static str, Vec<String>); 3] {
+        [("mic", Vec::new()), ("cam", Vec::new()), ("loc", Vec::new())]
     }
     pub fn file_name(path: &str) -> String {
         path.rsplit('/').next().unwrap_or(path).to_string()
@@ -469,4 +504,4 @@ mod imp {
     }
 }
 
-pub use imp::{alive, app_name, close, destroy_icon, file_icon, front, icon_of, keys, launch, list, net, press, toggle_native};
+pub use imp::{alive, app_name, close, destroy_icon, file_icon, front, icon_of, in_use, keys, launch, list, net, press, toggle_native};

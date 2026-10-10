@@ -759,26 +759,38 @@
   imeMark.dataset.bar = 'ime'
   keysBox.append(capsMark, imeMark)
   // Windows' quick settings (Wi-Fi, Bluetooth, volume…), as its own taskbar
-  // has them: the network's way out (by cable, Wi-Fi, or none) and the volume.
+  // has them: the network's way out (by cable, Wi-Fi, a VPN's, or none) and
+  // the volume, in its own icon font (.fi: Segoe Fluent Icons).
   const quickBox = el('span', 'tquick')
   quickBox.dataset.bar = 'quick'
-  const NET = {
-    wifi: '<path d="M1.5 6.2a9.5 9.5 0 0 1 13 0M3.8 8.6a6.2 6.2 0 0 1 8.4 0M6.1 11a3 3 0 0 1 3.8 0"/><circle cx="8" cy="13.2" r="0.9" class="dot"/>',
-    wired: '<rect x="2" y="2.5" width="12" height="8.5" rx="1.2"/><path d="M8 11v2.5M5 13.5h6"/>',
-    other: '<circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c2 2 2 10.4 0 12.4M8 1.8c-2 2-2 10.4 0 12.4"/>',
-    none: '<circle cx="8" cy="8" r="6.2"/><path d="M1.8 8h12.4M8 1.8c2 2 2 10.4 0 12.4M8 1.8c-2 2-2 10.4 0 12.4"/><path d="M3 13L13 3" class="off"/>',
-  }
-  const netMark = el('span', 'net')
-  const volMark = el('span', 'vol')
-  volMark.innerHTML = '<svg viewBox="0 0 16 16"><path d="M2 6h2.5L8 3v10l-3.5-3H2z"/><path d="M10.5 5.8a3 3 0 0 1 0 4.4M12.4 3.9a5.7 5.7 0 0 1 0 8.2"/></svg>'
+  const NET = { wired: '', wifi: '', other: '', none: '' }
+  const netMark = el('span', 'fi net')
+  const volMark = el('span', 'fi vol', '')
   quickBox.append(netMark, volMark)
   function showNet(kind) {
-    const k = NET[kind] ? kind : 'other'
-    if (netMark.dataset.k === k) return
-    netMark.dataset.k = k
-    netMark.innerHTML = `<svg viewBox="0 0 16 16">${NET[k]}</svg>`
+    netMark.textContent = NET[kind] || NET.other
   }
   showNet('other')
+  // What is using the microphone, the camera, the location, as Windows'
+  // taskbar shows it before the input method; a press, its privacy settings.
+  const PRIVACY = { mic: '', cam: '', loc: '' }
+  const privBox = el('span', 'tpriv')
+  let privDrawn = ''
+  function showPrivacy(use) {
+    const drawn = JSON.stringify(use || {})
+    if (drawn === privDrawn) return
+    privDrawn = drawn
+    privBox.replaceChildren(
+      ...Object.keys(PRIVACY)
+        .filter(k => use?.[k]?.length)
+        .map(k => {
+          const mark = el('span', 'fi', PRIVACY[k])
+          mark.dataset.bar = `privacy-${k}`
+          mark.title = t(lang, `taskbar.inUse.${k}`, { apps: use[k].join(lang === 'zh' ? '、' : ', ') })
+          return mark
+        }),
+    )
+  }
   const clockBox = el('span', 'tclock')
   clockBox.dataset.bar = 'notifications'
   const taskGear = gearNode()
@@ -800,7 +812,7 @@
   function fillTaskbar() {
     barRest.style.left = `${sizeOf('compact').width + (isCapsule() ? CAPSULE_X + 4 : 0)}px`
     if (!taskbarBuilt) {
-      barRest.replaceChildren(startButton, windowsBox, tagsBox, growNode, facesBox, trayBox, keysBox, quickBox, clockBox, taskGear, deskEdge, pop)
+      barRest.replaceChildren(startButton, windowsBox, tagsBox, growNode, facesBox, trayBox, privBox, keysBox, quickBox, clockBox, taskGear, deskEdge, pop)
       taskbarBuilt = true
       trayDrawn = ''
       windowsDrawn = ''
@@ -1055,6 +1067,7 @@
     capsMark.classList.toggle('on', !!keys?.caps)
     capsMark.title = keys?.caps ? 'Caps Lock' : ''
     showNet(keys?.net)
+    showPrivacy(keys?.use)
   })
 
   // --- The taskbar's look: Mica, light or dark, Windows' accent -------------------------
@@ -1127,7 +1140,7 @@
   // else Windows' own (windowsOut).
   const isOut = i => config.trayPinned?.[i.name] ?? i.windowsOut === true
   const chevron = el('span', 'tchev')
-  chevron.innerHTML = '<svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg>'
+  chevron.append(el('span', 'fi', ''))
   const outBox = el('span', 'tout')
   const flyout = el('span', 'tfly')
   let trayOpen = false

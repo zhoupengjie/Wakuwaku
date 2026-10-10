@@ -221,6 +221,9 @@ pub async fn settings_wallpaper(app: AppHandle, what: String, value: Option<Stri
     .await
     .ok()
     .flatten();
+    for line in crate::paper::notes() {
+        sh.log(&format!("settings: wallpaper: {line}"));
+    }
     if let Some((ok, value)) = done {
         sh.log(&format!("settings: wallpaper {what_done} {value}: {ok}"));
     }

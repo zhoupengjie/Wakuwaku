@@ -57,6 +57,8 @@ mod imp {
     // IDesktopWallpaper:
     const SET_WALLPAPER: usize = 3;
     const GET_WALLPAPER: usize = 4;
+    const GET_MONITOR_DEVICE_PATH_AT: usize = 5;
+    const GET_MONITOR_DEVICE_PATH_COUNT: usize = 6;
     const SET_POSITION: usize = 10;
     const GET_POSITION: usize = 11;
     const SET_SLIDESHOW: usize = 12;
@@ -155,6 +157,54 @@ mod imp {
         (f(item, SIGDN_FILESYSPATH, &mut name) >= 0).then(|| take(name)).filter(|p| !p.is_empty())
     }
 
+    // The picture shown: every display's one. In a slideshow Windows tells
+    // none for all at once (S_FALSE, an empty path), so the first display's
+    // that tells one: read for all, a slideshow's pictures went unseen and
+    // "previous" had none to go back to (2026-10-10).
+    unsafe fn shown(w: *mut Obj) -> String {
+        let get: extern "system" fn(*mut Obj, *const u16, *mut *mut u16) -> i32 = method(w, GET_WALLPAPER);
+        let mut file: *mut u16 = std::ptr::null_mut();
+        get(w, std::ptr::null(), &mut file);
+        let file = take(file);
+        if !file.is_empty() {
+            return file;
+        }
+        let mut count = 0u32;
+        let f: extern "system" fn(*mut Obj, *mut u32) -> i32 = method(w, GET_MONITOR_DEVICE_PATH_COUNT);
+        f(w, &mut count);
+        let at: extern "system" fn(*mut Obj, u32, *mut *mut u16) -> i32 = method(w, GET_MONITOR_DEVICE_PATH_AT);
+        for i in 0..count {
+            let mut id: *mut u16 = std::ptr::null_mut();
+            if at(w, i, &mut id) < 0 || id.is_null() {
+                continue;
+            }
+            let id = wide(&take(id));
+            let mut file: *mut u16 = std::ptr::null_mut();
+            get(w, id.as_ptr(), &mut file);
+            let file = take(file);
+            if !file.is_empty() {
+                return file;
+            }
+        }
+        String::new()
+    }
+
+    // What the calls did, for the log (settings.rs takes them after each).
+    static NOTES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+    fn note(line: String) {
+        NOTES.lock().unwrap().push(line);
+    }
+
+    pub fn notes() -> Vec<String> {
+        std::mem::take(&mut *NOTES.lock().unwrap())
+    }
+
+    // A file's name, for the log.
+    fn name(path: &str) -> &str {
+        path.rsplit(['\\', '/']).next().unwrap_or(path)
+    }
+
     // What the desktop shows: a slideshow or one picture, its file (the
     // slideshow's of the moment), the slideshow's folder, how it is laid,
     // the turns.
@@ -226,46 +276,130 @@ mod imp {
         back && set_position(s.position)
     }
 
-    // The slideshow's picture before this one: Windows' own step back; should
-    // it not take one (the same picture a second after), the one seen before
-    // this set as the slideshow's (the seen after it let go, so another step
-    // goes further back).
-    pub fn previous() -> bool {
-        let Some(now) = state() else { return false };
-        seen(&now.file);
-        // SAFETY: a COM object of our own, released.
-        let stepped = with_com(|| unsafe {
-            let Some(w) = wallpaper() else { return false };
-            let f: extern "system" fn(*mut Obj, *const u16, i32) -> i32 = method(w, ADVANCE_SLIDESHOW);
-            let done = f(w, std::ptr::null(), DSD_BACKWARD) >= 0;
-            release(w);
-            done
-        });
+    // The picture shown once it is another than this one, waited for up to
+    // so long (Windows changes it a moment after it is asked, with a fade).
+    fn changes_from(was: &str, most_ms: u64) -> Option<String> {
         let asked = std::time::Instant::now();
-        while stepped && asked.elapsed() < std::time::Duration::from_millis(1000) {
-            if state().is_some_and(|s| s.file != now.file) {
-                return true;
+        loop {
+            if let Some(file) = state().map(|s| s.file).filter(|f| !f.is_empty() && !f.eq_ignore_ascii_case(was)) {
+                return Some(file);
+            }
+            if asked.elapsed() >= std::time::Duration::from_millis(most_ms) {
+                return None;
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        let earlier = {
+    }
+
+    // Whether this picture is shown, waited for up to so long.
+    fn shows(file: &str, most_ms: u64) -> bool {
+        let asked = std::time::Instant::now();
+        loop {
+            if state().is_some_and(|s| s.file.eq_ignore_ascii_case(file)) {
+                return true;
+            }
+            if asked.elapsed() >= std::time::Duration::from_millis(most_ms) {
+                return false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
+    // The slideshow's step either way: Windows' answer (an HRESULT).
+    fn advance(direction: i32) -> i32 {
+        // SAFETY: a COM object of our own, released.
+        with_com(|| unsafe {
+            let Some(w) = wallpaper() else { return E_FAIL };
+            let f: extern "system" fn(*mut Obj, *const u16, i32) -> i32 = method(w, ADVANCE_SLIDESHOW);
+            let hr = f(w, std::ptr::null(), direction);
+            release(w);
+            hr
+        })
+    }
+
+    const E_FAIL: i32 = 0x8000_4005_u32 as i32;
+
+    // The picture before this one in its folder by name (the slideshow's
+    // order, unshuffled), the last before the first: for a step back with
+    // none seen yet (her started since).
+    fn before_in_folder(folder: &str, file: &str) -> Option<String> {
+        const PICTURES: [&str; 14] = ["jpg", "jpeg", "jfif", "png", "bmp", "dib", "gif", "tif", "tiff", "heic", "webp", "avif", "jxr", "wdp"];
+        let mut all: Vec<String> = std::fs::read_dir(folder)
+            .ok()?
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|x| x.to_str()).is_some_and(|x| PICTURES.contains(&x.to_ascii_lowercase().as_str())))
+            .filter_map(|p| p.to_str().map(str::to_string))
+            .collect();
+        all.sort_by_key(|p| p.to_lowercase());
+        let at = all.iter().position(|p| p.eq_ignore_ascii_case(file))?;
+        (all.len() > 1).then(|| all[(at + all.len() - 1) % all.len()].clone())
+    }
+
+    // The slideshow's picture before this one: Windows' own step back; should
+    // it not take one (the same picture a moment after), the one seen before
+    // this (the seen after it let go, so another step goes further back),
+    // else the one before it in the folder; shown, the slideshow going on.
+    pub fn previous() -> bool {
+        let Some(now) = state() else {
+            note("previous: the desktop not read".into());
+            return false;
+        };
+        seen(&now.file);
+        let hr = advance(DSD_BACKWARD);
+        let stepped = if hr >= 0 { changes_from(&now.file, 1500) } else { None };
+        note(format!("previous: from {}; Windows' step back {:#010x}, to {}", name(&now.file), hr as u32, stepped.as_deref().map_or("none", name)));
+        if stepped.is_some() {
+            return true;
+        }
+        let (earlier, count) = {
             let mut seen = SEEN.lock().unwrap();
+            let count = seen.len();
             let at = seen.iter().rposition(|f| f.eq_ignore_ascii_case(&now.file)).filter(|&i| i > 0);
-            at.map(|i| {
+            let earlier = at.map(|i| {
                 seen.truncate(i);
                 seen[i - 1].clone()
-            })
+            });
+            (earlier, count)
         };
+        let (earlier, from) = match earlier {
+            Some(file) => (Some(file), "seen"),
+            None => (now.folder.as_deref().and_then(|d| before_in_folder(d, &now.file)), "the folder"),
+        };
+        let Some(file) = earlier else {
+            note(format!("previous: none before it ({count} seen, none in the folder)"));
+            return false;
+        };
+        note(format!("previous: back to {} ({from}; {count} seen)", name(&file)));
+        show(&file, &now)
+    }
+
+    // A picture shown now: Windows' call for it; should it not take (the
+    // slideshow's own), the classic one, and the slideshow it ended on again
+    // from there.
+    fn show(file: &str, was: &State) -> bool {
         // SAFETY: a COM object of our own, released; the path alive for the call.
-        earlier.is_some_and(|file| {
-            with_com(|| unsafe {
-                let Some(w) = wallpaper() else { return false };
-                let put: extern "system" fn(*mut Obj, *const u16, *const u16) -> i32 = method(w, SET_WALLPAPER);
-                let done = put(w, std::ptr::null(), wide(&file).as_ptr()) >= 0;
-                release(w);
-                done
-            })
-        })
+        let hr = with_com(|| unsafe {
+            let Some(w) = wallpaper() else { return E_FAIL };
+            let put: extern "system" fn(*mut Obj, *const u16, *const u16) -> i32 = method(w, SET_WALLPAPER);
+            let path = wide(file);
+            let hr = put(w, std::ptr::null(), path.as_ptr());
+            release(w);
+            hr
+        });
+        let mut done = hr >= 0 && shows(file, 1500);
+        note(format!("previous: SetWallpaper {:#010x}, shown: {done}", hr as u32));
+        if !done {
+            let set = set_picture(file);
+            done = set && shows(file, 1500);
+            note(format!("previous: SPI_SETDESKWALLPAPER {set}, shown: {done}"));
+        }
+        let ended = state().is_some_and(|s| !s.slideshow);
+        if let (true, true, true, Some(folder)) = (done, was.slideshow, ended, was.folder.as_deref()) {
+            let on = slideshow(folder, false) && set_turns(Some(was.every), Some(was.shuffle));
+            note(format!("previous: the slideshow ended; on again: {on}, the picture kept: {}", shows(file, 0)));
+        }
+        done
     }
 
     fn state() -> Option<State> {
@@ -279,10 +413,7 @@ mod imp {
             let mut position = 4i32;
             let f: extern "system" fn(*mut Obj, *mut i32) -> i32 = method(w, GET_POSITION);
             f(w, &mut position);
-            let mut file: *mut u16 = std::ptr::null_mut();
-            let f: extern "system" fn(*mut Obj, *const u16, *mut *mut u16) -> i32 = method(w, GET_WALLPAPER);
-            f(w, std::ptr::null(), &mut file);
-            let file = take(file);
+            let file = shown(w);
             let (mut options, mut tick) = (0u32, 0u32);
             let f: extern "system" fn(*mut Obj, *mut u32, *mut u32) -> i32 = method(w, GET_SLIDESHOW_OPTIONS);
             f(w, &mut options, &mut tick);
@@ -318,8 +449,20 @@ mod imp {
     }
 
     // A folder's pictures in turn (Windows' slideshow), from now: the first
-    // of them at once, every half hour should no turn be set yet.
+    // of them at once (seen, once shown), every half hour should no turn be
+    // set yet.
     pub fn set_folder(path: &str) -> bool {
+        let was = state().map(|s| s.file).unwrap_or_default();
+        let set = slideshow(path, true);
+        if let Some(file) = set.then(|| changes_from(&was, 1500)).flatten() {
+            seen(&file);
+        }
+        set
+    }
+
+    // The slideshow set to a folder; its next picture at once, or (back
+    // from a step back) the one shown kept.
+    fn slideshow(path: &str, advance: bool) -> bool {
         // SAFETY: COM objects of our own, released; the path alive for the calls.
         with_com(|| unsafe {
             let Some(w) = wallpaper() else { return false };
@@ -339,8 +482,10 @@ mod imp {
                     let f: extern "system" fn(*mut Obj, u32, u32) -> i32 = method(w, SET_SLIDESHOW_OPTIONS);
                     f(w, options, EVERY[2]);
                 }
-                let f: extern "system" fn(*mut Obj, *const u16, i32) -> i32 = method(w, ADVANCE_SLIDESHOW);
-                f(w, std::ptr::null(), 0);
+                if advance {
+                    let f: extern "system" fn(*mut Obj, *const u16, i32) -> i32 = method(w, ADVANCE_SLIDESHOW);
+                    f(w, std::ptr::null(), 0);
+                }
             }
             release(items);
             release(item);
@@ -393,15 +538,18 @@ mod imp {
     }
 
     // The slideshow's next picture now.
+    // Waited for until shown, and seen: a step back has it to go back to,
+    // and the settings name it at once.
     pub fn next() -> bool {
-        // SAFETY: a COM object of our own, released.
-        with_com(|| unsafe {
-            let Some(w) = wallpaper() else { return false };
-            let f: extern "system" fn(*mut Obj, *const u16, i32) -> i32 = method(w, ADVANCE_SLIDESHOW);
-            let done = f(w, std::ptr::null(), 0) >= 0;
-            release(w);
-            done
-        })
+        let was = state().map(|s| s.file).unwrap_or_default();
+        seen(&was);
+        let hr = advance(0);
+        let now = if hr >= 0 { changes_from(&was, 2000) } else { None };
+        note(format!("next: from {}; Windows' step {:#010x}, to {}", name(&was), hr as u32, now.as_deref().map_or("none yet", name)));
+        if let Some(file) = &now {
+            seen(file);
+        }
+        hr >= 0
     }
 
     // A picture, or a folder, picked in Windows' own file dialog over this
@@ -464,6 +612,9 @@ mod imp {
         false
     }
     pub fn remember() {}
+    pub fn notes() -> Vec<String> {
+        Vec::new()
+    }
     pub fn undo() -> bool {
         false
     }
@@ -478,7 +629,7 @@ mod imp {
     }
 }
 
-pub use imp::{next, now, pick, previous, remember, set_folder, set_picture, set_position, set_turns, undo};
+pub use imp::{next, notes, now, pick, previous, remember, set_folder, set_picture, set_position, set_turns, undo};
 
 #[cfg(test)]
 mod tests {

@@ -339,18 +339,27 @@
   // the dialog answers (picking, a letter's files', is let go a second after
   // the island has the focus again, which a press on it mid-dialog gives).
   let pickingPaper = false
+  // One ask at a time: its buttons grey until Windows has done it (a step
+  // waits up to a few seconds to see the picture change; presses meanwhile
+  // went on stepping, 2026-10-10).
+  let paperBusy = false
 
   // Asked of Windows for the desktop's picture; the snapshot as it is after.
   function paperDo(what, value) {
-    if (what === 'picture' || what === 'folder') {
-      pickingPaper = true
-      draw()
-    }
-    return window.pet.settings.wallpaper(what, value).then(got => {
-      pickingPaper = false
-      snap = got
-      draw()
-    })
+    if (paperBusy) return
+    paperBusy = true
+    pickingPaper = what === 'picture' || what === 'folder'
+    draw()
+    return window.pet.settings
+      .wallpaper(what, value)
+      .then(got => {
+        snap = got
+      })
+      .finally(() => {
+        paperBusy = false
+        pickingPaper = false
+        draw()
+      })
   }
 
   // The desktop's picture (paper.rs): one picture or a folder's in turn,
@@ -365,7 +374,7 @@
       ? T('s.paperNowFolder', { name: lastPart(paper.folder) || T('s.paperUnknown') })
       : T('s.paperNowPicture', { name: lastPart(paper.file) || T('s.paperUnknown') })
     const every = PAPER_EVERY.map(ms => [ms, ms >= 86400000 ? T('s.paperDay') : ms >= 3600000 ? T('s.paperHours', { n: ms / 3600000 }) : T('settings.minutes', { n: ms / 60000 })])
-    const button = (what, label) => `<button class="pbtn sm" data-paper="${what}" ${pickingPaper ? 'disabled' : ''}>${esc(T(label))}</button>`
+    const button = (what, label) => `<button class="pbtn sm" data-paper="${what}" ${paperBusy ? 'disabled' : ''}>${esc(T(label))}</button>`
     // Back to the picture before the last change made here, while there is one.
     const pick = `<span class="btns">${button('picture', 's.paperPicture')}${button('folder', 's.paperFolder')}${paper.canUndo ? button('undo', 's.paperUndo') : ''}</span>`
     return `${sec(T('s.wallpaper'))}<div class="grp">

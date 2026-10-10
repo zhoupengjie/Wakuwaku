@@ -1470,6 +1470,7 @@ body {
 #bar-rest .start svg {
   width: 24px;
   height: 24px;
+  position: relative;
 }
 
 /* Under the pointer (and the window in front): a light wash, as on the

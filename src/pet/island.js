@@ -765,15 +765,23 @@
     const rect = (x, y) => `<rect x="${x}" y="${y}" width="${pane}" height="${pane}" rx="${r}"/>`
     startButton.innerHTML = `<svg viewBox="0 0 ${box} ${box}" style="width:${box / dpr}px;height:${box / dpr}px"><defs><linearGradient id="start-blue" gradientUnits="userSpaceOnUse" x1="${at}" y1="${at}" x2="${end}" y2="${end}"><stop class="s0" offset="0"/><stop class="s1" offset="1"/></linearGradient></defs><g fill="url(#start-blue)">${rect(at, at)}${rect(far, at)}${rect(at, far)}${rect(far, far)}</g></svg>`
   }
+  // Moved by its layout (position: relative), not by a transform: a moved
+  // layer is drawn again off the grid, blurring it (2026-10-10, on the
+  // live taskbar). The part of the taskbar it is in starts on the grid too
+  // (onPixels in fillTaskbar).
   function snapStart() {
     const mark = startButton.firstElementChild
     if (!mark || !mark.isConnected || startButton.classList.contains('down')) return
     const dpr = devicePixelRatio || 1
-    mark.style.translate = '0px 0px'
+    mark.style.left = '0px'
+    mark.style.top = '0px'
     const r = mark.getBoundingClientRect()
     const off = v => (Math.round(v * dpr) - v * dpr) / dpr
-    mark.style.translate = `${off(r.left).toFixed(3)}px ${off(r.top).toFixed(3)}px`
+    mark.style.left = `${off(r.left).toFixed(3)}px`
+    mark.style.top = `${off(r.top).toFixed(3)}px`
   }
+  // A length that starts and ends on the screen's own pixels.
+  const onPixels = v => Math.round(v * (devicePixelRatio || 1)) / (devicePixelRatio || 1)
   drawStartMark()
   window.addEventListener('resize', () => {
     drawStartMark()
@@ -872,7 +880,7 @@
   let windowsDrawn = ''
 
   function fillTaskbar() {
-    barRest.style.left = `${sizeOf('compact').width + (isCapsule() ? CAPSULE_X + 4 : 0)}px`
+    barRest.style.left = `${onPixels(sizeOf('compact').width + (isCapsule() ? CAPSULE_X + 4 : 0))}px`
     if (!taskbarBuilt) {
       barRest.replaceChildren(glide, startButton, windowsBox, tagsBox, growNode, facesBox, trayBox, privBox, keysBox, quickBox, clockBox, taskGear, deskEdge, pop)
       taskbarBuilt = true

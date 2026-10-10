@@ -37,7 +37,18 @@ mod imp {
         fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
         fn MonitorFromWindow(hwnd: Hwnd, flags: u32) -> *mut c_void;
         fn GetMonitorInfoW(monitor: *mut c_void, info: *mut MonitorInfo) -> i32;
+        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
     }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+        fn CloseHandle(handle: isize) -> i32;
+        fn QueryFullProcessImageNameW(process: isize, flags: u32, name: *mut u16, size: *mut u32) -> i32;
+    }
+
+    const GWL_EXSTYLE: i32 = -20;
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
 
     // The desktop, the taskbars, and task view and Alt+Tab (they cover the screen).
     const SKIP_CLASSES: [&str; 5] = ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "XamlExplorerHostIslandWindow"];
@@ -80,6 +91,35 @@ mod imp {
         }
     }
 
+    // The window in front, for the log: its class, its program's file and
+    // its extended style. To tell a screenshot tool's layer over the screen
+    // a moment (the taskbar hid and came back, a flash, with every shot,
+    // 2026-10-10) from a game full screen, before a rule tells them apart.
+    pub fn front() -> String {
+        // SAFETY: plain calls; the buffers are ours and sized; the handle closed.
+        unsafe {
+            let hwnd = GetForegroundWindow();
+            let mut name = [0u16; 256];
+            let n = GetClassNameW(hwnd, name.as_mut_ptr(), 256).max(0) as usize;
+            let class = String::from_utf16_lossy(&name[..n]);
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, &mut pid);
+            let mut file = String::new();
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if process != 0 {
+                let mut path = [0u16; 512];
+                let mut size = 512u32;
+                if QueryFullProcessImageNameW(process, 0, path.as_mut_ptr(), &mut size) != 0 {
+                    let path = String::from_utf16_lossy(&path[..size as usize]);
+                    file = path.rsplit('\\').next().unwrap_or(&path).to_string();
+                }
+                CloseHandle(process);
+            }
+            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            format!("{class} ({file}) exstyle {ex:#x}")
+        }
+    }
+
     pub const AVAILABLE: bool = true;
 }
 
@@ -89,7 +129,11 @@ mod imp {
         Some(false)
     }
 
+    pub fn front() -> String {
+        String::new()
+    }
+
     pub const AVAILABLE: bool = false;
 }
 
-pub use imp::{check, AVAILABLE};
+pub use imp::{check, front, AVAILABLE};

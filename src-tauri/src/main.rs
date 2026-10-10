@@ -1079,7 +1079,8 @@ fn main() {
                         let is_full = if watching { fullscreen::check(&own) } else { Some(false) };
                         if let Some(is_full) = is_full {
                             if ticker.by_fullscreen.swap(is_full, Ordering::SeqCst) != is_full {
-                                ticker.log(&format!("another app full screen: {is_full}"));
+                                let which = if is_full { format!(", {}", fullscreen::front()) } else { String::new() };
+                                ticker.log(&format!("another app full screen: {is_full}{which}"));
                                 ticker.apply_visibility();
                             }
                         }

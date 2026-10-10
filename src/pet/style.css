@@ -1255,6 +1255,19 @@ body {
   border-left: 1px solid transparent;
 }
 
+/* OLED's guard (island.js oledShift): the island and the taskbar's parts a
+   screen pixel or two off, by turns. The strip's ground (#island-row, the
+   Mica) stays, and so does the show-desktop sliver, which meets the
+   screen's edge. */
+#island,
+#bar-rest {
+  translate: var(--oled-x, 0px) var(--oled-y, 0px);
+}
+
+#bar-rest .tdesk {
+  translate: calc(-1 * var(--oled-x, 0px)) calc(-1 * var(--oled-y, 0px));
+}
+
 #bar-rest .tdesk:hover {
   border-left-color: rgba(255, 255, 255, 0.35);
 }

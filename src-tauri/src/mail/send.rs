@@ -250,7 +250,7 @@ fn keep_copy(sh: &Shared, account: &Account, mailbox: &str, uid: u32, copy: &[u8
     }
     let size = copy.len() as u32;
     s.add(Folder::Sent, store::Entry::from_head(uid, (true, false, false), size, Some(now_ms() as i64 / 1000), copy));
-    s.keep_body(Folder::Sent, uid, copy);
+    s.keep_body(Folder::Sent, uid, copy, true);
     s.save();
 }
 

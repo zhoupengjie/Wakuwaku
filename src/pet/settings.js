@@ -701,7 +701,8 @@
     return d.toLocaleDateString(locale, { year: 'numeric', month: 'numeric', day: 'numeric' })
   }
 
-  const mailSize = n => (n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`)
+  const mailSize = n =>
+    n >= 1 << 30 ? `${(n / (1 << 30)).toFixed(1)} GB` : n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`
   const people = list => (list || []).map(p => (p.name ? `${p.name} <${p.address}>` : p.address)).join(', ')
   const starHTML = (account, uid, on, folder = 'inbox') =>
     `<button class="star${on ? ' on' : ''}" data-star="${esc(account)}" data-folder="${folder}" data-uid="${uid}" title="${esc(T(on ? 'mail.unstar' : 'mail.star'))}">${on ? '★' : '☆'}</button>`
@@ -1194,7 +1195,17 @@
       .join('')
     const add = mailForm ? '' : `<div class="r"><button class="pbtn wide" data-mail-add>${esc(T('mail.add'))}</button></div>`
     return `${sec(T('mail.section'))}<div class="grp"><div class="note">${esc(T('mail.note'))}</div>${rows}${add}</div>
-      ${mailForm ? mailFormHTML() : ''}`
+      ${accounts.length ? offlineHTML() : ''}${mailForm ? mailFormHTML() : ''}`
+  }
+
+  // How much is kept whole on this computer (the setting mailOffline: the
+  // last year unless set), and the room every account's takes now.
+  function offlineHTML() {
+    const value = ['90d', 'year', 'all', 'opened'].includes(snap.settings.mailOffline) ? snap.settings.mailOffline : 'year'
+    const used = (snap.mail || []).reduce((n, a) => n + (a.status?.offline?.bytes || 0), 0)
+    const note = T(`mail.keep.${value}Note`) + (used ? ` ${T('mail.keep.used', { size: mailSize(used) })}` : '')
+    const choices = ['90d', 'year', 'all', 'opened'].map(v => [v, T(`mail.keep.${v}`)])
+    return `<div class="grp keep">${row(esc(T('mail.keep')), esc(note), seg('mailOffline', choices, value))}</div>`
   }
 
   // The letters as the list shows them: a conversation folded in is the
@@ -1803,7 +1814,7 @@
         gallery.items = []
         return loadGallery(false)
       }
-      const value = ['lang', 'islandWidth', 'taskbarMaterial', 'taskbarClearWhen', 'taskbarButtons', 'taskbarAlign', 'mailAgent'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
+      const value = ['lang', 'islandWidth', 'taskbarMaterial', 'taskbarClearWhen', 'taskbarButtons', 'taskbarAlign', 'mailAgent', 'mailOffline'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
       return patch({ [key]: value })
     }
     const tile = at('[data-tile]')

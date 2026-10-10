@@ -101,6 +101,8 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "mailAgent" => matches!(v.as_str(), Some("claude" | "codex")),
         // The Mail page in two panes (list, letter), or one.
         "mailPanes" => matches!(v.as_str(), Some("one" | "two")),
+        // How much mail is kept whole offline (mail/store.rs Offline).
+        "mailOffline" => matches!(v.as_str(), Some("90d" | "year" | "all" | "opened")),
         "mailAgentConf" => mail::agent::is_conf_ok(v),
         _ => false,
     }
@@ -137,11 +139,17 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
         sh.push_asks();
     }
     let plugins = rest.contains_key("plugins");
+    let offline = rest.contains_key("mailOffline");
     if !rest.is_empty() {
         sh.change(Value::Object(rest));
     }
     if plugins && scripts::sync(sh) {
         sh.redraw();
+    }
+    // Mail kept offline for more or less: each account's sync at it now,
+    // once the setting is there to be read.
+    if offline {
+        mail::kick_all(sh);
     }
     snapshot(sh)
 }

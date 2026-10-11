@@ -277,12 +277,12 @@
         const tr = x.state?.trash
         const confirm = x.local?.confirm === 'empty'
         const what = tr ? (tr.items ? `${esc(T(x, 'tool.trash.items', { n: tr.items }))} · ${esc(size(tr.bytes))}` : esc(T(x, 'tool.trash.empty'))) : '—'
-        if (confirm) return `<div class="tbig">${what}</div><div class="twarn">${esc(T(x, 'tool.trash.sure'))}</div><div class="trow">${button('empty', esc(T(x, 'tool.trash.emptyNow')), { cls: 'danger' })}${button('cancel', esc(T(x, 'tool.cancel')))}</div>`
+        if (confirm) return `<div class="tbig">${what}</div><div class="twarn">${esc(T(x, 'tool.trash.sure'))}</div><div class="trow tsure">${button('cancel', esc(T(x, 'tool.cancel')))}${button('empty', esc(T(x, 'tool.trash.emptyNow')), { cls: 'danger' })}</div>`
         return `<div class="tbig">${what}</div><div class="trow">${button('open', esc(T(x, 'tool.trash.open')))}${tr?.items ? button('ask', esc(T(x, 'tool.trash.emptyAsk')), { arg: 'empty' }) : ''}</div>`
       }
       case 'power': {
         const sure = x.local?.confirm
-        if (sure) return `<div class="twarn">${esc(T(x, 'tool.power.sure', { what: T(x, `tool.power.${sure}`) }))}</div><div class="trow">${button('do', esc(T(x, `tool.power.${sure}`)), { arg: sure, cls: 'danger' })}${button('cancel', esc(T(x, 'tool.cancel')))}</div>`
+        if (sure) return `<div class="twarn">${esc(T(x, 'tool.power.sure', { what: T(x, `tool.power.${sure}`) }))}</div><div class="trow tsure">${button('cancel', esc(T(x, 'tool.cancel')))}${button('do', esc(T(x, `tool.power.${sure}`)), { arg: sure, cls: 'danger' })}</div>`
         return `<div class="tgrid">${['lock', 'sleep', 'signout', 'restart', 'shutdown'].map(w => button(w === 'lock' || w === 'sleep' ? 'do' : 'ask', esc(T(x, `tool.power.${w}`)), { arg: w })).join('')}</div>`
       }
       case 'awake': {
@@ -339,6 +339,12 @@
     return ''
   }
 
+  // What is done only once asked (and answered): power's that end the session.
+  const ASKED = ['signout', 'restart', 'shutdown']
+  // A question asked (what) and answered, not by the second press of the
+  // click that asked it: 400 ms after it was asked at the soonest.
+  const answered = (x, what) => x.local?.confirm === what && x.now - (x.local.askedAt || 0) >= 400
+
   // A button on its card. arg: the button's (or the field it names').
   function act(kind, what, arg, x, api) {
     switch (`${kind}:${what}`) {
@@ -370,14 +376,18 @@
         return api.call('open')
       case 'trash:ask':
       case 'power:ask':
-        return api.setLocal({ confirm: arg })
+        return api.setLocal({ confirm: arg, askedAt: x.now })
       case 'trash:cancel':
       case 'power:cancel':
         return api.setLocal({ confirm: null })
       case 'trash:empty':
+        if (!answered(x, 'empty')) return
         api.setLocal({ confirm: null })
         return api.call('empty')
       case 'power:do':
+        // Locked or asleep at once; signed out, restarted, shut down only
+        // once asked and answered.
+        if (ASKED.includes(arg) && !answered(x, arg)) return
         api.setLocal({ confirm: null })
         return api.call(arg)
       case 'awake:on':

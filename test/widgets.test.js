@@ -171,3 +171,10 @@ test("a widget's name there: a plugin's, a built-in one's, a spacer's, a label a
   // Gone: as it was put there.
   assert.equal(Widgets.nameOf('en', { type: 'widget', of: 'gone', name: 'CI' }, all), 'CI')
 })
+
+test("a tool's settings: no control characters, C1's neither (as settings.rs has it)", () => {
+  const e = cfg => Widgets.isEntry({ id: 'wa', type: 'tool', of: 'launch', cfg })
+  assert.ok(e({ path: ['C:', 'Windows', 'notepad.exe'].join(String.fromCharCode(92)) }))
+  assert.ok(!e({ path: 'a' + String.fromCharCode(9) + 'b' }))
+  assert.ok(!e({ path: 'a' + String.fromCharCode(0x85) + 'b' }))
+})

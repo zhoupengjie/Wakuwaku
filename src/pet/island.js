@@ -1190,7 +1190,8 @@
   function toolAct(e, button) {
     const what = button.dataset.t
     let arg = button.dataset.arg ?? ''
-    if (what === 'setPath') arg = [...String(wgPop.querySelector('[data-field="path"]')?.value || '').trim()].slice(0, 300).join('')
+    // A path typed: no control characters (a tab, U+0080 to U+009F: neither would be kept).
+    if (what === 'setPath') arg = [...String(wgPop.querySelector('[data-field="path"]')?.value || '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim()].slice(0, 300).join('')
     Tools.act(e.of, what, arg, { ...toolX(e), data: { ...button.dataset } }, toolApi(e))
     // Done with it: what it opened comes to the front, the picker wants the screen.
     if (['window', 'search', 'start', 'open', 'do'].includes(what) && !(e.of === 'timer')) closeWidgetPop()
@@ -1546,7 +1547,14 @@
   wgPop.hidden = true
   barRest.append(wgPop)
 
+  // A question a card asked (empty the bin? restart?) goes with it: never
+  // waiting there when it opens again.
+  function forgetAsked() {
+    for (const [id, local] of toolLocal) if (local.confirm) toolLocal.set(id, { ...local, confirm: null, askedAt: 0 })
+  }
+
   function openWidgetPop(id) {
+    forgetAsked()
     if (popFor) closePop()
     wgFor = id
     drawWidgetPop()
@@ -1554,6 +1562,7 @@
   }
 
   function closeWidgetPop() {
+    forgetAsked()
     wgFor = null
     wgPop.hidden = true
     wgPop._key = ''

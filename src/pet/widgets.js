@@ -166,7 +166,7 @@
     !Array.isArray(c) &&
     Object.keys(c).length <= 8 &&
     Object.entries(c).every(
-      ([k, v]) => /^[A-Za-z0-9]{1,16}$/.test(k) && (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && [...v].length <= 300 && !/[\u0000-\u001f\u007f]/.test(v))),
+      ([k, v]) => /^[A-Za-z0-9]{1,16}$/.test(k) && (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && [...v].length <= 300 && !/[\u0000-\u001f\u007f-\u009f]/.test(v))),
     )
   const MAX_ENTRIES = 32
   const isEntry = e =>

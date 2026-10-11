@@ -102,3 +102,34 @@ test('every tool tools.rs takes, tools.js has, and no other', () => {
   const kinds = [...text.match(/pub const KINDS: \[&str; \d+\] = \[([^\]]*)\]/)[1].matchAll(/"(\w+)"/g)].map(m => m[1])
   assert.deepEqual([...kinds].sort(), [...Tools.KINDS].sort())
 })
+
+test('emptying the bin, signing out, restarting, shutting down: only once asked, and not by the click that asked', () => {
+  const calls = []
+  let local = {}
+  const api = { call: (what, arg) => calls.push(arg ? `${what} ${arg}` : what), setLocal: patch => (local = { ...local, ...patch }) }
+  const x = (kind, now) => ({ lang: 'zh', entry: { id: 'wa', type: 'tool', of: kind }, cfg: {}, state: {}, local, now })
+  // Not asked: nothing.
+  Tools.act('trash', 'empty', '', x('trash', 1000), api)
+  Tools.act('power', 'do', 'restart', x('power', 1000), api)
+  assert.deepEqual(calls, [])
+  // Asked, and the second press of a double click: nothing.
+  Tools.act('trash', 'ask', 'empty', x('trash', 1000), api)
+  Tools.act('trash', 'empty', '', x('trash', 1200), api)
+  assert.deepEqual(calls, [])
+  // Answered.
+  Tools.act('trash', 'empty', '', x('trash', 1500), api)
+  assert.deepEqual(calls, ['empty'])
+  // Asked for one thing, answered with another: nothing.
+  local = {}
+  Tools.act('power', 'ask', 'signout', x('power', 2000), api)
+  Tools.act('power', 'do', 'shutdown', x('power', 3000), api)
+  assert.deepEqual(calls, ['empty'])
+  Tools.act('power', 'do', 'signout', x('power', 3000), api)
+  // Locked at once.
+  Tools.act('power', 'do', 'lock', x('power', 3000), api)
+  assert.deepEqual(calls, ['empty', 'signout', 'lock'])
+  // The question's Cancel comes first, not where the button that asked was.
+  local = { confirm: 'restart', askedAt: 0 }
+  const card = Tools.card('power', x('power', 0))
+  assert.ok(card.indexOf('data-t="cancel"') < card.indexOf('data-t="do"'))
+})

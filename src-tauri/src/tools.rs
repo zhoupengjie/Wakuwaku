@@ -133,6 +133,35 @@ pub fn run(sh: std::sync::Arc<Shared>) {
 
 // --- What the page asks for (tool_do) -------------------------------------------------
 
+// A launcher's path as kept in the settings (a tool put somewhere): a page
+// asks to open only those, nothing it makes up.
+fn is_kept_launch(v: &Value, path: &str) -> bool {
+    match v {
+        Value::Object(o) => {
+            (o.get("type").and_then(Value::as_str) == Some("tool") && o.get("of").and_then(Value::as_str) == Some("launch") && o.get("cfg").and_then(|c| c.get("path")).and_then(Value::as_str).map(str::trim) == Some(path))
+                || o.values().any(|v| is_kept_launch(v, path))
+        }
+        Value::Array(a) => a.iter().any(|v| is_kept_launch(v, path)),
+        _ => false,
+    }
+}
+
+// A drive's root: a letter, a colon, a backslash.
+fn is_root(arg: &str) -> bool {
+    let b = arg.as_bytes();
+    b.len() == 3 && b[0].is_ascii_uppercase() && b[1] == b':' && b[2] == b'\\'
+}
+
+// The window the clipboard is set from (one of hers: with none, Windows
+// lets EmptyClipboard leave no owner and SetClipboardData fail).
+fn owner(sh: &Shared) -> isize {
+    use tauri::Manager;
+    #[cfg(windows)]
+    return sh.app.get_webview_window("island").and_then(|w| w.hwnd().ok()).map_or(0, |h| h.0 as isize);
+    #[cfg(not(windows))]
+    0
+}
+
 pub fn act(sh: &std::sync::Arc<Shared>, kind: &str, what: &str, arg: &str) -> bool {
     let done = match (kind, what) {
         ("media", "prev" | "toggle" | "next") => {
@@ -142,22 +171,26 @@ pub fn act(sh: &std::sync::Arc<Shared>, kind: &str, what: &str, arg: &str) -> bo
         }
         ("trash", "open") => crate::tasks::launch("shell:RecycleBinFolder"),
         ("trash", "empty") => imp::empty_trash(),
-        ("disk", "open") => !arg.is_empty() && crate::tasks::launch(arg),
+        ("disk", "open") => is_root(arg) && crate::tasks::launch(arg),
         ("power", what) => imp::power(what),
         ("awake", "on") => {
-            set_awake(sh, Some(arg.parse::<u64>().unwrap_or(0)));
+            // A day at most.
+            set_awake(sh, Some(arg.parse::<u64>().unwrap_or(0).min(24 * 60)));
             true
         }
         ("awake", "off") => {
             set_awake(sh, None);
             true
         }
-        ("launch", "open") => !arg.trim().is_empty() && crate::tasks::launch(arg.trim()),
+        ("launch", "open") => {
+            let path = arg.trim();
+            !path.is_empty() && PLACES.iter().any(|p| is_kept_launch(&sh.setting(p), path)) && crate::tasks::launch(path)
+        }
         ("picker", "start") => {
             imp::pick(sh.clone());
             true
         }
-        ("picker", "copy") | ("calc", "copy") | ("notes", "copy") => imp::copy(arg),
+        ("picker", "copy") | ("calc", "copy") | ("notes", "copy") => imp::copy(arg, owner(sh)),
         ("timer", "done") => crate::notify::show(arg).is_ok(),
         _ => false,
     };
@@ -186,7 +219,7 @@ fn awake_state() -> Value {
 // new on never miss each other.
 fn set_awake(sh: &std::sync::Arc<Shared>, minutes: Option<u64>) {
     let mut awake = AWAKE.lock().unwrap();
-    *awake = minutes.map(|m| if m == 0 { 0 } else { crate::now_ms() + m * 60_000 });
+    *awake = minutes.map(|m| if m == 0 { 0 } else { crate::now_ms().saturating_add(m.saturating_mul(60_000)) });
     if awake.is_none() || HOLDING.swap(true, Ordering::SeqCst) {
         return;
     }
@@ -345,6 +378,32 @@ mod imp {
 
     // --- Media ---------------------------------------------------------------
 
+    // An async WinRT call waited on for so long at most: a media source
+    // that does not answer is given up (cancelled), not waited on for ever
+    // with the Recycle Bin, drives and awake behind it on the same thread.
+    macro_rules! wait {
+        ($op:expr, $ms:expr) => {{
+            match $op {
+                Ok(op) => {
+                    let until = std::time::Instant::now() + std::time::Duration::from_millis($ms);
+                    loop {
+                        // Started 0, Completed 1, Canceled 2, Error 3.
+                        match op.Status().map(|s| s.0) {
+                            Ok(0) if std::time::Instant::now() < until => std::thread::sleep(std::time::Duration::from_millis(10)),
+                            Ok(0) => {
+                                let _ = op.Cancel();
+                                break None;
+                            }
+                            Ok(1) => break op.GetResults().ok(),
+                            _ => break None,
+                        }
+                    }
+                }
+                Err(_) => None,
+            }
+        }};
+    }
+
     #[derive(Default)]
     pub struct Media {
         manager: Option<Manager>,
@@ -353,7 +412,7 @@ mod imp {
     impl Media {
         fn manager(&mut self) -> Option<&Manager> {
             if self.manager.is_none() {
-                self.manager = Manager::RequestAsync().and_then(|op| op.join()).ok();
+                self.manager = wait!(Manager::RequestAsync(), 2000);
             }
             self.manager.as_ref()
         }
@@ -362,7 +421,11 @@ mod imp {
         // which buttons it takes; null with nothing that does.
         pub fn read(&mut self) -> Value {
             let Some(session) = self.manager().and_then(|m| m.GetCurrentSession().ok()) else { return Value::Null };
-            let props = session.TryGetMediaPropertiesAsync().and_then(|op| op.join()).ok();
+            let props = wait!(session.TryGetMediaPropertiesAsync(), 1500);
+            // No answer: the manager asked for again next time.
+            if props.is_none() {
+                self.manager = None;
+            }
             let text = |f: &dyn Fn(&windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties) -> windows_core::Result<windows_core::HSTRING>| {
                 props.as_ref().and_then(|p| f(p).ok()).map(|h| h.to_string()).unwrap_or_default()
             };
@@ -392,7 +455,7 @@ mod imp {
                 "next" => session.TrySkipNextAsync(),
                 _ => session.TryTogglePlayPauseAsync(),
             };
-            let _ = op.and_then(|op| op.join());
+            let _ = wait!(op, 2000);
         }
     }
 
@@ -478,39 +541,42 @@ mod imp {
 
     // --- The clipboard ---------------------------------------------------------
 
-    pub fn copy(text: &str) -> bool {
+    pub fn copy(text: &str, owner: isize) -> bool {
         let units = super::wide_text(text);
-        // SAFETY: the clipboard opened (a few tries: another program may
-        // hold it a moment), our moveable memory handed to it on success
-        // and freed by us on failure.
+        // SAFETY: our moveable memory filled before the clipboard is touched
+        // (nothing emptied should it fail), the clipboard opened by a window
+        // of hers (a few tries: another program may hold it a moment), the
+        // memory handed to it on success and freed by us otherwise.
         unsafe {
+            // GMEM_MOVEABLE.
+            let mem = GlobalAlloc(0x2, units.len() * 2);
+            if mem.is_null() {
+                return false;
+            }
+            let to = GlobalLock(mem) as *mut u16;
+            if to.is_null() {
+                GlobalFree(mem);
+                return false;
+            }
+            std::ptr::copy_nonoverlapping(units.as_ptr(), to, units.len());
+            GlobalUnlock(mem);
             let mut opened = false;
             for _ in 0..10 {
-                if OpenClipboard(std::ptr::null_mut()) != 0 {
+                if OpenClipboard(owner as *mut c_void) != 0 {
                     opened = true;
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(20));
             }
             if !opened {
+                GlobalFree(mem);
                 return false;
             }
             EmptyClipboard();
-            let bytes = units.len() * 2;
-            // GMEM_MOVEABLE.
-            let mem = GlobalAlloc(0x2, bytes);
-            let mut ok = false;
-            if !mem.is_null() {
-                let to = GlobalLock(mem) as *mut u16;
-                if !to.is_null() {
-                    std::ptr::copy_nonoverlapping(units.as_ptr(), to, units.len());
-                    GlobalUnlock(mem);
-                    // CF_UNICODETEXT.
-                    ok = !SetClipboardData(13, mem).is_null();
-                }
-                if !ok {
-                    GlobalFree(mem);
-                }
+            // CF_UNICODETEXT.
+            let ok = !SetClipboardData(13, mem).is_null();
+            if !ok {
+                GlobalFree(mem);
             }
             CloseClipboard();
             ok
@@ -523,7 +589,9 @@ mod imp {
     // Where the click came, or that it was a right one (given up); and
     // that its release is ours to keep too.
     static PICKED: Mutex<Option<Option<(i32, i32)>>> = Mutex::new(None);
-    static SWALLOW_UP: AtomicBool = AtomicBool::new(false);
+    // The button whose press was kept (1 left, 2 right; 0 none yet): its
+    // release is kept too, any other button passes as ever.
+    static KEPT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
     const WM_LBUTTONDOWN: usize = 0x201;
     const WM_LBUTTONUP: usize = 0x202;
@@ -534,23 +602,21 @@ mod imp {
         if code >= 0 {
             // SAFETY: a low-level mouse hook's lparam is its MSLLHOOKSTRUCT.
             let info = unsafe { &*(lparam as *const MouseHook) };
-            match wparam {
-                WM_LBUTTONDOWN => {
-                    *PICKED.lock().unwrap() = Some(Some((info.pt.x, info.pt.y)));
-                    SWALLOW_UP.store(true, Ordering::SeqCst);
-                    return 1;
-                }
-                WM_RBUTTONDOWN => {
-                    *PICKED.lock().unwrap() = Some(None);
-                    SWALLOW_UP.store(true, Ordering::SeqCst);
-                    return 1;
-                }
-                WM_LBUTTONUP | WM_RBUTTONUP if SWALLOW_UP.swap(false, Ordering::SeqCst) => {
-                    // SAFETY: this thread's own loop ends.
-                    unsafe { PostQuitMessage(0) };
-                    return 1;
-                }
-                _ => {}
+            let button = match wparam {
+                WM_LBUTTONDOWN | WM_LBUTTONUP => 1,
+                WM_RBUTTONDOWN | WM_RBUTTONUP => 2,
+                _ => 0,
+            };
+            let down = matches!(wparam, WM_LBUTTONDOWN | WM_RBUTTONDOWN);
+            if button != 0 && down && KEPT.compare_exchange(0, button, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                *PICKED.lock().unwrap() = Some((button == 1).then_some((info.pt.x, info.pt.y)));
+                return 1;
+            }
+            if button != 0 && !down && KEPT.load(Ordering::SeqCst) == button {
+                KEPT.store(0, Ordering::SeqCst);
+                // SAFETY: this thread's own loop ends.
+                unsafe { PostQuitMessage(0) };
+                return 1;
             }
         }
         // SAFETY: passed on as Windows asks.
@@ -562,7 +628,7 @@ mod imp {
             return;
         }
         *PICKED.lock().unwrap() = None;
-        SWALLOW_UP.store(false, Ordering::SeqCst);
+        KEPT.store(0, Ordering::SeqCst);
         crate::spawn_named("picker", move || {
             // SAFETY: the hook on this thread, which pumps its messages until
             // the click is in (or 20 seconds pass: WM_TIMER), then taken off.
@@ -573,10 +639,16 @@ mod imp {
                 } else {
                     SetTimer(std::ptr::null_mut(), 0, 20_000, std::ptr::null());
                     let mut msg: Msg = std::mem::zeroed();
+                    let mut ticks = 0;
                     while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-                        // WM_TIMER: given up.
+                        // WM_TIMER: given up, but not with a kept press not
+                        // yet released (its release would reach the window
+                        // alone), unless held a whole minute.
                         if msg.message == 0x113 {
-                            break;
+                            ticks += 1;
+                            if KEPT.load(Ordering::SeqCst) == 0 || ticks >= 3 {
+                                break;
+                            }
                         }
                     }
                     UnhookWindowsHookEx(hook_handle);
@@ -594,7 +666,7 @@ mod imp {
                 (colour != 0xFFFF_FFFF).then(|| super::hex(colour))
             });
             if let Some(hex) = &hex {
-                copy(hex);
+                copy(hex, super::owner(&sh));
             }
             PICKING.store(false, Ordering::SeqCst);
             sh.log(&format!("picker: {}", hex.as_deref().unwrap_or("given up")));
@@ -629,7 +701,7 @@ mod imp {
     pub fn power(_what: &str) -> bool {
         false
     }
-    pub fn copy(_text: &str) -> bool {
+    pub fn copy(_text: &str, _owner: isize) -> bool {
         false
     }
     pub fn pick(_sh: std::sync::Arc<crate::Shared>) {}
@@ -660,6 +732,17 @@ mod tests {
         assert_eq!(super::app_name("C:\\Program Files\\Netease\\CloudMusic\\cloudmusic.exe"), "Cloudmusic");
         assert_eq!(super::app_name("chrome"), "Chrome");
         assert_eq!(super::app_name(""), "");
+    }
+
+    #[test]
+    fn what_a_page_may_open() {
+        let layout = json!({ "right": [{ "id": "wa", "type": "stack", "items": [{ "id": "wb", "type": "tool", "of": "launch", "cfg": { "path": "C:\\Windows\\notepad.exe" } }, { "id": "wc", "type": "tool", "of": "media" }] }] });
+        assert!(super::is_kept_launch(&layout, "C:\\Windows\\notepad.exe"));
+        assert!(!super::is_kept_launch(&layout, "C:\\Windows\\System32\\cmd.exe"));
+        assert!(super::is_root("D:\\"));
+        assert!(!super::is_root("D:\\x"));
+        assert!(!super::is_root("shell:Startup"));
+        assert!(!super::is_root("d:\\"));
     }
 
     #[test]

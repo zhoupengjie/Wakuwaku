@@ -988,8 +988,100 @@
       entryNodes.set(e.id, node)
     }
     node._entry = e
-    if (Widgets.isSource(e)) node.dataset.size = e.size === 'S' ? 'S' : 'M'
+    if (Widgets.isSource(e)) node.dataset.size = e.size === 'S' || fitSmall.has(e.id) ? 'S' : 'M'
     return node
+  }
+
+  // --- Short of room: the widgets made small, then folded into ⋯ ------------------------
+  // Too much on the strip for the screen (the clock pushed off its right
+  // end): the widgets are made small first, from the right run's start
+  // (then the middle's, then the left's), then folded away into ⋯ before
+  // the right run, which opens them as a list (each its card from there).
+  // Room again, they come back the way they went, as far as it lasts. The
+  // parts never: the tray, the clock, the settings stay. While editing,
+  // made small only (everything is there to be arranged).
+  const MORE = '⋯more'
+  const moreNode = el('span', 'tw-more')
+  moreNode.innerHTML = '<span class="fi" aria-hidden="true">&#xE712;</span>'
+  moreNode.hidden = true
+  const fitSmall = new Set()
+  const fitFolded = new Set()
+  let fitting = false
+
+  // The widgets there, in the order they give way.
+  const fitOrder = () => {
+    const layout = tbLayout()
+    return ['right', 'center', 'left'].flatMap(k => layout[k].filter(p => typeof p !== 'string' && Widgets.isSource(p)).map(p => p.id))
+  }
+
+  // How far the strip reaches past the screen's right edge (the middle
+  // run's margin not counted: it is given up first, alignApps).
+  function overBy() {
+    const margin = parseFloat(getComputedStyle(zones.center).marginLeft) || 0
+    const shifted = (oledOn && parseFloat(document.documentElement.style.getPropertyValue('--oled-x'))) || 0
+    return deskEdge.getBoundingClientRect().right - shifted - innerWidth - margin
+  }
+
+  function setSmall(id, on) {
+    const node = entryNodes.get(id)
+    if (!node) return fitSmall.delete(id)
+    if (on) fitSmall.add(id)
+    else fitSmall.delete(id)
+    node.dataset.size = on || node._entry.size === 'S' ? 'S' : 'M'
+    node._drawn = ''
+    drawEntries()
+  }
+
+  function setFolded(id, on) {
+    const node = entryNodes.get(id)
+    if (on && node) fitFolded.add(id)
+    else fitFolded.delete(id)
+    node?.classList.toggle('folded', on)
+    moreNode.hidden = !fitFolded.size
+  }
+
+  function fitStrip() {
+    if (!taskbarBuilt || fitting || home() !== 'taskbar') return
+    fitting = true
+    try {
+      const ids = fitOrder()
+      for (const set of [fitSmall, fitFolded]) for (const id of [...set]) if (!ids.includes(id)) set.delete(id)
+      if (editLayout) for (const id of [...fitFolded]) setFolded(id, false)
+      // Room again: back the way they went, as far as it lasts.
+      for (const id of [...fitFolded].reverse()) {
+        setFolded(id, false)
+        if (overBy() > 0.5) {
+          setFolded(id, true)
+          break
+        }
+      }
+      if (!fitFolded.size)
+        for (const id of [...fitSmall].reverse()) {
+          setSmall(id, false)
+          if (overBy() > 0.5) {
+            setSmall(id, true)
+            break
+          }
+        }
+      // Too much: small first, then folded away.
+      for (const id of ids) {
+        if (overBy() <= 0.5) break
+        if (!fitSmall.has(id) && entryNodes.get(id)?._entry.size !== 'S') setSmall(id, true)
+      }
+      if (!editLayout)
+        for (const id of ids) {
+          if (overBy() <= 0.5) break
+          if (!fitFolded.has(id)) setFolded(id, true)
+        }
+      moreNode.hidden = !fitFolded.size
+      moreNode.title = t(lang, 'taskbar.w.more')
+    } finally {
+      fitting = false
+    }
+    // The middle run and her island where the room now has them.
+    alignApps()
+    placeHer()
+    if (wgFor === MORE) drawMorePop()
   }
 
   // The parts and widgets into their runs, as the layout has them.
@@ -1020,6 +1112,7 @@
   function drawEntries() {
     const turn = Math.floor(Date.now() / ENTRY_TURN_MS)
     const detailed = isDetailed()
+    let redrawn = false
     for (const node of entryNodes.values()) {
       const top = node._entry
       node.dataset.label = Widgets.nameOf(lang, top, allWidgets, detailed)
@@ -1028,7 +1121,7 @@
       const e = shownOf(top)
       const dots = top.type === 'stack' ? top.items.map((_, i) => (i === stackAt(top) ? '1' : '0')).join('') : ''
       if (e.type === 'tool') {
-        drawTool(node, e, dots)
+        if (drawTool(node, e, dots)) redrawn = true
         continue
       }
       const name = Widgets.nameOf(lang, e, allWidgets, detailed)
@@ -1042,6 +1135,7 @@
       const drawn = JSON.stringify([node.dataset.size, name, said, w?.icon || e.icon, colour, needs, dots])
       if (node._drawn === drawn) continue
       node._drawn = drawn
+      redrawn = true
       const icon = el('span', 'twi')
       icon.innerHTML = Widgets.icon(w?.icon || e.icon || 'dot')
       icon.style.color = colour
@@ -1056,6 +1150,7 @@
       }
       if (dots) node.append(dotsOf(dots))
     }
+    if (redrawn && !fitting) fitStrip()
     if (wgFor) drawWidgetPop()
   }
 
@@ -1352,7 +1447,7 @@
     const f = Tools.face(e.of, toolX(e))
     const colour = stripInk(f.colour) || stripHue().idle
     const drawn = JSON.stringify([node.dataset.size, f, colour, dots])
-    if (node._drawn === drawn) return
+    if (node._drawn === drawn) return false
     node._drawn = drawn
     const icon = el('span', 'twi')
     if (f.img) {
@@ -1375,6 +1470,7 @@
       node.replaceChildren(icon, text)
     }
     if (dots) node.append(dotsOf(dots))
+    return true
   }
 
   // Each second, with any of them out: timers run, clocks go on; a timer run
@@ -1433,7 +1529,7 @@
       wgPop.classList.add('tool')
     }
     wgPop.hidden = false
-    const r = node.getBoundingClientRect()
+    const r = anchorOf(node).getBoundingClientRect()
     const base = barRest.getBoundingClientRect()
     const left = r.left - base.left + r.width / 2 - wgPop.offsetWidth / 2
     wgPop.style.left = `${Math.max(4, Math.min(left, barRest.offsetWidth - wgPop.offsetWidth - 4))}px`
@@ -1535,7 +1631,7 @@
     if (!taskbarBuilt) {
       // As wide as the strip: her island lies over its slot in it (placeHer).
       barRest.style.left = '0px'
-      barRest.replaceChildren(glide, zones.left, zones.center, growNode, zones.right, deskEdge, pop, wgPop)
+      barRest.replaceChildren(glide, zones.left, zones.center, growNode, moreNode, zones.right, deskEdge, pop, wgPop)
       taskbarBuilt = true
       trayDrawn = ''
       windowsDrawn = ''
@@ -1556,6 +1652,7 @@
     alignApps()
     placeHer()
     snapStart()
+    fitStrip()
     // Editing: the chosen one's tools over it, where it is now.
     if (editLayout && chosen) drawTools()
   }
@@ -1577,11 +1674,14 @@
       const now = parseFloat(getComputedStyle(middle).marginLeft) || 0
       const start = middle.getBoundingClientRect()
       const width = start.width
-      const room = growNode.getBoundingClientRect().width + now
       // Where it lies without OLED's shift (which moves the bar after): the
       // margin taken from where it is drawn undid the shift, and the middle
       // ones stayed put across.
       const shifted = (oledOn && parseFloat(document.documentElement.style.getPropertyValue('--oled-x'))) || 0
+      // The room before the right run, less what reaches past the screen's
+      // edge (a crowded right run takes its room from the middle first).
+      const spill = Math.max(0, deskEdge.getBoundingClientRect().right - shifted - innerWidth)
+      const room = growNode.getBoundingClientRect().width + now - spill
       want = Math.round(Math.max(0, Math.min((innerWidth - width) / 2 - (start.left - shifted - now), room)))
     }
     if (want !== Math.round(target)) middle.style.marginLeft = `${want}px`
@@ -1606,7 +1706,7 @@
   // place, jumps rather than slides a long way, and gives a little under a
   // press. Not over what opens above the buttons, nor while a tray icon or
   // a program's button is being dragged.
-  const GLIDE_ON = '.start, .win, .tout .ticon, .tchev, .tpriv, .kbd .ime, .tquick, .face.mon, .tw-widget, .tw-plugin, .tw-tool, .tw-stack, .tclock, .gear, .tag[data-jump]'
+  const GLIDE_ON = '.start, .win, .tout .ticon, .tchev, .tpriv, .kbd .ime, .tquick, .face.mon, .tw-widget, .tw-plugin, .tw-tool, .tw-stack, .tw-more, .tclock, .gear, .tag[data-jump]'
   const GLIDE_FAR = 360
   const glide = el('span', 'hdrop')
   let glideOn = null
@@ -1671,6 +1771,7 @@
   window.addEventListener('pointerup', () => glide.classList.remove('down'))
   window.addEventListener('resize', () => {
     if (!isOn() || home() !== 'taskbar') return
+    fitStrip()
     alignApps()
     placeHer()
   })
@@ -1788,7 +1889,7 @@
     const over = document.elementFromPoint(at.x, at.y)
     if (popFor && !(over && (pop.contains(over) || windowsBox.contains(over)))) closePop()
     if (trayOpen && !(over && trayBox.contains(over))) openTray(false)
-    if (wgFor && !(over && (wgPop.contains(over) || entryNodes.get(wgFor)?.contains(over)))) closeWidgetPop()
+    if (wgFor && !(over && (wgPop.contains(over) || (wgFor === MORE ? moreNode : entryNodes.get(wgFor))?.contains(over)))) closeWidgetPop()
   })
 
   // --- A widget on the taskbar, opened ------------------------------------------------
@@ -1841,7 +1942,57 @@
     return [b('prev', '‹'), el('span', 'wgn', `${stackAt(top) + 1}/${top.items.length}`), b('next', '›')]
   }
 
+  // The folded ones, each as it would be on the strip; pressed, what it does or its card.
+  function drawMorePop() {
+    const ids = fitOrder().filter(id => fitFolded.has(id))
+    if (!ids.length || editLayout) return closeWidgetPop()
+    const head = el('div', 'wghead')
+    head.append(el('b', '', t(lang, 'taskbar.w.more')))
+    const list = el('div', 'wgmore')
+    for (const id of ids) {
+      const node = entryNodes.get(id)
+      if (!node) continue
+      const row = el('button', 'wgmrow')
+      row.type = 'button'
+      row.dataset.more = id
+      row.title = node.title
+      row.innerHTML = foldedRow(node._entry)
+      list.append(row)
+    }
+    wgPop._key = ''
+    wgPop.classList.remove('tool')
+    wgPop.replaceChildren(head, list)
+    wgPop.hidden = false
+    const r = moreNode.getBoundingClientRect()
+    const base = barRest.getBoundingClientRect()
+    wgPop.style.left = `${Math.max(4, Math.min(r.left - base.left + r.width / 2 - wgPop.offsetWidth / 2, barRest.offsetWidth - wgPop.offsetWidth - 4))}px`
+  }
+
+  // A folded one in the list: its icon, its value over its name (as a
+  // medium one on the strip, whatever it was there).
+  function foldedRow(top) {
+    const e = shownOf(top)
+    const detailed = isDetailed()
+    let icon, value, name, colour
+    if (e.type === 'tool') {
+      const f = Tools.face(e.of, toolX(e))
+      icon = f.img ? `<img src="${escH(f.img)}" alt="">` : f.icon
+      ;[value, name, colour] = [f.value, f.label, stripInk(f.colour)]
+    } else {
+      const w = Widgets.sourcesOf(e, allWidgets)[0]
+      icon = Widgets.icon(w?.icon || e.icon || 'dot')
+      value = w ? Widgets.words(lang, w, detailed).value : t(lang, 'taskbar.w.none')
+      name = Widgets.nameOf(lang, e, allWidgets, detailed)
+      colour = w && stripInk(w.color)
+    }
+    return `<span class="twi" style="color:${escH(colour || stripHue().idle)}">${icon}</span><span class="twt"><b class="twv">${escH(value)}</b><i>${escH(name)}</i></span>`
+  }
+
+  // Where a widget's card stands: over it, or over ⋯ while it is folded there.
+  const anchorOf = node => (node.classList.contains('folded') ? moreNode : node)
+
   function drawWidgetPop() {
+    if (wgFor === MORE) return drawMorePop()
     const node = wgFor && entryNodes.get(wgFor)
     const e = shownOf(node?._entry)
     if (!e || !node.isConnected || editLayout || home() !== 'taskbar') return closeWidgetPop()
@@ -1878,7 +2029,7 @@
     acts.append(button('remove', t(lang, 'taskbar.w.remove')))
     wgPop.replaceChildren(head, ...rows, acts)
     wgPop.hidden = false
-    const r = node.getBoundingClientRect()
+    const r = anchorOf(node).getBoundingClientRect()
     const base = barRest.getBoundingClientRect()
     const left = r.left - base.left + r.width / 2 - wgPop.offsetWidth / 2
     wgPop.style.left = `${Math.max(4, Math.min(left, barRest.offsetWidth - wgPop.offsetWidth - 4))}px`
@@ -1934,6 +2085,14 @@
   }
 
   wgPop.addEventListener('click', e => {
+    // One of the folded: what a tool's press does, or its card.
+    const folded = e.target.closest('[data-more]')
+    if (folded) {
+      const node = entryNodes.get(folded.dataset.more)
+      const one = shownOf(node?._entry)
+      if (one?.type === 'tool' && Tools.press(one.of, toolX(one), toolApi(one))) return closeWidgetPop()
+      return openWidgetPop(folded.dataset.more)
+    }
     const what = e.target.closest('[data-wg]')?.dataset.wg
     const entry = wgFor && shownOf(entryNodes.get(wgFor)?._entry)
     // A stack's: the one before, or the next.
@@ -2683,6 +2842,7 @@
     if (what && what !== 'settings') window.pet.taskbar.open(what)
     // One of the taskbar's own: what a press on it does (search, a
     // launcher, the picker, awake), or its card.
+    if (e.target.closest('.tw-more')) return wgFor === MORE ? closeWidgetPop() : openWidgetPop(MORE)
     const tool = e.target.closest('.tw-tool')
     if (tool) return pressTool(tool._entry)
     // A stack: what its shown one does.

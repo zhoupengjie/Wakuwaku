@@ -925,19 +925,23 @@
   // the island laid over it (placeHer), growing from it the way there is
   // room (body.isl-right: from its right edge, leftwards). Edited by
   // dragging the parts about on the strip itself (editTaskbar).
-  const TB_PARTS = ['her', 'start', 'apps', 'tags', 'monitor', 'tray', 'keys', 'quick', 'clock', 'gear']
+  const TB_PARTS = ['her', 'start', 'apps', 'monitor', 'tray', 'keys', 'quick', 'clock', 'gear']
   const TB_RIGHT = ['monitor', 'tray', 'keys', 'quick', 'clock', 'gear']
   const TB_PRESETS = {
-    win11: { left: ['her'], center: ['start', 'apps', 'tags'], right: TB_RIGHT },
-    left: { left: ['her', 'start', 'apps', 'tags'], center: [], right: TB_RIGHT },
-    herRight: { left: ['start', 'apps', 'tags'], center: [], right: [...TB_RIGHT, 'her'] },
+    win11: { left: ['her'], center: ['start', 'apps'], right: TB_RIGHT },
+    left: { left: ['her', 'start', 'apps'], center: [], right: TB_RIGHT },
+    herRight: { left: ['start', 'apps'], center: [], right: [...TB_RIGHT, 'her'] },
   }
   const herSlot = el('span', 'tslot')
-  // The tray's icons and the marks of what uses the microphone, camera or
-  // location: one part.
+  // The programs' buttons and, after them, the tags of the sessions none of
+  // them holds (they are buttons too, with no window's): one part, never
+  // an empty one of their own to place. The tray's icons and the marks of
+  // what uses the microphone, camera or location: one part too.
+  const appsPart = el('span', 'tpair')
+  appsPart.append(windowsBox, tagsBox)
   const trayPart = el('span', 'tpair')
   trayPart.append(trayBox, privBox)
-  const PART_NODES = { her: herSlot, start: startButton, apps: windowsBox, tags: tagsBox, monitor: facesBox, tray: trayPart, keys: keysBox, quick: quickBox, clock: clockBox, gear: taskGear }
+  const PART_NODES = { her: herSlot, start: startButton, apps: appsPart, monitor: facesBox, tray: trayPart, keys: keysBox, quick: quickBox, clock: clockBox, gear: taskGear }
   for (const [part, node] of Object.entries(PART_NODES)) node.dataset.part = part
   const zones = { left: el('span', 'tzone tz-left'), center: el('span', 'tzone tz-center'), right: el('span', 'tzone tz-right') }
   // While the layout is being edited: the one being made, not yet kept.

@@ -92,7 +92,7 @@ fn is_island_look(v: &Value) -> bool {
 // The taskbar's layout: { left, center, right }, each a list of its parts
 // (island.js TB_PARTS), none twice and nothing else; one left out goes where
 // the default has it.
-const TASKBAR_PARTS: [&str; 10] = ["her", "start", "apps", "tags", "monitor", "tray", "keys", "quick", "clock", "gear"];
+const TASKBAR_PARTS: [&str; 9] = ["her", "start", "apps", "monitor", "tray", "keys", "quick", "clock", "gear"];
 
 // A widget put on the taskbar (widgets.js isEntry): { id, type, of, size,
 // name, icon }, its id "w" and up to 15 of a-z 0-9; a widget's or a
@@ -506,7 +506,7 @@ mod layout_tests {
 
     #[test]
     fn taskbar_layouts() {
-        assert!(super::is_taskbar_layout(&json!({ "left": ["her"], "center": ["start", "apps", "tags"], "right": ["monitor", "tray", "keys", "quick", "clock", "gear"] })));
+        assert!(super::is_taskbar_layout(&json!({ "left": ["her"], "center": ["start", "apps"], "right": ["monitor", "tray", "keys", "quick", "clock", "gear"] })));
         assert!(super::is_taskbar_layout(&json!({ "left": ["start", "apps"], "right": ["clock", "her"] })));
         assert!(!super::is_taskbar_layout(&json!({ "left": ["her", "her"] })));
         assert!(!super::is_taskbar_layout(&json!({ "left": ["her"], "right": ["her"] })));

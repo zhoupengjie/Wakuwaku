@@ -1013,14 +1013,17 @@
     const turn = Math.floor(Date.now() / ENTRY_TURN_MS)
     const detailed = isDetailed()
     for (const node of entryNodes.values()) {
-      const e = node._entry
-      const name = Widgets.nameOf(lang, e, allWidgets, detailed)
-      node.dataset.label = name
-      if (!Widgets.isSource(e)) continue
+      const top = node._entry
+      node.dataset.label = Widgets.nameOf(lang, top, allWidgets, detailed)
+      if (!Widgets.isSource(top)) continue
+      // A stack: the one it shows, and a dot for each (that one lit).
+      const e = shownOf(top)
+      const dots = top.type === 'stack' ? top.items.map((_, i) => (i === stackAt(top) ? '1' : '0')).join('') : ''
       if (e.type === 'tool') {
-        drawTool(node, e)
+        drawTool(node, e, dots)
         continue
       }
+      const name = Widgets.nameOf(lang, e, allWidgets, detailed)
       const from = Widgets.sourcesOf(e, allWidgets)
       const w = from.length ? from[turn % from.length] : null
       const said = w ? Widgets.words(lang, w, detailed) : null
@@ -1028,7 +1031,7 @@
       // A plugin with nothing to say: maybe it wants its settings first.
       if (!w && e.type === 'plugin') askPlugins()
       const needs = !w && needsSettings(e)
-      const drawn = JSON.stringify([e.size, name, said, w?.icon || e.icon, colour, needs])
+      const drawn = JSON.stringify([node.dataset.size, name, said, w?.icon || e.icon, colour, needs, dots])
       if (node._drawn === drawn) continue
       node._drawn = drawn
       const icon = el('span', 'twi')
@@ -1043,9 +1046,72 @@
         text.append(el('b', 'twv', said?.value || none), el('i', '', name))
         node.replaceChildren(icon, text)
       }
+      if (dots) node.append(dotsOf(dots))
     }
     if (wgFor) drawWidgetPop()
   }
+
+  // --- Stacks: several in one place, one shown at a time ---------------------------------
+  // Which one each shows (the page's own: not kept), and what each said
+  // when last looked at (for a smart one's news).
+  const stackCur = new Map()
+  const stackSaid = new Map()
+  const stackAt = e => (e.type === 'stack' ? (((stackCur.get(e.id) ?? 0) % e.items.length) + e.items.length) % e.items.length : 0)
+  // The one a widget there shows: itself, or a stack's shown one.
+  const shownOf = e => (e?.type === 'stack' ? e.items[stackAt(e)] : e)
+  // A dot for each in the stack, the one shown lit.
+  function dotsOf(dots) {
+    const box = el('span', 'tdots')
+    for (const d of dots) box.append(el('i', d === '1' ? 'on' : ''))
+    return box
+  }
+
+  // To the next (or the one before), by the wheel or a smart one's turn.
+  function flipStack(id, step) {
+    const node = entryNodes.get(id)
+    const e = node?._entry
+    if (e?.type !== 'stack') return
+    stackCur.set(id, stackAt(e) + step + e.items.length)
+    stackCur.set(id, stackAt(e))
+    drawEntries()
+    if (editLayout && chosen === id) drawTools()
+  }
+
+  // What one says, for a smart stack to see news in: a widget's words, the
+  // media's title, the Recycle Bin's count (not a clock's or timer's ticking).
+  function newsOf(e) {
+    if (e.type === 'tool') return ['media', 'trash', 'picker', 'notes'].includes(e.of) ? Tools.face(e.of, toolX(e)).value : ''
+    return JSON.stringify(Widgets.sourcesOf(e, allWidgets).map(w => w.value))
+  }
+
+  // A smart stack turns to the one with news, else to the next, every
+  // eight seconds; not while the pointer is on it, nor its card open.
+  setInterval(() => {
+    if (!taskbarBuilt || home() !== 'taskbar' || editLayout) return
+    let turned = false
+    for (const node of entryNodes.values()) {
+      const e = node._entry
+      if (e?.type !== 'stack' || !e.smart || wgFor === e.id || node.matches(':hover')) continue
+      const said = e.items.map(newsOf)
+      const was = stackSaid.get(e.id) || said
+      stackSaid.set(e.id, said)
+      const news = said.findIndex((x, i) => x !== was[i] && i !== stackAt(e))
+      stackCur.set(e.id, news >= 0 ? news : stackAt(e) + 1)
+      turned = true
+    }
+    if (turned) drawEntries()
+  }, 8000)
+
+  barRest.addEventListener(
+    'wheel',
+    e => {
+      const node = e.target.closest('.tw-stack')
+      if (!node) return
+      e.preventDefault()
+      flipStack(node.dataset.entry, e.deltaY > 0 ? 1 : -1)
+    },
+    { passive: false },
+  )
 
   // The plugins she runs as settings_get says, for which want their
   // settings filled in first (missing: a parameter they need): asked for
@@ -1102,10 +1168,10 @@
   // Its face: S its icon (a launcher's file's own) and a short value, M its
   // value over its name; lit while it is at something (playing, running,
   // awake), ringing when a timer has run out.
-  function drawTool(node, e) {
+  function drawTool(node, e, dots = '') {
     const f = Tools.face(e.of, toolX(e))
     const colour = stripInk(f.colour) || stripHue().idle
-    const drawn = JSON.stringify([e.size, f, colour])
+    const drawn = JSON.stringify([node.dataset.size, f, colour, dots])
     if (node._drawn === drawn) return
     node._drawn = drawn
     const icon = el('span', 'twi')
@@ -1128,6 +1194,7 @@
       text.append(el('b', 'twv', f.value), el('i', '', f.label))
       node.replaceChildren(icon, text)
     }
+    if (dots) node.append(dotsOf(dots))
   }
 
   // Each second, with any of them out: timers run, clocks go on; a timer run
@@ -1136,24 +1203,28 @@
     if (!taskbarBuilt || home() !== 'taskbar') return
     let any = false
     for (const node of entryNodes.values()) {
-      const e = node._entry
-      if (e?.type !== 'tool') continue
-      any = true
-      const x = toolX(e)
-      if (e.of === 'timer' && Tools.rings(x)) {
-        toolLocal.set(e.id, { ...x.local, endAt: null, left: 0, done: true })
-        window.pet.tools.do('timer', 'done', t(lang, 'tool.timer.rang', { name: Widgets.nameOf(lang, e) }))
+      for (const e of node._entry ? Widgets.itemsOf(node._entry) : []) {
+        if (e.type !== 'tool') continue
+        any = true
+        const x = toolX(e)
+        if (e.of === 'timer' && Tools.rings(x)) {
+          toolLocal.set(e.id, { ...x.local, endAt: null, left: 0, done: true })
+          window.pet.tools.do('timer', 'done', t(lang, 'tool.timer.rang', { name: Widgets.nameOf(lang, e) }))
+          // A stack shows the one ringing.
+          if (node._entry.type === 'stack') stackCur.set(node._entry.id, node._entry.items.indexOf(e))
+        }
       }
     }
     if (any) drawEntries()
   }, 1000)
 
   // A press on its face: done there and then, or its card (again: closed).
-  function pressTool(e) {
+  // key: the widget's there (a stack's, for one in it).
+  function pressTool(e, key = e?.id) {
     if (!e || editLayout) return
-    if (wgFor === e.id) return closeWidgetPop()
+    if (wgFor === key) return closeWidgetPop()
     if (e.of === 'timer' && toolLocal.get(e.id)?.done) toolLocal.set(e.id, { ...toolLocal.get(e.id), done: false })
-    if (!Tools.press(e.of, toolX(e), toolApi(e))) openWidgetPop(e.id)
+    if (!Tools.press(e.of, toolX(e), toolApi(e))) openWidgetPop(key)
     else if (wgFor) closeWidgetPop()
   }
 
@@ -1161,14 +1232,14 @@
   // a field being typed in.
   function drawToolPop(node, e) {
     const html = Tools.card(e.of, toolX(e))
-    const key = `${e.id}\n${lang}\n${html}`
+    const key = `${e.id}\n${lang}\n${stackAt(node._entry)}\n${html}`
     const typing = wgPop.contains(document.activeElement) && document.activeElement.matches('input, textarea')
     if (wgPop._key !== key && !typing) {
       wgPop._key = key
       const head = el('div', 'wghead')
       head.innerHTML = Tools.icon(e.of)
       head.firstChild.style.color = stripInk(Tools.COLOUR[e.of]) || stripHue().idle
-      head.append(el('b', '', Widgets.nameOf(lang, e)), el('span', 'wgfrom', t(lang, 'taskbar.w.from.tool')))
+      head.append(el('b', '', Widgets.nameOf(lang, e)), ...flipper(node), el('span', 'wgfrom', t(lang, 'taskbar.w.from.tool')))
       const body = el('div', 'tcard')
       body.innerHTML = html
       const acts = el('div', 'wgacts')
@@ -1219,7 +1290,7 @@
 
   // The notes of those no longer in the layout, gone with them: the change.
   function forgetNotes(layout) {
-    const ids = new Set(Object.values(layout).flatMap(run => run.filter(p => typeof p !== 'string').map(p => p.id)))
+    const ids = new Set(Widgets.entriesOf(layout).map(p => p.id))
     const notes = config.notes || {}
     const kept = Object.fromEntries(Object.entries(notes).filter(([id]) => ids.has(id)))
     if (Object.keys(kept).length === Object.keys(notes).length) return {}
@@ -1353,7 +1424,7 @@
   // place, jumps rather than slides a long way, and gives a little under a
   // press. Not over what opens above the buttons, nor while a tray icon or
   // a program's button is being dragged.
-  const GLIDE_ON = '.start, .win, .tout .ticon, .tchev, .tpriv, .kbd .ime, .tquick, .face.mon, .tw-widget, .tw-plugin, .tw-tool, .tclock, .gear, .tag[data-jump]'
+  const GLIDE_ON = '.start, .win, .tout .ticon, .tchev, .tpriv, .kbd .ime, .tquick, .face.mon, .tw-widget, .tw-plugin, .tw-tool, .tw-stack, .tclock, .gear, .tag[data-jump]'
   const GLIDE_FAR = 360
   const glide = el('span', 'hdrop')
   let glideOn = null
@@ -1574,9 +1645,23 @@
     watchPresses()
   }
 
+  // A stack's card: to the one before or the next, and which it is.
+  function flipper(node) {
+    const top = node?._entry
+    if (top?.type !== 'stack') return []
+    const b = (what, label) => {
+      const x = el('button', 'wgflip', label)
+      x.type = 'button'
+      x.dataset.wg = what
+      x.title = t(lang, `taskbar.w.${what}`)
+      return x
+    }
+    return [b('prev', '‹'), el('span', 'wgn', `${stackAt(top) + 1}/${top.items.length}`), b('next', '›')]
+  }
+
   function drawWidgetPop() {
     const node = wgFor && entryNodes.get(wgFor)
-    const e = node?._entry
+    const e = shownOf(node?._entry)
     if (!e || !node.isConnected || editLayout || home() !== 'taskbar') return closeWidgetPop()
     if (e.type === 'tool') return drawToolPop(node, e)
     wgPop._key = ''
@@ -1588,7 +1673,7 @@
     head.innerHTML = Widgets.icon(first?.icon || e.icon || 'dot')
     head.firstChild.style.color = (first && stripInk(first.color)) || stripHue().idle
     const kind = e.type === 'plugin' ? 'plugin' : first?.from || 'widget'
-    head.append(el('b', '', Widgets.nameOf(lang, e, allWidgets, detailed)), el('span', 'wgfrom', t(lang, `taskbar.w.from.${kind}`)))
+    head.append(el('b', '', Widgets.nameOf(lang, e, allWidgets, detailed)), ...flipper(node), el('span', 'wgfrom', t(lang, `taskbar.w.from.${kind}`)))
     const rows = from.map(w => {
       const said = Widgets.words(lang, w, detailed)
       const row = el('div', 'wgrow')
@@ -1618,16 +1703,35 @@
   }
 
   // Off the taskbar, and kept so.
+  // Taken out of a layout: a widget there, or one in a stack (a stack left
+  // with one is that one, at the stack's size). The one taken, or null.
+  function takeOut(layout, id) {
+    for (const run of Object.values(layout)) {
+      for (let i = 0; i < run.length; i++) {
+        const p = run[i]
+        if (typeof p === 'string') continue
+        if (p.id === id) return run.splice(i, 1)[0]
+        if (p.type !== 'stack') continue
+        const j = p.items.findIndex(x => x.id === id)
+        if (j < 0) continue
+        const [one] = p.items.splice(j, 1)
+        if (p.items.length === 1) run[i] = { ...p.items[0], size: p.size || p.items[0].size }
+        return one
+      }
+    }
+    return null
+  }
+
   function removeEntry(id) {
     const layout = tbLayout()
-    for (const k of Object.keys(layout)) layout[k] = layout[k].filter(p => Widgets.keyOf(p) !== id)
+    takeOut(layout, id)
     if (editLayout) editLayout = layout
     else {
       config.taskbarLayout = layout
       window.pet.settings.set({ taskbarLayout: layout, ...forgetNotes(layout) })
     }
     toolLocal.delete(id)
-    if (wgFor === id) closeWidgetPop()
+    if (wgFor === id || !entryNodes.has(wgFor)) closeWidgetPop()
     arranged = ''
     update()
     if (libOpen) drawLibrary()
@@ -1635,7 +1739,9 @@
 
   wgPop.addEventListener('click', e => {
     const what = e.target.closest('[data-wg]')?.dataset.wg
-    const entry = wgFor && entryNodes.get(wgFor)?._entry
+    const entry = wgFor && shownOf(entryNodes.get(wgFor)?._entry)
+    // A stack's: the one before, or the next.
+    if (what === 'prev' || what === 'next') return flipStack(wgFor, what === 'next' ? 1 : -1)
     // One of the taskbar's own: a button on its card.
     const button = e.target.closest('[data-t]')
     if (button && entry?.type === 'tool') return toolAct(entry, button)
@@ -1661,11 +1767,11 @@
     setTimeout(() => field.focus(), 30)
   })
   wgPop.addEventListener('input', e => {
-    const entry = wgFor && entryNodes.get(wgFor)?._entry
+    const entry = wgFor && shownOf(entryNodes.get(wgFor)?._entry)
     if (entry && e.target.matches('[data-field="note"]')) saveNotes(entry.id, e.target.value)
   })
   wgPop.addEventListener('keydown', e => {
-    const entry = wgFor && entryNodes.get(wgFor)?._entry
+    const entry = wgFor && shownOf(entryNodes.get(wgFor)?._entry)
     if (entry && e.key === 'Enter' && e.target.matches('[data-field="path"]')) toolAct(entry, wgPop.querySelector('[data-t="setPath"]'))
     if (e.key === 'Escape') closeWidgetPop()
   })
@@ -2383,6 +2489,13 @@
     // launcher, the picker, awake), or its card.
     const tool = e.target.closest('.tw-tool')
     if (tool) return pressTool(tool._entry)
+    // A stack: what its shown one does.
+    const stack = e.target.closest('.tw-stack')
+    if (stack) {
+      const one = shownOf(stack._entry)
+      if (one?.type === 'tool') return pressTool(one, stack.dataset.entry)
+      return wgFor === stack.dataset.entry ? closeWidgetPop() : openWidgetPop(stack.dataset.entry)
+    }
     // A widget put there: its card, or closed again.
     const widget = e.target.closest('.tw-widget, .tw-plugin')
     if (widget) wgFor === widget.dataset.entry ? closeWidgetPop() : openWidgetPop(widget.dataset.entry)
@@ -2394,7 +2507,7 @@
     e.preventDefault()
     if (trayKey(e)) return
     if (wgPop.contains(e.target)) return
-    const widget = e.target.closest('.tw-widget, .tw-plugin, .tw-tool')
+    const widget = e.target.closest('.tw-widget, .tw-plugin, .tw-tool, .tw-stack')
     if (widget) return openWidgetPop(widget.dataset.entry)
     if (e.target.closest('[data-bar="ime"]')) return window.pet.taskbar.open('inputs')
     window.pet.menu()
@@ -2546,7 +2659,7 @@
   function drawLibrary() {
     const all = libSnap?.widgets || allWidgets
     const detailed = isDetailed()
-    const placed = new Set(Object.values(tbLayout()).flatMap(run => run.filter(p => typeof p !== 'string' && Widgets.isSource(p)).map(p => `${p.type}:${p.of}`)))
+    const placed = new Set(Widgets.entriesOf(tbLayout()).filter(Widgets.isOne).map(p => `${p.type}:${p.of}`))
     libCards = cardsOf(all)
     const kinds = ['all', ...new Set(libCards.map(c => c.kind))]
     if (!kinds.includes(libKind)) libKind = 'all'
@@ -2629,6 +2742,8 @@
     }
     const items = [el('span', 'tbtname', node.dataset.label || '')]
     if (Widgets.isSource(e)) items.push(button('S', t(lang, 'taskbar.w.size.S'), node.dataset.size === 'S'), button('M', t(lang, 'taskbar.w.size.M'), node.dataset.size === 'M'), el('span', 'tbtsep'))
+    // A stack: turning by itself, apart again, the one shown out of it.
+    if (e.type === 'stack') items.push(button('smart', t(lang, 'taskbar.w.smart'), !!e.smart), button('split', t(lang, 'taskbar.w.split')), button('takeOut', t(lang, 'taskbar.w.takeOut')), el('span', 'tbtsep'))
     items.push(button('remove', t(lang, 'taskbar.w.remove')))
     tools.replaceChildren(...items)
     if (!tools.isConnected) document.body.append(tools)
@@ -2645,11 +2760,67 @@
       return removeEntry(id)
     }
     const layout = tbLayout()
-    for (const run of Object.values(layout)) for (const p of run) if (p.id === id) p.size = what
+    for (const run of Object.values(layout)) {
+      const i = run.findIndex(p => typeof p !== 'string' && p.id === id)
+      if (i < 0) continue
+      const p = run[i]
+      if (what === 'S' || what === 'M') p.size = what
+      if (what === 'smart') p.smart = !p.smart
+      // Apart: its items in its place, each at its size.
+      if (what === 'split') {
+        run.splice(i, 1, ...p.items.map(one => ({ ...one, size: p.size || one.size })))
+        choose(null)
+      }
+      // The one shown: out, just after it.
+      if (what === 'takeOut') {
+        const one = p.items[stackAt(p)]
+        const left = takeOut(layout, one.id)
+        const at = run.indexOf(run.find(x => x === p) || run[i])
+        run.splice(at + 1, 0, { ...left, size: p.size || left.size })
+        if (run[i] !== p) choose(null)
+      }
+    }
     editLayout = layout
     arranged = ''
     update()
   })
+
+  // The widget there whose middle is under the pointer, to stack onto (not
+  // the one dragged; a stack while it has room).
+  function stackOnto(x, y, dragged) {
+    for (const node of entryNodes.values()) {
+      const e = node._entry
+      if (node === drag?.node || !node.isConnected || !Widgets.isSource(e)) continue
+      const r = node.getBoundingClientRect()
+      if (x < r.left + r.width * 0.25 || x > r.right - r.width * 0.25 || y < r.top || y > r.bottom) continue
+      if (Widgets.itemsOf(e).length + Widgets.itemsOf(dragged).length > 8) return null
+      return { id: e.id, node }
+    }
+    return null
+  }
+
+  // Dropped onto another: the two (or more) a stack where that one was,
+  // the first of those dropped shown.
+  function stackInto(targetId, d) {
+    const layout = tbLayout()
+    const moving = d.fresh ? { ...d.fresh } : takeOut(layout, d.key)
+    if (!moving) return
+    for (const run of Object.values(layout)) {
+      const i = run.findIndex(p => typeof p !== 'string' && p.id === targetId)
+      if (i < 0) continue
+      const target = run[i]
+      const bare = ({ size, ...one }) => one
+      const items = [...Widgets.itemsOf(target), ...Widgets.itemsOf(moving)].map(bare)
+      const stack = target.type === 'stack' ? { ...target, items } : { id: newId(), type: 'stack', size: target.size || 'M', items }
+      run[i] = stack
+      stackCur.set(stack.id, Widgets.itemsOf(target).length)
+      editLayout = layout
+      arranged = ''
+      update()
+      if (libOpen) drawLibrary()
+      return
+    }
+  }
 
   // Where a part let go at x goes: the run under it (or the nearest), and
   // before the first part of it whose middle is past x; the line's place.
@@ -2689,6 +2860,7 @@
 
   function endDrag() {
     if (!drag) return
+    for (const node of entryNodes.values()) node.classList.remove('tb-stackto')
     drag.ghost?.remove()
     drag.node.classList.remove('tb-dragging')
     editMark.remove()
@@ -2754,8 +2926,14 @@
       drag.off = off
       drag.ghost.classList.toggle('off', off)
       drag.ghost.textContent = off && drag.entry ? t(lang, 'taskbar.w.drop', { name: drag.label }) : drag.label
-      editMark.hidden = off
-      drag.at = off ? null : dropAt(e.clientX)
+      // Onto another's middle: stacked with it.
+      const dragged = drag.entry || drag.fresh
+      const onto = !off && dragged && Widgets.isSource(dragged) ? stackOnto(e.clientX, e.clientY, dragged) : null
+      drag.stackOn = onto?.id || null
+      for (const node of entryNodes.values()) node.classList.toggle('tb-stackto', node === onto?.node)
+      if (onto) drag.ghost.textContent = t(lang, 'taskbar.w.stackOn', { name: onto.node.dataset.label || '' })
+      editMark.hidden = off || !!onto
+      drag.at = off || onto ? null : dropAt(e.clientX)
       if (drag.at) editMark.style.left = `${Math.round(drag.at.line) - 1}px`
     },
     true,
@@ -2773,6 +2951,7 @@
         return choose(d.entry && chosen !== d.entry.id ? d.entry.id : null)
       }
       if (d.off) return d.entry ? removeEntry(d.entry.id) : undefined
+      if (d.stackOn) return stackInto(d.stackOn, d)
       if (d.at) movePart(d.fresh ? d.fresh.id : d.key, d.at.zone, d.at.index, d.fresh)
     },
     true,

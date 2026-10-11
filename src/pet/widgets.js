@@ -153,12 +153,14 @@
   // right }, of its parts by name ('start', 'clock', …) and of the widgets
   // put there, each { id, type, of, size, name, icon, cfg }: type 'widget'
   // (of: a widget's id), 'plugin' (of: a plugin's: its widgets, in turn),
-  // 'tool' (of: one of the taskbar's own, tools.js; cfg: its settings), or a
-  // spacer: 'flex' (takes the room there is), 'gap', 'sep' (a line); size
+  // 'tool' (of: one of the taskbar's own, tools.js; cfg: its settings),
+  // 'stack' (items: 2 to 8 of those, one shown at a time; smart: turning by
+  // itself to the one with news), or a spacer: 'flex' (takes the room
+  // there is), 'gap', 'sep' (a line); size
   // 'S' (its icon and value) or 'M' (its name over its value, as the clock
   // has the date under the time). name and icon: as it was put there, for
   // while it has nothing to say. settings.rs checks the same.
-  const ENTRY_TYPES = ['widget', 'plugin', 'tool', 'flex', 'gap', 'sep']
+  const ENTRY_TYPES = ['widget', 'plugin', 'tool', 'stack', 'flex', 'gap', 'sep']
   // A tool's settings: up to 8, a word each for a short text, a number or a flag.
   const isCfg = c =>
     !!c &&
@@ -175,13 +177,21 @@
     typeof e.id === 'string' &&
     /^w[a-z0-9]{1,15}$/.test(e.id) &&
     ENTRY_TYPES.includes(e.type) &&
+    (e.type === 'stack'
+      ? Array.isArray(e.items) && e.items.length >= 2 && e.items.length <= 8 && e.items.every(i => isEntry(i) && isOne(i)) && new Set(e.items.map(i => i.id)).size === e.items.length && (e.smart === undefined || typeof e.smart === 'boolean')
+      : e.items === undefined && e.smart === undefined) &&
     (e.type === 'widget' || e.type === 'plugin' || e.type === 'tool' ? typeof e.of === 'string' && /^[a-z0-9_-]{1,40}$/.test(e.of) : e.of === undefined) &&
     (e.cfg === undefined || (e.type === 'tool' && isCfg(e.cfg))) &&
     (e.size === undefined || e.size === 'S' || e.size === 'M') &&
     (e.name === undefined || (typeof e.name === 'string' && [...e.name].length <= 40)) &&
     (e.icon === undefined || (typeof e.icon === 'string' && e.icon in ICONS))
-  // One with something to show (a size), not a spacer.
-  const isSource = e => e.type === 'widget' || e.type === 'plugin' || e.type === 'tool'
+  // One thing shown (what a stack holds), or that and a stack: with a size, not a spacer.
+  const isOne = e => e.type === 'widget' || e.type === 'plugin' || e.type === 'tool'
+  const isSource = e => isOne(e) || e.type === 'stack'
+  // A stack's items, or the one.
+  const itemsOf = e => (e.type === 'stack' ? e.items : [e])
+  // Every widget in a layout, those in stacks too.
+  const entriesOf = layout => Object.values(layout).flatMap(run => run.filter(p => typeof p !== 'string')).flatMap(e => [e, ...(e.type === 'stack' ? e.items : [])])
   // A part by its name, a widget by its id.
   const keyOf = item => (typeof item === 'string' ? item : item.id)
 
@@ -192,11 +202,14 @@
     let entries = 0
     const keep = p => {
       if (typeof p === 'string') return parts.includes(p) && !seen.has(p) && !!seen.add(p)
-      if (!isEntry(p) || seen.has(p.id) || entries >= MAX_ENTRIES) return false
-      entries++
-      return !!seen.add(p.id)
+      const ids = [p.id, ...(p?.type === 'stack' && Array.isArray(p.items) ? p.items.map(i => i?.id) : [])]
+      if (!isEntry(p) || ids.some(id => seen.has(id)) || entries + ids.length - (p.type === 'stack' ? 1 : 0) > MAX_ENTRIES) return false
+      entries += ids.length - (p.type === 'stack' ? 1 : 0)
+      ids.forEach(id => seen.add(id))
+      return true
     }
-    const run = k => (Array.isArray(saved?.[k]) ? saved[k] : []).filter(keep).map(p => (typeof p === 'string' ? p : { ...p }))
+    const copy = p => (typeof p === 'string' ? p : p.type === 'stack' ? { ...p, items: p.items.map(i => ({ ...i })) } : { ...p })
+    const run = k => (Array.isArray(saved?.[k]) ? saved[k] : []).filter(keep).map(copy)
     const out = { left: run('left'), center: run('center'), right: run('right') }
     for (const [k, list] of Object.entries(base)) for (const p of list) if (!seen.has(p)) out[k].push(p)
     return out
@@ -219,7 +232,8 @@
 
   // What a widget put there shows, of the widgets there are now: the one,
   // or a plugin's.
-  const sourcesOf = (entry, all) => (entry.type === 'widget' ? all.filter(w => w.id === entry.of) : entry.type === 'plugin' ? all.filter(w => w.plugin === entry.of) : [])
+  const sourcesOf = (entry, all) =>
+    entry.type === 'stack' ? entry.items.flatMap(i => sourcesOf(i, all)) : entry.type === 'widget' ? all.filter(w => w.id === entry.of) : entry.type === 'plugin' ? all.filter(w => w.plugin === entry.of) : []
 
   // The widgets the layout shows (not to take their turns in the island too).
   function shownOn(layout, all) {
@@ -233,6 +247,7 @@
   function nameOf(lang, entry, all = [], detailed = true) {
     if (entry.type === 'plugin') return render(lang, { key: `w.ex.${entry.of}` })
     if (entry.type === 'tool') return render(lang, { key: `tool.${entry.of}` })
+    if (entry.type === 'stack') return render(lang, { key: 'taskbar.w.stack', vars: { n: entry.items.length } })
     if (entry.type !== 'widget') return render(lang, { key: `taskbar.w.${entry.type}` })
     const w = all.find(x => x.id === entry.of)
     if (w) return words(lang, w, detailed).label || render(lang, { key: 'taskbar.w.widget' })
@@ -253,7 +268,10 @@
     deepen,
     ENTRY_TYPES,
     isEntry,
+    isOne,
     isSource,
+    itemsOf,
+    entriesOf,
     keyOf,
     layoutOf,
     partsAlone,

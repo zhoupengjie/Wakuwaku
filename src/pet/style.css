@@ -2813,7 +2813,8 @@ body.isl-right.home-taskbar #island[data-view='settings'] {
    room there is, .stretch), a little fixed room, a thin line. */
 #bar-rest .tw-widget,
 #bar-rest .tw-plugin,
-#bar-rest .tw-tool {
+#bar-rest .tw-tool,
+#bar-rest .tw-stack {
   flex: none;
   display: flex;
   align-items: center;
@@ -2881,7 +2882,8 @@ body.isl-right.home-taskbar #island[data-view='settings'] {
 
 #bar-rest .tw-widget:hover,
 #bar-rest .tw-plugin:hover,
-#bar-rest .tw-tool:hover {
+#bar-rest .tw-tool:hover,
+#bar-rest .tw-stack:hover {
   background: rgba(255, 255, 255, 0.11);
 }
 
@@ -2924,7 +2926,8 @@ body.isl-right.home-taskbar #island[data-view='settings'] {
 
 .tb-light #bar-rest .tw-widget:hover,
 .tb-light #bar-rest .tw-plugin:hover,
-.tb-light #bar-rest .tw-tool:hover {
+.tb-light #bar-rest .tw-tool:hover,
+.tb-light #bar-rest .tw-stack:hover {
   background: rgba(255, 255, 255, 0.5);
 }
 
@@ -3727,4 +3730,78 @@ body.isl-right .tblib {
 
 .tb-light #bar-rest .tcard .tsw {
   border-color: rgba(0, 0, 0, 0.1);
+}
+
+/* --- A stack (island.js): one shown, a dot for each under it, the one
+   shown lit; the wheel turns it. Dragged onto another's middle while
+   editing, that one is ringed amber: let go, they are a stack. */
+#bar-rest .tw-stack {
+  position: relative;
+}
+
+#bar-rest .tdots {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  display: flex;
+  gap: 3px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+#bar-rest .tdots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.3;
+}
+
+#bar-rest .tdots i.on {
+  opacity: 0.9;
+}
+
+/* A stack at something (a tool in it lit) keeps its dots, not the lit dot. */
+#bar-rest .tw-stack.lit::after {
+  display: none;
+}
+
+.tb-editing #bar-rest .tw.tb-stackto {
+  box-shadow: inset 0 0 0 2px #ffb340;
+  background: rgba(255, 179, 64, 0.22);
+}
+
+/* A stack's card: the one before, which it is, the next. */
+#bar-rest .wgflip {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#bar-rest .wgflip:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+#bar-rest .wgn {
+  min-width: 26px;
+  color: #a1a1a6;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.tb-light #bar-rest .wgflip {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.tb-light #bar-rest .wgn {
+  color: #5d5d5d;
 }

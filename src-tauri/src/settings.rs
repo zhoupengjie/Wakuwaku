@@ -123,6 +123,36 @@ fn is_taskbar_widget(v: &Value) -> Option<&str> {
     (ok_id && ok_of && ok_rest).then_some(id)
 }
 
+// A widget there and its ids: its own, and a stack's (2 to 8 widgets, one
+// shown at a time; smart: turning by itself) its own and its items'.
+fn taskbar_widget_ids(v: &Value) -> Option<Vec<&str>> {
+    let w = v.as_object()?;
+    if w.get("type")?.as_str()? != "stack" {
+        return is_taskbar_widget(v).map(|id| vec![id]);
+    }
+    let id = w.get("id")?.as_str()?;
+    let ok_id = id.len() >= 2 && id.len() <= 16 && id.starts_with('w') && id[1..].chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
+    let items = w.get("items")?.as_array()?;
+    let ok_rest = w.iter().all(|(key, v)| match key.as_str() {
+        "id" | "type" | "items" => true,
+        "size" => matches!(v.as_str(), Some("S" | "M")),
+        "smart" => v.is_boolean(),
+        _ => false,
+    });
+    if !ok_id || !ok_rest || !(2..=8).contains(&items.len()) {
+        return None;
+    }
+    let mut ids = vec![id];
+    for item in items {
+        // A widget, a plugin's or a tool: no spacer, no stack in a stack.
+        if !matches!(item.get("type").and_then(Value::as_str), Some("widget" | "plugin" | "tool")) {
+            return None;
+        }
+        ids.push(is_taskbar_widget(item)?);
+    }
+    Some(ids)
+}
+
 // A tool's settings (a clock's city, a launcher's program): up to 8, each
 // a word for its key and a short text, a number or a flag.
 fn is_tool_cfg(v: &Value) -> bool {
@@ -140,7 +170,13 @@ fn is_tool_cfg(v: &Value) -> bool {
 // plugin's.
 pub fn is_on_taskbar(layout: &Value, widget: &str) -> bool {
     let owner = crate::scripts::owner_of(widget);
-    layout.as_object().into_iter().flat_map(|runs| runs.values()).filter_map(Value::as_array).flatten().any(|e| match (e["type"].as_str(), e["of"].as_str()) {
+    let entries = layout.as_object().into_iter().flat_map(|runs| runs.values()).filter_map(Value::as_array).flatten();
+    // A stack's items, each.
+    let each = entries.flat_map(|e| match e["items"].as_array() {
+        Some(items) if e["type"] == "stack" => items.iter().collect::<Vec<_>>(),
+        _ => vec![e],
+    });
+    each.into_iter().any(|e| match (e["type"].as_str(), e["of"].as_str()) {
         (Some("widget"), Some(of)) => of == widget,
         (Some("plugin"), Some(of)) => Some(of) == owner,
         _ => false,
@@ -160,11 +196,15 @@ fn is_taskbar_layout(v: &Value) -> bool {
                         seen.push(p);
                         true
                     }
-                    (None, Some(id)) if !seen.contains(&id) && widgets < 32 => {
-                        seen.push(id);
-                        widgets += 1;
-                        true
-                    }
+                    (None, _) => match taskbar_widget_ids(p) {
+                        // Each once; 32 at most, a stack's items each one.
+                        Some(ids) if widgets + ids.len().max(2) - 1 <= 32 && ids.iter().all(|id| !seen.contains(id)) && (1..ids.len()).all(|i| !ids[..i].contains(&ids[i])) => {
+                            widgets += ids.len().max(2) - 1;
+                            seen.extend(ids);
+                            true
+                        }
+                        _ => false,
+                    },
                     _ => false,
                 })
             })
@@ -583,6 +623,26 @@ mod layout_tests {
         assert!(!ok(json!({ "id": "wa1", "type": "tool", "of": "clock", "cfg": { "tz": "x".repeat(301) } })));
         assert!(!ok(json!({ "id": "wa1", "type": "tool", "of": "clock", "cfg": { "a-b": 1 } })));
         assert!(!ok(json!({ "id": "wa1", "type": "tool", "of": "clock", "cfg": { "a": [1] } })));
+    }
+
+    #[test]
+    fn stacks() {
+        let w = |id: &str, of: &str| json!({ "id": id, "type": "widget", "of": of });
+        let t = |id: &str, of: &str| json!({ "id": id, "type": "tool", "of": of });
+        let ok = |s| super::is_taskbar_layout(&json!({ "right": [s, "clock"] }));
+        assert!(ok(json!({ "id": "wa", "type": "stack", "items": [w("wb", "today"), t("wc", "media")], "size": "M", "smart": true })));
+        // Two to eight, each once, no spacer or stack inside, nothing else.
+        assert!(!ok(json!({ "id": "wa", "type": "stack", "items": [w("wb", "today")] })));
+        assert!(!ok(json!({ "id": "wa", "type": "stack", "items": (0..9).map(|i| t(&format!("w{i}"), "clock")).collect::<Vec<_>>() })));
+        assert!(!ok(json!({ "id": "wa", "type": "stack", "items": [w("wb", "today"), w("wb", "tokens")] })));
+        assert!(!ok(json!({ "id": "wa", "type": "stack", "items": [w("wa", "today"), w("wb", "tokens")] })));
+        assert!(!ok(json!({ "id": "wa", "type": "stack", "items": [w("wb", "today"), json!({ "id": "wc", "type": "sep" })] })));
+        assert!(!ok(json!({ "id": "wa", "type": "stack", "items": [w("wb", "today"), json!({ "id": "wc", "type": "stack", "items": [w("wd", "a"), w("we", "b")] })] })));
+        assert!(!ok(json!({ "id": "wa", "type": "stack", "items": [w("wb", "today"), w("wc", "tokens")], "cfg": {} })));
+        // An item's id once in the whole layout.
+        assert!(!super::is_taskbar_layout(&json!({ "left": [w("wb", "x")], "right": [{ "id": "wa", "type": "stack", "items": [w("wb", "today"), w("wc", "tokens")] }] })));
+        // What the taskbar shows: a stack's items too.
+        assert!(super::is_on_taskbar(&json!({ "right": [{ "id": "wa", "type": "stack", "items": [w("wb", "today"), w("wc", "tokens")] }] }), "tokens"));
     }
 
     #[test]

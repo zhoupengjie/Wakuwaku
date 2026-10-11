@@ -178,3 +178,29 @@ test("a tool's settings: no control characters, C1's neither (as settings.rs has
   assert.ok(!e({ path: 'a' + String.fromCharCode(9) + 'b' }))
   assert.ok(!e({ path: 'a' + String.fromCharCode(0x85) + 'b' }))
 })
+
+test('a stack: two to eight widgets, plugins or tools, each once, one shown at a time', () => {
+  const w = (id, of) => ({ id, type: 'widget', of })
+  const t = (id, of) => ({ id, type: 'tool', of })
+  const stack = { id: 'wa', type: 'stack', size: 'M', smart: true, items: [w('wb', 'today'), t('wc', 'media')] }
+  assert.ok(Widgets.isEntry(stack))
+  assert.ok(Widgets.isSource(stack) && !Widgets.isOne(stack))
+  assert.ok(!Widgets.isEntry({ ...stack, items: [w('wb', 'today')] }))
+  assert.ok(!Widgets.isEntry({ ...stack, items: [w('wb', 'today'), w('wb', 'tokens')] }))
+  assert.ok(!Widgets.isEntry({ ...stack, items: [w('wb', 'today'), { id: 'wc', type: 'sep' }] }))
+  assert.ok(!Widgets.isEntry({ ...stack, items: [w('wb', 'today'), { ...stack, id: 'wd' }] }))
+  assert.ok(!Widgets.isEntry({ ...stack, smart: 'yes' }))
+  assert.ok(!Widgets.isEntry({ ...w('wb', 'today'), items: [] }))
+  // Its items each count, and each once in the layout.
+  const layout = Widgets.layoutOf({ left: ['her', stack], right: [w('wb', 'x'), 'clock'] }, PARTS, WIN11)
+  assert.deepEqual(layout.left[1], stack)
+  assert.equal(layout.right[0], 'clock', 'the stack holds wb: a loose one with that id after it goes')
+  const many = Array.from({ length: 31 }, (_, i) => ({ id: `w${i}x`, type: 'gap' }))
+  assert.equal(Widgets.layoutOf({ right: [...many, stack] }, PARTS, WIN11).right.filter(p => p.type === 'stack').length, 0, '31 and two more is past 32')
+  // What it shows, what it is called, every widget in a layout.
+  const all = [{ id: 'today', value: '3' }]
+  assert.deepEqual(Widgets.sourcesOf(stack, all).map(x => x.id), ['today'])
+  assert.deepEqual(Widgets.entriesOf({ left: [], center: [], right: [stack, 'clock'] }).map(e => e.id), ['wa', 'wb', 'wc'])
+  assert.deepEqual(Widgets.itemsOf(stack).map(e => e.id), ['wb', 'wc'])
+  assert.equal(Widgets.nameOf('zh', stack), '一叠部件（2 个）')
+})

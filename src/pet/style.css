@@ -2812,7 +2812,8 @@ body.isl-right.home-taskbar #island[data-view='settings'] {
    The spacers: one taking the room left in its run (its run takes the
    room there is, .stretch), a little fixed room, a thin line. */
 #bar-rest .tw-widget,
-#bar-rest .tw-plugin {
+#bar-rest .tw-plugin,
+#bar-rest .tw-tool {
   flex: none;
   display: flex;
   align-items: center;
@@ -2879,7 +2880,8 @@ body.isl-right.home-taskbar #island[data-view='settings'] {
 }
 
 #bar-rest .tw-widget:hover,
-#bar-rest .tw-plugin:hover {
+#bar-rest .tw-plugin:hover,
+#bar-rest .tw-tool:hover {
   background: rgba(255, 255, 255, 0.11);
 }
 
@@ -2921,7 +2923,8 @@ body.isl-right.home-taskbar #island[data-view='settings'] {
 }
 
 .tb-light #bar-rest .tw-widget:hover,
-.tb-light #bar-rest .tw-plugin:hover {
+.tb-light #bar-rest .tw-plugin:hover,
+.tb-light #bar-rest .tw-tool:hover {
   background: rgba(255, 255, 255, 0.5);
 }
 
@@ -3283,4 +3286,445 @@ body.isl-right .tblib {
 
 .tb-light .tbghost.off {
   background: #f6d5d5;
+}
+
+/* --- The taskbar's own widgets (island.js drawTool, tools.js) -------------------------
+   As the others: a launcher shows its file's own icon; one at something
+   (playing, running, awake) has its icon lit with a soft dot under it; a
+   timer run out rings (its face pulses amber) until looked at. */
+#bar-rest .tw .twi img {
+  width: 16px;
+  height: 16px;
+}
+
+#bar-rest .tw-tool.lit::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+#bar-rest .tw-tool {
+  position: relative;
+}
+
+#bar-rest .tw-tool.ring {
+  animation: tool-ring 1.2s ease-in-out infinite;
+}
+
+@keyframes tool-ring {
+  50% {
+    background: rgba(255, 159, 10, 0.32);
+  }
+}
+
+/* Its card: what it shows, and its buttons. */
+#bar-rest .wgpop.tool {
+  min-width: 260px;
+  max-width: 340px;
+}
+
+#bar-rest .tcard {
+  display: grid;
+  gap: 8px;
+}
+
+#bar-rest .tcard .tbig {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+#bar-rest .tcard .tnum {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+#bar-rest .tcard .thuge {
+  font-size: 40px;
+}
+
+#bar-rest .tcard .tnum.ring {
+  color: #ff9f0a;
+}
+
+#bar-rest .tcard .tsub,
+#bar-rest .tcard .tnone,
+#bar-rest .tcard .tlabel {
+  color: #a1a1a6;
+}
+
+#bar-rest .tcard .tlabel {
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+#bar-rest .tcard .tpath {
+  overflow-wrap: anywhere;
+}
+
+#bar-rest .tcard .tcenter {
+  justify-content: center;
+  text-align: center;
+}
+
+#bar-rest .tcard .twarn {
+  color: #ff9f0a;
+}
+
+#bar-rest .tcard .trow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#bar-rest .tcard .twrap {
+  flex-wrap: wrap;
+}
+
+#bar-rest .tcard .tgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+#bar-rest .tbtn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#bar-rest .tbtn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+#bar-rest .tbtn.on {
+  border-color: rgba(94, 155, 255, 0.7);
+  background: rgba(94, 155, 255, 0.22);
+}
+
+#bar-rest .tbtn.main {
+  border-color: #0a84ff;
+  background: #0a84ff;
+  color: #fff;
+}
+
+#bar-rest .tbtn.danger {
+  border-color: #ff453a;
+  background: #ff453a;
+  color: #fff;
+}
+
+#bar-rest .tbtn.small {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+#bar-rest .tbtn.round {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+#bar-rest .tbtn.round.main {
+  width: 48px;
+  height: 48px;
+}
+
+#bar-rest .tbtn.off {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+#bar-rest .tbtn .tg {
+  font: normal 16px/1 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+}
+
+#bar-rest .tcard .tin,
+#bar-rest .tcard .tnote {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  font: inherit;
+}
+
+#bar-rest .tcard .tin {
+  height: 28px;
+  padding: 0 8px;
+}
+
+#bar-rest .tcard .tnote {
+  width: 100%;
+  height: 160px;
+  padding: 8px;
+  resize: none;
+  line-height: 1.5;
+}
+
+#bar-rest .tcard .tlist {
+  display: grid;
+  gap: 2px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+#bar-rest .tcard .titem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+#bar-rest .tcard .titem:hover,
+#bar-rest .tcard .titem.on {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+#bar-rest .tcard .titem img,
+#bar-rest .tcard .titem .wicon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+#bar-rest .tcard .titem span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#bar-rest .tcard .tapps {
+  max-height: 150px;
+}
+
+/* The calculator: what is typed, the result so far, its keys. */
+#bar-rest .tcalc .texpr {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+#bar-rest .tcalc .tres {
+  color: #a1a1a6;
+  text-align: right;
+}
+
+#bar-rest .tcalc .tkeys {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 6px;
+}
+
+#bar-rest .tcalc .tkeys .tbtn {
+  height: 34px;
+  font-size: 15px;
+}
+
+#bar-rest .tcalc .tkeys .op {
+  color: #64d2ff;
+}
+
+#bar-rest .tcalc .tkeys .wide {
+  grid-column: span 2;
+}
+
+#bar-rest .tcalc .tkeys .wide2 {
+  grid-column: span 1;
+}
+
+/* The clock: its dial, or its time large. */
+#bar-rest .tcard .tdial {
+  width: 132px;
+  height: 132px;
+  justify-self: center;
+}
+
+#bar-rest .tdial circle {
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 1.5;
+}
+
+#bar-rest .tdial .tick {
+  stroke: rgba(255, 255, 255, 0.5);
+  stroke-width: 2;
+}
+
+#bar-rest .tdial .hands line {
+  stroke: currentColor;
+}
+
+#bar-rest .tdial .sec line {
+  stroke: #ff9f0a;
+}
+
+/* The drives, each its use as a bar. */
+#bar-rest .tcard .tdisk {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+#bar-rest .tcard .tdisk.on {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+#bar-rest .tcard .tdhead {
+  display: grid;
+  gap: 1px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+#bar-rest .tcard .tdhead span {
+  color: #a1a1a6;
+  font-size: 11px;
+}
+
+#bar-rest .tcard .tbar {
+  grid-column: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+#bar-rest .tcard .tbar i {
+  display: block;
+  height: 100%;
+  background: #5e9bff;
+}
+
+#bar-rest .tcard .tbar.high i {
+  background: #ff9f0a;
+}
+
+/* The colours picked: each its swatch, a press copies it again. */
+#bar-rest .tcard .tswatches {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+#bar-rest .tcard .tsw {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+#bar-rest .tcard .tsw i {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.tb-light #bar-rest .tcard .tsub,
+.tb-light #bar-rest .tcard .tnone,
+.tb-light #bar-rest .tcard .tlabel,
+.tb-light #bar-rest .tcalc .tres,
+.tb-light #bar-rest .tcard .tdhead span {
+  color: #5d5d5d;
+}
+
+.tb-light #bar-rest .tbtn {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: #fff;
+}
+
+.tb-light #bar-rest .tbtn:hover {
+  background: #f0f0f0;
+}
+
+.tb-light #bar-rest .tbtn.main {
+  border-color: #005fb8;
+  background: #005fb8;
+  color: #fff;
+}
+
+.tb-light #bar-rest .tbtn.danger {
+  border-color: #c42b1c;
+  background: #c42b1c;
+  color: #fff;
+}
+
+.tb-light #bar-rest .tcard .tin,
+.tb-light #bar-rest .tcard .tnote {
+  border-color: rgba(0, 0, 0, 0.14);
+  background: #fff;
+}
+
+.tb-light #bar-rest .tcard .titem:hover,
+.tb-light #bar-rest .tcard .titem.on,
+.tb-light #bar-rest .tcard .tdisk.on {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.tb-light #bar-rest .tcalc .tkeys .op {
+  color: #005fb8;
+}
+
+.tb-light #bar-rest .tdial circle {
+  fill: rgba(0, 0, 0, 0.03);
+  stroke: rgba(0, 0, 0, 0.2);
+}
+
+.tb-light #bar-rest .tdial .tick {
+  stroke: rgba(0, 0, 0, 0.45);
+}
+
+.tb-light #bar-rest .tcard .tbar {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.tb-light #bar-rest .tcard .tsw {
+  border-color: rgba(0, 0, 0, 0.1);
 }

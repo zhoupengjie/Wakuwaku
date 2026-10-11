@@ -95,8 +95,10 @@ fn is_island_look(v: &Value) -> bool {
 const TASKBAR_PARTS: [&str; 9] = ["her", "start", "apps", "monitor", "tray", "keys", "quick", "clock", "gear"];
 
 // A widget put on the taskbar (widgets.js isEntry): { id, type, of, size,
-// name, icon }, its id "w" and up to 15 of a-z 0-9; a widget's or a
-// plugin's (of: its id), or a spacer (flex, gap, sep).
+// name, icon, cfg }, its id "w" and up to 15 of a-z 0-9; a widget's or a
+// plugin's (of: its id), one of the taskbar's own (tool, of: its kind,
+// tools.rs KINDS; cfg: its settings, a few short values), or a spacer
+// (flex, gap, sep).
 fn is_taskbar_widget(v: &Value) -> Option<&str> {
     let w = v.as_object()?;
     let id = w.get("id")?.as_str()?;
@@ -106,6 +108,7 @@ fn is_taskbar_widget(v: &Value) -> Option<&str> {
     let ok_of = match kind {
         "widget" => matches!(of, Some(Some(_))),
         "plugin" => matches!(of, Some(Some(of)) if crate::scripts::SCRIPTS.iter().any(|s| s.id == of)),
+        "tool" => matches!(of, Some(Some(of)) if crate::tools::KINDS.contains(&of)),
         "flex" | "gap" | "sep" => of.is_none(),
         _ => false,
     };
@@ -114,9 +117,23 @@ fn is_taskbar_widget(v: &Value) -> Option<&str> {
         "size" => matches!(v.as_str(), Some("S" | "M")),
         "name" => v.as_str().is_some_and(|n| n.chars().count() <= 40 && !n.chars().any(char::is_control)),
         "icon" => v.as_str().is_some_and(|i| crate::widgets::ICONS.contains(&i)),
+        "cfg" => kind == "tool" && is_tool_cfg(v),
         _ => false,
     });
     (ok_id && ok_of && ok_rest).then_some(id)
+}
+
+// A tool's settings (a clock's city, a launcher's program): up to 8, each
+// a word for its key and a short text, a number or a flag.
+fn is_tool_cfg(v: &Value) -> bool {
+    v.as_object().is_some_and(|cfg| {
+        cfg.len() <= 8
+            && cfg.iter().all(|(key, v)| {
+                (1..=16).contains(&key.len())
+                    && key.chars().all(|c| c.is_ascii_alphanumeric())
+                    && (v.is_boolean() || v.is_number() || v.as_str().is_some_and(|t| t.chars().count() <= 300 && !t.chars().any(char::is_control)))
+            })
+    })
 }
 
 // Whether a taskbar layout shows this widget: put there by itself, or its
@@ -174,6 +191,10 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "taskbarAlign" => matches!(v.as_str(), Some("center" | "left")),
         // The taskbar's parts in three runs (island.js tbLayout), each once.
         "taskbarLayout" => v.is_null() || is_taskbar_layout(v),
+        // The notes on the taskbar, by the widget's id: up to 64, 4000 characters each.
+        "notes" => v.as_object().is_some_and(|n| n.len() <= 64 && n.iter().all(|(id, text)| id.len() <= 16 && text.as_str().is_some_and(|t| t.chars().count() <= 4000))),
+        // The colours picked last (tools.rs picker), up to 12.
+        "pickedColors" => v.as_array().is_some_and(|c| c.len() <= 12 && c.iter().all(|c| c.as_str().is_some_and(|c| c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|d| d.is_ascii_hexdigit())))),
         // The programs' buttons in the order dragged: their keys (paths).
         "taskbarOrder" => v.as_array().is_some_and(|keys| keys.len() <= 200 && keys.iter().all(|k| k.as_str().is_some_and(|s| s.len() <= 1024))),
         "hold" => v.as_str() == Some("seen") || matches!(v.as_u64(), Some(8 | 30 | 120)),
@@ -221,6 +242,7 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
             }
         }
     }
+    let tools = rest.contains_key("taskbarLayout") || display.is_some();
     if let Some(scale) = scale {
         pet::resize(sh, scale);
     }
@@ -245,6 +267,10 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
     }
     if plugins && scripts::sync(sh) {
         sh.redraw();
+    }
+    // A tool put out (or taken away): read now, not at its next look.
+    if tools {
+        crate::tools::poke();
     }
     // Mail kept offline for more or less: each account's sync at it now,
     // once the setting is there to be read.
@@ -542,6 +568,21 @@ mod layout_tests {
         let many: Vec<_> = (0..33).map(|i| json!({ "id": format!("w{i}"), "type": "gap" })).collect();
         assert!(!super::is_taskbar_layout(&json!({ "right": many })));
         assert!(super::is_taskbar_layout(&json!({ "right": many[..32] })));
+    }
+
+    #[test]
+    fn the_taskbars_own_widgets() {
+        let ok = |w| super::is_taskbar_layout(&json!({ "right": [w, "clock"] }));
+        assert!(ok(json!({ "id": "wa1", "type": "tool", "of": "media", "size": "M" })));
+        assert!(ok(json!({ "id": "wa1", "type": "tool", "of": "clock", "cfg": { "tz": "Asia/Tokyo", "style": "analog" } })));
+        assert!(ok(json!({ "id": "wa1", "type": "tool", "of": "launch", "cfg": { "path": "C:\\Windows\\notepad.exe", "name": "记事本" } })));
+        assert!(!ok(json!({ "id": "wa1", "type": "tool", "of": "nope" })));
+        assert!(!ok(json!({ "id": "wa1", "type": "tool" })));
+        // Settings for a tool only, a few short ones.
+        assert!(!ok(json!({ "id": "wa1", "type": "widget", "of": "today", "cfg": {} })));
+        assert!(!ok(json!({ "id": "wa1", "type": "tool", "of": "clock", "cfg": { "tz": "x".repeat(301) } })));
+        assert!(!ok(json!({ "id": "wa1", "type": "tool", "of": "clock", "cfg": { "a-b": 1 } })));
+        assert!(!ok(json!({ "id": "wa1", "type": "tool", "of": "clock", "cfg": { "a": [1] } })));
     }
 
     #[test]

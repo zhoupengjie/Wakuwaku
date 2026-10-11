@@ -28,6 +28,7 @@
 //   data.rs        her folder, settings and pets
 //   widgets.rs     plugins in the island: widgets from scripts, and the built-in ones
 //   tokens.rs      today's tokens, from Claude Code's and Codex's own records
+//   tools.rs       the taskbar's own widgets: media, the Recycle Bin, drives, awake, power, the colour picker
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod appbar;
@@ -62,6 +63,7 @@ mod taskbar;
 mod tasks;
 mod theme;
 mod tokens;
+mod tools;
 mod tray;
 mod updates;
 mod wallpaper;
@@ -746,6 +748,23 @@ async fn island_holding(app: AppHandle, is_holding: bool) {
     island::set_holding(&shared(&app), is_holding);
 }
 
+// The taskbar's own widgets (tools.rs): as last read, for a page that
+// starts; an action (kind, what, its argument); a file's icon, for a launcher.
+#[tauri::command]
+fn tools_state() -> Value {
+    tools::state()
+}
+
+#[tauri::command]
+async fn tool_do(app: AppHandle, kind: String, what: String, arg: Option<String>) -> bool {
+    tools::act(&shared(&app), &kind, &what, arg.as_deref().unwrap_or(""))
+}
+
+#[tauri::command]
+async fn tool_icon(path: String) -> Option<String> {
+    taskbar::file_png(&path, 32)
+}
+
 // Where the page laid her island out on the taskbar: her seat.
 #[tauri::command]
 async fn island_seat(app: AppHandle, x: f64) {
@@ -1081,6 +1100,9 @@ fn main() {
             mail::mail_keep_draft,
             taskbar::taskbar_tray,
             taskbar::taskbar_open,
+            tools_state,
+            tool_do,
+            tool_icon,
             taskbar::taskbar_tray_rects,
             taskbar::taskbar_window,
             taskbar::taskbar_windows,
@@ -1219,6 +1241,10 @@ fn main() {
                     std::thread::sleep(Duration::from_secs(if watcher.is_quiet() { 10 } else { 3 }));
                 }
             });
+
+            // The taskbar's own widgets: what they read, while one is out.
+            let tooled = sh.clone();
+            spawn_named("tools", move || tools::run(tooled));
 
             // The monitor: the parts that are on, every so many seconds (its
             // setting, 1 to 10), while it is on; looked at again within a

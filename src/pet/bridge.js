@@ -124,6 +124,15 @@
     onTaskbarEdit: on('taskbar:edit'),
     // Windows' Start menu opened or closed ({ open }), for the Start button.
     onStart: on('taskbar:start'),
+    // The taskbar's own widgets (tools.rs): what they read as it changes
+    // ({ media, trash, disk, awake }), and a colour picked ({ hex }, null: given up).
+    onTools: on('tools:state'),
+    onPicked: on('tools:picked'),
+    tools: {
+      state: () => invoke('tools_state').catch(() => null),
+      do: (kind, what, arg) => invoke('tool_do', { kind: String(kind), what: String(what), arg: arg == null ? null : String(arg) }).catch(() => false),
+      icon: path => invoke('tool_icon', { path: String(path) }).catch(() => null),
+    },
     settings: {
       get: () => invoke('settings_get'),
       set: patch => invoke('settings_set', { patch }),

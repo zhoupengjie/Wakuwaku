@@ -4242,6 +4242,7 @@ dependencies = [
  "tiny_http",
  "ureq",
  "webview2-com",
+ "windows",
  "windows-core",
  "winreg",
 ]

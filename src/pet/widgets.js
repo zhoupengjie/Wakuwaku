@@ -151,13 +151,23 @@
   // --- On the taskbar (island.js) -----------------------------------------------------
   // The taskbar's layout (taskbarLayout) is three runs, { left, center,
   // right }, of its parts by name ('start', 'clock', …) and of the widgets
-  // put there, each { id, type, of, size, name, icon }: type 'widget' (of: a
-  // widget's id), 'plugin' (of: a plugin's: its widgets, in turn), or a
+  // put there, each { id, type, of, size, name, icon, cfg }: type 'widget'
+  // (of: a widget's id), 'plugin' (of: a plugin's: its widgets, in turn),
+  // 'tool' (of: one of the taskbar's own, tools.js; cfg: its settings), or a
   // spacer: 'flex' (takes the room there is), 'gap', 'sep' (a line); size
   // 'S' (its icon and value) or 'M' (its name over its value, as the clock
   // has the date under the time). name and icon: as it was put there, for
   // while it has nothing to say. settings.rs checks the same.
-  const ENTRY_TYPES = ['widget', 'plugin', 'flex', 'gap', 'sep']
+  const ENTRY_TYPES = ['widget', 'plugin', 'tool', 'flex', 'gap', 'sep']
+  // A tool's settings: up to 8, a word each for a short text, a number or a flag.
+  const isCfg = c =>
+    !!c &&
+    typeof c === 'object' &&
+    !Array.isArray(c) &&
+    Object.keys(c).length <= 8 &&
+    Object.entries(c).every(
+      ([k, v]) => /^[A-Za-z0-9]{1,16}$/.test(k) && (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && [...v].length <= 300 && !/[\u0000-\u001f\u007f]/.test(v))),
+    )
   const MAX_ENTRIES = 32
   const isEntry = e =>
     !!e &&
@@ -165,11 +175,13 @@
     typeof e.id === 'string' &&
     /^w[a-z0-9]{1,15}$/.test(e.id) &&
     ENTRY_TYPES.includes(e.type) &&
-    (e.type === 'widget' || e.type === 'plugin' ? typeof e.of === 'string' && /^[a-z0-9_-]{1,40}$/.test(e.of) : e.of === undefined) &&
+    (e.type === 'widget' || e.type === 'plugin' || e.type === 'tool' ? typeof e.of === 'string' && /^[a-z0-9_-]{1,40}$/.test(e.of) : e.of === undefined) &&
+    (e.cfg === undefined || (e.type === 'tool' && isCfg(e.cfg))) &&
     (e.size === undefined || e.size === 'S' || e.size === 'M') &&
     (e.name === undefined || (typeof e.name === 'string' && [...e.name].length <= 40)) &&
     (e.icon === undefined || (typeof e.icon === 'string' && e.icon in ICONS))
-  const isSource = e => e.type === 'widget' || e.type === 'plugin'
+  // One with something to show (a size), not a spacer.
+  const isSource = e => e.type === 'widget' || e.type === 'plugin' || e.type === 'tool'
   // A part by its name, a widget by its id.
   const keyOf = item => (typeof item === 'string' ? item : item.id)
 
@@ -220,6 +232,7 @@
   // label (as it was put there, when gone).
   function nameOf(lang, entry, all = [], detailed = true) {
     if (entry.type === 'plugin') return render(lang, { key: `w.ex.${entry.of}` })
+    if (entry.type === 'tool') return render(lang, { key: `tool.${entry.of}` })
     if (entry.type !== 'widget') return render(lang, { key: `taskbar.w.${entry.type}` })
     const w = all.find(x => x.id === entry.of)
     if (w) return words(lang, w, detailed).label || render(lang, { key: 'taskbar.w.widget' })

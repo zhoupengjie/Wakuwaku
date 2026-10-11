@@ -1961,6 +1961,18 @@ mod imp {
         Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(out)))
     }
 
+    // A file's icon (a program, a folder, a document) as Explorer shows it,
+    // `size` square: a launcher's on the taskbar (tools.rs launch).
+    pub fn file_png(path: &str, size: i32) -> Option<String> {
+        let icon = tasks::file_icon(path);
+        if icon == 0 {
+            return None;
+        }
+        let png = png_of(icon, size);
+        tasks::destroy_icon(icon);
+        png
+    }
+
     // An app's icon as Windows' taskbar shows it, asked of the shell by the
     // app's id (tasks::app_id): its Apps folder's item, drawn by the shell at
     // `size` from the app's own pictures (a store app's plain one for the
@@ -2203,9 +2215,12 @@ mod imp {
     pub fn work_area_bottom() -> i32 {
         0
     }
+    pub fn file_png(_path: &str, _size: i32) -> Option<String> {
+        None
+    }
 }
 
-pub use imp::{explorer_room, give_back, look_for_other, look_now, note, resend, strip_moved, take, waiting, wake, work_area_bottom};
+pub use imp::{explorer_room, file_png, give_back, look_for_other, look_now, note, resend, strip_moved, take, waiting, wake, work_area_bottom};
 
 // RGBA pixels (sw × sh) made dw × dh smoothly: each pixel out the weighted
 // mean of those it covers, under a tent as wide as a pixel of the coarser

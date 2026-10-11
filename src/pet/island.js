@@ -249,6 +249,12 @@
   let widgets = []
   let widgetAt = 0
   let allWidgets = []
+  // The taskbar's own widgets (tools.js): what tools.rs read, each one's
+  // own in the page (a timer, the calculator, a question asked), and the
+  // icons of launchers' files as they come.
+  let toolState = {}
+  const toolLocal = new Map()
+  const fileIcons = new Map()
   // The monitor, pinned (its setting, on by default): always in sight at the
   // island's right end (the bar's), never one of the turns. Unpinned it is
   // one of the widgets taking turns.
@@ -1011,6 +1017,10 @@
       const name = Widgets.nameOf(lang, e, allWidgets, detailed)
       node.dataset.label = name
       if (!Widgets.isSource(e)) continue
+      if (e.type === 'tool') {
+        drawTool(node, e)
+        continue
+      }
       const from = Widgets.sourcesOf(e, allWidgets)
       const w = from.length ? from[turn % from.length] : null
       const said = w ? Widgets.words(lang, w, detailed) : null
@@ -1057,6 +1067,181 @@
   setInterval(() => {
     if (taskbarBuilt && home() === 'taskbar' && entryNodes.size) drawEntries()
   }, ENTRY_TURN_MS)
+
+  // --- The taskbar's own widgets (tools.js) ---------------------------------------------
+  // What one is drawn from, and what it may do.
+  function toolX(e) {
+    return { lang, entry: e, cfg: e.cfg || {}, state: toolState, local: toolLocal.get(e.id) || {}, now: Date.now(), apps: taskWindows, notes: config.notes || {}, picked: config.pickedColors || [], iconOf }
+  }
+  function toolApi(e) {
+    return {
+      call: (what, arg) => window.pet.tools.do(e.of, what, arg),
+      setCfg: patch => saveCfg(e.id, patch),
+      setLocal: patch => {
+        toolLocal.set(e.id, { ...(toolLocal.get(e.id) || {}), ...patch })
+        drawEntries()
+      },
+      setNotes: text => saveNotes(e.id, text),
+      taskbar: what => window.pet.taskbar.open(what),
+      window: id => window.pet.taskbar.window(Number(id), 'press'),
+    }
+  }
+
+  // A launcher's file's icon, asked for once (tools.rs, Explorer's own).
+  function iconOf(path) {
+    if (!fileIcons.has(path)) {
+      fileIcons.set(path, null)
+      window.pet.tools.icon(path).then(png => {
+        fileIcons.set(path, png || '')
+        if (png) drawEntries()
+      })
+    }
+    return fileIcons.get(path) || null
+  }
+
+  // Its face: S its icon (a launcher's file's own) and a short value, M its
+  // value over its name; lit while it is at something (playing, running,
+  // awake), ringing when a timer has run out.
+  function drawTool(node, e) {
+    const f = Tools.face(e.of, toolX(e))
+    const colour = stripInk(f.colour) || stripHue().idle
+    const drawn = JSON.stringify([e.size, f, colour])
+    if (node._drawn === drawn) return
+    node._drawn = drawn
+    const icon = el('span', 'twi')
+    if (f.img) {
+      const img = el('img')
+      img.src = f.img
+      img.alt = ''
+      icon.append(img)
+    } else {
+      icon.innerHTML = f.icon
+      icon.style.color = colour
+    }
+    node.classList.toggle('empty', !!f.empty)
+    node.classList.toggle('lit', !!f.lit)
+    node.classList.toggle('ring', !!f.ring)
+    node.title = [f.value, f.label].filter(Boolean).join(' · ')
+    if (node.dataset.size === 'S') node.replaceChildren(icon, ...(f.short ? [el('b', 'twv', f.short)] : []))
+    else {
+      const text = el('span', 'twt')
+      text.append(el('b', 'twv', f.value), el('i', '', f.label))
+      node.replaceChildren(icon, text)
+    }
+  }
+
+  // Each second, with any of them out: timers run, clocks go on; a timer run
+  // out rings (a notification, and its face) until it is looked at.
+  setInterval(() => {
+    if (!taskbarBuilt || home() !== 'taskbar') return
+    let any = false
+    for (const node of entryNodes.values()) {
+      const e = node._entry
+      if (e?.type !== 'tool') continue
+      any = true
+      const x = toolX(e)
+      if (e.of === 'timer' && Tools.rings(x)) {
+        toolLocal.set(e.id, { ...x.local, endAt: null, left: 0, done: true })
+        window.pet.tools.do('timer', 'done', t(lang, 'tool.timer.rang', { name: Widgets.nameOf(lang, e) }))
+      }
+    }
+    if (any) drawEntries()
+  }, 1000)
+
+  // A press on its face: done there and then, or its card (again: closed).
+  function pressTool(e) {
+    if (!e || editLayout) return
+    if (wgFor === e.id) return closeWidgetPop()
+    if (e.of === 'timer' && toolLocal.get(e.id)?.done) toolLocal.set(e.id, { ...toolLocal.get(e.id), done: false })
+    if (!Tools.press(e.of, toolX(e), toolApi(e))) openWidgetPop(e.id)
+    else if (wgFor) closeWidgetPop()
+  }
+
+  // Its card: drawn anew only when what it shows changed, and never under
+  // a field being typed in.
+  function drawToolPop(node, e) {
+    const html = Tools.card(e.of, toolX(e))
+    const key = `${e.id}\n${lang}\n${html}`
+    const typing = wgPop.contains(document.activeElement) && document.activeElement.matches('input, textarea')
+    if (wgPop._key !== key && !typing) {
+      wgPop._key = key
+      const head = el('div', 'wghead')
+      head.innerHTML = Tools.icon(e.of)
+      head.firstChild.style.color = stripInk(Tools.COLOUR[e.of]) || stripHue().idle
+      head.append(el('b', '', Widgets.nameOf(lang, e)), el('span', 'wgfrom', t(lang, 'taskbar.w.from.tool')))
+      const body = el('div', 'tcard')
+      body.innerHTML = html
+      const acts = el('div', 'wgacts')
+      const remove = el('button', 'wgbtn', t(lang, 'taskbar.w.remove'))
+      remove.type = 'button'
+      remove.dataset.wg = 'remove'
+      acts.append(remove)
+      wgPop.replaceChildren(head, body, acts)
+      wgPop.classList.add('tool')
+    }
+    wgPop.hidden = false
+    const r = node.getBoundingClientRect()
+    const base = barRest.getBoundingClientRect()
+    const left = r.left - base.left + r.width / 2 - wgPop.offsetWidth / 2
+    wgPop.style.left = `${Math.max(4, Math.min(left, barRest.offsetWidth - wgPop.offsetWidth - 4))}px`
+  }
+
+  // A button on its card; the field it names (a launcher's path) goes with it.
+  function toolAct(e, button) {
+    const what = button.dataset.t
+    let arg = button.dataset.arg ?? ''
+    if (what === 'setPath') arg = [...String(wgPop.querySelector('[data-field="path"]')?.value || '').trim()].slice(0, 300).join('')
+    Tools.act(e.of, what, arg, { ...toolX(e), data: { ...button.dataset } }, toolApi(e))
+    // Done with it: what it opened comes to the front, the picker wants the screen.
+    if (['window', 'search', 'start', 'open', 'do'].includes(what) && !(e.of === 'timer')) closeWidgetPop()
+    else drawWidgetPop()
+  }
+
+  // A tool's settings kept, in the layout as kept.
+  function saveCfg(id, patch) {
+    const layout = tbLayout(config.taskbarLayout)
+    for (const run of Object.values(layout)) for (const p of run) if (p.id === id) p.cfg = { ...(p.cfg || {}), ...patch }
+    config.taskbarLayout = layout
+    window.pet.settings.set({ taskbarLayout: layout })
+    arranged = ''
+    update()
+  }
+
+  // A note kept a moment after the last key.
+  let notesTimer
+  function saveNotes(id, text) {
+    config.notes = { ...(config.notes || {}), [id]: [...String(text)].slice(0, 4000).join('') }
+    clearTimeout(notesTimer)
+    notesTimer = setTimeout(() => window.pet.settings.set({ notes: config.notes }), 600)
+    drawEntries()
+  }
+
+  // The notes of those no longer in the layout, gone with them: the change.
+  function forgetNotes(layout) {
+    const ids = new Set(Object.values(layout).flatMap(run => run.filter(p => typeof p !== 'string').map(p => p.id)))
+    const notes = config.notes || {}
+    const kept = Object.fromEntries(Object.entries(notes).filter(([id]) => ids.has(id)))
+    if (Object.keys(kept).length === Object.keys(notes).length) return {}
+    config.notes = kept
+    return { notes: kept }
+  }
+
+  // What tools.rs reads, as it changes; a colour picked: first of those
+  // kept (already copied).
+  window.pet.onTools(state => {
+    toolState = state || {}
+    if (taskbarBuilt && home() === 'taskbar') drawEntries()
+  })
+  window.pet.onPicked(({ hex } = {}) => {
+    if (!hex) return
+    const picked = [hex, ...(config.pickedColors || []).filter(c => c !== hex)].slice(0, 12)
+    config.pickedColors = picked
+    window.pet.settings.set({ pickedColors: picked })
+    if (taskbarBuilt && home() === 'taskbar') drawEntries()
+  })
+  window.pet.tools.state().then(state => {
+    if (state && typeof state === 'object') toolState = state
+  })
 
   // Her island over its slot, as wide as it is: from the strip's left, or,
   // its slot past the middle, from the right (what it grows into goes the
@@ -1167,7 +1352,7 @@
   // place, jumps rather than slides a long way, and gives a little under a
   // press. Not over what opens above the buttons, nor while a tray icon or
   // a program's button is being dragged.
-  const GLIDE_ON = '.start, .win, .tout .ticon, .tchev, .tpriv, .kbd .ime, .tquick, .face.mon, .tw-widget, .tw-plugin, .tclock, .gear, .tag[data-jump]'
+  const GLIDE_ON = '.start, .win, .tout .ticon, .tchev, .tpriv, .kbd .ime, .tquick, .face.mon, .tw-widget, .tw-plugin, .tw-tool, .tclock, .gear, .tag[data-jump]'
   const GLIDE_FAR = 360
   const glide = el('span', 'hdrop')
   let glideOn = null
@@ -1334,8 +1519,10 @@
   // press anywhere else closes them, as Windows' do: told by the host
   // (taskbar.rs press hook), for ours never take the focus whose loss would.
   let watching = false
-  // The widget on the taskbar whose card is open (openWidgetPop).
+  // The widget on the taskbar whose card is open (openWidgetPop), and
+  // whether the window took the keyboard for a field on it.
   let wgFor = null
+  let wgKeyboard = false
   function watchPresses() {
     const want = !!popFor || trayOpen || !!wgFor
     if (want === watching) return
@@ -1369,6 +1556,12 @@
   function closeWidgetPop() {
     wgFor = null
     wgPop.hidden = true
+    wgPop._key = ''
+    // A note or a launcher's field typed in: the keyboard back to where it was.
+    if (wgKeyboard) {
+      wgKeyboard = false
+      window.pet.keyboard(false)
+    }
     watchPresses()
   }
 
@@ -1376,6 +1569,9 @@
     const node = wgFor && entryNodes.get(wgFor)
     const e = node?._entry
     if (!e || !node.isConnected || editLayout || home() !== 'taskbar') return closeWidgetPop()
+    if (e.type === 'tool') return drawToolPop(node, e)
+    wgPop._key = ''
+    wgPop.classList.remove('tool')
     const detailed = isDetailed()
     const from = Widgets.sourcesOf(e, allWidgets)
     const first = from[0]
@@ -1419,8 +1615,9 @@
     if (editLayout) editLayout = layout
     else {
       config.taskbarLayout = layout
-      window.pet.settings.set({ taskbarLayout: layout })
+      window.pet.settings.set({ taskbarLayout: layout, ...forgetNotes(layout) })
     }
+    toolLocal.delete(id)
     if (wgFor === id) closeWidgetPop()
     arranged = ''
     update()
@@ -1430,6 +1627,9 @@
   wgPop.addEventListener('click', e => {
     const what = e.target.closest('[data-wg]')?.dataset.wg
     const entry = wgFor && entryNodes.get(wgFor)?._entry
+    // One of the taskbar's own: a button on its card.
+    const button = e.target.closest('[data-t]')
+    if (button && entry?.type === 'tool') return toolAct(entry, button)
     if (!what || !entry) return
     if (what === 'remove') return removeEntry(entry.id)
     closeWidgetPop()
@@ -1440,6 +1640,25 @@
   wgPop.addEventListener('contextmenu', e => {
     e.preventDefault()
     e.stopPropagation()
+  })
+
+  // A field on a card: the window takes the keyboard once it is clicked;
+  // a note kept as it is typed; Enter keeps a launcher's path.
+  wgPop.addEventListener('mousedown', e => {
+    const field = e.target.closest('input, textarea')
+    if (!field || wgKeyboard) return
+    wgKeyboard = true
+    window.pet.keyboard(true)
+    setTimeout(() => field.focus(), 30)
+  })
+  wgPop.addEventListener('input', e => {
+    const entry = wgFor && entryNodes.get(wgFor)?._entry
+    if (entry && e.target.matches('[data-field="note"]')) saveNotes(entry.id, e.target.value)
+  })
+  wgPop.addEventListener('keydown', e => {
+    const entry = wgFor && entryNodes.get(wgFor)?._entry
+    if (entry && e.key === 'Enter' && e.target.matches('[data-field="path"]')) toolAct(entry, wgPop.querySelector('[data-t="setPath"]'))
+    if (e.key === 'Escape') closeWidgetPop()
   })
 
   function drawPop() {
@@ -2151,6 +2370,10 @@
   barRest.addEventListener('click', e => {
     const what = e.target.closest('[data-bar]')?.dataset.bar
     if (what && what !== 'settings') window.pet.taskbar.open(what)
+    // One of the taskbar's own: what a press on it does (search, a
+    // launcher, the picker, awake), or its card.
+    const tool = e.target.closest('.tw-tool')
+    if (tool) return pressTool(tool._entry)
     // A widget put there: its card, or closed again.
     const widget = e.target.closest('.tw-widget, .tw-plugin')
     if (widget) wgFor === widget.dataset.entry ? closeWidgetPop() : openWidgetPop(widget.dataset.entry)
@@ -2162,7 +2385,7 @@
     e.preventDefault()
     if (trayKey(e)) return
     if (wgPop.contains(e.target)) return
-    const widget = e.target.closest('.tw-widget, .tw-plugin')
+    const widget = e.target.closest('.tw-widget, .tw-plugin, .tw-tool')
     if (widget) return openWidgetPop(widget.dataset.entry)
     if (e.target.closest('[data-bar="ime"]')) return window.pet.taskbar.open('inputs')
     window.pet.menu()
@@ -2257,7 +2480,7 @@
     for (const node of entryNodes.values()) node.classList.remove('tb-chosen')
     if (keep) {
       config.taskbarLayout = layout
-      const patch = { taskbarLayout: layout }
+      const patch = { taskbarLayout: layout, ...forgetNotes(layout) }
       // A plugin put there that was not running: it runs now.
       const plugins = config.plugins && typeof config.plugins === 'object' ? config.plugins : {}
       const off = [...new Set(Object.values(layout).flatMap(run => run.filter(p => p.type === 'plugin').map(p => p.of)))].filter(id => plugins[id]?.on !== true)
@@ -2300,7 +2523,8 @@
   // the plugins she runs, each mail account's, those of anyone else's
   // scripts there now, and the spacers.
   function cardsOf(all) {
-    const cards = []
+    // The taskbar's own first (tools.js), then the widgets there are.
+    const cards = Tools.KINDS.map(kind => ({ kind: 'tool', entry: { type: 'tool', of: kind } }))
     const named = w => (w.private ? {} : { name: [...String(Widgets.words(lang, w).label)].slice(0, 40).join('') })
     for (const w of all.filter(w => w.builtIn && w.id !== 'monitor')) cards.push({ kind: 'builtIn', entry: { type: 'widget', of: w.id, icon: w.icon }, w })
     for (const p of libSnap?.plugins || []) cards.push({ kind: 'plugin', entry: { type: 'plugin', of: p.id, icon: p.icon }, w: all.find(w => w.plugin === p.id), plugin: p })
@@ -2326,12 +2550,14 @@
     const grid = el('div', 'tblgrid')
     for (const [i, c] of libCards.entries()) {
       if (libKind !== 'all' && c.kind !== libKind) continue
-      const isOn = Widgets.isSource(c.entry) && placed.has(`${c.entry.type}:${c.entry.of}`)
+      // One of a kind: dimmed once there (a clock, a launcher, a note, a timer may be there again).
+      const isOn = Widgets.isSource(c.entry) && placed.has(`${c.entry.type}:${c.entry.of}`) && !(c.entry.type === 'tool' && Tools.MANY.includes(c.entry.of))
       const card = el('div', isOn ? 'tblcard placed' : 'tblcard')
       card.dataset.card = i
       const mark = el('span', 'tblmark')
-      mark.innerHTML = SPACER_MARK[c.entry.type] ? `<svg class="wicon" viewBox="0 0 24 24" aria-hidden="true">${SPACER_MARK[c.entry.type]}</svg>` : Widgets.icon(c.w?.icon || c.entry.icon || 'dot')
-      mark.style.color = (c.w && stripInk(c.w.color)) || stripHue().idle
+      const isTool = c.entry.type === 'tool'
+      mark.innerHTML = SPACER_MARK[c.entry.type] ? `<svg class="wicon" viewBox="0 0 24 24" aria-hidden="true">${SPACER_MARK[c.entry.type]}</svg>` : isTool ? Tools.icon(c.entry.of) : Widgets.icon(c.w?.icon || c.entry.icon || 'dot')
+      mark.style.color = stripInk(isTool ? Tools.COLOUR[c.entry.of] : c.w?.color) || stripHue().idle
       const said = c.w ? Widgets.words(lang, c.w, detailed).value : ''
       const note = isOn
         ? t(lang, 'taskbar.lib.placed')
@@ -2339,7 +2565,9 @@
           ? t(lang, 'taskbar.lib.needs')
           : c.plugin && !c.plugin.on
             ? t(lang, 'taskbar.lib.starts')
-            : said || t(lang, `taskbar.lib.note.${c.kind === 'layout' ? c.entry.type : c.kind}`)
+            : isTool
+              ? t(lang, `tool.${c.entry.of}.note`)
+              : said || t(lang, `taskbar.lib.note.${c.kind === 'layout' ? c.entry.type : c.kind}`)
       card.append(mark, el('b', '', Widgets.nameOf(lang, { ...c.entry, id: 'w0' }, all, detailed)), el('span', 'tblnote', note))
       grid.append(card)
     }
@@ -2363,7 +2591,7 @@
     const c = libCards[card.dataset.card]
     if (!c) return
     e.preventDefault()
-    const fresh = { ...c.entry, id: newId(), ...(Widgets.isSource(c.entry) ? { size: 'M' } : {}) }
+    const fresh = { ...c.entry, id: newId(), ...(Widgets.isSource(c.entry) ? { size: c.entry.type === 'tool' && Tools.SMALL.includes(c.entry.of) ? 'S' : 'M' } : {}) }
     drag = { fresh, node: card, label: card.querySelector('b')?.textContent || '', x: e.clientX, y: e.clientY, moved: false }
     try {
       library.setPointerCapture(e.pointerId)

@@ -204,3 +204,12 @@ test('a stack: two to eight widgets, plugins or tools, each once, one shown at a
   assert.deepEqual(Widgets.itemsOf(stack).map(e => e.id), ['wb', 'wc'])
   assert.equal(Widgets.nameOf('zh', stack), '一叠部件（2 个）')
 })
+
+test("her island's grid: widgets and stacks, L too, no spacers, each once", () => {
+  const w = (id, of, size) => ({ id, type: 'widget', of, size })
+  const grid = Widgets.gridOf([w('wa', 'today', 'L'), { id: 'wb', type: 'gap' }, w('wa', 'tokens', 'S'), { id: 'wc', type: 'stack', size: 'L', items: [w('wd', 'x', 'L'), w('we', 'y')] }, { id: 'wf', type: 'tool', of: 'media', size: 'XL' }])
+  assert.deepEqual(grid.map(p => p.id), ['wa', 'wc'])
+  assert.deepEqual(Widgets.gridOf(null), [])
+  assert.ok(!Widgets.isEntry(w('wa', 'today', 'L')), 'L only in the grid')
+  assert.deepEqual(Widgets.entriesIn(grid).map(p => p.id), ['wa', 'wc', 'wd', 'we'])
+})

@@ -171,18 +171,19 @@
       ([k, v]) => /^[A-Za-z0-9]{1,16}$/.test(k) && (typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && [...v].length <= 300 && !/[\u0000-\u001f\u007f-\u009f]/.test(v))),
     )
   const MAX_ENTRIES = 32
-  const isEntry = e =>
+  // large: one in her island's grid, where a widget may be L (2 × 2) too.
+  const isEntry = (e, large = false) =>
     !!e &&
     typeof e === 'object' &&
     typeof e.id === 'string' &&
     /^w[a-z0-9]{1,15}$/.test(e.id) &&
     ENTRY_TYPES.includes(e.type) &&
     (e.type === 'stack'
-      ? Array.isArray(e.items) && e.items.length >= 2 && e.items.length <= 8 && e.items.every(i => isEntry(i) && isOne(i)) && new Set(e.items.map(i => i.id)).size === e.items.length && (e.smart === undefined || typeof e.smart === 'boolean')
+      ? Array.isArray(e.items) && e.items.length >= 2 && e.items.length <= 8 && e.items.every(i => isEntry(i, large) && isOne(i)) && new Set(e.items.map(i => i.id)).size === e.items.length && (e.smart === undefined || typeof e.smart === 'boolean')
       : e.items === undefined && e.smart === undefined) &&
     (e.type === 'widget' || e.type === 'plugin' || e.type === 'tool' ? typeof e.of === 'string' && /^[a-z0-9_-]{1,40}$/.test(e.of) : e.of === undefined) &&
     (e.cfg === undefined || (e.type === 'tool' && isCfg(e.cfg))) &&
-    (e.size === undefined || e.size === 'S' || e.size === 'M') &&
+    (e.size === undefined || e.size === 'S' || e.size === 'M' || (large && e.size === 'L')) &&
     (e.name === undefined || (typeof e.name === 'string' && [...e.name].length <= 40)) &&
     (e.icon === undefined || (typeof e.icon === 'string' && e.icon in ICONS))
   // One thing shown (what a stack holds), or that and a stack: with a size, not a spacer.
@@ -214,6 +215,25 @@
     for (const [k, list] of Object.entries(base)) for (const p of list) if (!seen.has(p)) out[k].push(p)
     return out
   }
+
+  // Her island's grid (islandGrid) as kept, made whole: its widgets (and
+  // stacks) in the order they fill its four columns, each once, 32 at most.
+  function gridOf(saved) {
+    const seen = new Set()
+    let entries = 0
+    const keep = p => {
+      const ids = [p?.id, ...(p?.type === 'stack' && Array.isArray(p.items) ? p.items.map(i => i?.id) : [])]
+      const count = p?.type === 'stack' ? ids.length - 1 : 1
+      if (!isEntry(p, true) || !isSource(p) || ids.some(id => seen.has(id)) || entries + count > MAX_ENTRIES) return false
+      entries += count
+      ids.forEach(id => seen.add(id))
+      return true
+    }
+    return (Array.isArray(saved) ? saved : []).filter(keep).map(p => (p.type === 'stack' ? { ...p, items: p.items.map(i => ({ ...i })) } : { ...p }))
+  }
+
+  // Every widget in a list of them (a run, the grid), those in stacks too.
+  const entriesIn = list => list.filter(p => typeof p !== 'string').flatMap(e => [e, ...(e.type === 'stack' ? e.items : [])])
 
   // Its parts alone: what a preset says.
   const partsAlone = layout => Object.fromEntries(Object.entries(layout).map(([k, run]) => [k, run.filter(p => typeof p === 'string')]))
@@ -274,6 +294,8 @@
     entriesOf,
     keyOf,
     layoutOf,
+    gridOf,
+    entriesIn,
     partsAlone,
     withParts,
     sourcesOf,

@@ -100,6 +100,11 @@ const TASKBAR_PARTS: [&str; 9] = ["her", "start", "apps", "monitor", "tray", "ke
 // tools.rs KINDS; cfg: its settings, a few short values), or a spacer
 // (flex, gap, sep).
 fn is_taskbar_widget(v: &Value) -> Option<&str> {
+    widget_id(v, false)
+}
+
+// The same, L (2 × 2) allowed too when large: one in her island's grid.
+fn widget_id(v: &Value, large: bool) -> Option<&str> {
     let w = v.as_object()?;
     let id = w.get("id")?.as_str()?;
     let ok_id = id.len() >= 2 && id.len() <= 16 && id.starts_with('w') && id[1..].chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
@@ -114,7 +119,7 @@ fn is_taskbar_widget(v: &Value) -> Option<&str> {
     };
     let ok_rest = w.iter().all(|(key, v)| match key.as_str() {
         "id" | "type" | "of" => true,
-        "size" => matches!(v.as_str(), Some("S" | "M")),
+        "size" => matches!(v.as_str(), Some("S" | "M")) || (large && v.as_str() == Some("L")),
         "name" => v.as_str().is_some_and(|n| n.chars().count() <= 40 && !n.chars().any(char::is_control)),
         "icon" => v.as_str().is_some_and(|i| crate::widgets::ICONS.contains(&i)),
         "cfg" => kind == "tool" && is_tool_cfg(v),
@@ -126,16 +131,20 @@ fn is_taskbar_widget(v: &Value) -> Option<&str> {
 // A widget there and its ids: its own, and a stack's (2 to 8 widgets, one
 // shown at a time; smart: turning by itself) its own and its items'.
 fn taskbar_widget_ids(v: &Value) -> Option<Vec<&str>> {
+    widget_ids(v, false)
+}
+
+fn widget_ids(v: &Value, large: bool) -> Option<Vec<&str>> {
     let w = v.as_object()?;
     if w.get("type")?.as_str()? != "stack" {
-        return is_taskbar_widget(v).map(|id| vec![id]);
+        return widget_id(v, large).map(|id| vec![id]);
     }
     let id = w.get("id")?.as_str()?;
     let ok_id = id.len() >= 2 && id.len() <= 16 && id.starts_with('w') && id[1..].chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
     let items = w.get("items")?.as_array()?;
     let ok_rest = w.iter().all(|(key, v)| match key.as_str() {
         "id" | "type" | "items" => true,
-        "size" => matches!(v.as_str(), Some("S" | "M")),
+        "size" => matches!(v.as_str(), Some("S" | "M")) || (large && v.as_str() == Some("L")),
         "smart" => v.is_boolean(),
         _ => false,
     });
@@ -148,9 +157,44 @@ fn taskbar_widget_ids(v: &Value) -> Option<Vec<&str>> {
         if !matches!(item.get("type").and_then(Value::as_str), Some("widget" | "plugin" | "tool")) {
             return None;
         }
-        ids.push(is_taskbar_widget(item)?);
+        ids.push(widget_id(item, large)?);
     }
     Some(ids)
+}
+
+// Her island's grid (island.js): its widgets and stacks, no spacers, each
+// once, 32 at most (a stack's items each one).
+fn is_island_grid(v: &Value) -> bool {
+    let Some(list) = v.as_array() else { return false };
+    let mut seen: Vec<&str> = Vec::new();
+    let mut widgets = 0;
+    list.iter().all(|p| {
+        let spacer = matches!(p.get("type").and_then(Value::as_str), Some("flex" | "gap" | "sep"));
+        match widget_ids(p, true) {
+            Some(ids) if !spacer && widgets + ids.len().max(2) - 1 <= 32 && ids.iter().all(|id| !seen.contains(id)) && (1..ids.len()).all(|i| !ids[..i].contains(&ids[i])) => {
+                widgets += ids.len().max(2) - 1;
+                seen.extend(ids);
+                true
+            }
+            _ => false,
+        }
+    })
+}
+
+// Whether what is kept (a taskbar layout, her island's grid, anything)
+// shows this widget: put there by itself, or its plugin's, in a stack too.
+pub fn shows(v: &Value, widget: &str) -> bool {
+    match v {
+        Value::Object(o) => {
+            (match (o.get("type").and_then(Value::as_str), o.get("of").and_then(Value::as_str)) {
+                (Some("widget"), Some(of)) => of == widget,
+                (Some("plugin"), Some(of)) => Some(of) == crate::scripts::owner_of(widget),
+                _ => false,
+            }) || o.values().any(|v| shows(v, widget))
+        }
+        Value::Array(a) => a.iter().any(|v| shows(v, widget)),
+        _ => false,
+    }
 }
 
 // A tool's settings (a clock's city, a launcher's program): up to 8, each
@@ -231,6 +275,8 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "taskbarAlign" => matches!(v.as_str(), Some("center" | "left")),
         // The taskbar's parts in three runs (island.js tbLayout), each once.
         "taskbarLayout" => v.is_null() || is_taskbar_layout(v),
+        // The widgets in her island's grid, in the order they fill it.
+        "islandGrid" => v.is_null() || is_island_grid(v),
         // The notes on the taskbar, by the widget's id: up to 64, 4000 characters each.
         "notes" => v.as_object().is_some_and(|n| n.len() <= 64 && n.iter().all(|(id, text)| id.len() <= 16 && text.as_str().is_some_and(|t| t.chars().count() <= 4000))),
         // The colours picked last (tools.rs picker), up to 12.
@@ -282,7 +328,7 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
             }
         }
     }
-    let tools = rest.contains_key("taskbarLayout") || display.is_some();
+    let tools = rest.contains_key("taskbarLayout") || rest.contains_key("islandGrid") || display.is_some();
     if let Some(scale) = scale {
         pet::resize(sh, scale);
     }
@@ -643,6 +689,23 @@ mod layout_tests {
         assert!(!super::is_taskbar_layout(&json!({ "left": [w("wb", "x")], "right": [{ "id": "wa", "type": "stack", "items": [w("wb", "today"), w("wc", "tokens")] }] })));
         // What the taskbar shows: a stack's items too.
         assert!(super::is_on_taskbar(&json!({ "right": [{ "id": "wa", "type": "stack", "items": [w("wb", "today"), w("wc", "tokens")] }] }), "tokens"));
+    }
+
+    #[test]
+    fn her_islands_grid() {
+        let w = |id: &str, of: &str, size: &str| json!({ "id": id, "type": "widget", "of": of, "size": size });
+        assert!(super::is_island_grid(&json!([w("wa", "today", "L"), w("wb", "tokens", "S"), { "id": "wc", "type": "tool", "of": "media", "size": "L" }])));
+        assert!(super::is_island_grid(&json!([{ "id": "wa", "type": "stack", "size": "L", "items": [w("wb", "today", "L"), w("wc", "tokens", "M")] }])));
+        assert!(super::is_island_grid(&json!([])));
+        // No spacers there; each once; L only there.
+        assert!(!super::is_island_grid(&json!([{ "id": "wa", "type": "gap" }])));
+        assert!(!super::is_island_grid(&json!([w("wa", "today", "L"), w("wa", "tokens", "S")])));
+        assert!(!super::is_island_grid(&json!({ "left": [] })));
+        assert!(!super::is_taskbar_layout(&json!({ "right": [w("wa", "today", "L")] })));
+        // What it shows, as the strip's.
+        assert!(super::shows(&json!([w("wa", "tokens", "S")]), "tokens"));
+        assert!(super::shows(&json!([{ "id": "wa", "type": "plugin", "of": "stock" }]), "stock-aapl"));
+        assert!(!super::shows(&json!([w("wa", "today", "S")]), "tokens"));
     }
 
     #[test]

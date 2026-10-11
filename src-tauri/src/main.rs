@@ -347,7 +347,7 @@ impl Shared {
     // On in the island, or put on the taskbar (taskbarLayout) while she is
     // the taskbar: a built-in one is worked out then.
     pub fn is_widget_wanted(&self, id: &str) -> bool {
-        self.is_widget_on(id) || (self.setting("display") == "taskbar" && settings::is_on_taskbar(&self.setting("taskbarLayout"), id))
+        self.is_widget_on(id) || (self.setting("display") == "taskbar" && settings::is_on_taskbar(&self.setting("taskbarLayout"), id)) || settings::shows(&self.setting("islandGrid"), id)
     }
 
     // The widgets with something to say, each saying whether it is on.

@@ -3333,72 +3333,72 @@ body.isl-right .tblib {
   max-width: 340px;
 }
 
-#bar-rest .tcard {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard {
   display: grid;
   gap: 8px;
 }
 
-#bar-rest .tcard .tbig {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tbig {
   font-size: 15px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-#bar-rest .tcard .tnum {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tnum {
   font-size: 28px;
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
-#bar-rest .tcard .thuge {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .thuge {
   font-size: 40px;
 }
 
-#bar-rest .tcard .tnum.ring {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tnum.ring {
   color: #ff9f0a;
 }
 
-#bar-rest .tcard .tsub,
-#bar-rest .tcard .tnone,
-#bar-rest .tcard .tlabel {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tsub,
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tnone,
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tlabel {
   color: #a1a1a6;
 }
 
-#bar-rest .tcard .tlabel {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tlabel {
   margin-top: 2px;
   font-size: 11px;
 }
 
-#bar-rest .tcard .tpath {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tpath {
   overflow-wrap: anywhere;
 }
 
-#bar-rest .tcard .tcenter {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tcenter {
   justify-content: center;
   text-align: center;
 }
 
-#bar-rest .tcard .twarn {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .twarn {
   color: #ff9f0a;
 }
 
-#bar-rest .tcard .trow {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .trow {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-#bar-rest .tcard .twrap {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .twrap {
   flex-wrap: wrap;
 }
 
-#bar-rest .tcard .tgrid {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tgrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 
-#bar-rest .tbtn {
+:is(#bar-rest, #island-expanded, .tbgrid) .tbtn {
   height: 28px;
   padding: 0 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -3410,56 +3410,56 @@ body.isl-right .tblib {
   cursor: pointer;
 }
 
-#bar-rest .tbtn:hover {
+:is(#bar-rest, #island-expanded, .tbgrid) .tbtn:hover {
   background: rgba(255, 255, 255, 0.14);
 }
 
-#bar-rest .tbtn.on {
+:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.on {
   border-color: rgba(94, 155, 255, 0.7);
   background: rgba(94, 155, 255, 0.22);
 }
 
-#bar-rest .tbtn.main {
+:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.main {
   border-color: #0a84ff;
   background: #0a84ff;
   color: #fff;
 }
 
-#bar-rest .tbtn.danger {
+:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.danger {
   border-color: #ff453a;
   background: #ff453a;
   color: #fff;
 }
 
-#bar-rest .tbtn.small {
+:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.small {
   height: 24px;
   padding: 0 8px;
   font-size: 11px;
 }
 
-#bar-rest .tbtn.round {
+:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.round {
   width: 40px;
   height: 40px;
   padding: 0;
   border-radius: 50%;
 }
 
-#bar-rest .tbtn.round.main {
+:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.round.main {
   width: 48px;
   height: 48px;
 }
 
-#bar-rest .tbtn.off {
+:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.off {
   opacity: 0.35;
   pointer-events: none;
 }
 
-#bar-rest .tbtn .tg {
+:is(#bar-rest, #island-expanded, .tbgrid) .tbtn .tg {
   font: normal 16px/1 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
 }
 
-#bar-rest .tcard .tin,
-#bar-rest .tcard .tnote {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tin,
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tnote {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
@@ -3470,12 +3470,12 @@ body.isl-right .tblib {
   font: inherit;
 }
 
-#bar-rest .tcard .tin {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tin {
   height: 28px;
   padding: 0 8px;
 }
 
-#bar-rest .tcard .tnote {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tnote {
   width: 100%;
   height: 160px;
   padding: 8px;
@@ -3483,14 +3483,14 @@ body.isl-right .tblib {
   line-height: 1.5;
 }
 
-#bar-rest .tcard .tlist {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tlist {
   display: grid;
   gap: 2px;
   max-height: 260px;
   overflow: auto;
 }
 
-#bar-rest .tcard .titem {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3506,93 +3506,93 @@ body.isl-right .tblib {
   cursor: pointer;
 }
 
-#bar-rest .tcard .titem:hover,
-#bar-rest .tcard .titem.on {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem:hover,
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem.on {
   background: rgba(255, 255, 255, 0.09);
 }
 
-#bar-rest .tcard .titem img,
-#bar-rest .tcard .titem .wicon {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem img,
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem .wicon {
   flex: none;
   width: 16px;
   height: 16px;
 }
 
-#bar-rest .tcard .titem span {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-#bar-rest .tcard .tapps {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tapps {
   max-height: 150px;
 }
 
 /* The calculator: what is typed, the result so far, its keys. */
-#bar-rest .tcalc .texpr {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .texpr {
   font-size: 22px;
   font-variant-numeric: tabular-nums;
   text-align: right;
   overflow-wrap: anywhere;
 }
 
-#bar-rest .tcalc .tres {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tres {
   color: #a1a1a6;
   text-align: right;
 }
 
-#bar-rest .tcalc .tkeys {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tkeys {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   margin-top: 6px;
 }
 
-#bar-rest .tcalc .tkeys .tbtn {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tkeys .tbtn {
   height: 34px;
   font-size: 15px;
 }
 
-#bar-rest .tcalc .tkeys .op {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tkeys .op {
   color: #64d2ff;
 }
 
-#bar-rest .tcalc .tkeys .wide {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tkeys .wide {
   grid-column: span 2;
 }
 
-#bar-rest .tcalc .tkeys .wide2 {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tkeys .wide2 {
   grid-column: span 1;
 }
 
 /* The clock: its dial, or its time large. */
-#bar-rest .tcard .tdial {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tdial {
   width: 132px;
   height: 132px;
   justify-self: center;
 }
 
-#bar-rest .tdial circle {
+:is(#bar-rest, #island-expanded, .tbgrid) .tdial circle {
   fill: rgba(255, 255, 255, 0.05);
   stroke: rgba(255, 255, 255, 0.25);
   stroke-width: 1.5;
 }
 
-#bar-rest .tdial .tick {
+:is(#bar-rest, #island-expanded, .tbgrid) .tdial .tick {
   stroke: rgba(255, 255, 255, 0.5);
   stroke-width: 2;
 }
 
-#bar-rest .tdial .hands line {
+:is(#bar-rest, #island-expanded, .tbgrid) .tdial .hands line {
   stroke: currentColor;
 }
 
-#bar-rest .tdial .sec line {
+:is(#bar-rest, #island-expanded, .tbgrid) .tdial .sec line {
   stroke: #ff9f0a;
 }
 
 /* The drives, each its use as a bar. */
-#bar-rest .tcard .tdisk {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tdisk {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
@@ -3601,11 +3601,11 @@ body.isl-right .tblib {
   border-radius: 6px;
 }
 
-#bar-rest .tcard .tdisk.on {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tdisk.on {
   background: rgba(255, 255, 255, 0.07);
 }
 
-#bar-rest .tcard .tdhead {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tdhead {
   display: grid;
   gap: 1px;
   padding: 0;
@@ -3617,12 +3617,12 @@ body.isl-right .tblib {
   cursor: pointer;
 }
 
-#bar-rest .tcard .tdhead span {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tdhead span {
   color: #a1a1a6;
   font-size: 11px;
 }
 
-#bar-rest .tcard .tbar {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tbar {
   grid-column: 1;
   height: 6px;
   border-radius: 3px;
@@ -3630,24 +3630,24 @@ body.isl-right .tblib {
   overflow: hidden;
 }
 
-#bar-rest .tcard .tbar i {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tbar i {
   display: block;
   height: 100%;
   background: #5e9bff;
 }
 
-#bar-rest .tcard .tbar.high i {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tbar.high i {
   background: #ff9f0a;
 }
 
 /* The colours picked: each its swatch, a press copies it again. */
-#bar-rest .tcard .tswatches {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tswatches {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 
-#bar-rest .tcard .tsw {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tsw {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3662,7 +3662,7 @@ body.isl-right .tblib {
   cursor: pointer;
 }
 
-#bar-rest .tcard .tsw i {
+:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tsw i {
   flex: none;
   width: 18px;
   height: 18px;
@@ -3670,65 +3670,65 @@ body.isl-right .tblib {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 
-.tb-light #bar-rest .tcard .tsub,
-.tb-light #bar-rest .tcard .tnone,
-.tb-light #bar-rest .tcard .tlabel,
-.tb-light #bar-rest .tcalc .tres,
-.tb-light #bar-rest .tcard .tdhead span {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tsub,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tnone,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tlabel,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcalc .tres,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tdhead span {
   color: #5d5d5d;
 }
 
-.tb-light #bar-rest .tbtn {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tbtn {
   border-color: rgba(0, 0, 0, 0.1);
   background: #fff;
 }
 
-.tb-light #bar-rest .tbtn:hover {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tbtn:hover {
   background: #f0f0f0;
 }
 
-.tb-light #bar-rest .tbtn.main {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tbtn.main {
   border-color: #005fb8;
   background: #005fb8;
   color: #fff;
 }
 
-.tb-light #bar-rest .tbtn.danger {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tbtn.danger {
   border-color: #c42b1c;
   background: #c42b1c;
   color: #fff;
 }
 
-.tb-light #bar-rest .tcard .tin,
-.tb-light #bar-rest .tcard .tnote {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tin,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tnote {
   border-color: rgba(0, 0, 0, 0.14);
   background: #fff;
 }
 
-.tb-light #bar-rest .tcard .titem:hover,
-.tb-light #bar-rest .tcard .titem.on,
-.tb-light #bar-rest .tcard .tdisk.on {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .titem:hover,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .titem.on,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tdisk.on {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.tb-light #bar-rest .tcalc .tkeys .op {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcalc .tkeys .op {
   color: #005fb8;
 }
 
-.tb-light #bar-rest .tdial circle {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tdial circle {
   fill: rgba(0, 0, 0, 0.03);
   stroke: rgba(0, 0, 0, 0.2);
 }
 
-.tb-light #bar-rest .tdial .tick {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tdial .tick {
   stroke: rgba(0, 0, 0, 0.45);
 }
 
-.tb-light #bar-rest .tcard .tbar {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tbar {
   background: rgba(0, 0, 0, 0.1);
 }
 
-.tb-light #bar-rest .tcard .tsw {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tsw {
   border-color: rgba(0, 0, 0, 0.1);
 }
 
@@ -3739,7 +3739,7 @@ body.isl-right .tblib {
   position: relative;
 }
 
-#bar-rest .tdots {
+:is(#bar-rest, #island-expanded, .tbgrid) .tdots {
   position: absolute;
   left: 50%;
   bottom: 2px;
@@ -3749,7 +3749,7 @@ body.isl-right .tblib {
   pointer-events: none;
 }
 
-#bar-rest .tdots i {
+:is(#bar-rest, #island-expanded, .tbgrid) .tdots i {
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -3757,7 +3757,7 @@ body.isl-right .tblib {
   opacity: 0.3;
 }
 
-#bar-rest .tdots i.on {
+:is(#bar-rest, #island-expanded, .tbgrid) .tdots i.on {
   opacity: 0.9;
 }
 
@@ -3804,4 +3804,454 @@ body.isl-right .tblib {
 
 .tb-light #bar-rest .wgn {
   color: #5d5d5d;
+}
+
+/* --- Her island's grid (island.js drawGrid, tools.js tile) ----------------------------
+   Four columns under the sessions in her open island: S one cell, M two
+   across, L two by two; a stack's dots under it. While editing, the same
+   in a panel over her slot, with a row of empty cells to drop into and a
+   dashed place where one dragged goes. */
+.igrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 62px;
+  grid-auto-flow: row dense;
+  gap: 6px;
+  width: 280px;
+}
+
+#island-expanded .igrid,
+#island-expanded .icard {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.itile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  box-sizing: border-box;
+  overflow: hidden;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.itile:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.itile[data-size='S'] {
+  grid-column: span 1;
+}
+
+.itile[data-size='M'] {
+  grid-column: span 2;
+}
+
+.itile[data-size='L'] {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.itile .wicon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.itile .gs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+}
+
+.itile .gs .wicon,
+.itile .gs img {
+  width: 20px;
+  height: 20px;
+}
+
+.itile .gs b {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.itile .gtop {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: #a1a1a6;
+}
+
+.itile .gtop span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itile .gico {
+  display: flex;
+}
+
+.itile .gval,
+.itile .gtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.itile .gtitle {
+  display: -webkit-box;
+  white-space: normal;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 13px;
+}
+
+.itile .gbig {
+  margin: auto 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.itile .gbig.ring {
+  color: #ff9f0a;
+}
+
+.itile .gsub,
+.itile .gnone {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #a1a1a6;
+}
+
+.itile .gcenter {
+  text-align: center;
+}
+
+.itile .gright {
+  text-align: right;
+}
+
+.itile .grow3 {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.itile .grow3 .tbtn {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.itile .grow3 .tbtn.round {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+}
+
+.itile .grow3 .tbtn.round.main {
+  width: 36px;
+  height: 36px;
+}
+
+.itile .grow2 {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.itile .grow2 span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #a1a1a6;
+}
+
+.itile .gnote {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: pre-wrap;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.itile .gdisk {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.itile .gdisk span:first-child {
+  color: #a1a1a6;
+}
+
+.itile .tbar {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.itile .tbar i {
+  display: block;
+  height: 100%;
+  background: #5e9bff;
+}
+
+.itile .tbar.high i {
+  background: #ff9f0a;
+}
+
+.itile .ggrid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.itile .ggrid2 .tbtn {
+  height: 30px;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+.itile .gswatch {
+  flex: 1;
+  min-height: 20px;
+  margin: 4px 0;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.itile .tsw {
+  padding: 2px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.itile .tsw i {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.itile .glaunch {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.itile .glaunch img,
+.itile .glaunch .wicon {
+  width: 36px;
+  height: 36px;
+}
+
+.itile .gfill {
+  flex: 1;
+}
+
+.itile .gfill .tbtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+}
+
+.itile .gdial {
+  width: 96px;
+  height: 96px;
+  margin: 2px auto 0;
+}
+
+.itile .tlist {
+  max-height: none;
+}
+
+.itile .tlist .titem {
+  height: 26px;
+}
+
+.itile .twarn {
+  color: #ff9f0a;
+  font-size: 11px;
+}
+
+.itile .tdots {
+  bottom: 3px;
+}
+
+/* One opened in the island: its card, ‹ back to the grid. */
+.icard {
+  width: 280px;
+}
+
+.icard .ichead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.icard .ichead .wicon {
+  width: 16px;
+  height: 16px;
+}
+
+.icard .icback {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icard .wgrow {
+  display: grid;
+  gap: 2px;
+}
+
+.icard .wgrow span {
+  color: #a1a1a6;
+}
+
+.icard .wgrow b {
+  font-size: 18px;
+}
+
+.isl-light #island-expanded .igrid,
+.isl-light #island-expanded .icard {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+.isl-light .itile,
+.tb-light .tbgrid .itile {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.isl-light .itile:hover,
+.tb-light .tbgrid .itile:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+:is(.isl-light, .tb-light .tbgrid) .itile :is(.gtop, .gsub, .gnone, .grow2 span, .gdisk span:first-child),
+.isl-light .icard .wgrow span {
+  color: #5d5d5d;
+}
+
+.isl-light .icard .icback {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* The grid's panel while editing: over her slot (the library on the
+   other side), its empty cells dashed. */
+.tbgrid {
+  position: fixed;
+  left: 12px;
+  bottom: 156px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 170px);
+  padding-bottom: 12px;
+  border-radius: 14px;
+  background: #2c2c2c;
+  color: #f5f5f7;
+  font-size: 12px;
+  overflow: auto;
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+body.isl-right .tbgrid {
+  left: auto;
+  right: 12px;
+}
+
+.tbgrid .igrid {
+  margin: 2px 14px 0;
+}
+
+.tbgrid .itile {
+  cursor: grab;
+}
+
+.tbgrid .itile.tb-dragging {
+  opacity: 0.35;
+}
+
+.tbgrid .itile.tb-stackto {
+  box-shadow: inset 0 0 0 2px #ffb340;
+  background: rgba(255, 179, 64, 0.22);
+}
+
+.tbgrid .itile.tb-chosen {
+  box-shadow: inset 0 0 0 2px #5e9bff;
+  background: rgba(94, 155, 255, 0.24);
+}
+
+.tbgrid .itile.ph {
+  border: 1.5px dashed #5e9bff;
+  background: rgba(94, 155, 255, 0.12);
+}
+
+.tbgrid .icell {
+  border: 1.5px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+}
+
+.tb-light .tbgrid {
+  background: #f3f3f3;
+  color: #1b1b1b;
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.tb-light .tbgrid .icell {
+  border-color: rgba(0, 0, 0, 0.14);
 }

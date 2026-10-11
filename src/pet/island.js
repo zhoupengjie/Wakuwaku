@@ -470,6 +470,8 @@
   // turn ended in Claude's words, the to-do list's progress, and a line for
   // each other session. A hello (or something to fix) takes the name's place.
   function fillExpanded() {
+    // A note being typed in its card: left as it is (drawn anew, it would lose the keyboard).
+    if (gridCard && gridCardBox.contains(document.activeElement) && document.activeElement.matches('input, textarea')) return
     const detailed = isDetailed()
     const name = Status.nameOf(now, detailed)
     const title = (isNudging() && nudge.text) || (detailed && name) || t(lang, `mood.${now.mood}`)
@@ -519,9 +521,15 @@
       if (others.length > OTHERS_SHOWN) list.append(el('span', 'other rest', t(lang, 'status.moreSessions', { n: others.length - OTHERS_SHOWN })))
       lines.append(list)
     }
+    // Her island's grid, when there is one: under the sessions, in place of
+    // the widgets' lines; one opened, its card there instead (‹ back).
+    const grid = gridList()
+    if (grid.length && !(isNudging() && nudge.widget)) {
+      lines.append((gridCard && drawGridCard()) || drawGrid())
+    }
     // The monitor, and the widgets, the one shown lit: under the sessions too,
     // a session at work not all the island says (2026-10-10).
-    if ((widgets.length || monitor) && !(isNudging() && nudge.widget)) {
+    else if ((widgets.length || monitor) && !(isNudging() && nudge.widget)) {
       const list = el('span', 'wlist')
       const shown = shownWidget()
       if (isPinned()) list.append(widgetRow(monitor, false))
@@ -1051,6 +1059,177 @@
     if (wgFor) drawWidgetPop()
   }
 
+  // --- Her island's grid (islandGrid) ---------------------------------------------------
+  // Four columns under the sessions in her open island: a widget S (one
+  // cell), M (two across) or L (two by two), a stack one of those; what
+  // it is for at hand in L (tools.js tile). A press does what a tool's
+  // does, or opens its card in the island (‹ back); the wheel turns a
+  // stack. Edited with the taskbar: a panel of it over her slot, widgets
+  // dragged between it, the strip and the library.
+  let editGrid = null
+  const gridList = () => Widgets.gridOf(editGrid || config.islandGrid)
+  // The one whose card shows in the island (by id), and whether the window
+  // took the keyboard for a field on it.
+  let gridCard = null
+  let gridKeyboard = false
+  const gridBox = el('div', 'igrid')
+  const gridCardBox = el('div', 'icard')
+  const gridNodes = new Map()
+  const escH = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+
+  // A widget's tile (one of the plugins' or scripts'): S its icon and
+  // value, M its name over its value, L a plugin's every one.
+  function dataTile(e, size) {
+    const detailed = isDetailed()
+    const from = Widgets.sourcesOf(e, allWidgets)
+    const w = from.length ? from[Math.floor(Date.now() / ENTRY_TURN_MS) % from.length] : null
+    const name = Widgets.nameOf(lang, e, allWidgets, detailed)
+    const icon = `<span class="gico" style="color:${escH((w && ink(w.color)) || hue().idle)}">${Widgets.icon(w?.icon || e.icon || 'dot')}</span>`
+    const said = w ? Widgets.words(lang, w, detailed) : null
+    const none = t(lang, !w && needsSettings(e) ? 'taskbar.w.needs' : 'taskbar.w.none')
+    if (size === 'S') return `<div class="gs">${icon}<b>${escH(said?.value || '—')}</b></div>`
+    const top = `<div class="gtop">${icon}<span>${escH(name)}</span></div>`
+    if (size === 'M') return `${top}<b class="gval">${escH(said?.value || none)}</b>`
+    if (from.length > 1) return top + from.map(x => Widgets.words(lang, x, detailed)).map(x => `<div class="grow2"><span>${escH(x.label)}</span><b>${escH(x.value)}</b></div>`).join('')
+    return `${top}<b class="gbig">${escH(said?.value || none)}</b>${said?.label && said.label !== name ? `<span class="gsub gcenter">${escH(said.label)}</span>` : ''}`
+  }
+
+  // A tile's markup: its widget's (a stack's shown one's), and a stack's dots.
+  function tileHTML(top) {
+    const e = shownOf(top)
+    const size = top.size || 'M'
+    const html = e.type === 'tool' ? Tools.tile(e.of, size, toolX(e)) : dataTile(e, size)
+    const dots = top.type === 'stack' ? `<span class="tdots">${top.items.map((_, i) => `<i class="${i === stackAt(top) ? 'on' : ''}"></i>`).join('')}</span>` : ''
+    return html + dots
+  }
+
+  // The grid, each tile kept by its id and drawn anew only when it changed.
+  function drawGrid() {
+    const list = gridList()
+    const ids = new Set(list.map(p => p.id))
+    for (const id of [...gridNodes.keys()]) if (!ids.has(id)) gridNodes.delete(id)
+    const nodes = list.map(p => {
+      let node = gridNodes.get(p.id)
+      if (!node) {
+        node = el('div', 'itile')
+        node.dataset.gid = p.id
+        gridNodes.set(p.id, node)
+      }
+      node._entry = p
+      node.dataset.size = p.size || 'M'
+      node.classList.toggle('stack', p.type === 'stack')
+      const html = tileHTML(p)
+      if (node._html !== html) {
+        node._html = html
+        node.innerHTML = html
+      }
+      return node
+    })
+    if (gridBox.childNodes.length !== nodes.length || nodes.some((n, i) => gridBox.childNodes[i] !== n)) gridBox.replaceChildren(...nodes)
+    return gridBox
+  }
+
+  // One opened in the island: its card (a tool's own; a widget's lines and,
+  // for a plugin, its settings), ‹ back to the grid.
+  function drawGridCard() {
+    const top = gridList().find(p => p.id === gridCard)
+    const e = shownOf(top)
+    if (!e) {
+      gridCard = null
+      return null
+    }
+    const detailed = isDetailed()
+    const name = Widgets.nameOf(lang, e, allWidgets, detailed)
+    let body
+    if (e.type === 'tool') body = Tools.card(e.of, toolX(e))
+    else {
+      const from = Widgets.sourcesOf(e, allWidgets)
+      body =
+        (from.map(x => Widgets.words(lang, x, detailed)).map(x => `<div class="wgrow"><span>${escH(x.label)}</span><b>${escH(x.value)}</b></div>`).join('') ||
+          `<div class="tnone">${escH(t(lang, needsSettings(e) ? 'taskbar.lib.needs' : 'taskbar.w.none'))}</div>`) +
+        (e.type === 'plugin' ? `<div class="trow"><button type="button" class="tbtn" data-ic="settings">${escH(t(lang, 'taskbar.w.settings'))}</button></div>` : '')
+    }
+    const mark = e.type === 'tool' ? Tools.icon(e.of) : Widgets.icon(e.icon || 'dot')
+    const html = `<div class="ichead"><button type="button" class="icback" data-ic="back" title="${escH(t(lang, 'taskbar.grid.back'))}">‹</button>${mark}<b>${escH(name)}</b></div><div class="tcard">${body}</div>`
+    const typing = gridCardBox.contains(document.activeElement) && document.activeElement.matches('input, textarea')
+    if (gridCardBox._html !== html && !typing) {
+      gridCardBox._html = html
+      gridCardBox.innerHTML = html
+    }
+    return gridCardBox
+  }
+
+  // Drawn again in place (a second, what tools.rs read): the open island's size as it was.
+  function redrawGrid() {
+    if (view !== 'expanded' || !gridList().length) return
+    if (gridCard) drawGridCard()
+    else drawGrid()
+  }
+
+  // A press in the grid: a tile's button, a tile (what it does, or its card),
+  // the card's ‹ back; the wheel turns a stack.
+  expanded.addEventListener('click', e => {
+    const tile = e.target.closest('.itile')
+    const card = e.target.closest('.icard')
+    if (!tile && !card) return
+    e.stopPropagation()
+    if (e.target.closest('[data-ic="back"]')) {
+      gridCard = null
+      return update()
+    }
+    const top = tile ? tile._entry : gridList().find(p => p.id === gridCard)
+    const one = shownOf(top)
+    if (!one) return
+    if (e.target.closest('[data-ic="settings"]')) {
+      gridCard = null
+      window.Settings?.openPlugin?.(one.of)
+      return window.pet.openSettings('widgets')
+    }
+    const button = e.target.closest('[data-t]')
+    if (button && one.type === 'tool') {
+      const what = button.dataset.t
+      let arg = button.dataset.arg ?? ''
+      if (what === 'setPath') arg = [...String(gridCardBox.querySelector('[data-field="path"]')?.value || '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim()].slice(0, 300).join('')
+      Tools.act(one.of, what, arg, { ...toolX(one), data: { ...button.dataset } }, toolApi(one))
+      if (card && ['window', 'search', 'start', 'open', 'do'].includes(what) && one.of !== 'timer') gridCard = null
+      return update()
+    }
+    if (tile) {
+      if (one.type === 'tool' && one.of === 'timer' && toolLocal.get(one.id)?.done) toolLocal.set(one.id, { ...toolLocal.get(one.id), done: false })
+      if (one.type === 'tool' && Tools.press(one.of, toolX(one), toolApi(one))) return redrawGrid()
+      gridCard = top.id
+      update()
+    }
+  })
+  expanded.addEventListener(
+    'wheel',
+    e => {
+      const tile = e.target.closest('.itile.stack')
+      if (!tile) return
+      e.preventDefault()
+      const top = tile._entry
+      stackCur.set(top.id, stackAt(top) + (e.deltaY > 0 ? 1 : -1) + top.items.length)
+      stackCur.set(top.id, stackAt(top))
+      drawGrid()
+    },
+    { passive: false },
+  )
+  // A field on a card in the island: the keyboard once clicked; a note
+  // kept as typed; Enter keeps a launcher's path.
+  expanded.addEventListener('mousedown', e => {
+    const field = e.target.closest('.icard input, .icard textarea')
+    if (!field || gridKeyboard) return
+    gridKeyboard = true
+    window.pet.keyboard(true)
+    setTimeout(() => field.focus(), 30)
+  })
+  expanded.addEventListener('input', e => {
+    if (gridCard && e.target.matches('.icard [data-field="note"]')) saveNotes(shownOf(gridList().find(p => p.id === gridCard))?.id, e.target.value)
+  })
+  expanded.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.matches('.icard [data-field="path"]')) gridCardBox.querySelector('[data-t="setPath"]')?.click()
+  })
+
   // --- Stacks: several in one place, one shown at a time ---------------------------------
   // Which one each shows (the page's own: not kept), and what each said
   // when last looked at (for a smart one's news).
@@ -1146,6 +1325,7 @@
       setLocal: patch => {
         toolLocal.set(e.id, { ...(toolLocal.get(e.id) || {}), ...patch })
         drawEntries()
+        if (view === 'expanded' && gridList().length) update()
       },
       setNotes: text => saveNotes(e.id, text),
       taskbar: what => window.pet.taskbar.open(what),
@@ -1202,7 +1382,8 @@
   setInterval(() => {
     if (!taskbarBuilt || home() !== 'taskbar') return
     let any = false
-    for (const node of entryNodes.values()) {
+    const tiles = home() === 'taskbar' || view === 'expanded' ? gridList().map(top => ({ _entry: top, grid: true })) : []
+    for (const node of [...entryNodes.values(), ...tiles]) {
       for (const e of node._entry ? Widgets.itemsOf(node._entry) : []) {
         if (e.type !== 'tool') continue
         any = true
@@ -1216,6 +1397,7 @@
       }
     }
     if (any) drawEntries()
+    if (any && view === 'expanded' && tiles.length) redrawGrid()
   }, 1000)
 
   // A press on its face: done there and then, or its card (again: closed).
@@ -1271,10 +1453,9 @@
 
   // A tool's settings kept, in the layout as kept.
   function saveCfg(id, patch) {
-    const layout = tbLayout(config.taskbarLayout)
-    for (const run of Object.values(layout)) for (const p of run) if (p.id === id) p.cfg = { ...(p.cfg || {}), ...patch }
-    config.taskbarLayout = layout
-    window.pet.settings.set({ taskbarLayout: layout })
+    const w = working()
+    for (const p of [...Widgets.entriesOf(w.layout), ...Widgets.entriesIn(w.grid)]) if (p.id === id) p.cfg = { ...(p.cfg || {}), ...patch }
+    keepWorking(w)
     arranged = ''
     update()
   }
@@ -1289,8 +1470,8 @@
   }
 
   // The notes of those no longer in the layout, gone with them: the change.
-  function forgetNotes(layout) {
-    const ids = new Set(Widgets.entriesOf(layout).map(p => p.id))
+  function forgetNotes(layout, grid = gridList()) {
+    const ids = new Set([...Widgets.entriesOf(layout), ...Widgets.entriesIn(grid)].map(p => p.id))
     const notes = config.notes || {}
     const kept = Object.fromEntries(Object.entries(notes).filter(([id]) => ids.has(id)))
     if (Object.keys(kept).length === Object.keys(notes).length) return {}
@@ -1303,6 +1484,7 @@
   window.pet.onTools(state => {
     toolState = state || {}
     if (taskbarBuilt && home() === 'taskbar') drawEntries()
+    if (view === 'expanded') redrawGrid()
   })
   window.pet.onPicked(({ hex } = {}) => {
     if (!hex) return
@@ -1703,10 +1885,11 @@
   }
 
   // Off the taskbar, and kept so.
-  // Taken out of a layout: a widget there, or one in a stack (a stack left
-  // with one is that one, at the stack's size). The one taken, or null.
-  function takeOut(layout, id) {
-    for (const run of Object.values(layout)) {
+  // Taken out of lists (the strip's runs, her island's grid): a widget
+  // there, or one in a stack (a stack left with one is that one, at the
+  // stack's size). The one taken, or null.
+  function takeOut(lists, id) {
+    for (const run of lists) {
       for (let i = 0; i < run.length; i++) {
         const p = run[i]
         if (typeof p === 'string') continue
@@ -1722,14 +1905,27 @@
     return null
   }
 
-  function removeEntry(id) {
-    const layout = tbLayout()
-    takeOut(layout, id)
-    if (editLayout) editLayout = layout
-    else {
-      config.taskbarLayout = layout
-      window.pet.settings.set({ taskbarLayout: layout, ...forgetNotes(layout) })
+  // What is changed: copies of the strip's runs and her island's grid, and
+  // all their lists; kept as edited (editing), or saved.
+  const working = () => ({ layout: tbLayout(), grid: gridList() })
+  const listsIn = w => [...Object.values(w.layout), w.grid]
+  function keepWorking(w) {
+    if (editLayout) {
+      editLayout = w.layout
+      editGrid = w.grid
+      drawGridPanel()
+      return
     }
+    config.taskbarLayout = w.layout
+    config.islandGrid = w.grid
+    window.pet.settings.set({ taskbarLayout: w.layout, islandGrid: w.grid, ...forgetNotes(w.layout, w.grid) })
+  }
+
+  function removeEntry(id) {
+    const w = working()
+    takeOut(listsIn(w), id)
+    keepWorking(w)
+    if (gridCard === id) gridCard = null
     toolLocal.delete(id)
     if (wgFor === id || !entryNodes.has(wgFor)) closeWidgetPop()
     arranged = ''
@@ -2531,7 +2727,11 @@
   const editMark = el('span', 'tbmark')
   const library = el('div', 'tblib')
   const tools = el('div', 'tbtools')
+  // Her island's grid while editing: over her slot, the library on the other side.
+  const gridPanel = el('div', 'tbgrid')
   let drag = null
+  // A tile chosen in the grid (not on the strip).
+  let chosenGrid = false
   // The library: open, the kind shown, what it knows (settings_get: every
   // widget, on or off, and the plugins), the cards drawn; the widget chosen
   // on the strip.
@@ -2553,7 +2753,7 @@
   const newId = () => `w${Date.now().toString(36).slice(-6)}${Math.random().toString(36).slice(2, 6)}`
 
   // Pointer in or out of what editing puts over the strip: the window takes it.
-  for (const node of [editBar, library, tools]) {
+  for (const node of [editBar, library, tools, gridPanel]) {
     node.addEventListener('mouseenter', () => window.pet.hover(true))
     node.addEventListener('mouseleave', () => window.pet.hover(false))
   }
@@ -2564,6 +2764,7 @@
     if (wgFor) closeWidgetPop()
     if (popFor) closePop()
     editLayout = JSON.parse(JSON.stringify(tbLayout()))
+    editGrid = gridList()
     // Each part's name: shown on one with nothing in it now, and dragged by.
     for (const [part, node] of Object.entries(PART_NODES)) node.dataset.label = t(lang, `taskbar.part.${part}`)
     // Closed, should it have been open under the pointer (its menu came
@@ -2574,7 +2775,8 @@
     libOpen = false
     chosen = null
     drawEditBar()
-    document.body.append(editBar)
+    document.body.append(editBar, gridPanel)
+    drawGridPanel()
     arranged = ''
     update()
   }
@@ -2591,21 +2793,25 @@
   function endEdit(keep) {
     if (!editLayout) return
     const layout = editLayout
+    const grid = gridList()
     editLayout = null
+    editGrid = null
     endDrag()
     body.classList.remove('tb-editing')
     editBar.remove()
     library.remove()
+    gridPanel.remove()
     tools.remove()
     libOpen = false
     chosen = null
     for (const node of entryNodes.values()) node.classList.remove('tb-chosen')
     if (keep) {
       config.taskbarLayout = layout
-      const patch = { taskbarLayout: layout, ...forgetNotes(layout) }
-      // A plugin put there that was not running: it runs now.
+      config.islandGrid = grid
+      const patch = { taskbarLayout: layout, islandGrid: grid, ...forgetNotes(layout, grid) }
+      // A plugin put there (in a stack, in her island's grid too) that was not running: it runs now.
       const plugins = config.plugins && typeof config.plugins === 'object' ? config.plugins : {}
-      const off = [...new Set(Object.values(layout).flatMap(run => run.filter(p => p.type === 'plugin').map(p => p.of)))].filter(id => plugins[id]?.on !== true)
+      const off = [...new Set([...Widgets.entriesOf(layout), ...Widgets.entriesIn(grid)].filter(p => p.type === 'plugin').map(p => p.of))].filter(id => plugins[id]?.on !== true)
       if (off.length) patch.plugins = { ...plugins, ...Object.fromEntries(off.map(id => [id, { ...(plugins[id] || {}), on: true }])) }
       // Then which of the plugins put there want their settings first.
       Promise.resolve(window.pet.settings.set(patch)).then(() => askPlugins(true))
@@ -2659,7 +2865,7 @@
   function drawLibrary() {
     const all = libSnap?.widgets || allWidgets
     const detailed = isDetailed()
-    const placed = new Set(Widgets.entriesOf(tbLayout()).filter(Widgets.isOne).map(p => `${p.type}:${p.of}`))
+    const placed = new Set([...Widgets.entriesOf(tbLayout()), ...Widgets.entriesIn(gridList())].filter(Widgets.isOne).map(p => `${p.type}:${p.of}`))
     libCards = cardsOf(all)
     const kinds = ['all', ...new Set(libCards.map(c => c.kind))]
     if (!kinds.includes(libKind)) libKind = 'all'
@@ -2720,14 +2926,100 @@
     } catch {}
   })
 
+  // --- Her island's grid, edited ------------------------------------------------------------
+  // Its tiles as they will be (each dragged by its id), a dashed place where
+  // one dragged would go, and a row of empty cells to drop into.
+  function drawGridPanel(at = drag?.gridAt) {
+    if (!editLayout) return
+    const list = gridList()
+    const box = el('div', 'igrid edit')
+    for (const p of list) {
+      const tile = el('div', 'itile')
+      tile.dataset.gid = p.id
+      tile.dataset.size = p.size || 'M'
+      tile.classList.toggle('stack', p.type === 'stack')
+      tile.classList.toggle('tb-dragging', drag?.gid === p.id && drag.moved)
+      tile.classList.toggle('tb-stackto', at?.stack === p.id)
+      tile.classList.toggle('tb-chosen', chosenGrid && chosen === p.id)
+      tile._entry = p
+      tile.dataset.label = Widgets.nameOf(lang, p, allWidgets, isDetailed())
+      tile.innerHTML = tileHTML(p)
+      box.append(tile)
+    }
+    if (at && !at.stack) {
+      const ph = el('div', 'itile ph')
+      ph.dataset.size = at.size || 'M'
+      box.insertBefore(ph, box.children[at.index] || null)
+    }
+    // Empty cells: a row more than it fills (each tile's cells counted).
+    const cells = list.reduce((n, p) => n + ({ S: 1, M: 2, L: 4 })[p.size || 'M'], 0)
+    for (let i = 0; i < 4 - (cells % 4) + 4; i++) box.append(el('div', 'icell'))
+    const head = el('div', 'tblhead')
+    head.append(el('b', '', t(lang, 'taskbar.grid.title')), el('span', 'tblhint', t(lang, 'taskbar.grid.hint')))
+    gridPanel.replaceChildren(head, box)
+    if (chosenGrid && chosen) drawTools()
+  }
+
+  // Over the grid's panel.
+  const overGrid = (x, y) => {
+    if (!gridPanel.isConnected) return false
+    const r = gridPanel.getBoundingClientRect()
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
+  }
+
+  // Where one dragged over the grid goes: onto a tile's middle (a stack), or
+  // before the tile under it (after, past its middle), or at the end.
+  // The tiles where they were as the drag came over the grid (without the
+  // dashed place, which moves those after it: by where they are now, what
+  // is under the pointer would change as it is drawn).
+  function gridTargetAt(x, y, dragged) {
+    const size = dragged.size === 'L' || dragged.size === 'S' ? dragged.size : 'M'
+    if (!drag.gridRects) {
+      drawGridPanel(null)
+      drag.gridRects = [...gridPanel.querySelectorAll('.itile[data-gid]')].filter(n => n.dataset.gid !== drag.gid).map(n => ({ id: n.dataset.gid, entry: n._entry, r: n.getBoundingClientRect() }))
+    }
+    for (const [i, { id, entry, r }] of drag.gridRects.entries()) {
+      if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue
+      const middle = Math.abs(x - (r.left + r.width / 2)) < r.width * 0.25 && Math.abs(y - (r.top + r.height / 2)) < r.height * 0.3
+      if (middle && Widgets.itemsOf(entry).length + Widgets.itemsOf(dragged).length <= 8) return { stack: id }
+      return { index: x < r.left + r.width / 2 ? i : i + 1, size }
+    }
+    return { index: drag.gridRects.length, size }
+  }
+
+  // Let go over the grid: there, or stacked with the one under it.
+  function toGrid(d, at) {
+    if (at.stack) return stackInto(at.stack, d)
+    const w = working()
+    const item = d.fresh ? { ...d.fresh } : takeOut(listsIn(w), d.gid || d.key)
+    if (!item || typeof item === 'string') return
+    w.grid.splice(Math.min(at.index, w.grid.length), 0, item)
+    keepWorking(w)
+    arranged = ''
+    update()
+    if (libOpen) drawLibrary()
+  }
+
+  gridPanel.addEventListener('pointerdown', e => {
+    const tile = e.target.closest('.itile[data-gid]')
+    if (!tile || e.button !== 0 || !editLayout) return
+    e.preventDefault()
+    drag = { gid: tile.dataset.gid, entry: tile._entry, node: tile, label: tile.dataset.label || '', x: e.clientX, y: e.clientY, moved: false }
+    try {
+      gridPanel.setPointerCapture(e.pointerId)
+    } catch {}
+  })
+
   // --- The one chosen: its size, or off ------------------------------------------------
-  function choose(id) {
+  function choose(id, inGrid = false) {
     chosen = id
+    chosenGrid = !!id && inGrid
     drawTools()
+    drawGridPanel()
   }
 
   function drawTools() {
-    const node = chosen && entryNodes.get(chosen)
+    const node = chosen && (chosenGrid ? gridPanel.querySelector(`.itile[data-gid="${CSS.escape(chosen)}"]`) : entryNodes.get(chosen))
     const e = node?._entry
     for (const n of entryNodes.values()) n.classList.toggle('tb-chosen', n === node)
     if (!editLayout || !e || !node.isConnected) {
@@ -2741,7 +3033,7 @@
       return b
     }
     const items = [el('span', 'tbtname', node.dataset.label || '')]
-    if (Widgets.isSource(e)) items.push(button('S', t(lang, 'taskbar.w.size.S'), node.dataset.size === 'S'), button('M', t(lang, 'taskbar.w.size.M'), node.dataset.size === 'M'), el('span', 'tbtsep'))
+    if (Widgets.isSource(e)) items.push(...(chosenGrid ? ['S', 'M', 'L'] : ['S', 'M']).map(z => button(z, t(lang, `taskbar.w.size.${z}`), node.dataset.size === z)), el('span', 'tbtsep'))
     // A stack: turning by itself, apart again, the one shown out of it.
     if (e.type === 'stack') items.push(button('smart', t(lang, 'taskbar.w.smart'), !!e.smart), button('split', t(lang, 'taskbar.w.split')), button('takeOut', t(lang, 'taskbar.w.takeOut')), el('span', 'tbtsep'))
     items.push(button('remove', t(lang, 'taskbar.w.remove')))
@@ -2749,6 +3041,8 @@
     if (!tools.isConnected) document.body.append(tools)
     const r = node.getBoundingClientRect()
     tools.style.left = `${Math.round(Math.max(4, Math.min(r.left + r.width / 2 - tools.offsetWidth / 2, innerWidth - tools.offsetWidth - 4)))}px`
+    // Over a tile of the grid: just above it, not down at the strip.
+    tools.style.bottom = chosenGrid ? `${Math.round(innerHeight - r.top + 6)}px` : ''
   }
 
   tools.addEventListener('click', e => {
@@ -2759,12 +3053,12 @@
       choose(null)
       return removeEntry(id)
     }
-    const layout = tbLayout()
-    for (const run of Object.values(layout)) {
+    const w = working()
+    for (const run of listsIn(w)) {
       const i = run.findIndex(p => typeof p !== 'string' && p.id === id)
       if (i < 0) continue
       const p = run[i]
-      if (what === 'S' || what === 'M') p.size = what
+      if (what === 'S' || what === 'M' || what === 'L') p.size = what
       if (what === 'smart') p.smart = !p.smart
       // Apart: its items in its place, each at its size.
       if (what === 'split') {
@@ -2774,13 +3068,13 @@
       // The one shown: out, just after it.
       if (what === 'takeOut') {
         const one = p.items[stackAt(p)]
-        const left = takeOut(layout, one.id)
+        const left = takeOut([run], one.id)
         const at = run.indexOf(run.find(x => x === p) || run[i])
         run.splice(at + 1, 0, { ...left, size: p.size || left.size })
         if (run[i] !== p) choose(null)
       }
     }
-    editLayout = layout
+    keepWorking(w)
     arranged = ''
     update()
   })
@@ -2802,10 +3096,10 @@
   // Dropped onto another: the two (or more) a stack where that one was,
   // the first of those dropped shown.
   function stackInto(targetId, d) {
-    const layout = tbLayout()
-    const moving = d.fresh ? { ...d.fresh } : takeOut(layout, d.key)
+    const w = working()
+    const moving = d.fresh ? { ...d.fresh } : takeOut(listsIn(w), d.gid || d.key)
     if (!moving) return
-    for (const run of Object.values(layout)) {
+    for (const run of listsIn(w)) {
       const i = run.findIndex(p => typeof p !== 'string' && p.id === targetId)
       if (i < 0) continue
       const target = run[i]
@@ -2814,7 +3108,7 @@
       const stack = target.type === 'stack' ? { ...target, items } : { id: newId(), type: 'stack', size: target.size || 'M', items }
       run[i] = stack
       stackCur.set(stack.id, Widgets.itemsOf(target).length)
-      editLayout = layout
+      keepWorking(w)
       arranged = ''
       update()
       if (libOpen) drawLibrary()
@@ -2842,17 +3136,21 @@
   }
 
   // A part (by its name) or a widget (by its id) moved; a new widget put in.
-  function movePart(key, zone, index, fresh) {
-    const layout = tbLayout()
+  function movePart(key, zone, index, fresh, fromGrid = false) {
+    const w = working()
     let item = fresh || key
-    for (const k of Object.keys(layout))
-      layout[k] = layout[k].filter(p => {
-        if (Widgets.keyOf(p) !== key) return true
-        item = p
-        return false
-      })
-    layout[zone].splice(index, 0, item)
-    editLayout = layout
+    if (fromGrid) item = takeOut([w.grid], key)
+    else
+      for (const k of Object.keys(w.layout))
+        w.layout[k] = w.layout[k].filter(p => {
+          if (Widgets.keyOf(p) !== key) return true
+          item = p
+          return false
+        })
+    if (!item) return
+    if (item.size === 'L') item = { ...item, size: 'M' }
+    w.layout[zone].splice(index, 0, item)
+    keepWorking(w)
     arranged = ''
     update()
     if (libOpen) drawLibrary()
@@ -2860,11 +3158,13 @@
 
   function endDrag() {
     if (!drag) return
+    const hadGrid = !!drag.gridAt || !!drag.gid
     for (const node of entryNodes.values()) node.classList.remove('tb-stackto')
     drag.ghost?.remove()
     drag.node.classList.remove('tb-dragging')
     editMark.remove()
     drag = null
+    if (hadGrid) drawGridPanel(null)
   }
 
   // Over the library (or let go there).
@@ -2918,9 +3218,29 @@
         document.body.append(drag.ghost, editMark)
         drag.node.classList.add('tb-dragging')
         choose(null)
+        if (drag.gid) drawGridPanel(null)
       }
       drag.ghost.style.left = `${e.clientX}px`
       drag.ghost.style.top = `${e.clientY}px`
+      // Over her island's grid: where it would go there, or the tile it would stack onto.
+      const draggedOne = drag.entry || drag.fresh
+      const inGrid = !!draggedOne && Widgets.isSource(draggedOne) && overGrid(e.clientX, e.clientY)
+      if (!inGrid) drag.gridRects = null
+      const gridAt = inGrid ? gridTargetAt(e.clientX, e.clientY, draggedOne) : null
+      if (JSON.stringify(gridAt) !== JSON.stringify(drag.gridAt)) {
+        drag.gridAt = gridAt
+        drawGridPanel(gridAt)
+      }
+      if (gridAt) {
+        drag.off = false
+        drag.at = null
+        drag.stackOn = null
+        editMark.hidden = true
+        for (const node of entryNodes.values()) node.classList.remove('tb-stackto')
+        drag.ghost.classList.remove('off')
+        drag.ghost.textContent = gridAt.stack ? t(lang, 'taskbar.w.stackOn', { name: gridPanel.querySelector(`[data-gid="${CSS.escape(gridAt.stack)}"]`)?.dataset.label || '' }) : drag.label
+        return
+      }
       const strip = barRest.getBoundingClientRect()
       const off = (!!drag.entry || !!drag.fresh) && (overLibrary(e.clientX, e.clientY) || e.clientY < strip.top - OFF_STRIP_PX)
       drag.off = off
@@ -2946,13 +3266,15 @@
       endDrag()
       if (!d.moved) {
         // A press: a card goes to the right run's start; a widget on the
-        // strip is chosen (again: no longer); elsewhere, none is.
+        // strip or a tile of the grid is chosen (again: no longer).
         if (d.fresh) return movePart(d.fresh.id, 'right', 0, d.fresh)
+        if (d.gid) return choose(chosen !== d.gid || !chosenGrid ? d.gid : null, true)
         return choose(d.entry && chosen !== d.entry.id ? d.entry.id : null)
       }
-      if (d.off) return d.entry ? removeEntry(d.entry.id) : undefined
+      if (d.gridAt) return toGrid(d, d.gridAt)
+      if (d.off) return d.gid ? removeEntry(d.gid) : d.entry ? removeEntry(d.entry.id) : undefined
       if (d.stackOn) return stackInto(d.stackOn, d)
-      if (d.at) movePart(d.fresh ? d.fresh.id : d.key, d.at.zone, d.at.index, d.fresh)
+      if (d.at) movePart(d.fresh ? d.fresh.id : d.gid || d.key, d.at.zone, d.at.index, d.fresh, !!d.gid)
     },
     true,
   )
@@ -2965,6 +3287,13 @@
     // A prompt answered: the island closes rather than lingering open.
     if (view === 'ask' && !isAsking()) nudge = null
     view = isSetting() ? 'settings' : isAsking() ? 'ask' : isHover || isNudging() ? 'expanded' : 'compact'
+    if (view !== 'expanded') {
+      gridCard = null
+      if (gridKeyboard) {
+        gridKeyboard = false
+        window.pet.keyboard(false)
+      }
+    }
     island.dataset.view = view
     setInk()
     island.style.setProperty('--ring', hue()[now.mood])

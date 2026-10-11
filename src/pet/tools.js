@@ -237,6 +237,84 @@
     return base
   }
 
+  // Its tile in her island's grid (island.js): S its icon and short value;
+  // M its name over its value, large; L what it is for, at hand (media's
+  // buttons, a clock's dial, a timer's start, a note's lines, the drives'
+  // bars…), its buttons done by act as its card's are.
+  function tile(kind, size, x) {
+    const f = face(kind, x)
+    const top = `<div class="gtop">${icon(kind)}<span>${esc(T(x, `tool.${kind}`))}</span></div>`
+    if (size === 'S') return `<div class="gs">${f.img ? `<img src="${esc(f.img)}" alt="">` : icon(kind === 'launch' && /^[a-z][a-z0-9+.-]*:\/\//i.test(x.cfg?.path || '') ? 'link' : kind)}${f.short || (kind === 'picker' && f.value.startsWith('#')) ? `<b>${esc(f.short || '')}</b>` : ''}</div>`
+    if (size !== 'L') return `${top}<b class="gval">${esc(f.value)}</b>${f.label && f.label !== T(x, `tool.${kind}`) ? `<span class="gsub">${esc(f.label)}</span>` : ''}`
+    switch (kind) {
+      case 'media': {
+        const m = x.state?.media
+        if (!m || (!m.title && !m.artist)) return `${top}<div class="gnone">${esc(T(x, 'tool.media.none'))}</div>`
+        return `${top}<b class="gtitle">${esc(m.title || m.artist)}</b><span class="gsub">${esc([m.artist, m.app].filter(Boolean).join(' · '))}</span>
+          <div class="grow3">${button('prev', glyph('prev'), { cls: m.prev ? 'round' : 'round off' })}${button('toggle', glyph(m.playing ? 'pause' : 'play'), { cls: 'round main' })}${button('next', glyph('next'), { cls: m.next ? 'round' : 'round off' })}</div>`
+      }
+      case 'clock': {
+        const tz = x.cfg?.tz || ''
+        const tm = timeIn(tz, x.now)
+        const hand = (deg, len, w) => `<line x1="50" y1="50" x2="${50 + len * Math.sin((deg * Math.PI) / 180)}" y2="${50 - len * Math.cos((deg * Math.PI) / 180)}" stroke-width="${w}" stroke-linecap="round"/>`
+        const body =
+          x.cfg?.style === 'analog'
+            ? `<svg class="tdial gdial" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46"/>${[...Array(12)].map((_, i) => `<line class="tick" x1="50" y1="8" x2="50" y2="${i % 3 ? 12 : 15}" transform="rotate(${i * 30} 50 50)"/>`).join('')}<g class="hands">${hand((tm.h % 12) * 30 + tm.m / 2, 24, 4)}${hand(tm.m * 6, 34, 3)}</g><g class="sec">${hand(tm.s * 6, 38, 1.5)}</g></svg>`
+            : `<b class="gbig">${hm(tm)}</b>`
+        return `${top}${body}<span class="gsub gcenter">${esc(T(x, cityOf(tz)[1]))}</span>`
+      }
+      case 'timer': {
+        const tm = timerOf(x)
+        return `${top}<b class="gbig${tm.done ? ' ring' : ''}">${tm.done ? esc(T(x, 'tool.timer.done')) : clock(tm.left)}</b><div class="grow3">${button(tm.running ? 'pause' : 'start', esc(T(x, tm.running ? 'tool.timer.pause' : 'tool.timer.start')), { cls: 'main' })}${button('reset', esc(T(x, 'tool.timer.reset')))}</div>`
+      }
+      case 'notes': {
+        const text = notesOf(x)
+        return `${top}<div class="gnote">${text ? esc(text) : `<span class="gnone">${esc(T(x, 'tool.notes.empty'))}</span>`}</div>`
+      }
+      case 'disk': {
+        const all = (Array.isArray(x.state?.disk) ? x.state.disk : []).slice(0, 3)
+        return `${top}${all
+          .map(d => {
+            const used = Math.round(((d.total - d.free) / d.total) * 100)
+            return `<div class="gdisk"><span><b>${esc(d.drive)}</b> ${esc(T(x, 'tool.disk.free', { size: size(d.free) }))}</span><span class="tbar${used >= 90 ? ' high' : ''}"><i style="width:${used}%"></i></span></div>`
+          })
+          .join('') || '<div class="gnone">—</div>'}`
+      }
+      case 'trash': {
+        const tr = x.state?.trash
+        if (x.local?.confirm === 'empty') return `${top}<div class="twarn">${esc(T(x, 'tool.trash.sure'))}</div><div class="grow3">${button('cancel', esc(T(x, 'tool.cancel')))}${button('empty', esc(T(x, 'tool.trash.emptyNow')), { cls: 'danger' })}</div>`
+        return `${top}<b class="gbig">${tr ? (tr.items ? esc(String(tr.items)) : '0') : '—'}</b><span class="gsub gcenter">${tr?.items ? esc(size(tr.bytes)) : esc(T(x, 'tool.trash.empty'))}</span><div class="grow3">${button('open', esc(T(x, 'tool.disk.open')))}${tr?.items ? button('ask', esc(T(x, 'tool.trash.emptyAsk')), { arg: 'empty' }) : ''}</div>`
+      }
+      case 'power': {
+        const sure = x.local?.confirm
+        if (sure) return `${top}<div class="twarn">${esc(T(x, 'tool.power.sure', { what: T(x, `tool.power.${sure}`) }))}</div><div class="grow3">${button('cancel', esc(T(x, 'tool.cancel')))}${button('do', esc(T(x, `tool.power.${sure}`)), { arg: sure, cls: 'danger' })}</div>`
+        return `${top}<div class="ggrid2">${[['do', 'lock'], ['do', 'sleep'], ['ask', 'restart'], ['ask', 'shutdown']].map(([what, w]) => button(what, esc(T(x, `tool.power.${w}`)), { arg: w })).join('')}</div>`
+      }
+      case 'awake': {
+        const a = x.state?.awake
+        return `${top}<b class="gbig">${esc(f.value)}</b>${a?.on ? button('off', esc(T(x, 'tool.awake.stop')), { cls: 'danger' }) : button('on', esc(T(x, 'tool.awake.always')), { arg: 0, cls: 'main' })}`
+      }
+      case 'windows': {
+        const list = windowsOf(x).slice(0, 4)
+        return `${top}<div class="tlist">${list.map(w => `<button type="button" class="titem${w.front ? ' on' : ''}" data-t="window" data-arg="${esc(w.id)}">${w.png ? `<img src="${esc(w.png)}" alt="">` : icon('windows')}<span>${esc(w.title || w.name)}</span></button>`).join('') || `<span class="gnone">${esc(T(x, 'tool.windows.none'))}</span>`}</div>`
+      }
+      case 'calc': {
+        const expr = x.local?.expr || ''
+        const live = calculate(expr)
+        return `${top}<b class="gbig gright">${esc(expr || '0')}</b><span class="gsub gright">${live != null && expr && !/^[\d.]+$/.test(expr) ? `= ${esc(shown(live))}` : '&nbsp;'}</span>`
+      }
+      case 'picker': {
+        const all = (x.picked || []).slice(0, 4)
+        return `${top}<div class="gswatch" style="background:${esc(all[0] || '#00000000')}"></div><div class="grow3">${button('start', esc(T(x, 'tool.picker.start')), { cls: 'main' })}${all.map(c => `<button type="button" class="tsw" data-t="copy" data-arg="${esc(c)}" title="${esc(c)}"><i style="background:${esc(c)}"></i></button>`).join('')}</div>`
+      }
+      case 'launch':
+        return `${top}<div class="glaunch">${f.img ? `<img src="${esc(f.img)}" alt="">` : f.icon}<b>${esc(f.value)}</b></div>`
+      case 'search':
+        return `${top}<div class="grow3 gfill">${button('search', `${icon('search')}<span>${esc(T(x, 'tool.search.open'))}</span>`, { cls: 'main wide' })}</div>`
+    }
+    return `${top}<b class="gval">${esc(f.value)}</b>`
+  }
+
   // A press on its face: done there and then (true), or its card opens.
   function press(kind, x, api) {
     if (kind === 'search') return api.taskbar('search'), true
@@ -425,7 +503,7 @@
     return !!l.endAt && l.endAt <= x.now && !l.done
   }
 
-  const api = { ICONS, KINDS, MANY, SMALL, COLOUR, icon, face, press, card, act, rings, size, clock, calculate, typed, shown, timeIn, CITIES }
+  const api = { ICONS, KINDS, MANY, SMALL, COLOUR, icon, face, tile, press, card, act, rings, size, clock, calculate, typed, shown, timeIn, CITIES }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api

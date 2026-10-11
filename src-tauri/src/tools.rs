@@ -31,7 +31,7 @@ pub const KINDS: [&str; 13] = ["media", "notes", "timer", "calc", "trash", "powe
 
 // Where widgets are put: any tool in them, however deep (a stack, a
 // container), counts.
-const PLACES: [&str; 1] = ["taskbarLayout"];
+const PLACES: [&str; 2] = ["taskbarLayout", "islandGrid"];
 
 fn find_kinds(v: &Value, out: &mut Vec<String>) {
     match v {
@@ -50,14 +50,14 @@ fn find_kinds(v: &Value, out: &mut Vec<String>) {
     }
 }
 
-// The kinds put somewhere, while she is the taskbar.
+// The kinds put somewhere: on the taskbar while she is it, in her
+// island's grid in either home.
 pub fn placed(sh: &Shared) -> Vec<String> {
     let mut out = Vec::new();
     if sh.setting("display") == "taskbar" {
-        for place in PLACES {
-            find_kinds(&sh.setting(place), &mut out);
-        }
+        find_kinds(&sh.setting("taskbarLayout"), &mut out);
     }
+    find_kinds(&sh.setting("islandGrid"), &mut out);
     out
 }
 

@@ -2937,6 +2937,8 @@
     drawEditBar()
     document.body.append(editBar, gridPanel)
     drawGridPanel()
+    // The desktop's containers edited with it (desk.rs: put back on cancel).
+    window.pet.desk.edit(true)
     arranged = ''
     update()
   }
@@ -2956,6 +2958,7 @@
     const grid = gridList()
     editLayout = null
     editGrid = null
+    window.pet.desk.edit(false, keep)
     endDrag()
     body.classList.remove('tb-editing')
     editBar.remove()
@@ -3403,9 +3406,11 @@
       }
       const strip = barRest.getBoundingClientRect()
       const off = (!!drag.entry || !!drag.fresh) && (overLibrary(e.clientX, e.clientY) || e.clientY < strip.top - OFF_STRIP_PX)
+      // A library card up over the desktop (not the library): a container there.
+      drag.desk = !!drag.fresh && Widgets.isSource(drag.fresh) && off && !overLibrary(e.clientX, e.clientY)
       drag.off = off
-      drag.ghost.classList.toggle('off', off)
-      drag.ghost.textContent = off && drag.entry ? t(lang, 'taskbar.w.drop', { name: drag.label }) : drag.label
+      drag.ghost.classList.toggle('off', off && !drag.desk)
+      drag.ghost.textContent = off && drag.entry ? t(lang, 'taskbar.w.drop', { name: drag.label }) : drag.desk ? t(lang, 'taskbar.desk.drop', { name: drag.label }) : drag.label
       // Onto another's middle: stacked with it.
       const dragged = drag.entry || drag.fresh
       const onto = !off && dragged && Widgets.isSource(dragged) ? stackOnto(e.clientX, e.clientY, dragged) : null
@@ -3432,6 +3437,7 @@
         return choose(d.entry && chosen !== d.entry.id ? d.entry.id : null)
       }
       if (d.gridAt) return toGrid(d, d.gridAt)
+      if (d.desk) return window.pet.desk.drop(d.fresh, e.clientX, e.clientY)
       if (d.off) return d.gid ? removeEntry(d.gid) : d.entry ? removeEntry(d.entry.id) : undefined
       if (d.stackOn) return stackInto(d.stackOn, d)
       if (d.at) movePart(d.fresh ? d.fresh.id : d.gid || d.key, d.at.zone, d.at.index, d.fresh, !!d.gid)

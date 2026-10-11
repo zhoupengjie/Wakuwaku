@@ -3333,72 +3333,72 @@ body.isl-right .tblib {
   max-width: 340px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard {
   display: grid;
   gap: 8px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tbig {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tbig {
   font-size: 15px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tnum {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tnum {
   font-size: 28px;
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .thuge {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .thuge {
   font-size: 40px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tnum.ring {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tnum.ring {
   color: #ff9f0a;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tsub,
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tnone,
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tlabel {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tsub,
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tnone,
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tlabel {
   color: #a1a1a6;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tlabel {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tlabel {
   margin-top: 2px;
   font-size: 11px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tpath {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tpath {
   overflow-wrap: anywhere;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tcenter {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tcenter {
   justify-content: center;
   text-align: center;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .twarn {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .twarn {
   color: #ff9f0a;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .trow {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .trow {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .twrap {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .twrap {
   flex-wrap: wrap;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tgrid {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tgrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tbtn {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tbtn {
   height: 28px;
   padding: 0 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -3410,56 +3410,56 @@ body.isl-right .tblib {
   cursor: pointer;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tbtn:hover {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tbtn:hover {
   background: rgba(255, 255, 255, 0.14);
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.on {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tbtn.on {
   border-color: rgba(94, 155, 255, 0.7);
   background: rgba(94, 155, 255, 0.22);
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.main {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tbtn.main {
   border-color: #0a84ff;
   background: #0a84ff;
   color: #fff;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.danger {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tbtn.danger {
   border-color: #ff453a;
   background: #ff453a;
   color: #fff;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.small {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tbtn.small {
   height: 24px;
   padding: 0 8px;
   font-size: 11px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.round {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tbtn.round {
   width: 40px;
   height: 40px;
   padding: 0;
   border-radius: 50%;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.round.main {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tbtn.round.main {
   width: 48px;
   height: 48px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tbtn.off {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tbtn.off {
   opacity: 0.35;
   pointer-events: none;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tbtn .tg {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tbtn .tg {
   font: normal 16px/1 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tin,
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tnote {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tin,
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tnote {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
@@ -3470,12 +3470,12 @@ body.isl-right .tblib {
   font: inherit;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tin {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tin {
   height: 28px;
   padding: 0 8px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tnote {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tnote {
   width: 100%;
   height: 160px;
   padding: 8px;
@@ -3483,14 +3483,14 @@ body.isl-right .tblib {
   line-height: 1.5;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tlist {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tlist {
   display: grid;
   gap: 2px;
   max-height: 260px;
   overflow: auto;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .titem {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3506,93 +3506,93 @@ body.isl-right .tblib {
   cursor: pointer;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem:hover,
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem.on {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .titem:hover,
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .titem.on {
   background: rgba(255, 255, 255, 0.09);
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem img,
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem .wicon {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .titem img,
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .titem .wicon {
   flex: none;
   width: 16px;
   height: 16px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .titem span {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .titem span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tapps {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tapps {
   max-height: 150px;
 }
 
 /* The calculator: what is typed, the result so far, its keys. */
-:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .texpr {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcalc .texpr {
   font-size: 22px;
   font-variant-numeric: tabular-nums;
   text-align: right;
   overflow-wrap: anywhere;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tres {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcalc .tres {
   color: #a1a1a6;
   text-align: right;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tkeys {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcalc .tkeys {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   margin-top: 6px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tkeys .tbtn {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcalc .tkeys .tbtn {
   height: 34px;
   font-size: 15px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tkeys .op {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcalc .tkeys .op {
   color: #64d2ff;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tkeys .wide {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcalc .tkeys .wide {
   grid-column: span 2;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcalc .tkeys .wide2 {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcalc .tkeys .wide2 {
   grid-column: span 1;
 }
 
 /* The clock: its dial, or its time large. */
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tdial {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tdial {
   width: 132px;
   height: 132px;
   justify-self: center;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tdial circle {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tdial circle {
   fill: rgba(255, 255, 255, 0.05);
   stroke: rgba(255, 255, 255, 0.25);
   stroke-width: 1.5;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tdial .tick {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tdial .tick {
   stroke: rgba(255, 255, 255, 0.5);
   stroke-width: 2;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tdial .hands line {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tdial .hands line {
   stroke: currentColor;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tdial .sec line {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tdial .sec line {
   stroke: #ff9f0a;
 }
 
 /* The drives, each its use as a bar. */
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tdisk {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tdisk {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
@@ -3601,11 +3601,11 @@ body.isl-right .tblib {
   border-radius: 6px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tdisk.on {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tdisk.on {
   background: rgba(255, 255, 255, 0.07);
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tdhead {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tdhead {
   display: grid;
   gap: 1px;
   padding: 0;
@@ -3617,12 +3617,12 @@ body.isl-right .tblib {
   cursor: pointer;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tdhead span {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tdhead span {
   color: #a1a1a6;
   font-size: 11px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tbar {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tbar {
   grid-column: 1;
   height: 6px;
   border-radius: 3px;
@@ -3630,24 +3630,24 @@ body.isl-right .tblib {
   overflow: hidden;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tbar i {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tbar i {
   display: block;
   height: 100%;
   background: #5e9bff;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tbar.high i {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tbar.high i {
   background: #ff9f0a;
 }
 
 /* The colours picked: each its swatch, a press copies it again. */
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tswatches {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tswatches {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tsw {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tsw {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3662,7 +3662,7 @@ body.isl-right .tblib {
   cursor: pointer;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tcard .tsw i {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tcard .tsw i {
   flex: none;
   width: 18px;
   height: 18px;
@@ -3670,65 +3670,65 @@ body.isl-right .tblib {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tsub,
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tnone,
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tlabel,
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcalc .tres,
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tdhead span {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .tsub,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .tnone,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .tlabel,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcalc .tres,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .tdhead span {
   color: #5d5d5d;
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tbtn {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tbtn {
   border-color: rgba(0, 0, 0, 0.1);
   background: #fff;
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tbtn:hover {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tbtn:hover {
   background: #f0f0f0;
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tbtn.main {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tbtn.main {
   border-color: #005fb8;
   background: #005fb8;
   color: #fff;
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tbtn.danger {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tbtn.danger {
   border-color: #c42b1c;
   background: #c42b1c;
   color: #fff;
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tin,
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tnote {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .tin,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .tnote {
   border-color: rgba(0, 0, 0, 0.14);
   background: #fff;
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .titem:hover,
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .titem.on,
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tdisk.on {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .titem:hover,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .titem.on,
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .tdisk.on {
   background: rgba(0, 0, 0, 0.05);
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcalc .tkeys .op {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcalc .tkeys .op {
   color: #005fb8;
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tdial circle {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tdial circle {
   fill: rgba(0, 0, 0, 0.03);
   stroke: rgba(0, 0, 0, 0.2);
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tdial .tick {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tdial .tick {
   stroke: rgba(0, 0, 0, 0.45);
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tbar {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .tbar {
   background: rgba(0, 0, 0, 0.1);
 }
 
-:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid) .tcard .tsw {
+:is(.tb-light #bar-rest, .isl-light #island-expanded, .tb-light .tbgrid, .light .dbox) .tcard .tsw {
   border-color: rgba(0, 0, 0, 0.1);
 }
 
@@ -3739,7 +3739,7 @@ body.isl-right .tblib {
   position: relative;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tdots {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tdots {
   position: absolute;
   left: 50%;
   bottom: 2px;
@@ -3749,7 +3749,7 @@ body.isl-right .tblib {
   pointer-events: none;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tdots i {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tdots i {
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -3757,7 +3757,7 @@ body.isl-right .tblib {
   opacity: 0.3;
 }
 
-:is(#bar-rest, #island-expanded, .tbgrid) .tdots i.on {
+:is(#bar-rest, #island-expanded, .tbgrid, .dbox) .tdots i.on {
   opacity: 0.9;
 }
 
@@ -4331,4 +4331,140 @@ body.isl-right .tbgrid {
 
 #bar-rest .wgmrow .tdots {
   display: none;
+}
+
+/* --- A container of widgets on the desktop (desk.js, desk.html) ---------------------
+   Its own window, as big as it is: glass (a dark or light ground, the
+   desktop's picture faintly through) or clear (each tile its own ground);
+   while editing, ringed, with a head to move it by and its choices above
+   its tiles, and the chosen one's sizes under them. */
+html.desk-page,
+body.desk-page {
+  height: auto;
+  background: transparent;
+}
+
+#desk {
+  display: inline-block;
+  padding: 2px;
+}
+
+.dbox {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 16px;
+  color: #f5f5f7;
+  font-size: 12px;
+}
+
+.dbox.glass {
+  background: rgba(32, 33, 36, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.dbox.clear .itile {
+  background: rgba(32, 33, 36, 0.7);
+}
+
+.dbox.editing {
+  box-shadow: inset 0 0 0 1.5px rgba(94, 155, 255, 0.85);
+}
+
+.dbox.clear.editing {
+  background: rgba(94, 155, 255, 0.08);
+}
+
+.dbox .igrid {
+  width: auto;
+  grid-template-columns: repeat(var(--cols, 2), 66px);
+}
+
+.dbox .itile.tb-chosen {
+  box-shadow: inset 0 0 0 2px #5e9bff;
+  background: rgba(94, 155, 255, 0.24);
+}
+
+.dbox .dboxdots {
+  position: static;
+  align-self: center;
+  transform: none;
+  color: inherit;
+}
+
+.dbox .dhead,
+.dbox .dtools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.dbox .dgrip {
+  padding: 0 6px 0 2px;
+  color: #a1a1a6;
+  font-size: 14px;
+  cursor: grab;
+}
+
+.dbox .dbtn {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.dbox .dbtn.on {
+  border-color: rgba(94, 155, 255, 0.7);
+  background: rgba(94, 155, 255, 0.22);
+}
+
+.dbox .dn {
+  min-width: 34px;
+  color: #a1a1a6;
+  font-size: 11px;
+  text-align: center;
+}
+
+.dbox .icard {
+  width: auto;
+  min-width: 240px;
+  max-width: 300px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.light .dbox {
+  color: #1b1b1b;
+}
+
+.light .dbox.glass {
+  background: rgba(243, 243, 243, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.light .dbox .itile {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.light .dbox.clear .itile {
+  background: rgba(243, 243, 243, 0.82);
+}
+
+.light .dbox .itile :is(.gtop, .gsub, .gnone, .grow2 span, .gdisk span:first-child),
+.light .dbox .dn,
+.light .dbox .dgrip {
+  color: #5d5d5d;
+}
+
+.light .dbox .dbtn {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: #fff;
 }

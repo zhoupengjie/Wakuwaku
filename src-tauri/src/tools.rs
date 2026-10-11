@@ -31,7 +31,7 @@ pub const KINDS: [&str; 13] = ["media", "notes", "timer", "calc", "trash", "powe
 
 // Where widgets are put: any tool in them, however deep (a stack, a
 // container), counts.
-const PLACES: [&str; 2] = ["taskbarLayout", "islandGrid"];
+const PLACES: [&str; 3] = ["taskbarLayout", "islandGrid", "desktop"];
 
 fn find_kinds(v: &Value, out: &mut Vec<String>) {
     match v {
@@ -58,6 +58,7 @@ pub fn placed(sh: &Shared) -> Vec<String> {
         find_kinds(&sh.setting("taskbarLayout"), &mut out);
     }
     find_kinds(&sh.setting("islandGrid"), &mut out);
+    find_kinds(&sh.setting("desktop"), &mut out);
     out
 }
 
@@ -123,6 +124,7 @@ pub fn run(sh: std::sync::Arc<Shared>) {
         });
         if changed {
             let _ = sh.app.emit_to("island", "tools:state", &state);
+            crate::desk::tell(&sh, "tools:state", &state);
         }
         // Each second with the media widget out (or asked to), quiet ones less.
         let wait = if has("media") && !sh.is_quiet() { 1 } else if kinds.is_empty() { 10 } else { 5 };
@@ -671,6 +673,7 @@ mod imp {
             PICKING.store(false, Ordering::SeqCst);
             sh.log(&format!("picker: {}", hex.as_deref().unwrap_or("given up")));
             let _ = sh.app.emit_to("island", "tools:picked", json!({ "hex": hex }));
+            crate::desk::tell(&sh, "tools:picked", &json!({ "hex": hex }));
         });
     }
 }

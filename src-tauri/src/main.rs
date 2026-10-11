@@ -29,6 +29,7 @@
 //   widgets.rs     plugins in the island: widgets from scripts, and the built-in ones
 //   tokens.rs      today's tokens, from Claude Code's and Codex's own records
 //   tools.rs       the taskbar's own widgets: media, the Recycle Bin, drives, awake, power, the colour picker
+//   desk.rs        widgets on the desktop: each container its window, under the programs, over the icons
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod appbar;
@@ -37,6 +38,7 @@ mod audio;
 mod connection;
 mod crash;
 mod data;
+mod desk;
 mod events;
 mod events_codex;
 mod fetch;
@@ -280,6 +282,7 @@ impl Shared {
         self.to_pages("pet:update", self.payload());
         tray::refresh(self);
         self.push_settings();
+        desk::push(self);
     }
 
     // Only a widget's words changed (the monitor's readings every couple of
@@ -288,6 +291,7 @@ impl Shared {
     pub fn redraw_widgets(&self) {
         let _ = self.app.emit_to("island", "pet:widgets", json!({ "widgets": self.widgets_said() }));
         self.push_settings();
+        desk::push(self);
     }
 
     // The prompts waiting changed.
@@ -347,11 +351,14 @@ impl Shared {
     // On in the island, or put on the taskbar (taskbarLayout) while she is
     // the taskbar: a built-in one is worked out then.
     pub fn is_widget_wanted(&self, id: &str) -> bool {
-        self.is_widget_on(id) || (self.setting("display") == "taskbar" && settings::is_on_taskbar(&self.setting("taskbarLayout"), id)) || settings::shows(&self.setting("islandGrid"), id)
+        self.is_widget_on(id)
+            || (self.setting("display") == "taskbar" && settings::is_on_taskbar(&self.setting("taskbarLayout"), id))
+            || settings::shows(&self.setting("islandGrid"), id)
+            || settings::shows(&self.setting("desktop"), id)
     }
 
     // The widgets with something to say, each saying whether it is on.
-    fn widgets_said(&self) -> Value {
+    pub fn widgets_said(&self) -> Value {
         Value::Array(self.widgets_view().as_array().into_iter().flatten().filter(|w| !w["value"].is_null()).cloned().collect())
     }
 
@@ -626,6 +633,10 @@ fn is_island(window: &WebviewWindow) -> bool {
 
 #[tauri::command]
 async fn pet_ready(app: AppHandle, window: WebviewWindow) {
+    // A container of widgets on the desktop is neither (desk.rs).
+    if window.label().starts_with("desk-") {
+        return;
+    }
     let sh = shared(&app);
     if is_island(&window) { island::ready(&sh) } else { pet::ready(&sh) }
     let views = sh.asks.lock().unwrap().views();
@@ -1100,6 +1111,13 @@ fn main() {
             mail::mail_keep_draft,
             taskbar::taskbar_tray,
             taskbar::taskbar_open,
+            desk::desk_state,
+            desk::desk_size,
+            desk::desk_change,
+            desk::desk_remove,
+            desk::desk_move,
+            desk::desk_edit,
+            desk::desk_drop,
             tools_state,
             tool_do,
             tool_icon,
@@ -1245,6 +1263,8 @@ fn main() {
             // The taskbar's own widgets: what they read, while one is out.
             let tooled = sh.clone();
             spawn_named("tools", move || tools::run(tooled));
+            // The desktop's containers of widgets, each its window.
+            desk::sync(&sh);
 
             // The monitor: the parts that are on, every so many seconds (its
             // setting, 1 to 10), while it is on; looked at again within a

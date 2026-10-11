@@ -181,6 +181,45 @@ fn is_island_grid(v: &Value) -> bool {
     })
 }
 
+// The containers of widgets on the desktop (desk.rs): up to 16, each its
+// id, its corner (physical), grid or stack, 1 to 6 columns, glass or
+// clear, and 1 to 16 widgets (as her island's grid has them); every id
+// once among them all.
+fn is_desktop(v: &Value) -> bool {
+    let Some(boxes) = v.as_array() else { return false };
+    let mut seen: Vec<&str> = Vec::new();
+    boxes.len() <= 16
+        && boxes.iter().all(|b| {
+            let Some(o) = b.as_object() else { return false };
+            let Some(id) = o.get("id").and_then(Value::as_str) else { return false };
+            let ok_id = id.len() >= 2 && id.len() <= 16 && id.starts_with('w') && id[1..].chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) && !seen.contains(&id);
+            seen.push(id);
+            let ok_rest = o.iter().all(|(key, v)| match key.as_str() {
+                "id" | "items" => true,
+                "x" | "y" => v.as_i64().is_some_and(|n| n.abs() <= 100_000),
+                "mode" => matches!(v.as_str(), Some("grid" | "stack")),
+                "cols" => v.as_u64().is_some_and(|n| (1..=6).contains(&n)),
+                "style" => matches!(v.as_str(), Some("glass" | "clear")),
+                _ => false,
+            });
+            let items = o.get("items").and_then(Value::as_array);
+            let ok_items = items.is_some_and(|items| {
+                (1..=16).contains(&items.len())
+                    && items.iter().all(|p| {
+                        let spacer = matches!(p.get("type").and_then(Value::as_str), Some("flex" | "gap" | "sep"));
+                        match widget_ids(p, true) {
+                            Some(ids) if !spacer && ids.iter().all(|id| !seen.contains(id)) && (1..ids.len()).all(|i| !ids[..i].contains(&ids[i])) => {
+                                seen.extend(ids);
+                                true
+                            }
+                            _ => false,
+                        }
+                    })
+            });
+            ok_id && ok_rest && ok_items && o.contains_key("x") && o.contains_key("y")
+        })
+}
+
 // Whether what is kept (a taskbar layout, her island's grid, anything)
 // shows this widget: put there by itself, or its plugin's, in a stack too.
 pub fn shows(v: &Value, widget: &str) -> bool {
@@ -277,6 +316,8 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "taskbarLayout" => v.is_null() || is_taskbar_layout(v),
         // The widgets in her island's grid, in the order they fill it.
         "islandGrid" => v.is_null() || is_island_grid(v),
+        // The containers of widgets on the desktop.
+        "desktop" => v.is_null() || is_desktop(v),
         // The notes on the taskbar, by the widget's id: up to 64, 4000 characters each.
         "notes" => v.as_object().is_some_and(|n| n.len() <= 64 && n.iter().all(|(id, text)| id.len() <= 16 && text.as_str().is_some_and(|t| t.chars().count() <= 4000))),
         // The colours picked last (tools.rs picker), up to 12.
@@ -328,7 +369,7 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
             }
         }
     }
-    let tools = rest.contains_key("taskbarLayout") || rest.contains_key("islandGrid") || display.is_some();
+    let tools = rest.contains_key("taskbarLayout") || rest.contains_key("islandGrid") || rest.contains_key("desktop") || display.is_some();
     if let Some(scale) = scale {
         pet::resize(sh, scale);
     }
@@ -689,6 +730,23 @@ mod layout_tests {
         assert!(!super::is_taskbar_layout(&json!({ "left": [w("wb", "x")], "right": [{ "id": "wa", "type": "stack", "items": [w("wb", "today"), w("wc", "tokens")] }] })));
         // What the taskbar shows: a stack's items too.
         assert!(super::is_on_taskbar(&json!({ "right": [{ "id": "wa", "type": "stack", "items": [w("wb", "today"), w("wc", "tokens")] }] }), "tokens"));
+    }
+
+    #[test]
+    fn the_desktops_containers() {
+        let w = |id: &str, of: &str, size: &str| json!({ "id": id, "type": "widget", "of": of, "size": size });
+        let b = |id: &str, items: serde_json::Value| json!({ "id": id, "x": 100, "y": 200, "mode": "grid", "cols": 2, "style": "glass", "items": items });
+        assert!(super::is_desktop(&json!([b("wa", json!([w("wb", "today", "L")])), b("wc", json!([{ "id": "wd", "type": "tool", "of": "clock", "size": "M" }]))])));
+        assert!(super::is_desktop(&json!([])));
+        // Each id once; some widgets; nothing else; a place.
+        assert!(!super::is_desktop(&json!([b("wa", json!([w("wb", "today", "S")])), b("wa", json!([w("wc", "tokens", "S")]))])));
+        assert!(!super::is_desktop(&json!([b("wa", json!([w("wb", "today", "S")])), b("wc", json!([w("wb", "tokens", "S")]))])));
+        assert!(!super::is_desktop(&json!([b("wa", json!([]))])));
+        assert!(!super::is_desktop(&json!([b("wa", json!([{ "id": "wb", "type": "gap" }]))])));
+        assert!(!super::is_desktop(&json!([{ "id": "wa", "items": [w("wb", "today", "S")] }])));
+        let mut bad = b("wa", json!([w("wb", "today", "S")]));
+        bad["cols"] = json!(7);
+        assert!(!super::is_desktop(&json!([bad])));
     }
 
     #[test]

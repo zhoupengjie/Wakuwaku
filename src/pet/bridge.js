@@ -128,6 +128,21 @@
     // ({ media, trash, disk, awake }), and a colour picked ({ hex }, null: given up).
     onTools: on('tools:state'),
     onPicked: on('tools:picked'),
+    // The desktop's containers of widgets (desk.rs): what they draw from as
+    // it changes ({ lang, details, boxes, widgets, tools, notes, picked,
+    // editing }); a container's size, changes, removal, a move by its head;
+    // editing begun or ended (kept or not); a library card let go over the
+    // desktop (the island's page, its CSS px).
+    onDesk: on('desk:update'),
+    desk: {
+      state: () => invoke('desk_state').catch(() => null),
+      size: (id, w, h) => send('desk_size', { id: String(id), w: Number(w) || 0, h: Number(h) || 0 }),
+      change: (id, change) => send('desk_change', { id: String(id), change }),
+      remove: id => send('desk_remove', { id: String(id) }),
+      move: id => send('desk_move', { id: String(id) }),
+      edit: (on, keep) => send('desk_edit', { on: on === true, keepIt: keep === true }),
+      drop: (entry, x, y) => invoke('desk_drop', { entry, x: Number(x) || 0, y: Number(y) || 0 }).catch(() => false),
+    },
     tools: {
       state: () => invoke('tools_state').catch(() => null),
       do: (kind, what, arg) => invoke('tool_do', { kind: String(kind), what: String(what), arg: arg == null ? null : String(arg) }).catch(() => false),
@@ -227,9 +242,11 @@
   window.addEventListener('error', e => console.log('error:', e.message, e.filename, e.lineno))
   window.addEventListener('unhandledrejection', e => console.log('unhandled:', e.reason))
 
+  // A container of widgets on the desktop (desk.js) is neither her window
+  // nor the island's: it asks for what it draws itself (desk_state).
   document.addEventListener('DOMContentLoaded', () => {
     Promise.all(pending)
-      .then(() => send('pet_ready'))
+      .then(() => (LABEL.startsWith('desk-') ? undefined : send('pet_ready')))
       .catch(err => console.log('listeners failed:', err))
   })
 })()

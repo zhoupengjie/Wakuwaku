@@ -201,23 +201,28 @@ pub fn push(sh: &Shared) {
     }
 }
 
-// An event of the tools' (tools.rs) told the containers' pages too.
+// An event of the tools' (tools.rs) told the containers' pages too (the
+// windows' list let go first: nothing held while their pages are told).
 pub fn tell(sh: &Shared, event: &str, payload: &Value) {
-    for (l, _) in HWNDS.lock().unwrap().iter() {
+    let labels: Vec<String> = HWNDS.lock().unwrap().iter().map(|(l, _)| l.clone()).collect();
+    for l in labels {
         let _ = sh.app.emit_to(l.as_str(), event, payload.clone());
     }
 }
 
 // --- What its pages (and the island's) ask -------------------------------------------------
+// Each off the main thread (async): one asked from a page's call ran on
+// the main thread, inside that page's WebView2 callback, where closing
+// another container's window, or waiting for anything, could stop it all.
 
 #[tauri::command]
-pub fn desk_state(app: tauri::AppHandle) -> Value {
+pub async fn desk_state(app: tauri::AppHandle) -> Value {
     state(&crate::shared(&app))
 }
 
 // The page drew itself: its window as big (CSS px), shown, under the programs.
 #[tauri::command]
-pub fn desk_size(app: tauri::AppHandle, id: String, w: f64, h: f64) {
+pub async fn desk_size(app: tauri::AppHandle, id: String, w: f64, h: f64) {
     let sh = crate::shared(&app);
     let Some(win) = sh.app.get_webview_window(&label(&id)) else { return };
     let sf = win.scale_factor().unwrap_or(1.0);
@@ -233,7 +238,7 @@ pub fn desk_size(app: tauri::AppHandle, id: String, w: f64, h: f64) {
 
 // A container changed by its page (its mode, columns, ground, widgets).
 #[tauri::command]
-pub fn desk_change(app: tauri::AppHandle, id: String, change: Value) {
+pub async fn desk_change(app: tauri::AppHandle, id: String, change: Value) {
     let sh = crate::shared(&app);
     change_box(&sh, &id, |b| {
         for key in ["mode", "cols", "style", "items"] {
@@ -245,7 +250,7 @@ pub fn desk_change(app: tauri::AppHandle, id: String, change: Value) {
 }
 
 #[tauri::command]
-pub fn desk_remove(app: tauri::AppHandle, id: String) {
+pub async fn desk_remove(app: tauri::AppHandle, id: String) {
     let sh = crate::shared(&app);
     let all = boxes(&sh).into_iter().filter(|b| b["id"] != id.as_str()).collect();
     keep(&sh, all);
@@ -253,7 +258,7 @@ pub fn desk_remove(app: tauri::AppHandle, id: String) {
 
 // Moved by its head: the system's own move (desk_moved keeps it).
 #[tauri::command]
-pub fn desk_move(app: tauri::AppHandle, id: String) {
+pub async fn desk_move(app: tauri::AppHandle, id: String) {
     if !is_editing() {
         return;
     }
@@ -263,16 +268,23 @@ pub fn desk_move(app: tauri::AppHandle, id: String) {
 }
 
 // Editing begins (the taskbar's), or ends: kept, or put back as it was.
+// What it was is taken in a statement of its own: held through an if let,
+// the lock was still held when what follows asked is_editing (state), and
+// the thread waited on itself for ever (Cancel or Done, a container there).
 #[tauri::command]
-pub fn desk_edit(app: tauri::AppHandle, on: bool, keep_it: bool) {
+pub async fn desk_edit(app: tauri::AppHandle, on: bool, keep_it: bool) {
     let sh = crate::shared(&app);
     if on {
-        *EDITING.lock().unwrap() = Some(sh.setting("desktop"));
-    } else if let Some(was) = EDITING.lock().unwrap().take() {
-        if !keep_it {
-            crate::settings::apply_patch(&sh, &json!({ "desktop": was }));
+        let now = sh.setting("desktop");
+        *EDITING.lock().unwrap() = Some(now);
+    } else {
+        let was = EDITING.lock().unwrap().take();
+        if let Some(was) = was {
+            if !keep_it {
+                crate::settings::apply_patch(&sh, &json!({ "desktop": was }));
+            }
+            sync(&sh);
         }
-        sync(&sh);
     }
     push(&sh);
 }
@@ -280,7 +292,7 @@ pub fn desk_edit(app: tauri::AppHandle, on: bool, keep_it: bool) {
 // A library card let go over the desktop (the island's page, its CSS px):
 // into the container it is over, or a new one there.
 #[tauri::command]
-pub fn desk_drop(app: tauri::AppHandle, entry: Value, x: f64, y: f64) -> bool {
+pub async fn desk_drop(app: tauri::AppHandle, entry: Value, x: f64, y: f64) -> bool {
     let sh = crate::shared(&app);
     let (pos, sf) = crate::island::origin(&sh);
     let (px, py) = (pos.0 + (x * sf).round() as i32, pos.1 + (y * sf).round() as i32);
@@ -380,6 +392,9 @@ mod imp {
     const SWP_NOSIZE: u32 = 0x1;
     const SWP_NOMOVE: u32 = 0x2;
     const SWP_NOACTIVATE: u32 = 0x10;
+    // Asked of the window's own thread, not waited for (the hook's thread
+    // never waits on the main one).
+    const SWP_ASYNCWINDOWPOS: u32 = 0x4000;
     const HWND_TOP: isize = 0;
     const EVENT_SYSTEM_FOREGROUND: u32 = 0x3;
 
@@ -430,14 +445,14 @@ mod imp {
             }
             // Put after (under) the window just above the desktop: on it.
             let after = if above.is_null() { HWND_TOP } else { above as isize };
-            SetWindowPos(hwnd as Hwnd, after, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            SetWindowPos(hwnd as Hwnd, after, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
         }
     }
 
     // Over every program's window (the desktop shown).
     fn over_programs(hwnd: isize) {
         // SAFETY: as above.
-        unsafe { SetWindowPos(hwnd as Hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) };
+        unsafe { SetWindowPos(hwnd as Hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS) };
     }
 
     pub fn contains(hwnd: isize, x: i32, y: i32) -> bool {

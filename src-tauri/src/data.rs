@@ -137,7 +137,9 @@ fn defaults() -> Map<String, Value> {
         "mail": [],
         "walk": true,
         "look": true,
-        // Done, changed or failed: shown 8 s, or until seen (8, 30, 120, "seen").
+        // Done, changed or failed: shown 8 s, or until seen ("seen"); 30 and
+        // 120 the other quick choices, any whole seconds from 3 to 600 too
+        // (settings.rs is_hold, #59).
         "hold": 8,
         // At each, and whenever she has something to tell that needs no
         // answer (a hello, a plugin's nudge): round her closed island a ring

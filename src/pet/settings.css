@@ -425,6 +425,37 @@
   align-self: flex-start;
 }
 
+/* How long endings stay (settings.js pageAlerts): its choices under its
+   words the same, and with Custom on, the box for its seconds beside them
+   (a box as the others, as tall as the choices), the unit after it. */
+#island-settings .hold-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+#island-settings .r.col.cue .hold-pick .seg {
+  align-self: auto;
+}
+
+#island-settings .hold-secs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#island-settings .in.secs {
+  flex: none;
+  width: 64px;
+  height: 27px;
+  padding: 0 8px;
+  border-radius: 14px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Buttons side by side at a row's end (the desktop's picture: picture, folder). */
 #island-settings .btns {
   display: flex;

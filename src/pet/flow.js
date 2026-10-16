@@ -90,11 +90,40 @@
 
   // How long what the island would have shown (a hello's words, a plugin's
   // card) stays to be seen on the next hover: as long as an ending stays
-  // (the hold setting: 8, 30 or 120 s, or until seen); a notice until seen.
+  // (the hold setting: 3 to 600 s, or until seen); a notice until seen.
   function keepFor(kind, hold) {
     if (kind === 'notice') return Infinity
     const secs = Number(hold)
     return Number.isFinite(secs) && secs > 0 ? secs * 1000 : Infinity
+  }
+
+  // The hold setting: whole seconds from 3 to 600 (settings.rs is_hold), or
+  // "seen". 8, 30 and 120 are its quick choices (settings.js); any other
+  // number is a custom one (#59).
+  const HOLD_MIN = 3
+  const HOLD_MAX = 600
+  const HOLD_QUICK = [8, 30, 120]
+
+  // Seconds typed in Custom's box, as kept: rounded, within 3 to 600 (an
+  // input method's full-width digits, or a unit after them, taken as well).
+  // Nothing typed, or no number: null, and the box goes back to what it was.
+  function holdSecs(typed) {
+    const text = String(typed ?? '')
+      .replace(/[０-９]/g, d => String(d.charCodeAt(0) - 0xff10))
+      .replace(/\s*(秒|s|secs?|seconds?)$/i, '')
+      .trim()
+    const secs = Number(text)
+    if (!text || !Number.isFinite(secs)) return null
+    return Math.min(HOLD_MAX, Math.max(HOLD_MIN, Math.round(secs)))
+  }
+
+  // Which choice is on: until seen, a quick one, or custom (a number of its
+  // own, or Custom picked to type one in). No whole number: until seen, as
+  // main reads it (main.rs hold).
+  function holdChoice(hold, custom = false) {
+    if (custom) return 'custom'
+    if (!Number.isInteger(hold) || hold < 0) return 'seen'
+    return HOLD_QUICK.includes(hold) ? hold : 'custom'
   }
 
   // --- The colours ----------------------------------------------------------------------
@@ -325,6 +354,11 @@
     cueFor,
     kindOfReact,
     keepFor,
+    HOLD_MIN,
+    HOLD_MAX,
+    HOLD_QUICK,
+    holdSecs,
+    holdChoice,
     palette,
     gradient,
     glows,

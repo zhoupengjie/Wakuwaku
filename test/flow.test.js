@@ -76,6 +76,45 @@ test('what the island would have shown stays as long as an ending does; a notice
   assert.equal(Flow.keepFor('plugin', 120), 120000)
   assert.equal(Flow.keepFor('hello', 'seen'), Infinity)
   assert.equal(Flow.keepFor('notice', 8), Infinity)
+  // A custom hold as long as it says (#59).
+  assert.equal(Flow.keepFor('hello', 45), 45000)
+  assert.equal(Flow.keepFor('plugin', 600), 600000)
+})
+
+test("Custom's seconds as typed: whole, within 3 to 600; no number is none (#59)", () => {
+  assert.equal(Flow.holdSecs('45'), 45)
+  assert.equal(Flow.holdSecs(' 45 '), 45)
+  assert.equal(Flow.holdSecs('3'), 3)
+  assert.equal(Flow.holdSecs('600'), 600)
+  assert.equal(Flow.holdSecs('2'), 3)
+  assert.equal(Flow.holdSecs('0'), 3)
+  assert.equal(Flow.holdSecs('-8'), 3)
+  assert.equal(Flow.holdSecs('601'), 600)
+  assert.equal(Flow.holdSecs('99999'), 600)
+  assert.equal(Flow.holdSecs('7.5'), 8)
+  assert.equal(Flow.holdSecs('7.4'), 7)
+  // An input method's full-width digits; a unit after them.
+  assert.equal(Flow.holdSecs('４５'), 45)
+  assert.equal(Flow.holdSecs('45秒'), 45)
+  assert.equal(Flow.holdSecs('45 s'), 45)
+  assert.equal(Flow.holdSecs('90 seconds'), 90)
+  for (const none of ['', '   ', 'x', '4x5', '秒', 'Infinity', null, undefined]) assert.equal(Flow.holdSecs(none), null, String(none))
+})
+
+test('which hold choice is on: until seen, a quick one, or Custom for any other number (#59)', () => {
+  assert.equal(Flow.holdChoice('seen'), 'seen')
+  for (const secs of Flow.HOLD_QUICK) assert.equal(Flow.holdChoice(secs), secs)
+  assert.deepEqual(Flow.HOLD_QUICK, [8, 30, 120])
+  assert.equal(Flow.holdChoice(45), 'custom')
+  assert.equal(Flow.holdChoice(3), 'custom')
+  assert.equal(Flow.holdChoice(600), 'custom')
+  // Custom picked, its box open before anything is typed: on, whatever is kept.
+  assert.equal(Flow.holdChoice(8, true), 'custom')
+  assert.equal(Flow.holdChoice('seen', true), 'custom')
+  // No whole number is until seen, as main reads it (main.rs hold).
+  for (const odd of [undefined, null, 'x', '8', 7.5, -8]) assert.equal(Flow.holdChoice(odd), 'seen', String(odd))
+  assert.equal(Flow.HOLD_MIN, 3)
+  assert.equal(Flow.HOLD_MAX, 600)
 })
 
 test('a ring: three turns over 2.55 s on its curve, lit 2.8 s, the dot as it fades', () => {

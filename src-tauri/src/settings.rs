@@ -418,6 +418,15 @@ fn is_taskbar_layout(v: &Value) -> bool {
     })
 }
 
+// How long done, review and error stay (main.rs hold): until seen, or whole
+// seconds from 3 to 600; the settings offer 8, 30 and 120, and Custom for
+// any other (#59; flow.js holdSecs keeps what is typed within).
+const HOLD_SECS: std::ops::RangeInclusive<u64> = 3..=600;
+
+fn is_hold(v: &Value) -> bool {
+    v.as_str() == Some("seen") || v.as_u64().is_some_and(|s| HOLD_SECS.contains(&s))
+}
+
 // What a settings patch may hold, checked: anything else is dropped.
 fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
     let is_bool = v.is_boolean();
@@ -447,7 +456,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "deskLayout" => is_desk_layout(v),
         // The programs' buttons in the order dragged: their keys (paths).
         "taskbarOrder" => v.as_array().is_some_and(|keys| keys.len() <= 200 && keys.iter().all(|k| k.as_str().is_some_and(|s| s.len() <= 1024))),
-        "hold" => v.as_str() == Some("seen") || matches!(v.as_u64(), Some(8 | 30 | 120)),
+        "hold" => is_hold(v),
         // When she has something to tell that needs no answer (a turn's end,
         // a hello, a plugin's nudge): the island open by itself, a ring round
         // it (the flow light), or only the dot (island.js cue).
@@ -903,6 +912,17 @@ mod tests {
         assert!(!super::is_island_look(&json!({ "edge": "glow" })));
         assert!(!super::is_island_look(&json!({ "bare": 1 })));
         assert!(!super::is_island_look(&json!({ "ink": "light" })));
+    }
+
+    // How long endings stay: until seen, or whole seconds from 3 to 600 (#59).
+    #[test]
+    fn holds() {
+        for ok in [json!("seen"), json!(3), json!(8), json!(30), json!(45), json!(120), json!(600)] {
+            assert!(super::is_hold(&ok), "{ok}");
+        }
+        for bad in [json!(2), json!(601), json!(0), json!(-8), json!(7.5), json!(8.0), json!("x"), json!("8"), json!(null), json!(true)] {
+            assert!(!super::is_hold(&bad), "{bad}");
+        }
     }
 }
 

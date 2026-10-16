@@ -49,7 +49,9 @@
   const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
   const HOMES = ['island', 'taskbar']
   const HOME_KEY = { island: 's.displayIsland', taskbar: 's.displayTaskbar' }
-  const HOLDS = ['seen', 8, 30, 120]
+  // How long endings stay: until seen, the quick choices, and Custom, whole
+  // seconds typed in a box beside them (flow.js holdSecs, #59).
+  const HOLDS = ['seen', ...window.Flow.HOLD_QUICK]
   // Minutes a session at rest stays in sight; 0 always (state.rs is_shown).
   const IDLE_HIDES = [15, 30, 60, 120, 0]
   const WAITS = [30, 60, 120, 290]
@@ -92,6 +94,9 @@
   // typed in them and not yet kept ("weather.City": "上海").
   let openPlugin = ''
   const drafts = {}
+  // Custom picked for how long endings stay, its box shown before anything
+  // is typed in it (until the settings close or another choice is picked).
+  let holdCustom = false
   // The monitor's hardware (LibreHardwareMonitor's) folded out, by its id.
   const openHardware = new Set()
   // The mail account being set up or changed, as Thunderbird's dialog has
@@ -676,7 +681,18 @@
 
   function pageAlerts() {
     const s = snap.settings
+    // How long endings stay: the choices under the words (five, too long
+    // beside them), and with Custom on, the box for its seconds beside them,
+    // kept as it is left or Enter is pressed (holdTyped).
     const holds = HOLDS.map(h => [h, h === 'seen' ? T('s.holdSeen') : h >= 60 ? T('settings.minutes', { n: h / 60 }) : T('settings.seconds', { n: h })])
+    holds.push(['custom', T('s.holdCustom')])
+    const holdOn = window.Flow.holdChoice(s.hold, holdCustom)
+    const range = esc(T('s.holdRange', { min: window.Flow.HOLD_MIN, max: window.Flow.HOLD_MAX }))
+    const typed = 'hold:secs' in drafts ? drafts['hold:secs'] : Number.isInteger(s.hold) ? String(s.hold) : ''
+    const secs =
+      holdOn === 'custom'
+        ? `<span class="hold-secs"><input class="in secs" data-hold="secs" value="${esc(typed)}" inputmode="numeric" maxlength="5" placeholder="${window.Flow.HOLD_MIN}–${window.Flow.HOLD_MAX}" title="${range}" aria-label="${range}" spellcheck="false" autocomplete="off"><span class="d">${esc(T('s.holdUnit'))}</span></span>`
+        : ''
     const waits = WAITS.map(w => [w, w >= 60 ? T('settings.minutes', { n: Math.round(w / 60) }) : T('settings.seconds', { n: w })])
     const idles = IDLE_HIDES.map(m => [m, !m ? T('s.idleAlways') : m >= 60 ? T('s.paperHours', { n: m / 60 }) : T('s.minutesShort', { n: m })])
     const notify = s.notify || {}
@@ -690,7 +706,7 @@
       ['ring', T('s.endCueRing')],
       ['none', T('s.endCueNone')],
     ]
-    return `${sec(T('s.holdTitle'))}<div class="grp">${row(esc(T('s.hold')), '', seg('hold', holds, s.hold))}<div class="r col cue"><div><div>${esc(T('s.endCue'))}</div><div class="d">${esc(T('s.endCueNote'))}</div></div>${seg('endCue', cues, cue)}</div></div>
+    return `${sec(T('s.holdTitle'))}<div class="grp"><div class="r col cue"><div>${esc(T('s.hold'))}</div><div class="hold-pick">${seg('hold', holds, holdOn)}${secs}</div></div><div class="r col cue"><div><div>${esc(T('s.endCue'))}</div><div class="d">${esc(T('s.endCueNote'))}</div></div>${seg('endCue', cues, cue)}</div></div>
       ${sec(T('s.idleTitle'))}<div class="grp">${row(esc(T('s.idleHide')), esc(T('s.idleHideNote')), seg('idleHideMin', idles, s.idleHideMin))}</div>
       ${sec(T('settings.notify'))}<div class="grp">
         ${row(esc(T('settings.notifyWaiting')), '', sw('notify.waiting', notify.waiting))}
@@ -2488,7 +2504,7 @@
     const box = body.contains(document.activeElement) && document.activeElement.matches('input, textarea') ? document.activeElement : null
     const which =
       box &&
-      (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : box.dataset.mon ? `[data-mon="${box.dataset.mon}"]` : box.dataset.mf ? `[data-mf="${box.dataset.mf}"]` : box.dataset.w ? `[data-w="${box.dataset.w}"]` : box.dataset.proxyAt !== undefined ? '[data-proxy-at]' : null)
+      (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : box.dataset.mon ? `[data-mon="${box.dataset.mon}"]` : box.dataset.hold ? '[data-hold]' : box.dataset.mf ? `[data-mf="${box.dataset.mf}"]` : box.dataset.w ? `[data-w="${box.dataset.w}"]` : box.dataset.proxyAt !== undefined ? '[data-proxy-at]' : null)
     const caret = which ? box.selectionStart : null
     const changed = setHTML(body, PAGES[tab]())
     if (reset) {
@@ -2621,7 +2637,10 @@
     clearInterval(clockTimer)
     for (const timer of thumbTimers) clearTimeout(timer)
     thumbTimers = []
+    // Seconds being typed are kept as the box is left (holdTyped); Custom is
+    // on next time only for a custom number kept.
     if (layer.contains(document.activeElement)) document.activeElement.blur()
+    holdCustom = false
     window.pet.settingsClosed()
     window.Island?.changed()
   }
@@ -2856,6 +2875,18 @@
         return draw()
       }
       if (key === 'ilookEdge') return ilookSave(ilookFor(), { ...ilookOf(ilookFor()), edge: raw })
+      // How long endings stay: Custom shows the box for its seconds, the
+      // caret in it (kept once typed: holdTyped); any other choice at once.
+      if (key === 'hold') {
+        holdCustom = raw === 'custom'
+        if (holdCustom) {
+          draw()
+          const box = layer.querySelector('[data-hold]')
+          box?.focus()
+          box?.select()
+          return
+        }
+      }
       if (key === 'paperPosition') return raw !== snap.winPaper?.position && paperDo('position', raw)
       if (key === 'paperEvery') return Number(raw) !== snap.winPaper?.every && paperDo('every', raw)
       if (key === 'winMode') {
@@ -3455,6 +3486,7 @@
     }
     if (e.target.dataset.field) drafts[e.target.dataset.field] = e.target.value
     if (e.target.dataset.mon) drafts[`mon:${e.target.dataset.mon}`] = e.target.value
+    if (e.target.dataset.hold) drafts['hold:secs'] = e.target.value
   })
 
   // The word an input method has chosen: looked for as if typed.
@@ -3471,6 +3503,7 @@
     if (e.target.dataset.ilook) return ilookInput(e.target, true)
     if (e.target.dataset.proxyAt !== undefined) return proxyAddress(e.target.value)
     if (e.target.dataset.mon) return monitorField(e.target.dataset.mon)
+    if (e.target.dataset.hold) return holdTyped(e.target)
     const key = e.target.dataset.field
     if (!key || !(key in drafts)) return
     const value = drafts[key].trim()
@@ -3499,6 +3532,27 @@
     return patch({ monitor: { ...m, lhmUser: typed.trim().replace(/:/g, '').slice(0, 64) } })
   }
 
+  // The seconds typed for how long endings stay, kept once Enter is pressed
+  // or the box is left: rounded, within 3 to 600 (Flow.holdSecs), shown so
+  // at once; no number goes back to what is kept.
+  function holdTyped(box) {
+    delete drafts['hold:secs']
+    const secs = window.Flow.holdSecs(box.value)
+    const kept = snap.settings.hold
+    box.value = String(secs ?? (Number.isInteger(kept) ? kept : ''))
+    if (secs === null || secs === kept) return draw()
+    patch({ hold: secs })
+  }
+
+  // Custom's box left empty, nothing custom kept: the choice kept shows again.
+  layer.addEventListener('focusout', e => {
+    if (!e.target.dataset?.hold) return
+    delete drafts['hold:secs']
+    if (e.target.value.trim() || window.Flow.holdChoice(snap?.settings?.hold) === 'custom') return
+    holdCustom = false
+    draw()
+  })
+
   // A plugin's settings changed, the others kept.
   function setPlugin(id, change) {
     const all = snap.settings.plugins || {}
@@ -3519,7 +3573,7 @@
         return sendDraft()
       }
       if (e.key === 'Enter' && e.target.id === 's-ref' && !e.isComposing) layer.querySelector('[data-fetch]')?.click()
-      if (e.key === 'Enter' && (e.target.dataset.field || e.target.dataset.mon || e.target.dataset.proxyAt !== undefined)) e.target.blur()
+      if (e.key === 'Enter' && (e.target.dataset.field || e.target.dataset.mon || e.target.dataset.hold || e.target.dataset.proxyAt !== undefined)) e.target.blur()
       if (e.key === 'Enter' && e.target.dataset.mf) layer.querySelector('[data-mail-find]:not([disabled]), [data-mail-save]:not([disabled])')?.click()
       if (e.key === 'Enter' && e.target.dataset.talk && !e.isComposing) say(e.target)
       return

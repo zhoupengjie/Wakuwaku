@@ -402,23 +402,76 @@
   // --- A widget in one place (§7's note; island.js takeWidgets) -------------------------------
   // Put on the desktop (alone, stacked, in a board), or on the taskbar while
   // that is her home: out of the closed island, neither taking turns there
-  // nor pinned at its end. The monitor's readings pinned at the island's end
-  // (or in the strip's part) by its setting, unless it is put elsewhere, and,
-  // the taskbar her home, only while the strip has that part (#53: taken
-  // off it, it takes its turns as any other). The open island lists every
-  // widget that is on, wherever it is, the monitor first while it is pinned
-  // or put elsewhere. all: the widgets with something to say (on or off);
-  // taskbar: her taskbar's layout as island.js tbLayout makes it whole.
-  function placement({ all = [], home = 'island', taskbar = null, desk = [], pin } = {}) {
+  // nor pinned at its end. The rest that are on are her capsule's members
+  // (capsule.js: the capsule setting's order and modes, or, without it,
+  // the widgets' order and the monitor's pin): those taking turns, those
+  // pinned at its end (two at most), those only in the open island. The
+  // taskbar her home, the monitor's readings are the strip's monitor part
+  // while it has one and its pin is on (#53: taken off it, it is a member
+  // as any other). The open island lists the members in their order, then
+  // those put elsewhere (where: 'bar' or 'desk', by id). all: the widgets
+  // with something to say (on or off); taskbar: her taskbar's layout as
+  // island.js tbLayout makes it whole; capsule: the capsule setting.
+  function placement({ all = [], home = 'island', taskbar = null, desk = [], pin, capsule } = {}) {
+    const C = root.Capsule || (typeof require === 'function' ? require('./capsule') : null)
     const onBar = home === 'taskbar' && taskbar ? Widgets.shownOn(taskbar, all) : new Set()
-    const out = new Set([...onBar, ...shownOn(desk, all)])
+    const onDesk = shownOn(desk, all)
+    const out = new Set([...onBar, ...onDesk])
     const monitor = all.find(w => w.id === 'monitor' && w.on !== false) || null
-    const part = home !== 'taskbar' || !taskbar || Object.values(taskbar).some(run => Array.isArray(run) && run.includes('monitor'))
-    const pinned = !!monitor && pin !== false && !out.has('monitor') && part
-    const turning = all.filter(w => w.on !== false && !(w === monitor && pinned) && !out.has(w.id))
-    const monFirst = !!monitor && (pinned || out.has('monitor'))
-    const listed = [...(monFirst ? [monitor] : []), ...all.filter(w => w.on !== false && !(monFirst && w === monitor) && (turning.includes(w) || out.has(w.id)))]
-    return { out, monitor, pinned, turning, listed }
+    const part = !taskbar || Object.values(taskbar).some(run => Array.isArray(run) && run.includes('monitor'))
+    const inPart = !!monitor && home === 'taskbar' && part && pin !== false && !out.has('monitor')
+    const inCapsule = w => w.on !== false && !out.has(w.id) && !(inPart && w === monitor)
+    const members = C.effective({ capsule, all, home, pin, inCapsule })
+    const turning = members.filter(m => m.mode === 'turn').flatMap(m => m.widgets)
+    const pins = members.filter(m => m.mode === 'pin').map(m => m.widgets[0])
+    const pinned = inPart || (home !== 'taskbar' && !!monitor && pins.includes(monitor))
+    const elsewhere = all.filter(w => w.on !== false && (out.has(w.id) || (inPart && w === monitor)))
+    const listed = [...members.flatMap(m => m.widgets), ...elsewhere]
+    const where = new Map(elsewhere.map(w => [w.id, onDesk.has(w.id) ? 'desk' : 'bar']))
+    return { out, monitor, pinned, turning, listed, members, pins, where }
+  }
+
+  // --- Let go of here from her home (picker.js, desk-drop.js) ---------------------------------
+  // From the cell wanted, row by row to the next free one, round to the top
+  // again (as Plasma finds a place: not the nearest, the next); null when
+  // there is none.
+  function nextFree(grid, [c0, r0], size, blocks = []) {
+    const [cw, ch] = spanOf(size)
+    const cols = grid.cols - cw + 1
+    const rows = grid.rows - ch + 1
+    if (cols <= 0 || rows <= 0) return null
+    const n = cols * rows
+    const start = Math.max(0, Math.min(rows - 1, r0)) * cols + Math.max(0, Math.min(cols - 1, c0))
+    for (let i = 0; i < n; i++) {
+      const j = (start + i) % n
+      const cell = [j % cols, Math.floor(j / cols)]
+      if (isFree(grid, cell, size, blocks)) return cell
+    }
+    return null
+  }
+
+  // Where one of a size let go of at (x, y) lands, the pointer at its
+  // middle: over a board, its first free cell (at tileSize); else the cell
+  // under it, or the next free one, clear of the icons if it can be, never
+  // over another widget. { ok, where: 'desk' | 'board', cell | spot, want, why }.
+  function landing({ grid, x, y, size, blocks = [], icons = [], board = null, tileSize = 's' }) {
+    if (board) {
+      const spot = boardFirst(board, tileSize)
+      return spot ? { ok: true, where: 'board', spot } : { ok: false, where: 'board', why: 'boardFull' }
+    }
+    const { w, h } = sizePx(size)
+    const want = snap(grid, x - w / 2, y - h / 2, size)
+    const cell = nextFree(grid, want, size, [...blocks, ...icons]) || nextFree(grid, want, size, blocks)
+    return cell ? { ok: true, where: 'desk', cell, want } : { ok: false, where: 'desk', want, why: 'full' }
+  }
+
+  // The layout with it there (a member: { type, of, name?, icon? }): out of
+  // wherever else it was on the desktop first (one place), then into the
+  // board, or alone on the cell of this display (key).
+  function dropped(layout, land, { m, size, tileSize = 's', key, boardId, newId }) {
+    if (!land?.ok) return layout
+    if (land.where === 'board') return intoBoard(layout, boardId, m, tileSize, land.spot, newId)
+    return [...without(layout, itemOf(m), newId), placed({ id: newId(), ...memberOf(m), size }, key, land.cell)]
   }
 
   const api = {
@@ -477,6 +530,9 @@
     shownOn,
     without,
     placement,
+    nextFree,
+    landing,
+    dropped,
   }
 
   if (typeof module !== 'undefined' && module.exports) {

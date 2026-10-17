@@ -46,8 +46,10 @@ test('on the desktop (alone, stacked or in a board): out of the turns and not pi
   assert.equal(p.pinned, false)
   assert.deepEqual([...p.out].sort(), ['monitor', 'stock-aapl', 'stock-nvda', 'today', 'weather'])
   assert.deepEqual(ids(p.turning), ['tokens'])
-  // The overview: every one on, wherever it is, the monitor first.
-  assert.deepEqual(ids(p.listed), ['monitor', 'today', 'tokens', 'weather', 'stock-aapl', 'stock-nvda'])
+  // The overview: every one on, the capsule's first (the picker of
+  // 2026-10-17), then those elsewhere, each saying where.
+  assert.deepEqual(ids(p.listed), ['tokens', 'monitor', 'today', 'weather', 'stock-aapl', 'stock-nvda'])
+  assert.deepEqual([...p.where.values()], ['desk', 'desk', 'desk', 'desk', 'desk'])
 })
 
 test('on the taskbar: out of the island while the taskbar is her home only', () => {

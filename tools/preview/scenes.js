@@ -220,6 +220,50 @@
         p.emit('taskbar:edit', null)
       },
     },
+    {
+      id: 'add-widgets',
+      title: '添加小工具',
+      note: '右键任务栏选了「添加小工具…」：任务栏进入编辑，右边是小工具库。把卡片拖到任务栏（会让出位置）、她的胶囊、桌面或「工作」板上；单击加到托盘前。鼠标停在任务栏的小工具上能设置或移除，把它拖回库里、或拖到任务栏上方那条空地也是移除，都能撤销；拖到桌面就是搬过去。随改随存，Esc 先关库，再按一次就完成。',
+      world: F => ({
+        ...desktop(F),
+        sessions: [F.session('working')],
+        taskbarLayout: { left: ['her'], center: ['start', 'apps'], right: [{ id: 'wtw', type: 'plugin', of: 'weather', size: 'M', icon: 'weather' }, 'monitor', 'tray', 'keys', 'quick', 'clock'] },
+      }),
+      // As her menu's 添加小工具… does.
+      play: async p => {
+        await p.wait(200)
+        p.emit('taskbar:edit', { picker: true })
+      },
+    },
+    {
+      id: 'edit-capsule',
+      title: '编辑胶囊',
+      note: '编辑任务栏时点了她的胶囊：上方是胶囊里的小工具。按住左边的点拖动排序（就是轮播和展开时的顺序）；每个选轮播、固定（最多两个，显示在胶囊右端）或展开时（只在展开的岛里）；× 移出胶囊（能撤销）；底下是轮播间隔。从小工具库把卡片拖到这块面板上也能加进来。',
+      world: F => ({
+        ...desktop(F),
+        sessions: [],
+        deskLayout: F.DESK.everyday.filter(e => e.id === 'wd1' || e.id === 'wd2'),
+        config: {
+          capsule: {
+            members: [
+              { key: 'plugin:weather', mode: 'pin' },
+              { key: 'widget:today', mode: 'turn' },
+              { key: 'plugin:pomodoro', mode: 'turn' },
+              { key: 'widget:inbox-a1', mode: 'open' },
+              { key: 'widget:tokens', mode: 'turn' },
+              { key: 'plugin:countdown', mode: 'turn' },
+            ],
+          },
+        },
+      }),
+      // Editing the taskbar, then a press on her capsule (as 编辑胶囊 does at the top).
+      play: async p => {
+        await p.wait(200)
+        p.emit('taskbar:edit', null)
+        await p.wait(300)
+        p.emit('island:picker', { open: 'capsule' })
+      },
+    },
   ]
   const sceneById = id => SCENES.find(s => s.id === id) || null
 
@@ -295,6 +339,8 @@
     { id: 'scene-island-home', section: 'scenes', scene: 'island-home', title: '灵动岛模式 · 展开', page: 'island', view: [400, 0, 800, 420], steps: openIsland },
     { id: 'scene-light-clear', section: 'scenes', scene: 'light-clear', title: '浅色 + 透明任务栏', page: 'island', view: STRIP_VIEW },
     { id: 'scene-edit-layout', section: 'scenes', scene: 'edit-layout', title: '编辑任务栏布局中', page: 'island', view: [0, above(200), 1600, 200], settle: 700 },
+    { id: 'scene-add-widgets', section: 'scenes', scene: 'add-widgets', title: '添加小工具 · 编辑任务栏，右边是小工具库', page: 'screen', view: WHOLE, budget: 4000, settle: 700 },
+    { id: 'scene-edit-capsule', section: 'scenes', scene: 'edit-capsule', title: '编辑胶囊 · 她的胶囊上方的面板', page: 'island', view: [0, above(440), 720, 440], settle: 700 },
 
     // --- The taskbar's strip ---------------------------------------------------------------
     ...[

@@ -15,7 +15,7 @@
 - 模拟器的「场景」一栏一键切过去，`#<id>` 打开时直接进这个场景（托管页只把 `#记号` 传进来，没有 `?参数`）；
 - 样例页的一张图（`LIST` 里一项）= 一个场景 + 拍什么（哪个页面、屏幕上哪一块、拍前再做什么）。`page: 'screen'` 拍整个屏幕（桌面页在下，她的家在上，和模拟器一样）。还有一批只有样例页用的细节图，各带一个小世界（`world`）。
 
-现在的场景：新用户第一次打开、平常、三个会话在忙、等你批准、做完了（流光）、出错了、放满小工具的任务栏、桌面、空桌面、灵动岛模式、浅色 + 透明任务栏、编辑任务栏布局中。
+现在的场景：新用户第一次打开、平常、三个会话在忙、等你批准、做完了（流光）、出错了、放满小工具的任务栏、桌面、空桌面、灵动岛模式、浅色 + 透明任务栏、编辑任务栏布局中、添加小工具（编辑任务栏，右边开着小工具库）、编辑胶囊（胶囊上方的面板）。
 
 加一个场景：在 `SCENES` 里加一项（`id`、`title`、`note`、`world`，可选 `home`、`mode`、`play`），在 `LIST` 里加一张它的图（`scene: '<id>'`、`section: 'scenes'`、`page`、`view`）。`test/preview.test.js` 会查世界是否完整、布局里的小工具是否都在、每个场景有没有图。新数据放进 `fixtures.js`，新的「Rust 会发的东西」放进 `fake-tauri.js`。
 
@@ -31,7 +31,7 @@ node tools/preview/publish.js serve [端口] [文件夹]          # 按发布的
 - **页头标签**：`build` 默认从 git 取「主线 · 3ec87d9」或「分支 simulator · 3ec87d9」，工作区有没提交的改动再加「+ 未提交的改动」；`--label` 换成自己的话（`--label ""` 不要标签）。
 - **发布（协调来做）**：主线版发到固定的那个链接；分支要验收时，另 `build` 一份带分支标签的，单独发一个 Artifact。发布用 Artifact 工具：`file_path` 是文件夹里的 `playground.html`，`files` 是 `files.json` 那张表（发布路径 → 本地文件）。更新已有的链接时带上 `url`。
 - `playground.html` 只有页面内容（title、meta、一个 style、标记和脚本），托管方会套上 html/head/body；`serve`、`dev` 也照这样套。仓库里这一份只能通过 `publish.js` 打开。
-- `playground.js` 替 Rust 回答两个页面（`window.WakuHost`）：设置的保存和回送、询问的回答、桌面布局、程序按钮的前后台和固定、音量、任务栏布局编辑时的键盘。它还代画 Windows 画的东西：她的右键菜单、窗口的实时预览、岛下面的亚克力。指针按她的窗口那样「穿过」：哪个页面的元素在指针下面，哪个 iframe 才接住指针。需要 Windows 的事（开始菜单、打开程序、连接 agent）不做，在左下角说一声。
+- `playground.js` 替 Rust 回答两个页面（`window.WakuHost`）：设置的保存和回送、询问的回答、桌面布局、程序按钮的前后台和固定、音量、任务栏布局编辑时的键盘。它还代画 Windows 画的东西：她的右键菜单（含「添加小工具…」「编辑胶囊」）、窗口的实时预览、岛下面的亚克力；从小工具库拖到桌面时，替 Rust 把指针位置和松手转给桌面页（`desk_drag_preview`、`desk_drop`，桌面页回 `desk_drag_answer`）。指针按她的窗口那样「穿过」：哪个页面的元素在指针下面，哪个 iframe 才接住指针。需要 Windows 的事（开始菜单、打开程序、连接 agent）不做，在左下角说一声。
 - 本地还能用参数：`?home=island`、`?mode=light`、`?material=clear`、`?edge=left`；截图钩子 `?demo=open|card|done|ring|ask|answer|edit|menu|thumbs|settings|probe|check`，加 `&still=1` 让过渡停在终点。`window.WakuPlay` 给外面的检查用（当前场景、frame 载入次数、换样式次数）。无头 Edge 窗口最窄 500 px；看 400 px 宽用 `http://127.0.0.1:8765/__frame?w=400&h=860`。
 
 ## 样例页（gallery）

@@ -16,7 +16,7 @@ const compare = require('../tools/preview/compare')
 const REPO = path.join(__dirname, '..')
 
 // The playground's one-click scenes, as agreed (2026-10-17), in order.
-const WANTED = ['新用户第一次打开', '平常', '三个会话在忙', '等你批准', '做完了（流光）', '出错了', '放满小工具的任务栏', '桌面', '空桌面', '灵动岛模式', '浅色 + 透明任务栏', '编辑任务栏布局中']
+const WANTED = ['新用户第一次打开', '平常', '三个会话在忙', '等你批准', '做完了（流光）', '出错了', '放满小工具的任务栏', '桌面', '空桌面', '灵动岛模式', '浅色 + 透明任务栏', '编辑任务栏布局中', '添加小工具', '编辑胶囊']
 
 test('the playground has each agreed scene, in order, with a note on what to try', () => {
   assert.deepEqual(

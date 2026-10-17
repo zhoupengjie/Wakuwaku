@@ -254,17 +254,21 @@
   // What is open on her home's page that a reload would close: the settings
   // (on their tab), the layout being edited.
   function captureUi() {
-    const ui = { settings: null, editing }
+    const ui = { settings: null, editing, picker: false, capsule: false }
     try {
       const win = frames.island.win
       if (win?.Settings?.isOpen()) ui.settings = win.document.querySelector('.s-tabs button.on')?.dataset.tab || 'now'
+      ui.picker = !!win?.Picker?.isOpen()
+      ui.capsule = !!win?.CapsulePanel?.isOpen()
     } catch {}
     return ui
   }
   function restoreUi(ui) {
-    if (ui?.editing) toIsland('taskbar:edit', null)
+    if (ui?.editing) toIsland('taskbar:edit', ui.picker ? { picker: true } : null)
+    else if (ui?.picker) toIsland('island:picker', { open: 'picker' })
+    if (ui?.capsule) toIsland('island:picker', { open: 'capsule' })
     if (ui?.settings) toIsland('island:settings', { tab: ui.settings })
-    if (ui?.editing || ui?.settings) focusFrame(frames.island)
+    if (ui?.editing || ui?.settings || ui?.picker || ui?.capsule) focusFrame(frames.island)
   }
 
   // A script or page of theirs changed: these frames anew, the world kept.
@@ -445,6 +449,9 @@
       if ('taskbarMaterial' in p) world.material = p.taskbarMaterial
       if ('taskbarEdge' in p && p.taskbarEdge !== world.edge) setEdge(p.taskbarEdge, false)
       for (const k of ['display', 'taskbarMaterial', 'taskbarEdge']) delete p[k]
+      // The desktop's layout is the desktop's (desk.rs keeps it, its pages hear it).
+      if (Array.isArray(p.deskLayout)) world.deskLayout = p.deskLayout
+      delete p.deskLayout
       Object.assign(world.config, p)
       setTimeout(() => {
         frames.island.win?.Fake.emit('settings:changed', frames.island.win.Fake.snapshot())
@@ -572,12 +579,32 @@
       toIsland('desk:ask', { what, args: clone(args) })
       return { value: null }
     },
+    // A widget dragged from her home over the desktop (picker.js): where it
+    // is, in the desktop's page's px, to that page (desk-drop.js), as desk.rs
+    // will forward it (phase 2); and what that page said, back.
+    desk_drag_preview(from, { at }) {
+      frames.desk.win?.Fake.emit('desk:drag-preview', at ? toDesk(from, at) : null)
+      return { value: null }
+    },
+    desk_drop(from, { at }) {
+      if (at) frames.desk.win?.Fake.emit('desk:drop', toDesk(from, at))
+      return { value: null }
+    },
+    desk_drag_answer(from, { said }) {
+      toIsland('island:desk-answer', clone(said))
+      return { value: null }
+    },
     settings_hooks: () => noteValue('连接要改本机的 Claude Code 设置，试玩里不做'),
     settings_codex_hooks: () => noteValue('连接要改本机的 Codex 设置，试玩里不做'),
     settings_open_site: () => noteValue('打开网页在这里不做'),
     settings_update: () => noteValue('更新在这里不做'),
     settings_wallpaper: () => noteValue('换壁纸要在 Windows 上'),
     settings_login: () => noteValue('开机启动要在 Windows 上'),
+  }
+  // A point in her home's page, in the desktop's page.
+  function toDesk(from, at) {
+    const f = byLabel(from) || frames.island
+    return { ...clone(at), x: f.rect[0] + at.x - frames.desk.rect[0], y: f.rect[1] + at.y - frames.desk.rect[1] }
   }
   const noteValue = text => {
     note(text)
@@ -606,6 +633,7 @@
   const MENUS = {
     taskbarHome: () => [
       ...(editing ? [['endEdit', '退出编辑'], '-'] : []),
+      ['addWidgets', '添加小工具…'],
       ['dnd', '勿扰', !!world.config.dnd],
       ['settings', '设置…'],
       ['editTaskbar', '编辑任务栏布局'],
@@ -618,6 +646,9 @@
       ['quit', '退出'],
     ],
     islandHome: () => [
+      ['addWidgets', '添加小工具…'],
+      ['editCapsule', '编辑胶囊'],
+      '-',
       ['win', '宠物 ›'],
       ['win', '大小 ›'],
       ['walk', '空闲时走动', world.config.walk !== false],
@@ -673,6 +704,14 @@
       focusFrame(frames.island)
     } else if (act === 'editTaskbar') {
       toIsland('taskbar:edit', null)
+      focusFrame(frames.island)
+    } else if (act === 'addWidgets') {
+      // On the taskbar: editing it, the picker open; at the top, the picker alone.
+      if (world.home === 'taskbar') toIsland('taskbar:edit', { picker: true })
+      else toIsland('island:picker', { open: 'picker' })
+      focusFrame(frames.island)
+    } else if (act === 'editCapsule') {
+      toIsland('island:picker', { open: 'capsule' })
       focusFrame(frames.island)
     } else if (act === 'endEdit') toIsland('taskbar:edit', { end: true })
     else if (act.startsWith('display:')) setHome(act.slice(8))
@@ -764,8 +803,8 @@
     ]
     if (mon.detail?.series?.points) mon.detail.series.points = [...mon.detail.series.points.slice(1), cpu]
     if (mon.detail?.rows?.[0]) mon.detail.rows[0].value = `${cpu}%`
-    frames.island.win?.Fake.emit('pet:widgets', { widgets: world.widgets })
-    frames.desk.win?.Fake.emit('desk:widgets', { widgets: world.widgets })
+    frames.island.win?.Fake.emit('pet:widgets', { widgets: Fake.widgetsNow() })
+    frames.desk.win?.Fake.emit('desk:widgets', { widgets: Fake.widgetsNow() })
   }, 2000)
 
   // --- The panel -----------------------------------------------------------------------------

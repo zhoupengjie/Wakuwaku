@@ -124,6 +124,14 @@
     { id: 'stretch', icon: 'timer', on: false, state: 'off', params: [{ name: 'Minutes', kind: 'number', required: false, value: '50' }] },
   ]
 
+  // What the plugins off above (PLUGINS) say once they are turned on (put
+  // somewhere from the picker: fake-tauri.js widgetsNow).
+  const SLEEPING = {
+    ci: { id: 'ci-main', plugin: 'ci', from: 'script', on: true, icon: 'check', color: '#34d27b', label: 'wakuwaku · main', value: '通过', detail: { sizes: ['s', 'm'], extra: '3 分钟前' } },
+    devserver: { id: 'devserver', plugin: 'devserver', from: 'script', on: true, icon: 'server', color: '#36cfc9', label: 'localhost:5173', value: '运行中' },
+    stretch: { id: 'stretch', plugin: 'stretch', from: 'script', on: true, icon: 'timer', color: '#b18cff', label: '久坐提醒', value: '32 分钟后' },
+  }
+
   // --- The taskbar ------------------------------------------------------------------------
   let apps = 0
   const app = (name, color, letter, titles, opts = {}) => {
@@ -239,7 +247,7 @@
     },
   }
 
-  const api = { T0, appIcon, trayIcon, session, others, reading, ASK, WIDGETS, widget, widgets, PLUGINS, WINDOWS, TRAY, KEYS, DESK, TASKBAR }
+  const api = { T0, appIcon, trayIcon, session, others, reading, ASK, WIDGETS, widget, widgets, PLUGINS, SLEEPING, WINDOWS, TRAY, KEYS, DESK, TASKBAR }
   if (typeof module !== 'undefined' && module.exports) module.exports = api
   else root.Fixtures = api
 })(typeof window !== 'undefined' ? window : globalThis)

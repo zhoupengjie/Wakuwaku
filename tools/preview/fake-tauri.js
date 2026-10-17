@@ -273,8 +273,31 @@
     taskbarMaterial: world.material,
     ...(world.taskbarLayout ? { taskbarLayout: world.taskbarLayout } : {}),
     deskLayout: world.deskLayout,
+    // The plugins running as the settings say it (scripts.rs: plugins[id].on).
+    plugins: Object.fromEntries(world.plugins.filter(p => p.on).map(p => [p.id, { on: true }])),
     ...world.config,
   })
+
+  // A plugin she runs on or off (scripts.rs: plugins[id].on, the world's
+  // own until the settings say).
+  function pluginOn(id) {
+    const c = config().plugins?.[id]
+    if (typeof c?.on === 'boolean') return c.on
+    return !!world.plugins.find(p => p.id === id)?.on
+  }
+  // The widgets as main sends them (widgets_view): each on as widgetsOff
+  // says; a plugin's gone once it is off (scripts.rs stops it), and one
+  // turned on that had none says what the fixtures have for it
+  // (Fixtures.SLEEPING: the picker's plugins, put somewhere).
+  function widgetsNow() {
+    const off = Array.isArray(config().widgetsOff) ? config().widgetsOff : []
+    const list = world.widgets.filter(w => !w.plugin || pluginOn(w.plugin)).map(w => ({ ...w, on: !off.includes(w.id) }))
+    const sleeping = window.Fixtures?.SLEEPING || {}
+    for (const p of world.plugins) if (pluginOn(p.id) && !list.some(w => w.plugin === p.id) && sleeping[p.id]) list.push({ ...sleeping[p.id], on: !off.includes(sleeping[p.id].id) })
+    return list
+  }
+  // The plugins as scripts.rs views them: on and running, or off.
+  const pluginsNow = () => world.plugins.map(p => (pluginOn(p.id) ? { ...p, on: true, state: p.state === 'off' ? 'running' : p.state } : { ...p, on: false, state: 'off' }))
 
   const IDLE = { id: '', project: '', agent: 'claude', jump: false, mood: 'idle', detail: null, since: null, took: null, name: '', step: null, stepSince: null, todo: null, files: 0, reply: '', error: null }
 
@@ -301,7 +324,7 @@
       fullScreen: false,
       plate: true,
       ...(world.home !== 'taskbar' ? { winLight: world.mode === 'light' } : {}),
-      widgets: world.widgets,
+      widgets: widgetsNow(),
       unconnected: !world.connected,
       ...(world.connected ? {} : { tools: ['claude', 'codex'] }),
     }
@@ -343,13 +366,13 @@
       crash: { can: false },
       fullscreenAvailable: true,
       plate: true,
-      widgets: world.widgets,
+      widgets: widgetsNow(),
       lhm: { status: 'none' },
       hw: {},
       monitorSource: 'builtin',
       cpuSensors: { state: 'off' },
       lhmSetup: {},
-      plugins: world.plugins,
+      plugins: pluginsNow(),
       mail: [],
       mailAgents: { claude: true, codex: true },
       mailModels: {},
@@ -412,7 +435,7 @@
     if (role === 'bar') return emit('bar:state', barState())
     if (role === 'desk') {
       emit('desk:state', deskState())
-      emit('desk:widgets', { widgets: world.widgets })
+      emit('desk:widgets', { widgets: widgetsNow() })
       emit('desk:paper', deskPaper())
       return
     }
@@ -466,7 +489,11 @@
     settings_get: () => snapshot(),
     // Kept, then sent back as main does: the settings anew, the island drawn anew.
     settings_set: ({ patch }) => {
-      Object.assign(world.config, patch || {})
+      const p = { ...(patch || {}) }
+      // The desktop's layout is the desktop's (desk.rs keeps it for its pages).
+      if (Array.isArray(p.deskLayout)) world.deskLayout = p.deskLayout
+      delete p.deskLayout
+      Object.assign(world.config, p)
       later(() => {
         emit('settings:changed', snapshot())
         if (role === 'island') emit('pet:update', payload())
@@ -530,6 +557,8 @@
     payload,
     snapshot,
     config,
+    widgetsNow,
+    pluginsNow,
     deskState,
     stripPaper,
     barState,

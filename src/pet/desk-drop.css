@@ -1,0 +1,55 @@
+/* A widget dragged from her home over the desktop (desk-drop.js): the
+   grid's cells faintly, where it would land as a dashed place (as a board
+   shows where a tile goes, .bghost), amber where it may not; a board it
+   would go into ringed. */
+.dcells {
+  position: absolute;
+  z-index: 0;
+  border-radius: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='84' height='84'%3E%3Crect x='0.75' y='0.75' width='70.5' height='70.5' rx='14' fill='none' stroke='white' stroke-opacity='0.16' stroke-width='1.5' stroke-dasharray='3 5'/%3E%3C/svg%3E");
+  background-size: 84px 84px;
+  pointer-events: none;
+}
+
+body.lw .dcells {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='84' height='84'%3E%3Crect x='0.75' y='0.75' width='70.5' height='70.5' rx='14' fill='none' stroke='black' stroke-opacity='0.14' stroke-width='1.5' stroke-dasharray='3 5'/%3E%3C/svg%3E");
+}
+
+.dcells[hidden],
+.dland[hidden] {
+  display: none;
+}
+
+.dland {
+  position: absolute;
+  z-index: 50;
+  box-sizing: border-box;
+  border: 2px dashed color-mix(in srgb, var(--w-fg) 70%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--w-fg) 10%, transparent);
+  pointer-events: none;
+  transition:
+    left 0.1s ease-out,
+    top 0.1s ease-out;
+}
+
+.dland.no {
+  border-color: var(--w-amber);
+  background: color-mix(in srgb, var(--w-amber) 14%, transparent);
+}
+
+.dw.board.dhot .db {
+  outline: 2px solid color-mix(in srgb, var(--w-fg) 70%, transparent);
+  outline-offset: 3px;
+}
+
+.dw.board.dno .db {
+  outline: 2px solid var(--w-amber);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dland {
+    transition: none;
+  }
+}

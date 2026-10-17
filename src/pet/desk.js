@@ -1338,5 +1338,30 @@
     shake: id => shake(nodes.get(id)),
     toast: (id, text) => nodes.get(id) && toast(nodes.get(id), text),
     paperAgain: () => lastPaper && setPaper(lastPaper),
+    // desk-drop.js: a widget from her home let go of over this display (the
+    // picker of 2026-10-17): what is here, and how it is kept.
+    inner: {
+      get here() {
+        return here
+      },
+      get layout() {
+        return layout
+      },
+      get all() {
+        return all
+      },
+      get icons() {
+        return icons
+      },
+      nodes,
+      grid,
+      boardUnder,
+      boardLabel,
+      keepLayout,
+      loadIcons,
+      shake,
+      toast,
+      newId,
+    },
   }
 })()

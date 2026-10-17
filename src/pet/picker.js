@@ -67,7 +67,7 @@
     sep: '<path d="M12 4v16"/>',
   }
   // The gap a widget opens on the strip as it comes (its width, px).
-  const GAP_W = { M: 112, S: 64, part: 96, flex: 40, gap: 20, sep: 14 }
+  const GAP_W = { M: 112, S: 64, part: 96, flex: 40, gap: 20, sep: 14, side: 44 }
   // Dragged this far above the strip (across it), a widget from it goes.
   const BAND_PX = 90
   const UNDO_MS = 10000
@@ -502,7 +502,7 @@
       return note1(T('picker.already'))
     }
     const at = P.beforeTray(Isle.tbLayout())
-    const fit = fitFor(card.spacer ? GAP_W[card.spacer] : GAP_W[sizeOfCard(card)])
+    const fit = fitFor(card.spacer ? GAP_W[card.spacer] : Isle.isSide() ? GAP_W.side : GAP_W[sizeOfCard(card)])
     if (!fit.ok) return refuse(node, T('picker.full'))
     putOnStrip(card.key, at, fit.shrink, null, card)
   }
@@ -517,13 +517,15 @@
     // The middle run stays where it is centred (island.js alignApps keeps
     // it there, never moving it back): what lies before it is used too.
     const mid = getComputedStyle(Isle.zones.center)
-    let used = 12 + (edge ? L(edge.getBoundingClientRect()) : 0) + (parseFloat(Isle.isSide() ? mid.marginTop : mid.marginLeft) || 0)
+    // A side bar's: its programs scroll when crowded (two buttons' room kept), its middle run moves up.
+    const side = Isle.isSide()
+    let used = 12 + (edge ? L(edge.getBoundingClientRect()) : 0) + (side ? 0 : parseFloat(mid.marginLeft) || 0)
     const shrinkable = []
     for (const z of Object.values(Isle.zones)) {
       used += 8
       for (const n of z.children) {
         if (n === gapNode || n === except || n.classList.contains('pk-lifted')) continue
-        used += L(n.getBoundingClientRect())
+        used += side && n === Isle.PART_NODES.apps ? Math.min(L(n.getBoundingClientRect()), 88) : L(n.getBoundingClientRect())
         const e = n._entry
         if (e && Widgets.isSource(e) && n.dataset.size === 'M' && !n.classList.contains('S')) shrinkable.push({ id: e.id, width: L(n.getBoundingClientRect()) })
       }
@@ -831,7 +833,7 @@
         d.strip = there
         d.node = there === 'monitor' ? Isle.PART_NODES.monitor : Isle.entryNodes.get(there)
       }
-      d.width = card.spacer ? GAP_W[card.spacer] : d.node ? Isle.len(d.node.getBoundingClientRect()) : GAP_W[sizeOfCard(card)]
+      d.width = card.spacer ? GAP_W[card.spacer] : d.node ? Isle.len(d.node.getBoundingClientRect()) : Isle.isSide() ? GAP_W.side : GAP_W[sizeOfCard(card)]
     } else {
       const layout = Isle.tbLayout()
       const rec = P.removalOf(layout, p.key)

@@ -205,8 +205,21 @@
     // Windows' look ({ mode: dark | light, accent: { base, light, dark } }),
     // for the taskbar to be as Windows' own is.
     onLook: on('taskbar:look'),
-    // The taskbar's layout to be edited by dragging (its menu).
+    // The taskbar's layout to be edited by dragging (its menu; { picker }:
+    // 添加小工具…, the picker open with it).
     onTaskbarEdit: on('taskbar:edit'),
+    // Her menu in the island's home (picker.js): 添加小工具… ({ open:
+    // 'picker' }) or 编辑胶囊 ({ open: 'capsule' }).
+    onPicker: on('island:picker'),
+    // A widget dragged from her home over the desktop (picker.js), for the
+    // desktop's page of the display under it (desk-drop.js; the Rust side
+    // forwards both, phase 2): where it would land shown ({ x, y, item,
+    // size }, in this page's px; null: off the desktop again), and let go
+    // there ({ x, y, item, size, ticket }). What that page said back: {
+    // ticket, ok, where, why } (ticket null: about the preview).
+    deskPreview: at => send('desk_drag_preview', { at: at || null }),
+    deskDrop: at => send('desk_drop', { at }),
+    onDeskAnswer: on('island:desk-answer'),
     // A desktop widget's page asks the island's (desk.rs desk_ask): a
     // widget's settings ({ what: 'settings', args: { widget } }), widgets
     // put elsewhere ({ what: 'place', args: { items, where, stack } }).

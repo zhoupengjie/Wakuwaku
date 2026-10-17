@@ -346,6 +346,12 @@
   let placedOut = new Set()
   let pinnedNow = false
   let listedNow = []
+  // picker.js: her capsule's members (capsule.js: the capsule setting's
+  // order and modes), those pinned at its right end, and where each one put
+  // elsewhere is ('bar', 'desk'), for the open island's list.
+  let membersNow = []
+  let pinsNow = []
+  let whereNow = new Map()
 
   // The widgets as sent: those that take turns are those on, but for the
   // monitor pinned and what is put elsewhere (deskgrid.js placement, the
@@ -354,8 +360,8 @@
   function takeWidgets(all) {
     const was = widgets.length ? widgets[widgetAt % widgets.length].id : null
     allWidgets = Array.isArray(all) ? all : []
-    const p = DeskGrid.placement({ all: allWidgets, home: home(), taskbar: home() === 'taskbar' ? tbLayout() : null, desk: config.deskLayout, pin: config.monitor?.pin })
-    ;({ monitor, pinned: pinnedNow, listed: listedNow, out: placedOut, turning: widgets } = p)
+    const p = DeskGrid.placement({ all: allWidgets, home: home(), taskbar: home() === 'taskbar' ? tbLayout() : null, desk: config.deskLayout, pin: config.monitor?.pin, capsule: config.capsule })
+    ;({ monitor, pinned: pinnedNow, listed: listedNow, out: placedOut, turning: widgets, members: membersNow, pins: pinsNow, where: whereNow } = p)
     const still = widgets.findIndex(w => w.id === was)
     if (still >= 0) widgetAt = still
   }
@@ -589,8 +595,10 @@
     const turning = el('span', 'turning')
     turning.append(words, ...(more ? [more] : []), value)
     const isBare = !words.textContent && !value.textContent && !more
-    const pinned = isPinned() && home() === 'island' ? el('span', 'pinned') : null
-    if (pinned) pinned.innerHTML = Widgets.partsHTML(monitor)
+    // picker.js: the members pinned at its end (two at most, capsule.js): the
+    // monitor's readings as they were, another its glyph and value.
+    const pinned = pinsNow.length ? el('span', 'pinned') : null
+    if (pinned) pinned.innerHTML = pinsNow.map(w => (Widgets.partsOf(w) ? Widgets.partsHTML(w) : `<span class="wpin" style="color:${ink(w.color) || hue().idle}">${Widgets.iconHTML(w, lang)}<b>${WCards.esc(WCards.briefOf(w, { lang, light: inkLight, detailed: isDetailed() }).value)}</b></span>`)).join('')
     compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), ...(isBare && pinned ? [] : [turning]), ...(pinned ? [pinned] : []))
     compact.classList.toggle('bare', isBare)
     // As wide as set, and the readings' width more when pinned (their own,
@@ -669,6 +677,9 @@
     const row = el('span', `wrow wr-${size}${isShown ? ' on' : ''}${open ? ' open' : ''}${card ? ' carded' : ''}`)
     row.dataset.widget = widget.id
     row.innerHTML = WCards.rowHTML(widget, size, ctx, { open, card })
+    // picker.js: one put elsewhere (after the capsule's own) says where.
+    const where = whereNow.get(widget.id)
+    if (where) row.querySelector('.wtwo, .wl')?.after(el('span', 'wwhere', t(lang, where === 'desk' ? 'capsule.atDesk' : 'capsule.atBar')))
     fillHer(row, 14)
     if (!open) return row
     const unfolded = el('span', 'icard')
@@ -2037,8 +2048,8 @@
     alignApps()
     placeSlot()
     snapStart()
-    // Editing: the chosen one's tools over it, where it is now.
-    if (editLayout && chosen) drawTools()
+    // Editing: picker.js's popover over its widget, where it is now.
+    if (editLayout) window.Picker?.relaid()
   }
 
   // The middle run in the middle of the screen, as Windows 11 has Start and
@@ -2098,7 +2109,7 @@
     if (glideOn?.isConnected) glideTo(glideOn, true)
     placeSlot()
     snapStart()
-    if (editLayout && chosen) drawTools()
+    if (editLayout) window.Picker?.relaid()
     if (wgFor) drawWidgetPop()
     requestAnimationFrame(sendTrayRects)
   })
@@ -2321,7 +2332,8 @@
   let stackFor = null
   let imeOpen = false
   function watchPresses() {
-    const want = !!popFor || trayOpen || !!wgFor || !!stackFor || menuFor?.where === 'bar' || imeOpen
+    // picker.js: its capsule panel, its popover, closed by a press elsewhere too.
+    const want = !!popFor || trayOpen || !!wgFor || !!stackFor || menuFor?.where === 'bar' || imeOpen || !!window.Picker?.watches()
     if (want === watching) return
     watching = want
     window.pet.taskbar.watch(want)
@@ -2447,7 +2459,8 @@
     }
     arranged = ''
     update()
-    if (libOpen) drawLibrary()
+    // picker.js: its cards' "已放" anew.
+    window.Picker?.changed()
   }
 
   // Off the taskbar, and kept so.
@@ -2472,6 +2485,9 @@
     const group = Widgets.isGroup(entry)
     const w = group ? allWidgets.find(x => x.id === (wgPick || entryNodes.get(wgFor)._slides?.[entryNodes.get(wgFor)._at || 0]?.w?.id)) : null
     if (what === 'remove') {
+      // picker.js: taken off with a way back (undo), off once it is nowhere.
+      const at = group && w ? entry.items.findIndex(m => Widgets.sourcesOf(m, allWidgets).includes(w)) : -1
+      if (window.Picker?.remove({ entry: entry.id, member: at })) return closeWidgetPop()
       if (!group) return removeEntry(entry.id)
       const index = w ? entry.items.findIndex(m => Widgets.sourcesOf(m, allWidgets).includes(w)) : -1
       return index >= 0 ? removeMember(entry.id, index) : removeEntry(entry.id)
@@ -2748,7 +2764,11 @@
       parts.push(item('board', t(lang, 'desk.newBoard'), '', 'new'))
     }
     if (w) parts.push(item('settings', t(lang, 'menu.settings')))
-    parts.push(item('remove', t(lang, bar && entry ? 'menu.remove' : 'menu.off')))
+    // picker.js: in the open island, a member's way of showing in her
+    // capsule (under its name), and out of it, or off where it is.
+    const isle = !bar && w ? window.Picker?.isleMenu?.(w, { opt, line }) : null
+    if (isle) parts.splice(1, 0, ...isle.lines)
+    parts.push(item('remove', isle?.remove || t(lang, bar && entry ? 'menu.remove' : 'menu.off')))
     parts.push('<div class="wmwhy" hidden></div>')
     return parts.join('')
   }
@@ -2857,7 +2877,12 @@
         return entry && keepLayout(Widgets.takeOut(tbLayout(), entry.id, Number(v), newId))
       case 'settings':
         return w && openWidgetSettings(w)
+      // picker.js: its way of showing in her capsule.
+      case 'cmode':
+        return w && window.Picker?.setMode(w, v)
       case 'remove':
+        // picker.js: taken off, with a way back (undo), and off once it is nowhere.
+        if (window.Picker?.remove(m.where === 'bar' && entry ? { entry: entry.id, member } : { widget: w })) return
         if (m.where === 'bar' && entry) return Widgets.isGroup(entry) && member >= 0 ? removeMember(entry.id, member) : removeEntry(entry.id)
         // Off in the island (its switch on the plugins page).
         if (w) return window.pet.settings.set({ widgetsOff: [...new Set([...(config.widgetsOff || []), w.id])] })
@@ -4230,10 +4255,13 @@
         keyPaused = !!keyPart
         return window.pet.taskbar.keysPause()
       }
-      // Editing the taskbar's layout: Esc ends it, as 取消 (#53).
+      // Editing the taskbar's layout: Esc closes what the picker has open
+      // (picker.js: a drag, its popover, the search's words, the picker),
+      // then ends it, as 完成: kept as it goes, there is no 取消 (#53).
       if (editLayout && e.key === 'Escape') {
         e.preventDefault()
-        return endEdit(false)
+        if (window.Picker?.escape()) return
+        return endEdit(true)
       }
       if (!keyPart) return
       // The settings opened meanwhile (a press on her capsule): the keys are theirs.
@@ -4442,70 +4470,52 @@
   barRest.addEventListener('mouseleave', () => window.pet.hover(false))
 
   // --- Editing the layout: the parts dragged about on the strip itself -------------------
-  // As KDE edits a panel: each part outlined, the three runs shown (an empty
-  // one a place to drop into), a part dragged to where a line shows it goes
-  // and laid out there at once; a bar above the strip to add widgets, reset,
-  // cancel or keep it (taskbarLayout). The widgets come from a library over
-  // the strip, the island's other side (by kind, each a card): dragged onto
-  // it, or a press puts one at the right run's start. One there is chosen by
-  // a press (its size, or off the strip), or dragged off: onto the library,
-  // or up away from the strip. The parts' own presses are held back
-  // meanwhile; her island lets the pointer through to its slot, to be
-  // dragged by it.
+  // As KDE edits a panel (the picker of 2026-10-17): each part outlined, the
+  // three runs shown (an empty one a place to drop into), a bar above the
+  // strip to open the picker (picker.js: the widgets there are, a sidebar at
+  // the screen's side, to drag onto the strip, into her capsule or onto the
+  // desktop) and to be done. What changes is kept as it goes (update:
+  // picker.js persist), so there is no 取消: a widget taken off comes back by
+  // its toast's 撤销. The drags, the popover over a widget and her capsule's
+  // panel are picker.js's: the strip's presses go there while editing. The
+  // parts' own presses are held back meanwhile; her island lets the pointer
+  // through to its slot, to be dragged by it.
   const editBar = el('div', 'tbedit')
-  const editMark = el('span', 'tbmark')
-  const library = el('div', 'tblib')
-  const tools = el('div', 'tbtools')
-  let drag = null
-  // The library: open, the kind shown, what it knows (settings_get: every
-  // widget, on or off, and the plugins), the cards drawn; the widget chosen
-  // on the strip.
-  let libOpen = false
-  let libKind = 'all'
-  let libSnap = null
-  let libCards = []
-  let chosen = null
-  // Let go this far above the strip, a widget goes.
-  const OFF_STRIP_PX = 90
-  // The spacers' marks in the library (a widget's own are widgets.js ICONS).
-  const SPACER_MARK = {
-    flex: '<path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3"/>',
-    gap: '<path d="M5 7v10M19 7v10M8 12h8"/>',
-    sep: '<path d="M12 4v16"/>',
-  }
 
   // A new widget's id, as settings.rs takes it: "w" and up to 15 of a-z 0-9.
   const newId = () => `w${Date.now().toString(36).slice(-6)}${Math.random().toString(36).slice(2, 6)}`
 
   // Pointer in or out of what editing puts over the strip: the window takes it.
-  for (const node of [editBar, library, tools]) {
-    node.addEventListener('mouseenter', () => window.pet.hover(true))
-    node.addEventListener('mouseleave', () => window.pet.hover(false))
-  }
+  editBar.addEventListener('mouseenter', () => window.pet.hover(true))
+  editBar.addEventListener('mouseleave', () => window.pet.hover(false))
   // And whatever the page hears of the pointer: where they are goes to the
   // Rust side as they change (island.rs set_editing), and the window takes
   // the mouse over them there (pointer.rs solid). By enter and leave alone
   // its mode flipped while the pointer was on the bar, a press going to the
   // window under it and only its release coming here, so 完成 and 取消 did
   // nothing (zhoupengjie/Wakuwaku#53). A couple of px more all round.
+  // picker.js: the picker, its popover, the capsule's panel and a toast
+  // with 撤销 too, editing or not.
   let solidSent = ''
   function sendSolid() {
     if (!isOn()) return
-    const rects = editLayout
-      ? [editBar, library, tools]
+    const extra = window.Picker?.solids() || []
+    const on = !!editLayout || extra.length > 0
+    const rects = on
+      ? [...(editLayout ? [editBar] : []), ...extra]
           .filter(n => n.isConnected)
           .map(n => n.getBoundingClientRect())
           .filter(r => r.width && r.height)
           .map(r => [Math.floor(r.left) - 2, Math.floor(r.top) - 2, Math.ceil(r.width) + 4, Math.ceil(r.height) + 4])
       : []
-    const sent = JSON.stringify([!!editLayout, rects])
+    const sent = JSON.stringify([on, rects])
     if (sent === solidSent) return
     solidSent = sent
-    window.pet.editing(!!editLayout, rects)
+    window.pet.editing(on, rects)
   }
   const solidWatch = new ResizeObserver(() => sendSolid())
-  for (const node of [editBar, library, tools]) solidWatch.observe(node)
-  // The keyboard while editing, for Esc to cancel it (taken a moment after
+  solidWatch.observe(editBar)
+  // The keyboard while editing, for Esc to end it (taken a moment after
   // it starts: from her menu, which gives the keyboard back as it closes).
   let editKeys = false
   // A press whose button went down where the window let it through and
@@ -4524,8 +4534,10 @@
     true,
   )
 
-  function editTaskbar() {
-    if (home() !== 'taskbar' || editLayout) return
+  // opts.picker: from her menu's 添加小工具…, the picker open with it.
+  function editTaskbar(opts) {
+    if (home() !== 'taskbar') return
+    if (editLayout) return opts?.picker && window.Picker?.open()
     if (isSetting()) window.Settings?.close?.('edit')
     if (wgFor) closeWidgetPop()
     if (popFor) closePop()
@@ -4539,12 +4551,11 @@
     clearTimeout(hoverTimer)
     isHover = false
     body.classList.add('tb-editing')
-    libOpen = false
-    chosen = null
     drawEditBar()
     document.body.append(editBar)
     arranged = ''
     update()
+    if (opts?.picker) window.Picker?.open()
     requestAnimationFrame(sendSolid)
     setTimeout(() => {
       if (!editLayout || editKeys) return
@@ -4553,13 +4564,18 @@
     }, 250)
   }
 
+  // Its words (editing the taskbar, kept as it goes), 添加小工具 (pressed
+  // while the picker is open) and 完成.
   function drawEditBar() {
-    const button = (what, label = t(lang, `taskbar.edit.${what}`)) => {
+    const button = (what, label) => {
       const b = el('button', `tbe tbe-${what}`, label)
+      b.type = 'button'
       b.dataset.edit = what
       return b
     }
-    editBar.replaceChildren(el('span', 'hint', t(lang, isSide() ? 'taskbar.edit.hintSide' : 'taskbar.edit.hint')), button('add', t(lang, libOpen ? 'taskbar.edit.hideAdd' : 'taskbar.edit.add')), button('reset'), button('cancel'), button('done'))
+    const add = button('add', t(lang, 'taskbar.edit.add'))
+    add.setAttribute('aria-pressed', String(!!window.Picker?.isOpen()))
+    editBar.replaceChildren(el('span', 'hint', t(lang, 'taskbar.edit.title')), el('span', 'hint kept', t(lang, 'taskbar.edit.kept')), add, button('done', t(lang, 'taskbar.edit.done')))
   }
 
   // What a layout puts on the strip, as placeWidget takes them: its widgets
@@ -4570,14 +4586,9 @@
     if (!editLayout) return
     const layout = editLayout
     editLayout = null
-    endDrag()
+    window.Picker?.ended()
     body.classList.remove('tb-editing')
     editBar.remove()
-    library.remove()
-    tools.remove()
-    libOpen = false
-    chosen = null
-    for (const node of entryNodes.values()) node.classList.remove('tb-chosen')
     sendSolid()
     if (editKeys) {
       editKeys = false
@@ -4606,248 +4617,15 @@
   // One of the bar's buttons, pressed (a click, or a release alone: above).
   function editAct(what) {
     if (what === 'done') endEdit(true)
-    else if (what === 'cancel') endEdit(false)
-    else if (what === 'add') showLibrary(!libOpen)
-    else if (what === 'reset') {
-      // The parts as Windows 11 has them; the widgets kept, where they were.
-      editLayout = tbLayout(Widgets.withParts(TB_PRESETS.win11, tbLayout()))
-      arranged = ''
-      update()
-    }
+    else if (what === 'add') window.Picker?.toggle()
   }
 
-  // --- The library -------------------------------------------------------------------
-  function showLibrary(open) {
-    libOpen = open
-    drawEditBar()
-    if (!open) return library.remove()
-    drawLibrary()
-    document.body.append(library)
-    window.pet.settings.get().then(got => {
-      libSnap = got
-      tellPlugins(got?.plugins)
-      if (libOpen) drawLibrary()
-    })
-  }
-
-  // Its cards: the built-in widgets (the monitor too: its readings, as a
-  // widget with a card, besides its part's cells),
-  // the plugins she runs, each mail account's, those of anyone else's
-  // scripts there now, and the spacers.
-  function cardsOf(all) {
-    const cards = []
-    const named = w => (w.private ? {} : { name: [...String(Widgets.words(lang, w).label)].slice(0, 40).join('') })
-    for (const w of all.filter(w => w.builtIn)) cards.push({ kind: 'builtIn', entry: { type: 'widget', of: w.id, icon: w.icon }, w })
-    for (const p of libSnap?.plugins || []) cards.push({ kind: 'plugin', entry: { type: 'plugin', of: p.id, icon: p.icon }, w: all.find(w => w.plugin === p.id), plugin: p })
-    for (const w of all.filter(w => w.from === 'mail')) cards.push({ kind: 'mail', entry: { type: 'widget', of: w.id, icon: w.icon, ...named(w) }, w })
-    for (const w of all.filter(w => w.from === 'script' && !w.plugin)) cards.push({ kind: 'script', entry: { type: 'widget', of: w.id, icon: w.icon, ...named(w) }, w })
-    for (const type of ['flex', 'gap', 'sep']) cards.push({ kind: 'layout', entry: { type } })
-    return cards
-  }
-
-  const isMonitorCard = c => c.entry.type === 'widget' && c.entry.of === 'monitor'
-
-  function drawLibrary() {
-    const all = libSnap?.widgets || allWidgets
-    const detailed = isDetailed()
-    const placed = new Set(Object.values(tbLayout()).flatMap(run => run.filter(p => typeof p !== 'string').flatMap(Widgets.membersOf).map(Widgets.memberKey)))
-    libCards = cardsOf(all)
-    const kinds = ['all', ...new Set(libCards.map(c => c.kind))]
-    if (!kinds.includes(libKind)) libKind = 'all'
-    const tabs = el('div', 'tblkinds')
-    for (const kind of kinds) {
-      const b = el('button', kind === libKind ? 'tblkind on' : 'tblkind', t(lang, `taskbar.lib.${kind}`))
-      b.dataset.kind = kind
-      tabs.append(b)
-    }
-    const grid = el('div', 'tblgrid')
-    for (const [i, c] of libCards.entries()) {
-      if (libKind !== 'all' && c.kind !== libKind) continue
-      const isOn = (Widgets.isSource(c.entry) && placed.has(`${c.entry.type}:${c.entry.of}`)) || (isMonitorCard(c) && hasMonitorPart())
-      const card = el('div', isOn ? 'tblcard placed' : 'tblcard')
-      card.dataset.card = i
-      const mark = el('span', 'tblmark')
-      mark.innerHTML = SPACER_MARK[c.entry.type] ? `<svg class="wicon" viewBox="0 0 24 24" aria-hidden="true">${SPACER_MARK[c.entry.type]}</svg>` : Widgets.iconHTML(c.w || { id: c.entry.of, icon: c.entry.icon, label: c.entry.name || Widgets.nameOf(lang, { ...c.entry, id: 'w0' }, all, detailed) }, lang)
-      mark.style.color = (c.w && stripInk(c.w.color)) || stripHue().idle
-      const said = c.w ? Widgets.words(lang, c.w, detailed).value : ''
-      const note = isOn
-        ? t(lang, 'taskbar.lib.placed')
-        : c.plugin?.missing
-          ? t(lang, 'taskbar.lib.needs')
-          : c.plugin && !c.plugin.on
-            ? t(lang, 'taskbar.lib.starts')
-            : said || t(lang, `taskbar.lib.note.${c.kind === 'layout' ? c.entry.type : c.kind}`)
-      card.append(mark, el('b', '', Widgets.nameOf(lang, { ...c.entry, id: 'w0' }, all, detailed)), el('span', 'tblnote', note))
-      grid.append(card)
-    }
-    const head = el('div', 'tblhead')
-    head.append(el('b', '', t(lang, 'taskbar.lib.title')), el('span', 'tblhint', t(lang, 'taskbar.lib.hint')))
-    library.replaceChildren(head, tabs, grid)
-  }
-
-  library.addEventListener('click', e => {
-    const kind = e.target.closest('[data-kind]')?.dataset.kind
-    if (!kind) return
-    libKind = kind
-    drawLibrary()
-  })
-
-  // A card picked up: a new widget, dragged onto the strip (or put at the
-  // right run's start by a press). One already there is not again.
-  library.addEventListener('pointerdown', e => {
-    const card = e.target.closest('[data-card]')
-    if (!card || e.button !== 0 || card.classList.contains('placed')) return
-    const c = libCards[card.dataset.card]
-    if (!c) return
-    e.preventDefault()
-    // The monitor's card puts its part there (#53: never a widget besides it).
-    const fresh = isMonitorCard(c) ? 'monitor' : { ...c.entry, id: newId(), ...(Widgets.isSource(c.entry) ? { size: 'M' } : {}) }
-    drag = { fresh, node: card, label: card.querySelector('b')?.textContent || '', x: e.clientX, y: e.clientY, moved: false }
-    try {
-      library.setPointerCapture(e.pointerId)
-    } catch {}
-  })
-
-  // --- The one chosen: its size, or off ------------------------------------------------
-  function choose(id) {
-    chosen = id
-    drawTools()
-  }
-
-  function drawTools() {
-    const node = chosen && entryNodes.get(chosen)
-    const e = node?._entry
-    for (const n of entryNodes.values()) n.classList.toggle('tb-chosen', n === node)
-    if (!editLayout || !e || !node.isConnected) {
-      chosen = null
-      return tools.remove()
-    }
-    const button = (what, label, on, why = '') => {
-      const b = el('button', on ? 'tbt on' : why ? 'tbt off' : 'tbt', label)
-      b.type = 'button'
-      b.dataset.tool = what
-      if (why) {
-        b.title = why
-        b.setAttribute('aria-disabled', 'true')
-      }
-      return b
-    }
-    const items = [el('span', 'tbtname', node.dataset.label || '')]
-    // Its size, as it has them (a countdown small alone); never large on the
-    // strip. Several in one place: a carousel or a stack, or apart again.
-    if (Widgets.isSource(e)) {
-      const w = Widgets.sourcesOf(e, allWidgets)[0]
-      const noM = w && !Widgets.sizesOf(w).includes('m') ? noSize(w, 'M') : ''
-      items.push(button('S', t(lang, 'taskbar.w.size.S'), node.dataset.size === 'S'), button('M', t(lang, 'taskbar.w.size.M'), node.dataset.size === 'M' && !noM, noM), button('L', t(lang, 'menu.l'), false, t(lang, 'menu.noLargeBar')), el('span', 'tbtsep'))
-    }
-    if (Widgets.isGroup(e)) items.push(button('carousel', t(lang, 'menu.carousel'), e.type === 'carousel'), button('stack', t(lang, 'menu.stack'), e.type === 'stack'), button('ungroup', t(lang, 'menu.ungroup')), el('span', 'tbtsep'))
-    items.push(button('remove', t(lang, 'taskbar.w.remove')))
-    tools.replaceChildren(...items)
-    if (!tools.isConnected) document.body.append(tools)
-    const r = node.getBoundingClientRect()
-    // Over it, or beside a side bar (its place there by style.css).
-    tools.style.left = isSide() ? '' : `${Math.round(Math.max(4, Math.min(r.left + r.width / 2 - tools.offsetWidth / 2, innerWidth - tools.offsetWidth - 4)))}px`
-    tools.style.top = isSide() ? `${Math.round(Math.max(8, Math.min(r.top + r.height / 2 - tools.offsetHeight / 2, innerHeight - tools.offsetHeight - 8)))}px` : ''
-  }
-
-  tools.addEventListener('click', e => {
-    const tool = e.target.closest('[data-tool]')
-    const what = tool?.dataset.tool
-    const id = chosen
-    if (!what || !id || tool.classList.contains('off')) return
-    if (what === 'remove') {
-      choose(null)
-      return removeEntry(id)
-    }
-    if (what === 'ungroup') {
-      choose(null)
-      editLayout = Widgets.ungroup(tbLayout(), id, newId)
-    } else if (what === 'carousel' || what === 'stack') editLayout = Widgets.regroup(tbLayout(), id, what)
-    else {
-      const layout = tbLayout()
-      for (const run of Object.values(layout)) for (const p of run) if (p.id === id) p.size = what
-      editLayout = layout
-    }
+  // The parts as Windows 11 has them; the widgets kept, where they were
+  // (the picker's ⋯ 恢复默认).
+  function resetParts() {
+    editLayout = tbLayout(Widgets.withParts(TB_PRESETS.win11, tbLayout()))
     arranged = ''
     update()
-  })
-
-  // Where a part let go at x goes: the run under it (or the nearest), and
-  // before the first part of it whose middle is past x; the line's place.
-  // (Named dropAt at first, it took the name of the tray's: an icon dragged
-  // in the tray was dropped as a part, 2026-10-12.)
-  function partDropAt(x) {
-    let near = null
-    for (const [zone, node] of Object.entries(zones)) {
-      const r = node.getBoundingClientRect()
-      const d = x < lo(r) ? lo(r) - x : x > hi(r) ? x - hi(r) : 0
-      if (!near || d < near.d) near = { zone, d, r }
-    }
-    const parts = [...zones[near.zone].children].filter(n => n !== drag.node)
-    let index = parts.findIndex(n => {
-      const r = n.getBoundingClientRect()
-      return x < lo(r) + len(r) / 2
-    })
-    if (index < 0) index = parts.length
-    const line = index < parts.length ? lo(parts[index].getBoundingClientRect()) : parts.length ? hi(parts[parts.length - 1].getBoundingClientRect()) : lo(near.r) + len(near.r) / 2
-    return { zone: near.zone, index, line }
-  }
-
-  // A part (by its name) or a widget (by its id) moved; a new widget put in.
-  function movePart(key, zone, index, fresh) {
-    const layout = tbLayout()
-    let item = fresh || key
-    for (const k of Object.keys(layout))
-      layout[k] = layout[k].filter(p => {
-        if (Widgets.keyOf(p) !== key) return true
-        item = p
-        return false
-      })
-    layout[zone].splice(index, 0, item)
-    editLayout = layout
-    arranged = ''
-    update()
-    if (libOpen) drawLibrary()
-  }
-
-  // A part that may go (the monitor's, #53) taken off the strip: back in the
-  // library, the monitor in her capsule then (isPinned).
-  function removePart(key) {
-    const layout = tbLayout()
-    for (const k of Object.keys(layout)) layout[k] = layout[k].filter(p => p !== key)
-    editLayout = layout
-    arranged = ''
-    update()
-    if (libOpen) drawLibrary()
-  }
-
-  function endDrag() {
-    if (!drag) return
-    drag.ghost?.remove()
-    drag.node.classList.remove('tb-dragging')
-    for (const n of entryNodes.values()) n.classList.remove('tb-into')
-    editMark.remove()
-    drag = null
-  }
-
-  // A widget (or several in one place, or a library card's) over the middle
-  // half of another widget or group: let go there, the two in one place (a
-  // stack; a group there keeps its kind). Null elsewhere.
-  function intoAt(x, y) {
-    const item = drag.entry || drag.fresh
-    if (!item || !(Widgets.isSource(item) || Widgets.isGroup(item))) return null
-    const over = document.elementFromPoint(x, y)?.closest?.('.tw-widget, .tw-plugin, .tw-group')
-    if (!over || over === drag.node || !barRest.contains(over)) return null
-    const r = over.getBoundingClientRect()
-    const a = along(x, y)
-    return a > lo(r) + len(r) * 0.25 && a < lo(r) + len(r) * 0.75 ? over : null
-  }
-
-  // Over the library (or let go there).
-  const overLibrary = (x, y) => {
-    if (!library.isConnected) return false
-    const r = library.getBoundingClientRect()
-    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
   }
 
   // While editing, the parts' own presses (Start, the buttons, the tray, the
@@ -4868,105 +4646,24 @@
       true,
     )
   }
-  // The same on the bar, the library and the tools over the strip.
-  for (const node of [editBar, library, tools]) {
-    node.addEventListener('contextmenu', e => {
-      e.preventDefault()
-      if (editLayout) window.pet.menu()
-    })
-  }
+  // The same on the bar.
+  editBar.addEventListener('contextmenu', e => {
+    e.preventDefault()
+    if (editLayout) window.pet.menu()
+  })
+  // A press on a part or a widget: picker.js drags it (on the strip, into
+  // her capsule, off it, onto the desktop), or, let go where it was, opens
+  // a widget's popover or her capsule's panel.
   barRest.addEventListener(
     'pointerdown',
     e => {
       if (!editLayout) return
       e.preventDefault()
       e.stopPropagation()
-      const node = e.target.closest('[data-part]')
-      if (e.button !== 0) return
-      if (!node) return choose(null)
-      drag = { key: node.dataset.part, entry: node._entry || null, node, label: node.dataset.label || '', x: e.clientX, y: e.clientY, moved: false }
-      try {
-        barRest.setPointerCapture(e.pointerId)
-      } catch {}
+      if (e.button === 0) window.Picker?.pressStrip(e, e.target.closest('[data-part]'))
     },
     true,
   )
-
-  // A drag, from the strip or from the library: where it goes shown by a
-  // line in the run; a widget dragged off the strip (onto the library, or
-  // up away from it) goes, a new one there is not put in.
-  document.addEventListener(
-    'pointermove',
-    e => {
-      if (!drag) return
-      if (!drag.moved) {
-        if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return
-        drag.moved = true
-        drag.ghost = el('span', 'tbghost', drag.label)
-        document.body.append(drag.ghost, editMark)
-        drag.node.classList.add('tb-dragging')
-        choose(null)
-      }
-      drag.ghost.style.left = `${e.clientX}px`
-      drag.ghost.style.top = `${e.clientY}px`
-      const strip = barRest.getBoundingClientRect()
-      const away = { bottom: e.clientY < strip.top - OFF_STRIP_PX, top: e.clientY > strip.bottom + OFF_STRIP_PX, left: e.clientX > strip.right + OFF_STRIP_PX, right: e.clientX < strip.left - OFF_STRIP_PX }[tbEdge()]
-      // A widget, and the monitor's part (#53), go when let go off the
-      // strip; the other parts stay, the ghost saying so.
-      const removable = !!drag.entry || !!drag.fresh || TB_OPTIONAL.includes(drag.key)
-      const off = removable && (overLibrary(e.clientX, e.clientY) || away)
-      const stays = !removable && (overLibrary(e.clientX, e.clientY) || away)
-      drag.off = off
-      drag.ghost.classList.toggle('off', off)
-      drag.ghost.classList.toggle('stays', stays)
-      drag.ghost.textContent = off && !drag.fresh ? t(lang, 'taskbar.w.drop', { name: drag.label }) : stays ? t(lang, 'taskbar.edit.fixed') : drag.label
-      drag.into = off ? null : intoAt(e.clientX, e.clientY)
-      for (const n of entryNodes.values()) n.classList.toggle('tb-into', n === drag.into)
-      editMark.hidden = off || !!drag.into
-      drag.at = off ? null : partDropAt(along(e.clientX, e.clientY))
-      if (drag.at) {
-        editMark.style.left = isSide() ? '' : `${Math.round(drag.at.line) - 1}px`
-        editMark.style.top = isSide() ? `${Math.round(drag.at.line) - 1}px` : ''
-      }
-    },
-    true,
-  )
-  document.addEventListener(
-    'pointerup',
-    e => {
-      if (!drag || e.button !== 0) return
-      const d = drag
-      endDrag()
-      if (!d.moved) {
-        // A press: a card goes to the right run's start; a widget on the
-        // strip is chosen (again: no longer); elsewhere, none is.
-        if (d.fresh) {
-          if (Widgets.isSource(d.fresh)) placedAt.set(Widgets.memberKey(d.fresh), Date.now())
-          return movePart(Widgets.keyOf(d.fresh), 'right', 0, d.fresh)
-        }
-        return choose(d.entry && chosen !== d.entry.id ? d.entry.id : null)
-      }
-      if (d.off) return d.entry ? removeEntry(d.entry.id) : TB_OPTIONAL.includes(d.key) && !d.fresh ? removePart(d.key) : undefined
-      if (d.into) {
-        // A library card: put in first, then with the one it was let go over.
-        const into = d.into.dataset.entry
-        let layout = tbLayout()
-        if (d.fresh) {
-          layout.right.unshift(d.fresh)
-          placedAt.set(Widgets.memberKey(d.fresh), Date.now())
-        }
-        editLayout = Widgets.groupWith(layout, d.fresh ? d.fresh.id : d.key, into, 'stack', newId)
-        arranged = ''
-        update()
-        if (libOpen) drawLibrary()
-        return
-      }
-      if (d.at) movePart(d.fresh ? Widgets.keyOf(d.fresh) : d.key, d.at.zone, d.at.index, d.fresh)
-      if (d.at && d.fresh && Widgets.isSource(d.fresh)) placedAt.set(Widgets.memberKey(d.fresh), Date.now())
-    },
-    true,
-  )
-  document.addEventListener('pointercancel', endDrag, true)
 
   function update() {
     clearInterval(clockTimer)
@@ -5037,8 +4734,9 @@
 
     const want = sizeOf(view)
     if (view === 'settings' && isSide()) placeSideSettings(want.height)
-    // Reaching for her keeps the room to reach in.
-    const grows = setRoom(isReaching ? PULL_ROOM : roomFor(want))
+    // Reaching for her keeps the room to reach in; the picker and the
+    // capsule's panel in the island's home want theirs (picker.js).
+    const grows = setRoom(isReaching ? PULL_ROOM : window.Picker ? window.Picker.roomOver(roomFor(want), baseRoom()) : roomFor(want))
     // The window has its room before the island (and she) grow into it.
     const grow = () => {
       const resized = island.style.width !== `${want.width}px` || island.style.height !== `${want.height}px`
@@ -5070,8 +4768,10 @@
     const isTimed = time() || now.stepSince || Status.othersOf(now.list, now).some(x => Status.time(x))
     if (isTimed && (view === 'compact' || view === 'expanded')) clockTimer = setInterval(tickTimes, 1000)
     spin()
-    // Editing the layout: where its bar and the rest are now, for the Rust side.
-    if (editLayout) sendSolid()
+    // Editing the layout: kept as it goes (picker.js); where its bar and the
+    // rest are now (the picker's too, editing or not), for the Rust side.
+    if (editLayout) window.Picker?.persist()
+    sendSolid()
     // Up out of the way of a window under it, or down (setStow).
     setStow()
     // Opened on the taskbar: over any window come over hers.
@@ -5949,7 +5649,93 @@
   const settingsMax = () => (home() === 'taskbar' ? (isSide() ? innerHeight - 2 * TASKBAR_GAP - TASKBAR_SHADE : TASKBAR_ROOM - TASKBAR_GAP - TASKBAR_SHADE) : null)
 
   // The taskbar's layout, for the settings: its presets, which one it is, editing it on the strip.
-  // From her menu: editing it, or (退出编辑, while editing) out of it as 取消.
-  window.pet.onTaskbarEdit(p => (p?.end ? endEdit(false) : editTaskbar()))
+  // From her menu: editing it (添加小工具…: with the picker open, { picker }),
+  // or (退出编辑, while editing) out of it, kept as it went (picker.js).
+  window.pet.onTaskbarEdit(p => (p?.end ? (endEdit(true), window.Picker?.closeAll()) : editTaskbar(p)))
+  // picker.js, capsule-panel.js (loaded after this file): what they work
+  // with here, read live. Internal to her home's page; settings.js and
+  // panel.js use window.Island.
+  window.Isle = {
+    get config() {
+      return config
+    },
+    get lang() {
+      return lang
+    },
+    get allWidgets() {
+      return allWidgets
+    },
+    get editLayout() {
+      return editLayout
+    },
+    // The layout being edited, changed (the picker's drops): drawn anew.
+    set editLayout(layout) {
+      editLayout = layout
+      arranged = ''
+    },
+    get members() {
+      return membersNow
+    },
+    get where() {
+      return whereNow
+    },
+    get view() {
+      return view
+    },
+    // Windows' own mode (the picker's ground follows it, in either home).
+    get winLight() {
+      return look.mode === 'light'
+    },
+    isOn,
+    home,
+    tbEdge,
+    isSide,
+    isLight,
+    isDetailed,
+    along,
+    lo,
+    hi,
+    len,
+    el,
+    stripInk,
+    stripHue,
+    ink,
+    hue,
+    tbLayout,
+    hasMonitorPart,
+    keepLayout,
+    removeEntry,
+    keyFor,
+    whereOf,
+    placeWidget,
+    deskOff,
+    keepDesk,
+    keepDeskLayout,
+    deskBoards,
+    takeWidgets,
+    placedAt,
+    newId,
+    update,
+    sendSolid,
+    watchPresses,
+    drawEditBar,
+    editTaskbar,
+    endEdit,
+    resetParts,
+    askPlugins,
+    openWidgetSettings,
+    closeMenu,
+    alignApps,
+    placeSlot,
+    entryNodes,
+    zones,
+    PART_NODES,
+    TB_OPTIONAL,
+    barRest,
+    herSlot,
+    island,
+    compact,
+    expanded,
+  }
   window.Island = { accent: () => look.accent || null, isOn, changed: update, reach, absorb, settingsMax, tbPresets: TB_PRESETS, tbPreset: () => presetOf(config.taskbarLayout), tbWithPreset: name => TB_PRESETS[name] && Widgets.withParts(TB_PRESETS[name], tbLayout(config.taskbarLayout)), editTaskbar, whereOf, placeWidget }
 })()

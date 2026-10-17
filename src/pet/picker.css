@@ -1,0 +1,1124 @@
+/* The widget picker, its popover and toasts, her capsule's panel (picker.js,
+   capsule-panel.js; the picker of 2026-10-17). As Windows 11 draws its own
+   flyouts (docs/design/style.md): a near-solid ground over other windows
+   (the page's blur reaches only what it draws itself), a thin line and a
+   top highlight, Windows' accent for what is on and what is pressed,
+   Segoe UI Variable before 微软雅黑 UI; radii 12 (panels), 8 (cards,
+   rows), 6 (buttons, fields), and pills for chips, toasts and the edit bar.
+   Windows' mode, not her island's look: .pk-l the light one. */
+
+.pk,
+.pk-pop,
+.pk-toasts,
+.pk-ghost,
+.pk-band,
+.cp,
+.tbedit {
+  --pk-bg: rgba(32, 33, 40, 0.95);
+  --pk-menu: rgba(43, 44, 52, 0.98);
+  --pk-fg: #f5f5f7;
+  --pk-2: rgba(235, 235, 245, 0.64);
+  --pk-3: rgba(235, 235, 245, 0.36);
+  --pk-line: rgba(255, 255, 255, 0.09);
+  --pk-hi: rgba(255, 255, 255, 0.07);
+  --pk-card: rgba(255, 255, 255, 0.05);
+  --pk-card-hi: rgba(255, 255, 255, 0.1);
+  --pk-hover: rgba(255, 255, 255, 0.08);
+  --pk-input: rgba(255, 255, 255, 0.06);
+  --pk-outline: rgba(255, 255, 255, 0.42);
+  --pk-accent: var(--win-accent, #4cc2ff);
+  --pk-on-accent: #00263b;
+  --pk-ph: color-mix(in srgb, var(--pk-accent) 16%, transparent);
+  --pk-warn: #ffb340;
+  --pk-warn-bg: rgba(255, 179, 64, 0.14);
+  --pk-shadow: rgba(0, 0, 0, 0.45);
+  --pk-band: rgba(0, 0, 0, 0.32);
+  --pk-band-hot: rgba(0, 0, 0, 0.52);
+  --pk-font: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
+  --pk-font-d: 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
+  font-family: var(--pk-font);
+  color: var(--pk-fg);
+}
+
+.pk-l,
+.tb-light .tbedit {
+  --pk-bg: rgba(246, 247, 250, 0.97);
+  --pk-menu: rgba(250, 250, 252, 0.99);
+  --pk-fg: #1b1b1f;
+  --pk-2: rgba(30, 30, 36, 0.62);
+  --pk-3: rgba(30, 30, 36, 0.38);
+  --pk-line: rgba(0, 0, 0, 0.08);
+  --pk-hi: rgba(255, 255, 255, 0.7);
+  --pk-card: rgba(255, 255, 255, 0.66);
+  --pk-card-hi: #fff;
+  --pk-hover: rgba(0, 0, 0, 0.05);
+  --pk-input: rgba(255, 255, 255, 0.9);
+  --pk-outline: rgba(0, 0, 0, 0.36);
+  --pk-accent: var(--win-accent, #005fb8);
+  --pk-on-accent: #fff;
+  --pk-warn: #b25e00;
+  --pk-warn-bg: rgba(178, 94, 0, 0.12);
+  --pk-shadow: rgba(30, 40, 60, 0.26);
+  --pk-band: rgba(255, 255, 255, 0.36);
+  --pk-band-hot: rgba(255, 255, 255, 0.62);
+}
+
+.pk button,
+.pk-pop button,
+.pk-toasts button,
+.cp button,
+.tbedit button {
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pk-fi {
+  font-family: 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+  font-size: 14px;
+  font-style: normal;
+  line-height: 1;
+}
+
+/* An icon in its own colour, on a tint of it (as the stack's cards have theirs). */
+.pk-wi {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--c, currentColor) 16%, transparent);
+  color: var(--c, currentColor);
+}
+
+.pk-wi .wicon {
+  width: 20px;
+  height: 20px;
+}
+
+.pk-wi .wglyph {
+  font-size: 18px;
+}
+
+/* --- The picker: a sidebar the full height of the room above the strip ---------------- */
+.pk {
+  position: fixed;
+  z-index: 32;
+  top: 8px;
+  right: 8px;
+  bottom: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 360px;
+  max-width: calc(100vw - 16px);
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--pk-bg);
+  backdrop-filter: blur(30px) saturate(1.4);
+  box-shadow:
+    inset 0 1px 0 var(--pk-hi),
+    0 0 0 1px var(--pk-line),
+    0 16px 40px var(--pk-shadow);
+  font-size: 13px;
+  line-height: 1.4;
+  transform: translateX(calc(100% + 16px));
+  opacity: 0;
+  transition:
+    transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.15s;
+}
+
+.pk[hidden] {
+  display: none;
+}
+
+.pk.pk-open {
+  transform: none;
+  opacity: 1;
+}
+
+/* The strip along the right edge: at the room's other side. */
+.pk.pk-left {
+  right: auto;
+  left: 8px;
+  transform: translateX(calc(-100% - 16px));
+}
+
+.pk.pk-left.pk-open {
+  transform: none;
+}
+
+.pk[data-home='taskbar'][data-edge='top'] {
+  top: 56px;
+  bottom: 8px;
+}
+
+.pk[data-edge='left'],
+.pk[data-edge='right'] {
+  top: 8px;
+  bottom: 8px;
+}
+
+/* At the top, the island's home: under her island. */
+.pk[data-home='island'] {
+  top: 64px;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  height: min(560px, calc(100vh - 80px));
+  transform: translate(-50%, -12px);
+}
+
+.pk[data-home='island'].pk-open {
+  transform: translate(-50%, 0);
+}
+
+/* Dragging from it: it fades, out of the way of what is behind it; over it, a place to let go. */
+.pk.pk-thru {
+  opacity: 0.35;
+}
+
+.pk.pk-thru.pk-hot {
+  opacity: 1;
+}
+
+.pk.pk-hot::after {
+  content: attr(data-drop);
+  position: absolute;
+  inset: 12px;
+  display: grid;
+  place-items: start center;
+  padding-top: 88px;
+  border: 1.5px dashed var(--pk-outline);
+  border-radius: 8px;
+  background: var(--pk-bg);
+  font-size: 15px;
+}
+
+.pk-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pk-head h2 {
+  flex: 1;
+  margin: 0;
+  font: 600 18px/1.3 var(--pk-font-d);
+}
+
+.pk-ib {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+}
+
+.pk-ib:hover {
+  background: var(--pk-hover);
+}
+
+.pk-ib[hidden] {
+  display: none;
+}
+
+.pk-menu {
+  position: absolute;
+  z-index: 2;
+  top: 52px;
+  right: 16px;
+  min-width: 180px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--pk-menu);
+  box-shadow:
+    0 0 0 1px var(--pk-line),
+    0 12px 32px -10px var(--pk-shadow);
+}
+
+.pk-menu[hidden] {
+  display: none;
+}
+
+.pk-menu button {
+  display: block;
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.pk-menu button:hover {
+  background: var(--pk-hover);
+}
+
+.pk-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid var(--pk-line);
+  border-bottom-color: var(--pk-outline);
+  border-radius: 6px;
+  background: var(--pk-input);
+  color: var(--pk-2);
+}
+
+.pk-search:focus-within {
+  border-bottom: 2px solid var(--pk-accent);
+}
+
+.pk-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--pk-fg);
+  font: 13px var(--pk-font);
+  user-select: text;
+}
+
+.pk-search input::placeholder {
+  color: var(--pk-2);
+}
+
+.pk-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.pk-chips {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pk-chip {
+  height: 28px;
+  padding: 0 11px !important;
+  border: 1px solid var(--pk-line) !important;
+  border-radius: 999px;
+  background: var(--pk-card) !important;
+  font-size: 12px !important;
+}
+
+.pk-chip:hover {
+  background: var(--pk-card-hi) !important;
+}
+
+.pk-chip[aria-pressed='true'] {
+  border-color: transparent !important;
+  background: var(--pk-accent) !important;
+  color: var(--pk-on-accent);
+}
+
+.pk-hint {
+  flex: none;
+  margin: -4px 0 0;
+  color: var(--pk-2);
+  font-size: 12px;
+}
+
+.pk-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-content: start;
+  gap: 8px;
+  margin: 0 -6px;
+  padding: 0 6px 2px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.pk-card {
+  position: relative;
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px !important;
+  border: 1px solid var(--pk-line) !important;
+  border-radius: 8px;
+  background: var(--pk-card) !important;
+  text-align: left;
+  cursor: grab !important;
+  touch-action: none;
+}
+
+.pk-card:hover {
+  background: var(--pk-card-hi) !important;
+}
+
+.pk-card:focus-visible {
+  outline: 2px solid var(--pk-accent);
+  outline-offset: 1px;
+}
+
+.pk-n {
+  max-width: 100%;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pk-d {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--pk-2);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pk-bd {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--pk-ph);
+  color: var(--pk-accent);
+  font-size: 11px;
+}
+
+.pk-bd[hidden] {
+  display: none;
+}
+
+.pk-empty {
+  grid-column: 1 / -1;
+  margin: 24px 0;
+  color: var(--pk-2);
+  text-align: center;
+}
+
+.pk-note {
+  flex: none;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--pk-card);
+  color: var(--pk-2);
+  font-size: 12px;
+}
+
+.pk-note[hidden] {
+  display: none;
+}
+
+.pk-foot {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.pk-foot button {
+  flex: 1;
+  height: 32px;
+  border: 1px solid var(--pk-line) !important;
+  border-radius: 6px;
+  background: var(--pk-card) !important;
+}
+
+.pk-foot button:hover {
+  background: var(--pk-card-hi) !important;
+}
+
+/* --- Editing the strip: the edit bar, the gap, the band, her capsule lit --------------- */
+.tbedit {
+  bottom: 62px;
+  gap: 8px;
+  padding: 6px 6px 6px 18px;
+  border-radius: 999px;
+  background: var(--pk-menu);
+  color: var(--pk-fg);
+  font-family: var(--pk-font);
+  box-shadow:
+    0 0 0 1px var(--pk-line),
+    0 12px 32px -10px var(--pk-shadow);
+}
+
+.tb-light .tbedit {
+  background: var(--pk-menu);
+  color: var(--pk-fg);
+  box-shadow:
+    0 0 0 1px var(--pk-line),
+    0 12px 32px -10px var(--pk-shadow);
+}
+
+.tbedit .hint {
+  margin-right: 0;
+  color: var(--pk-fg);
+  font-weight: 600;
+}
+
+.tbedit .hint.kept {
+  margin-right: 6px;
+  color: var(--pk-2);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.tb-light .tbedit .hint {
+  color: var(--pk-fg);
+}
+
+.tb-light .tbedit .hint.kept {
+  color: var(--pk-2);
+}
+
+.tbedit .tbe,
+.tb-light .tbedit .tbe {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--pk-card-hi);
+  color: inherit;
+}
+
+.tbedit .tbe:hover {
+  background: var(--pk-hover);
+}
+
+.tbedit .tbe[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 1px var(--pk-accent);
+  color: var(--pk-accent);
+}
+
+.tbedit .tbe-done,
+.tb-light .tbedit .tbe-done {
+  border: 0;
+  background: var(--pk-accent);
+  color: var(--pk-on-accent);
+  font-weight: 600;
+}
+
+body.pk-dragging .tbedit,
+body.pk-dragging .pk-toasts {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+/* The one lifted (it is the ghost now), and the gap where it would go. */
+#bar-rest .pk-lifted {
+  display: none !important;
+}
+
+#bar-rest .pk-ph {
+  flex: none;
+  align-self: center;
+  height: 36px;
+  margin: 0 2px;
+  border-radius: 8px;
+  background: var(--pk-ph, color-mix(in srgb, var(--win-accent, #4cc2ff) 16%, transparent));
+  outline: 1.5px dashed var(--win-accent, #4cc2ff);
+  outline-offset: -1.5px;
+}
+
+#bar-rest .pk-ph.pk-no {
+  background: rgba(255, 179, 64, 0.14);
+  outline-color: #ffb340;
+}
+
+.tb-light #bar-rest .pk-ph.pk-no {
+  outline-color: #b25e00;
+}
+
+.tb-side #bar-rest .pk-ph {
+  width: 36px;
+  margin: 2px 0;
+}
+
+.pk-band {
+  position: fixed;
+  z-index: 29;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 0 10px;
+  background: linear-gradient(to top, var(--pk-band), transparent);
+  color: var(--pk-2);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.pk-band[hidden] {
+  display: none;
+}
+
+.pk-band[data-edge='top'] {
+  align-items: flex-start;
+  padding: 10px 0 0;
+  background: linear-gradient(to bottom, var(--pk-band), transparent);
+}
+
+.pk-band[data-edge='left'],
+.pk-band[data-edge='right'] {
+  align-items: center;
+  padding: 0 8px;
+  writing-mode: vertical-rl;
+  background: linear-gradient(to right, var(--pk-band), transparent);
+}
+
+.pk-band[data-edge='right'] {
+  background: linear-gradient(to left, var(--pk-band), transparent);
+}
+
+.pk-band.pk-hot {
+  background: linear-gradient(to top, var(--pk-band-hot), transparent);
+  color: var(--pk-fg);
+}
+
+#island.pk-hot,
+.tb-editing #island.pk-hot {
+  outline: 2px solid var(--win-accent, #4cc2ff);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--win-accent, #4cc2ff) 26%, transparent);
+}
+
+.pk-flash {
+  animation: pk-flash 1.2s ease-out;
+}
+
+.pk-shake {
+  animation: pk-shake 0.38s ease;
+}
+
+@keyframes pk-flash {
+  0% {
+    box-shadow: 0 0 0 0 var(--win-accent, #4cc2ff);
+  }
+  25% {
+    box-shadow: 0 0 0 3px var(--win-accent, #4cc2ff);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+@keyframes pk-shake {
+  20% {
+    translate: -5px 0;
+  }
+  40% {
+    translate: 4px 0;
+  }
+  60% {
+    translate: -3px 0;
+  }
+  80% {
+    translate: 2px 0;
+  }
+}
+
+/* --- The ghost under the pointer: what it is, and what letting go here does ------------ */
+.pk-ghost {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transform: translate(-50%, -28px);
+  pointer-events: none;
+}
+
+.pk-ghost[hidden] {
+  display: none;
+}
+
+.pk-ghost.pk-up {
+  flex-direction: column-reverse;
+  transform: translate(-50%, calc(-100% + 28px));
+}
+
+.pk-gt {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--pk-menu);
+  box-shadow:
+    0 0 0 1px var(--pk-line),
+    0 14px 30px -10px var(--pk-shadow);
+}
+
+.pk-gl {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--pk-accent);
+  color: var(--pk-on-accent);
+  font-size: 12px;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px -8px var(--pk-shadow);
+}
+
+.pk-ghost.pk-rm .pk-gl {
+  background: var(--pk-menu);
+  color: var(--pk-fg);
+  box-shadow: inset 0 0 0 1px var(--pk-outline);
+}
+
+.pk-ghost.pk-no .pk-gl {
+  background: var(--pk-menu);
+  color: var(--pk-warn);
+  box-shadow: inset 0 0 0 1px var(--pk-warn);
+}
+
+/* --- A widget's popover on the strip (editing), and the toasts ------------------------ */
+.pk-pop {
+  position: fixed;
+  z-index: 33;
+  min-width: 210px;
+  max-width: 300px;
+  box-sizing: border-box;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--pk-menu);
+  font-size: 13px;
+  box-shadow:
+    inset 0 1px 0 var(--pk-hi),
+    0 0 0 1px var(--pk-line),
+    0 12px 32px -10px var(--pk-shadow);
+  animation: pk-in 0.12s ease-out;
+}
+
+.pk-pop[hidden] {
+  display: none;
+}
+
+.pk-pt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 8px;
+}
+
+.pk-pt .pk-wi {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+.pk-pt .pk-wi .wicon {
+  width: 16px;
+  height: 16px;
+}
+
+.pk-pt b {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 4px 8px;
+  color: var(--pk-2);
+  font-size: 12px;
+}
+
+.pk-segs {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--pk-input);
+  box-shadow: inset 0 0 0 1px var(--pk-line);
+}
+
+.pk-seg {
+  height: 24px;
+  padding: 0 9px !important;
+  border-radius: 4px;
+  color: var(--pk-2) !important;
+  font-size: 12px !important;
+  white-space: nowrap;
+}
+
+.pk-seg:hover {
+  background: var(--pk-hover) !important;
+}
+
+.pk-seg.on {
+  background: var(--pk-card-hi) !important;
+  color: var(--pk-fg) !important;
+  box-shadow: 0 0 0 1px var(--pk-line);
+}
+
+.pk-l .pk-seg.on {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.pk-seg[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: default !important;
+}
+
+.pk-pb {
+  display: flex;
+  gap: 6px;
+}
+
+.pk-pb button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--pk-card-hi);
+}
+
+.pk-pb button:hover {
+  background: var(--pk-hover);
+}
+
+.pk-toasts {
+  position: fixed;
+  z-index: 34;
+  bottom: 62px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+}
+
+.pk-toasts:empty,
+.pk-toasts[hidden] {
+  display: none;
+}
+
+.pk-toasts.pk-editing {
+  bottom: 116px;
+}
+
+.pk-toasts[data-edge='top'] {
+  top: 62px;
+  bottom: auto;
+}
+
+.pk-toasts[data-edge='top'].pk-editing {
+  top: 116px;
+}
+
+.pk-toasts[data-edge='left'],
+.pk-toasts[data-edge='right'] {
+  bottom: 24px;
+}
+
+.pk-toasts[data-home='island'] {
+  top: 64px;
+  bottom: auto;
+}
+
+.pk-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 16px;
+  border-radius: 999px;
+  background: var(--pk-menu);
+  font-size: 13px;
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 1px var(--pk-line),
+    0 12px 32px -10px var(--pk-shadow);
+  animation: pk-up 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.pk-toast.pk-info {
+  padding: 8px 16px;
+}
+
+.pk-dot {
+  color: var(--pk-3);
+}
+
+.pk-undo {
+  height: 28px;
+  padding: 0 12px !important;
+  border-radius: 999px;
+  color: var(--pk-accent) !important;
+  font-weight: 600 !important;
+}
+
+.pk-undo:hover {
+  background: var(--pk-hover) !important;
+}
+
+@keyframes pk-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes pk-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* --- Her capsule's panel ---------------------------------------------------------------- */
+.cp {
+  position: fixed;
+  z-index: 33;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 440px;
+  max-width: calc(100vw - 16px);
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--pk-menu);
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow:
+    inset 0 1px 0 var(--pk-hi),
+    0 0 0 1px var(--pk-line),
+    0 16px 40px var(--pk-shadow);
+}
+
+.cp[hidden] {
+  display: none;
+}
+
+.cp.cp-in {
+  animation: pk-in 0.14s ease-out;
+}
+
+.cp.cp-hot {
+  outline: 2px dashed var(--pk-accent);
+  outline-offset: -2px;
+}
+
+.cp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 0 6px;
+}
+
+.cp-head b {
+  font: 600 15px/1.3 var(--pk-font-d);
+}
+
+.cp-count {
+  flex: 1;
+  color: var(--pk-2);
+  font-size: 12px;
+}
+
+.cp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.cp-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px 28px minmax(0, 1fr) auto auto 26px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  background: var(--pk-menu);
+}
+
+.cp-row:hover {
+  background: color-mix(in srgb, var(--pk-fg) 6%, var(--pk-menu));
+}
+
+.cp-row.cp-lift {
+  z-index: 1;
+  background: var(--pk-card-hi);
+  box-shadow: 0 8px 20px -8px var(--pk-shadow);
+}
+
+.cp-grip {
+  display: grid;
+  place-items: center;
+  height: 24px;
+  color: var(--pk-3);
+  cursor: grab;
+  touch-action: none;
+}
+
+.cp-grip svg {
+  width: 9px;
+  height: 15px;
+  fill: currentColor;
+}
+
+.cp-row .pk-wi {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+
+.cp-row .pk-wi .wicon {
+  width: 16px;
+  height: 16px;
+}
+
+.cp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-val {
+  max-width: 76px;
+  overflow: hidden;
+  color: var(--pk-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cp-out {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--pk-2) !important;
+}
+
+.cp-out .pk-fi {
+  font-size: 11px;
+}
+
+.cp-out:hover {
+  background: var(--pk-hover) !important;
+  color: var(--pk-fg) !important;
+}
+
+.cp-empty {
+  margin: 0;
+  padding: 14px 8px;
+  color: var(--pk-2);
+  font-size: 12px;
+  text-align: center;
+}
+
+.cp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 6px 0;
+  border-top: 1px solid var(--pk-line);
+  color: var(--pk-2);
+  font-size: 12px;
+}
+
+.cp-note {
+  margin: 0;
+  padding: 0 6px;
+  color: var(--pk-3);
+  font-size: 11.5px;
+}
+
+/* --- In her island: where one put elsewhere is, a member pinned at its end ------------- */
+#island-expanded .wrow .wwhere {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(235, 235, 245, 0.55);
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+.isl-light #island-expanded .wrow .wwhere {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(30, 30, 36, 0.55);
+}
+
+#island-compact .pinned .wpin {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+#island-compact .pinned .wpin:first-child {
+  margin-left: 0;
+}
+
+#island-compact .pinned .wpin .wicon {
+  width: 13px;
+  height: 13px;
+}
+
+#island-compact .pinned .wpin b {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk,
+  .pk-pop,
+  .pk-toast,
+  .cp {
+    transition: opacity 0.15s !important;
+    animation: none !important;
+  }
+
+  .pk:not(.pk-open) {
+    transform: none;
+  }
+
+  .pk-shake {
+    animation: none;
+    outline: 2px solid var(--pk-warn, #ffb340);
+    outline-offset: 2px;
+  }
+
+  .pk-flash {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--win-accent, #4cc2ff);
+  }
+}
+
+.tb-top .tbedit {
+  top: 62px;
+}

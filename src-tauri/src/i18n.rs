@@ -83,6 +83,8 @@ pub fn t(lang: &str, key: &str) -> String {
         "notify.review" => if zh { "{project}改好了，等你看看" } else { "{project}has changes for you to review" },
         "notify.error" => if zh { "{project}出错了" } else { "{project}hit an error" },
         "notify.project" => if zh { "{project}：" } else { "{project}: " },
+        // Words sent to her to say (say.rs), from no one named.
+        "word.from" => if zh { "有话对你说" } else { "A word for you" },
         "mail.new" => if zh { "新邮件 · {what}" } else { "New mail · {what}" },
         "mail.talkDone" => if zh { "{agent} 看完了：{what}" } else { "{agent} read it: {what}" },
         "mail.talkReplied" => if zh { "{agent} 回答了：{what}" } else { "{agent} answered: {what}" },

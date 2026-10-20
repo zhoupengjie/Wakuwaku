@@ -47,6 +47,8 @@
     // A widget asks to open the island for itself (widgets.rs).
     onNudge: on('pet:nudge'),
     onAlert: on('pet:alert'),
+    // Words sent to her to say, out on the desktop (main.rs say): { text, from, ms, private }.
+    onSay: on('pet:say'),
     onCursor: on('pet:cursor'),
     onDrag: on('pet:drag'),
     onDragEnd: on('pet:drag-end'),

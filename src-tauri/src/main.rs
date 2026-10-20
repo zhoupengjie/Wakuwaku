@@ -83,6 +83,7 @@ mod plugins;
 mod pointer;
 mod power;
 mod proxy;
+mod say;
 mod screen;
 mod scripts;
 mod sensors;
@@ -556,6 +557,27 @@ impl Shared {
         }
         let Some((label, value, private)) = self.widgets.lock().unwrap().label_of(id) else { return };
         self.to_pages("pet:nudge", json!({ "id": id, "words": words, "label": label, "value": value, "private": private, "open": open }));
+    }
+
+    // Words for you from a script or an agent (say.rs): by her, in a bubble
+    // over her head, when she is out on the desktop; her home opening
+    // saying them, as a widget's nudge, when she is in it. Ok(false): not
+    // said, she being hidden or a session wanting you.
+    pub fn say(&self, v: &Value) -> Result<bool, &'static str> {
+        let say = say::read(v)?;
+        let out = self.flag("out");
+        let said = self.is_visible() && !self.pet.lock().unwrap().wants_you();
+        self.log(&format!("say: {} characters{}, {} s, {}", say.text.chars().count(), if say.from.is_empty() { String::new() } else { format!(" from {}", say.from) }, say.ms / 1000, if !said { "not said (hidden, or a session wants you)" } else if out { "by her" } else { "at her home" }));
+        if !said {
+            return Ok(false);
+        }
+        let from = if say.from.is_empty() { i18n::t(self.lang(), "word.from").to_string() } else { say.from };
+        if out {
+            let _ = self.app.emit_to("pet", "pet:say", json!({ "text": say.text, "from": from, "ms": say.ms, "private": say.private }));
+        } else {
+            self.to_pages("pet:nudge", json!({ "id": "say", "icon": "bell", "words": say.text, "label": from, "value": "", "private": say.private, "open": Value::Null, "ms": say.ms }));
+        }
+        Ok(true)
     }
 
     // Today's counts changed: kept, and the widget says so.

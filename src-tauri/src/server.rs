@@ -302,6 +302,14 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool) {
             },
             None => reply(req, 400, json!({ "error": "bad json" })),
         },
+        // Words for you, said by her (say.rs): whether they were said.
+        ("POST", "/say") => match read_json(&mut req) {
+            Some(v) => match sh.say(&v) {
+                Ok(said) => reply(req, 200, json!({ "ok": true, "said": said })),
+                Err(why) => reply(req, 400, json!({ "error": why })),
+            },
+            None => reply(req, 400, json!({ "error": "bad json" })),
+        },
         // Started again while she runs: she comes back into sight.
         ("POST", "/come-home") => {
             crate::come_home(sh);

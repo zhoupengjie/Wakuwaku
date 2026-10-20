@@ -48,6 +48,9 @@ const isIsland = () => ROLE === 'island'
 let quiet = false
 
 let reaction = null // { clip, times, say, start }
+// Words sent to her to say (onSay): { main, more } in her bubble till their time is up.
+let saying = null
+let sayTimer
 let dragged = null // { dir, at }
 let walking = null // { dir }
 let looking = null // { row, frame, until }
@@ -191,9 +194,7 @@ function fillBubble(lines, isSaying = false) {
     node.textContent = text
     return node
   }
-  bubble.replaceChildren(
-    ...(isSaying ? [line('say', lines.main)] : [line('line', lines.main), ...(lines.more ? [line('line more', lines.more)] : [])]),
-  )
+  bubble.replaceChildren(...(isSaying ? [line('say', lines.main)] : [line('line', lines.main)]), ...(lines.more ? [line('line more', lines.more)] : []))
   bubble.title = [lines.main, lines.more].filter(Boolean).join('\n')
 }
 
@@ -216,7 +217,13 @@ function render() {
   }
   sprite.classList.remove('empty')
 
-  bubble.classList.add('hidden')
+  // Words sent to her to say (onSay): in her bubble for their time.
+  if (saying) {
+    fillBubble(saying, true)
+    bubble.classList.remove('hidden')
+  } else {
+    bubble.classList.add('hidden')
+  }
   const { main, more } = words()
   sprite.title = [main, more].filter(Boolean).join('\n')
 }
@@ -339,6 +346,26 @@ function react({ react: name, say: text, times }) {
 window.pet.onReact(react)
 
 window.pet.onAlert(({ mood }) => chime(mood))
+
+// Words sent to her to say to you (POST /say, main.rs say), out on the
+// desktop: in her bubble over her head, who says them under them, for as
+// long as they ask, a wave as they come. Private ones, while 「显示具体内容」
+// is off, show who alone.
+window.pet.onSay?.(s => {
+  if (isIsland() || !s?.text) return
+  const hide = s.private === true && config.details === false
+  saying = hide ? { main: s.from || '' } : { main: s.text, more: s.from || '' }
+  clearTimeout(sayTimer)
+  sayTimer = setTimeout(
+    () => {
+      saying = null
+      render()
+    },
+    s.ms > 0 ? s.ms : 10000,
+  )
+  react({ react: 'wave' })
+  render()
+})
 
 // Eyes on the cursor while it moves near enough.
 window.pet.onCursor(({ dx, dy }) => {

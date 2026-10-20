@@ -90,3 +90,34 @@
 **Widgets in the island, from scripts.** POST that JSON to `http://127.0.0.1:47213/widget` and it shows in the island while no session needs you; send it again within `ttl` seconds to keep it there. The fields are in the table above. The scripts here: `waku` (tell me when a command is done), CI and pull requests, a pomodoro, deadlines, dev servers, stocks/rates/coins, weather, a stretch reminder, and mail over IMAP, Microsoft Graph, or Thunderbird. The weather, stocks, pomodoro, countdown, stretch, CI and dev-server ones she also runs for you when switched on in the Plugins page, but as part of herself (in her own process: no PowerShell, no process of their own), showing exactly what these scripts send, with the same parameters; she no longer runs these scripts, which stay as samples to start your own from, or to run by hand.
 
 A widget is small at least (its icon and value). Its `detail`, as an object, says which sizes it has (`sizes`: `s`, `m`, `l`) and gives the larger ones more to show: `extra` (a few words, 24 characters: its second line), `series` (`points`, 120 at most, with `unit`, `hi`, `lo`) and `rows` (12 at most, each of `from code name when price change value unit kind icon`, 16 characters each, `subject text`, 60, `at` and `points`). Longer words are cut with "…"; anything else is dropped. A string `detail`, as before, is its extra.
+
+## 让她替你说一句话
+
+不想做成插件、只想让她马上告诉你一件事（比如 AI 跑完了要你看一眼），往 `http://127.0.0.1:47213/say` 发：
+
+```json
+{ "text": "测试跑完了，3 个失败", "from": "Claude Code", "secs": 15 }
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `text` | 要说的话，最长 200 个字，换行和多余的空格合成一个空格 |
+| `from` | 可选，谁说的，最长 40 个字；不写就是「有话对你说」 |
+| `secs` | 可选，显示几秒，2 到 120，默认 10 |
+| `private` | 可选，`true`：「显示具体内容」关掉时只显示 `from` |
+
+她在桌面上时，说在她头顶的气泡里（她还会挥挥手）；在家里（灵动岛、任务栏）时，岛弹开说，不管「她有事告诉你时」怎么设。勿扰、有程序全屏，或者有会话在等你确认时不说。回复 `{ "ok": true, "said": true }`；没说出来时 `said` 是 `false`；不对时 400 和 `{ "error": "…" }`。
+
+PowerShell：
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:47213/say -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes((@{ text = '构建好了'; from = 'CI' } | ConvertTo-Json -Compress)))
+```
+
+curl（Git Bash、WSL 外的终端）：
+
+```bash
+curl -s -X POST http://127.0.0.1:47213/say -H 'Content-Type: application/json' -d '{"text":"Build is green","from":"CI"}'
+```
+
+**Have her say a few words to you.** POST `{ "text", "from"?, "secs"?, "private"? }` to `http://127.0.0.1:47213/say`: up to 200 characters (one line), who says it (40), for 2 to 120 seconds (10 by default). Out on the desktop she says it in a bubble over her head; at home her island opens saying it, whatever "When she has something to tell you" is set to. Not while do not disturb is on, something is full screen, or a session waits on you (`said: false`).

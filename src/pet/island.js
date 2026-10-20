@@ -5724,6 +5724,8 @@
     // Not a widget's (a new version): its own icon.
     const own = widgets[at] || allWidgets.find(w => w.id === n.id)
     const widget = { ...n, icon: own?.icon || n.icon, color: own?.color, detail: own?.detail }
+    // Words sent to her to say (main.rs say): open for as long as they ask.
+    if (n.id === 'say') return cue('say', { clip: 'waving', text: null, ms: n.ms > 0 ? n.ms : NUDGE_READ_MS, widget })
     cue(own ? 'plugin' : 'notice', { clip: 'waving', text: null, ms: NUDGE_READ_MS, widget })
   })
 

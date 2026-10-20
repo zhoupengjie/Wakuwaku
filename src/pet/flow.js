@@ -81,6 +81,10 @@
   // opened the island by itself still does.
   function cueFor(kind, { setting = 'ring', view = 'compact', blocked = false } = {}) {
     if (kind === 'waiting' || setting === 'open') return 'open'
+    // Words sent to her to say to you (say: POST /say, main.rs say): said
+    // out, whatever the setting, that being why they were sent; kept for a
+    // prompt or the settings, the dot alone where a ring would be blocked.
+    if (kind === 'say') return view === 'expanded' ? 'show' : view === 'ask' || view === 'settings' ? 'later' : blocked ? 'dot' : 'open'
     // A tool failed, an item of the turn's list done: how it goes, not how
     // it ended. An agent mostly finds its way round a failed tool, and a
     // dot would say something was left undone (the design session).
@@ -110,7 +114,7 @@
   // card) stays to be seen on the next hover: as long as an ending stays
   // (the hold setting: 3 to 600 s, or until seen); a notice until seen.
   function keepFor(kind, hold) {
-    if (kind === 'notice') return Infinity
+    if (kind === 'notice' || kind === 'say') return Infinity
     return holdMs(hold)
   }
 

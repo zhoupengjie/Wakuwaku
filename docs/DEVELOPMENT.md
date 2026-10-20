@@ -63,6 +63,7 @@ src-tauri/
     winkeys.rs            任务栏的 Win 键：Win+1…9、Win+T、Win+B 从藏起来的 Windows 任务栏接过来（低级键盘钩子，自己的线程），按她的顺序
     jump.rs               点会话就到它的窗口：会话的进程链、找窗口、叫到前面、桌面版的会话链接
     widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、今天的 token、监控），什么时候冒头
+    say.rs                POST /say：脚本或 agent 让她说的一句话（文字、谁说的、几秒、是否私密）的校验；main.rs say 决定在她头顶的气泡里说（pet:say），还是在家里弹开说（pet:nudge，id 为 say，flow.js 的 say 类）
     tokens.rs             今天的 token：读 Claude Code、Codex 和 Antigravity 自己的会话记录
     plugins.rs, plugins/  她替你跑的插件（天气、股票、番茄钟、倒计时、久坐提醒、CI、开发服务器）：开关、参数、在她自己的进程里按各自的节拍跑
     scripts.rs            写出 waku 给终端用；邮件的 agent 启动 PowerShell 脚本时用的引号和 job object

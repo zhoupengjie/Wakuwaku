@@ -55,6 +55,8 @@
     answer: (id, choice) => send('pet_answer', { id, choice }),
     dismiss: id => send('pet_dismiss', { id }),
     keyboard: needs => send('pet_keyboard', { needs: needs === true }),
+    // A shortcut being recorded: her global ones let go meanwhile (shortcuts.rs).
+    shortcutsPause: on => send('pet_shortcuts_pause', { on: on === true }),
     // Room sizes are measured in page CSS px. WebView2's DPR can differ from
     // the monitor scale reported to Rust (Windows text scaling), so include
     // it when the native window converts that room to physical pixels.

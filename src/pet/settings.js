@@ -121,6 +121,13 @@
   const market = { items: null, at: 0, error: null, loading: false, cat: 'all', query: '', jobs: {}, updating: false }
   let mkAsk = null
   let recordingShortcut = null
+  // Recording one: her global shortcuts let go meanwhile, so the keys
+  // pressed reach this page (shortcuts.rs pause).
+  const setRecording = key => {
+    if (key === recordingShortcut) return
+    recordingShortcut = key
+    window.pet.shortcutsPause?.(key !== null)
+  }
   let failedShortcuts = null
   window.pet.onShortcutStatus && window.pet.onShortcutStatus(({ failed } = {}) => {
     failedShortcuts = new Set(failed || [])
@@ -3480,7 +3487,7 @@
     sub = null
     gone = null
     mkAsk = null
-    recordingShortcut = null
+    setRecording(null)
     if (flow.step === 'ask' || flow.step === 'refused') flow = AddonUI.IDLE
     freshRows.clear()
     drawSheet()
@@ -3637,17 +3644,17 @@
     const keyBind = at('[data-key-bind]')
     if (keyBind) {
       const key = keyBind.dataset.keyBind
-      recordingShortcut = recordingShortcut === key ? null : key
+      setRecording(recordingShortcut === key ? null : key)
       return draw()
     }
     const keyClear = at('[data-key-clear]')
     if (keyClear) {
       const key = keyClear.dataset.keyClear
-      recordingShortcut = null
+      setRecording(null)
       return patch({ [key]: '' })
     }
     if (recordingShortcut && !at('.kbadge')) {
-      recordingShortcut = null
+      setRecording(null)
       draw()
     }
     const tabButton = at('[data-tab]')
@@ -4573,23 +4580,23 @@
       e.stopPropagation()
       const key = recordingShortcut
       if (e.key === 'Escape') {
-        recordingShortcut = null
+        setRecording(null)
         return draw()
       }
       if (e.key === 'Backspace' || e.key === 'Delete') {
-        recordingShortcut = null
+        setRecording(null)
         return patch({ [key]: '' })
       }
       if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return
 
       if (e.metaKey) {
-        recordingShortcut = null
+        setRecording(null)
         toast(T('s.shortcutNoWin'))
         return draw()
       }
 
       if (!e.ctrlKey && !e.altKey) {
-        recordingShortcut = null
+        setRecording(null)
         toast(T('s.shortcutNeedMod'))
         return draw()
       }
@@ -4616,12 +4623,12 @@
       const defaults = { shortcutApprove: 'Alt+Y', shortcutDeny: 'Alt+N', shortcutIsland: 'Alt+W' }
       const others = ['shortcutApprove', 'shortcutDeny', 'shortcutIsland'].filter(k => k !== key)
       if (others.some(k => (s[k] ?? defaults[k]).toLowerCase() === combo.toLowerCase())) {
-        recordingShortcut = null
+        setRecording(null)
         toast(T('s.shortcutDuplicate'))
         return draw()
       }
 
-      recordingShortcut = null
+      setRecording(null)
       return patch({ [key]: combo })
     }
     if (e.key === 'Escape') {

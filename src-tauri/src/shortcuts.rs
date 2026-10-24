@@ -5,7 +5,7 @@
 // machine to decide whether to answer or expand safely.
 use std::sync::{Arc, Mutex};
 #[cfg(windows)]
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 #[cfg(windows)]
 use std::time::Duration;
 
@@ -134,6 +134,7 @@ mod win {
         y: i32,
     }
 
+    // As winkeys.rs declares it (GetMessageW is declared once per signature).
     #[repr(C)]
     struct Msg {
         hwnd: *mut std::ffi::c_void,
@@ -142,6 +143,7 @@ mod win {
         lparam: isize,
         time: u32,
         pt: Point,
+        private: u32,
     }
 
     extern "system" {
@@ -154,25 +156,41 @@ mod win {
     }
 
     static THREAD_ID: AtomicU32 = AtomicU32::new(0);
+    // A shortcut being recorded in the open settings: the keys are let go
+    // meanwhile, so the combination pressed reaches the settings instead of
+    // answering a prompt or folding the island.
+    static PAUSED: AtomicBool = AtomicBool::new(false);
+
+    pub fn pause(on: bool) {
+        if PAUSED.swap(on, Ordering::SeqCst) != on {
+            notify_reload();
+        }
+    }
 
     pub fn start_worker(sh: Arc<Shared>) {
         if THREAD_ID.load(Ordering::SeqCst) != 0 {
             return;
         }
         let sh_worker = sh.clone();
-        std::thread::spawn(move || {
+        crate::spawn_named("shortcuts", move || {
             let tid = unsafe { GetCurrentThreadId() };
             THREAD_ID.store(tid, Ordering::SeqCst);
 
-            let register_all = |sh: &Shared| -> Vec<String> {
+            // The failed ones; None while recording (the last say stays shown).
+            let register_all = |sh: &Shared| -> Option<Vec<String>> {
                 unsafe {
                     UnregisterHotKey(null_mut(), HOTKEY_APPROVE);
                     UnregisterHotKey(null_mut(), HOTKEY_DENY);
                     UnregisterHotKey(null_mut(), HOTKEY_ISLAND);
                 }
+                // Only while the settings are open: closed, the keys are back
+                // whatever their page last said.
+                if PAUSED.load(Ordering::SeqCst) && sh.island.lock().unwrap().settings_open {
+                    return None;
+                }
                 // Yield hotkeys when shortcuts disabled, DND on, or an app is fullscreen
                 if !sh.flag("shortcutsEnabled") || sh.flag("dnd") || sh.is_fullscreen() {
-                    return Vec::new();
+                    return Some(Vec::new());
                 }
 
                 let approve = sh.setting("shortcutApprove").as_str().unwrap_or("Alt+Y").to_string();
@@ -202,10 +220,10 @@ mod win {
                         failed.push(name.to_string());
                     }
                 }
-                failed
+                Some(failed)
             };
 
-            let mut last_failed = register_all(&sh_worker);
+            let mut last_failed = register_all(&sh_worker).unwrap_or_default();
             set_failed(last_failed.clone());
             let _ = sh_worker.app.emit_to("island", "shortcuts:status", json!({ "failed": last_failed }));
 
@@ -228,7 +246,7 @@ mod win {
                         let _ = sh_worker.app.emit_to("island", "island:hotkey", json!({ "which": which }));
                     }
                     WM_USER_RELOAD => {
-                        let failed = register_all(&sh_worker);
+                        let Some(failed) = register_all(&sh_worker) else { continue };
                         let changed = failed != last_failed;
                         last_failed = failed.clone();
                         set_failed(failed.clone());
@@ -251,11 +269,13 @@ mod win {
         }
     }
 
-    // When upgrading, the new instance starts before the old exits.
-    // If registration failed initially, retry after 1s (up to 5 times) to reacquire hotkeys.
+    // When upgrading, the new instance starts before the old exits, which
+    // takes up to 8 s (Shared::quit) and longer while it waits on the
+    // taskbar's handover. If registration failed initially, retry each
+    // second for 30 s to reacquire hotkeys.
     pub fn retry_registration() {
-        std::thread::spawn(move || {
-            for _ in 0..5 {
+        crate::spawn_named("shortcuts retry", move || {
+            for _ in 0..30 {
                 std::thread::sleep(Duration::from_millis(1000));
                 if failed().is_empty() {
                     break;
@@ -318,4 +338,12 @@ pub fn start(sh: &Arc<Shared>) {
 pub fn update(_sh: &Arc<Shared>) {
     #[cfg(windows)]
     win::notify_reload();
+}
+
+// The settings recording a shortcut (on), or done with it (off).
+pub fn pause(on: bool) {
+    #[cfg(windows)]
+    win::pause(on);
+    #[cfg(not(windows))]
+    let _ = on;
 }

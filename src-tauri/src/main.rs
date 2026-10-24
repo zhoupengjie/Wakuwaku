@@ -987,6 +987,13 @@ async fn pet_keyboard(app: AppHandle, window: WebviewWindow, needs: bool) {
     sh.set_keyboard(&window, needs);
 }
 
+// A shortcut being recorded in the settings: her global ones let go
+// meanwhile (shortcuts.rs pause).
+#[tauri::command]
+async fn pet_shortcuts_pause(on: bool) {
+    shortcuts::pause(on);
+}
+
 #[tauri::command]
 async fn pet_walk(app: AppHandle, window: WebviewWindow, dx: f64, ms: f64) -> bool {
     if is_island(&window) {
@@ -1618,6 +1625,7 @@ fn main() {
             pet_answer,
             pet_dismiss,
             pet_keyboard,
+            pet_shortcuts_pause,
             pet_walk,
             pet_walk_stop,
             island_holding,

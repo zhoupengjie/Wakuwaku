@@ -55,6 +55,8 @@
     answer: (id, choice) => send('pet_answer', { id, choice }),
     dismiss: id => send('pet_dismiss', { id }),
     keyboard: needs => send('pet_keyboard', { needs: needs === true }),
+    // A shortcut being recorded: her global ones let go meanwhile (shortcuts.rs).
+    shortcutsPause: on => send('pet_shortcuts_pause', { on: on === true }),
     // Room sizes are measured in page CSS px. WebView2's DPR can differ from
     // the monitor scale reported to Rust (Windows text scaling), so include
     // it when the native window converts that room to physical pixels.
@@ -188,6 +190,8 @@
     // Her tray icon clicked on a Mac: the island in the notch drops open, or
     // goes back (island.js peek).
     onPeek: on('island:peek'),
+    onHotkey: on('island:hotkey'),
+    onShortcutStatus: on('shortcuts:status'),
     // The windows' buttons as they change ({ id, title, exe, png, front, min, flash, sessions }).
     onWindows: on('taskbar:windows'),
     // The keyboard as it changes ({ lang, native, caps, ime: { id, name, lang,

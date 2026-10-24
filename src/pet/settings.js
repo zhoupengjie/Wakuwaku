@@ -45,7 +45,7 @@
   // welcome shows is the welcome, at General's top.
   const TABS = ['now', 'agents', 'look', 'widgets', 'mail']
   const TAB_KEY = { now: 's.tabGeneral', agents: 's.tabAgents', look: 's.tabLook', widgets: 's.tabWidgets', mail: 's.tabMail' }
-  const PART_OF = { pets: 'look', place: 'look', paper: 'look', alerts: 'now', connect: 'agents', update: 'now', net: 'now', crash: 'now' }
+  const PART_OF = { pets: 'look', place: 'look', paper: 'look', shortcuts: 'now', alerts: 'now', connect: 'agents', update: 'now', net: 'now', crash: 'now' }
   const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
   const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
   const HOMES = ['island', 'taskbar']
@@ -120,6 +120,20 @@
   // 'install', id }), or 全部更新 when one asks for more ({ kind: 'updates' }).
   const market = { items: null, at: 0, error: null, loading: false, cat: 'all', query: '', jobs: {}, updating: false }
   let mkAsk = null
+  let recordingShortcut = null
+  // Recording one: her global shortcuts let go meanwhile, so the keys
+  // pressed reach this page (shortcuts.rs pause).
+  const setRecording = key => {
+    if (key === recordingShortcut) return
+    recordingShortcut = key
+    window.pet.shortcutsPause?.(key !== null)
+  }
+  let failedShortcuts = null
+  window.pet.onShortcutStatus && window.pet.onShortcutStatus(({ failed } = {}) => {
+    failedShortcuts = new Set(failed || [])
+    if (snap) snap.shortcutsFailed = failed || []
+    draw()
+  })
   // Custom picked for how long endings stay, its box shown before anything
   // is typed in it (until the settings close or another choice is picked).
   let holdCustom = false
@@ -3248,8 +3262,32 @@
   // connected, the sessions and the quick switches, the alerts, startup and
   // the language, her updates, her crash reports and what this is.
   // Connecting them is the Agent page's.
+  function shortcutRow(key, title, note, value) {
+    const isRecording = recordingShortcut === key
+    const displayVal = isRecording ? esc(T('s.shortcutRecording')) : (value ? esc(value) : `<span class="empty">${esc(T('s.shortcutNone'))}</span>`)
+    const clearBtn = !isRecording && value ? `<button class="kclear" data-key-clear="${key}" title="${esc(T('s.shortcutNone'))}">✕</button>` : ''
+    const isFailed = failedShortcuts ? failedShortcuts.has(key) : (snap.shortcutsFailed || []).includes(key)
+    const errTip = isFailed ? `<div class="kerr">${esc(T('s.shortcutOccupied'))}</div>` : ''
+    const control = `<div class="kctl"><button class="kbadge${isRecording ? ' rec' : ''}" data-key-bind="${key}">${displayVal}</button>${clearBtn}</div>`
+    return row(esc(title), `${note ? esc(note) : ''}${errTip}`, control)
+  }
+
+  function pageShortcuts() {
+    const s = snap.settings
+    const on = s.shortcutsEnabled === true
+    return `${sec(T('s.shortcuts'))}<div class="grp">
+      ${row(esc(T('s.shortcutsEnable')), esc(T('s.shortcutsEnableNote')), sw('shortcutsEnabled', on))}
+      ${on ? `
+        ${shortcutRow('shortcutApprove', T('s.shortcutApprove'), T('s.shortcutApproveNote'), s.shortcutApprove ?? 'Alt+Y')}
+        ${shortcutRow('shortcutDeny', T('s.shortcutDeny'), T('s.shortcutDenyNote'), s.shortcutDeny ?? 'Alt+N')}
+        ${shortcutRow('shortcutIsland', T('s.shortcutIsland'), T('s.shortcutIslandNote'), s.shortcutIsland ?? 'Alt+W')}
+      ` : ''}
+    </div>`
+  }
+
   function pageGeneral() {
     return `${cardShows() ? part('welcome', welcomeBlock()) : agentsLine()}${pageNow()}
+      ${part('shortcuts', pageShortcuts())}
       ${part('alerts', pageAlerts())}
       ${sec(T('s.startLang'))}<div class="grp">
         ${row(esc(T('settings.startAtLogin')), esc(T('home.pluginStart')), sw('login', snap.loginAtStart))}
@@ -3449,6 +3487,7 @@
     sub = null
     gone = null
     mkAsk = null
+    setRecording(null)
     if (flow.step === 'ask' || flow.step === 'refused') flow = AddonUI.IDLE
     freshRows.clear()
     drawSheet()
@@ -3601,6 +3640,22 @@
       // Locked: ✕ closes them (and Esc), a press on the head no more.
       if (snap.settings.settingsPin && !at('.x[data-close]')) return
       return close('click')
+    }
+    const keyBind = at('[data-key-bind]')
+    if (keyBind) {
+      const key = keyBind.dataset.keyBind
+      setRecording(recordingShortcut === key ? null : key)
+      return draw()
+    }
+    const keyClear = at('[data-key-clear]')
+    if (keyClear) {
+      const key = keyClear.dataset.keyClear
+      setRecording(null)
+      return patch({ [key]: '' })
+    }
+    if (recordingShortcut && !at('.kbadge')) {
+      setRecording(null)
+      draw()
     }
     const tabButton = at('[data-tab]')
     if (tabButton) return setTab(tabButton.dataset.tab)
@@ -4520,6 +4575,62 @@
 
   document.addEventListener('keydown', e => {
     if (!isOpen) return
+    if (recordingShortcut) {
+      e.preventDefault()
+      e.stopPropagation()
+      const key = recordingShortcut
+      if (e.key === 'Escape') {
+        setRecording(null)
+        return draw()
+      }
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        setRecording(null)
+        return patch({ [key]: '' })
+      }
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return
+
+      if (e.metaKey) {
+        setRecording(null)
+        toast(T('s.shortcutNoWin'))
+        return draw()
+      }
+
+      if (!e.ctrlKey && !e.altKey) {
+        setRecording(null)
+        toast(T('s.shortcutNeedMod'))
+        return draw()
+      }
+
+      const parts = []
+      if (e.ctrlKey) parts.push('Ctrl')
+      if (e.altKey) parts.push('Alt')
+      if (e.shiftKey) parts.push('Shift')
+
+      let mainKey = ''
+      if (/^[a-zA-Z0-9]$/.test(e.key)) mainKey = e.key.toUpperCase()
+      else if (/^Key([A-Z])$/.test(e.code)) mainKey = e.code.slice(3)
+      else if (/^Digit([0-9])$/.test(e.code)) mainKey = e.code.slice(5)
+      else if (/^F([1-9]|1[0-2])$/i.test(e.key)) mainKey = e.key.toUpperCase()
+      else if (e.key === ' ' || e.code === 'Space') mainKey = 'Space'
+      else if (e.key === 'Enter') mainKey = 'Enter'
+      else if (e.key === 'Tab') mainKey = 'Tab'
+
+      if (!mainKey) return
+      parts.push(mainKey)
+      const combo = parts.join('+')
+
+      const s = snap.settings
+      const defaults = { shortcutApprove: 'Alt+Y', shortcutDeny: 'Alt+N', shortcutIsland: 'Alt+W' }
+      const others = ['shortcutApprove', 'shortcutDeny', 'shortcutIsland'].filter(k => k !== key)
+      if (others.some(k => (s[k] ?? defaults[k]).toLowerCase() === combo.toLowerCase())) {
+        setRecording(null)
+        toast(T('s.shortcutDuplicate'))
+        return draw()
+      }
+
+      setRecording(null)
+      return patch({ [key]: combo })
+    }
     if (e.key === 'Escape') {
       e.preventDefault()
       if (!menuEl.hidden) return closeMenu()

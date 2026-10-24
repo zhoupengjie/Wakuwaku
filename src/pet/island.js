@@ -3843,6 +3843,7 @@
   // or after a while if the pointer never comes.
   function setPeek(on) {
     if (on !== peek) console.log(`island: peek ${on ? 'open' : 'closed'}`)
+    if (!on) endNudge()
     peek = on
     clearTimeout(peekTimer)
     if (peek) peekTimer = setTimeout(() => !isHover && setPeek(false), PEEK_MS)
@@ -6154,5 +6155,5 @@
     const angle = Flow.stepsOf(r, s.t0 + ms)[0]?.angle ?? Flow.angleAt(r, s.t0 + ms)
     for (const sp of spins) sp.style.transform = `rotate(${angle}deg)`
   }
-  window.Island = { accent: () => look.accent || null, isOn, changed: update, reach, absorb, settingsMax, tbPresets: TB_PRESETS, tbPreset: () => presetOf(config.taskbarLayout), tbWithPreset: name => TB_PRESETS[name] && Widgets.withParts(TB_PRESETS[name], tbLayout(config.taskbarLayout)), editTaskbar, whereOf, placeWidget, placeNow, anchor, notched: () => !!screenTop?.notch, ringAt }
+  window.Island = { accent: () => look.accent || null, isOn, isOpen: () => isOn() && view !== 'compact' && !body.classList.contains('isl-stowed'), peek: on => setPeek(typeof on === 'boolean' ? on : view === 'compact'), changed: update, reach, absorb, settingsMax, tbPresets: TB_PRESETS, tbPreset: () => presetOf(config.taskbarLayout), tbWithPreset: name => TB_PRESETS[name] && Widgets.withParts(TB_PRESETS[name], tbLayout(config.taskbarLayout)), editTaskbar, whereOf, placeWidget, placeNow, anchor, notched: () => !!screenTop?.notch, ringAt }
 })()

@@ -142,6 +142,7 @@ pub fn snapshot(sh: &Shared) -> Value {
         "asks": sh.asks.lock().unwrap().views(),
         "isVisible": sh.is_visible(),
         "hidden": sh.hidden.load(Ordering::SeqCst),
+        "shortcutsFailed": crate::shortcuts::failed(),
         // Each agent's block (agent_row), by its id.
         "agents": connection::ALL.into_iter().map(|agent| (connection::id(agent).to_string(), json!(agent_row(sh, agent)))).collect::<Map<String, Value>>(),
         // The agents' versions where a file of theirs says (connection/versions.rs
@@ -529,6 +530,29 @@ fn is_island_pos(v: &Value) -> bool {
     matches!(v.as_str(), Some("left" | "center" | "right"))
 }
 
+const SHORTCUT_KEYS: [&str; 3] = ["shortcutApprove", "shortcutDeny", "shortcutIsland"];
+
+fn is_shortcut_spec(sh: &Shared, key: &str, s: &str) -> bool {
+    if s.is_empty() {
+        return true;
+    }
+    if crate::shortcuts::parse_shortcut(s).is_none() {
+        return false;
+    }
+    let all: Vec<String> = SHORTCUT_KEYS
+        .iter()
+        .map(|&k| {
+            if k == key {
+                s.to_string()
+            } else {
+                sh.setting(k).as_str().unwrap_or("").to_string()
+            }
+        })
+        .collect();
+    let refs: Vec<&str> = all.iter().map(String::as_str).collect();
+    !crate::shortcuts::has_duplicates(&refs)
+}
+
 // What a settings patch may hold, checked: anything else is dropped.
 fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
     let is_bool = v.is_boolean();
@@ -536,7 +560,8 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "lang" => matches!(v.as_str(), Some("auto" | "zh" | "en")),
         "pet" => v.as_str().is_some_and(|id| data::pets(&sh.dir).iter().any(|p| p.id == id)),
         "scale" => v.as_f64().is_some_and(|s| data::SCALES.iter().any(|(_, x)| (x - s).abs() < 1e-9)),
-        "details" | "walk" | "look" | "sound" | "dnd" | "hideInFullscreen" | "onboarded" | "out" | "settingsPin" | "settingsTop" | "oledShift" | "autoUpdateCheck" => is_bool,
+        "details" | "walk" | "look" | "sound" | "dnd" | "hideInFullscreen" | "onboarded" | "out" | "settingsPin" | "settingsTop" | "oledShift" | "autoUpdateCheck" | "shortcutsEnabled" => is_bool,
+        "shortcutApprove" | "shortcutDeny" | "shortcutIsland" => v.as_str().is_some_and(|s| is_shortcut_spec(sh, key, s)),
         // Where an update is downloaded from first (updates.rs gitee_first).
         "updateFrom" => matches!(v.as_str(), Some("auto" | "github" | "gitee")),
         // Crash reports sent by themselves, never, or asked about (crash.rs).
@@ -668,6 +693,7 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
     let mail_way = rest.contains_key("mailProxy") || net_way;
     let crash_auto = rest.get("crashReports").and_then(Value::as_str) == Some("auto");
     let island_pos = rest.contains_key("islandPos");
+
     if !rest.is_empty() {
         sh.change(Value::Object(rest));
     }

@@ -190,6 +190,11 @@ fn defaults() -> Map<String, Value> {
         "dnd": false,
         "hideInFullscreen": true,
         "onboarded": false,
+        // Global shortcuts for prompt approval and island toggle (shortcuts.rs)
+        "shortcutsEnabled": false,
+        "shortcutApprove": "Alt+Y",
+        "shortcutDeny": "Alt+N",
+        "shortcutIsland": "Alt+W",
         // Which defaults a config was written under (load: one from before
         // 2026-10-13 keeps the look it had).
         "lookDefaults": 2,

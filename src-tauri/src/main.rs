@@ -95,6 +95,7 @@ mod sensors;
 mod server;
 mod settings;
 mod shell;
+mod shortcuts;
 mod starts;
 mod state;
 mod systray;
@@ -628,6 +629,7 @@ impl Shared {
         let touches_top = ["settingsPin", "settingsTop"].iter().any(|k| patch.contains_key(*k));
         let touches_monitor = ["monitor", "monitorSource", "widgetsOff"].iter().any(|k| patch.contains_key(*k));
         let touches_stow = patch.contains_key("islandHideUnder");
+        let touches_shortcuts = ["shortcutsEnabled", "shortcutApprove", "shortcutDeny", "shortcutIsland", "dnd"].iter().any(|k| patch.contains_key(*k));
         {
             let mut settings = self.settings.lock().unwrap();
             settings.extend(patch);
@@ -644,6 +646,9 @@ impl Shared {
         tray::refresh_menu(self);
         if touches_visibility {
             self.apply_visibility();
+        }
+        if touches_shortcuts {
+            shortcuts::update(self);
         }
         // Her taskbar on the other displays: its material, its buttons' alignment, her language (bars.rs).
         bars::refresh(self);
@@ -696,6 +701,7 @@ impl Shared {
         let _ = self.app.emit_to("island", "pet:full-screen", json!({ "on": is_full }));
         let t = Instant::now();
         self.apply_visibility();
+        shortcuts::update(self);
         self.log(&format!("full screen: {} in {} ms", if is_full { "stepped aside" } else { "back" }, t.elapsed().as_millis()));
     }
 
@@ -1810,6 +1816,7 @@ fn main() {
             island::apply_visibility(&sh);
             tray::create(&sh)?;
             server::serve(sh.clone(), listener);
+            shortcuts::start(&sh);
             // The mail accounts that are on, watched from the start.
             mail::sync(&sh);
             // The desktop's widgets (desk.rs).

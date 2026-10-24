@@ -10,8 +10,8 @@
 // its own dialog open all the while.
 //
 // Everything shown comes from the tool call, so it is set as text, never HTML.
-;(function () {
-  const { t } = window.I18n
+;(function (root) {
+  const { t } = root?.I18n || (typeof require !== 'undefined' ? require('../shared/i18n') : { t: (_, k) => k })
   // The other agents a prompt may come from, named on it (Claude Code's: none).
   const FROM = { codex: 'Codex', opencode: 'OpenCode', omp: 'omp', zcode: 'ZCode', dsh: 'DeepSeek Harness' }
   // Apps whose own dialog stays open meanwhile: a prompt is handled there.
@@ -22,9 +22,12 @@
   const ARM_MS = 600
   const STEP_ARM_MS = 150
 
-  const panel = document.getElementById('panel')
+  const panel = typeof document !== 'undefined' ? document.getElementById('panel') : null
   let lang = 'en'
+  let config = {}
   let asks = []
+  const canAnswerWithHotkey = ask => !!ask && (ask.kind === 'permission' || ask.kind === 'plan') && !IN_APP.has(ask.from) && ask.canAnswer !== false
+  const keyHintOf = (key, ask) => (canAnswerWithHotkey(ask) && config.shortcutsEnabled && config[key] ? config[key] : '')
   let shownId = null
   let step = 0
   // Per question: ['label', ...] picked, { text } typed, or { number }.
@@ -50,8 +53,9 @@
     return node
   }
 
-  function button(label, action, onClick, kind = '') {
-    return el('button', { class: `btn ${kind}`, 'data-action': action, disabled: true, onclick: onClick }, label)
+  function button(label, action, onClick, kind = '', keyHint = '') {
+    const hint = keyHint ? el('span', { class: 'hk-hint' }, keyHint) : null
+    return el('button', { class: `btn ${kind}`, 'data-action': action, disabled: true, onclick: onClick }, label, hint)
   }
 
   // A box to type in. The window takes the keyboard only once you click it.
@@ -131,9 +135,9 @@
       el(
         'div',
         { class: 'row' },
-        button(T('panel.allow'), 'allow', () => answer({ action: 'allow' }), 'primary'),
+        button(T('panel.allow'), 'allow', () => answer({ action: 'allow' }), 'primary', keyHintOf('shortcutApprove', ask)),
         ask.always ? button(T('panel.always'), 'always', () => answer({ action: 'always' }), 'always') : null,
-        button(T('panel.deny'), 'deny', () => answer({ action: 'deny' }), 'danger'),
+        button(T('panel.deny'), 'deny', () => answer({ action: 'deny' }), 'danger', keyHintOf('shortcutDeny', ask)),
       ),
       ask.always ? alwaysNote(ask.always) : null,
       ask.reason ? reasonNote(ask.reason) : null,
@@ -147,8 +151,8 @@
       el(
         'div',
         { class: 'row' },
-        button(T('panel.approve'), 'allow', () => answer({ action: 'allow' }), 'primary'),
-        button(T('panel.deny'), 'deny', () => answer({ action: 'deny' }), 'danger'),
+        button(T('panel.approve'), 'allow', () => answer({ action: 'allow' }), 'primary', keyHintOf('shortcutApprove', ask)),
+        button(T('panel.deny'), 'deny', () => answer({ action: 'deny' }), 'danger', keyHintOf('shortcutDeny', ask)),
       ),
     ]
   }
@@ -272,11 +276,14 @@
 
   // Which page holds the panel: her home's (the island's window), which
   // talks for her; the open settings have it as a banner.
-  const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
+  const ROLE = typeof location !== 'undefined'
+    ? (new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet')
+    : 'island'
   let settingsOpen = false
   const holdsPanel = () => ROLE === 'island'
 
   function render(armMs = ARM_MS) {
+    if (!panel) return
     const ask = holdsPanel() ? asks[0] : null
     const hadFocus = document.activeElement?.dataset?.input === 'answer'
     panel.replaceChildren()
@@ -328,7 +335,7 @@
   }
 
   // Typing shows the confirm button for a single-select "other" answer.
-  panel.addEventListener('input', e => {
+  panel?.addEventListener('input', e => {
     if (e.target?.dataset?.input !== 'answer') return
     const row = panel.querySelector('button[data-action="confirm"]')?.parentElement
     if (row?.hidden && typed.trim()) {
@@ -337,25 +344,65 @@
     }
   })
 
-  // Main moves the pet within a grown window so she stays put on screen.
-  window.pet.onShift(px => document.documentElement.style.setProperty('--shift', `${px}px`))
+  if (typeof window !== 'undefined' && window.pet) {
+    // Main moves the pet within a grown window so she stays put on screen.
+    window.pet.onShift?.(px => document.documentElement.style.setProperty('--shift', `${px}px`))
 
-  window.pet.onUpdate(data => {
-    const wasHolding = holdsPanel()
-    settingsOpen = data.settingsOpen === true
-    if ((data.lang && data.lang !== lang) || wasHolding !== holdsPanel()) {
-      lang = data.lang || lang
-      render(0)
+    window.pet.onUpdate?.(data => {
+      const wasHolding = holdsPanel()
+      const prevHk = `${config.shortcutsEnabled}:${config.shortcutApprove}:${config.shortcutDeny}`
+      settingsOpen = data.settingsOpen === true
+      config = data.config || config
+      const nextHk = `${config.shortcutsEnabled}:${config.shortcutApprove}:${config.shortcutDeny}`
+      if ((data.lang && data.lang !== lang) || wasHolding !== holdsPanel() || (shownId && prevHk !== nextHk)) {
+        lang = data.lang || lang
+        render(0)
+      }
+    })
+
+    window.pet.onAsks?.(list => {
+      asks = Array.isArray(list) ? list : []
+      render()
+    })
+  }
+
+  function decideHotkeyAction({ which, ask, shownId, isArmed, islandOpen }) {
+    if (which === 'island') return { type: 'toggle' }
+    if (which !== 'allow' && which !== 'deny') return { type: 'ignore' }
+    if (canAnswerWithHotkey(ask) && isArmed && shownId && ask.id === shownId && islandOpen) {
+      return { type: 'answer', which, id: shownId }
     }
-  })
+    return { type: 'open' }
+  }
 
-  window.pet.onAsks(list => {
-    asks = Array.isArray(list) ? list : []
-    render()
-  })
+  if (typeof window !== 'undefined' && window.pet) {
+    window.pet.onHotkey?.(({ which } = {}) => {
+      const ask = holdsPanel() ? asks[0] : null
+      const actionBtn = panel?.querySelector(`button[data-action="${which}"]`)
+      const isArmed = !!panel && !panel.hidden && !!actionBtn && actionBtn.disabled === false
+      const islandOpen = !!window.Island?.isOpen?.()
+
+      const decision = decideHotkeyAction({ which, ask, shownId, isArmed, islandOpen })
+      if (decision.type === 'toggle') {
+        window.Island?.peek?.()
+      } else if (decision.type === 'answer') {
+        answer({ action: which })
+      } else if (decision.type === 'open') {
+        if (!islandOpen) {
+          window.Island?.peek?.(true)
+        }
+      }
+    })
+  }
 
   // The panel takes clicks; the rest of the window lets them through. In the
   // island, the island itself does this for the panel inside it.
-  panel.addEventListener('mouseenter', () => window.Island?.isOn() || window.pet.hover(true))
-  panel.addEventListener('mouseleave', () => window.Island?.isOn() || window.pet.hover(false))
-})()
+  if (panel) {
+    panel.addEventListener('mouseenter', () => window.Island?.isOn() || window.pet.hover(true))
+    panel.addEventListener('mouseleave', () => window.Island?.isOn() || window.pet.hover(false))
+  }
+
+  const api = { decideHotkeyAction, ARM_MS }
+  if (typeof module !== 'undefined' && module.exports) module.exports = api
+  if (typeof window !== 'undefined') window.Panel = api
+})(this ?? window)

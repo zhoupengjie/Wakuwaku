@@ -188,6 +188,8 @@
     // Her tray icon clicked on a Mac: the island in the notch drops open, or
     // goes back (island.js peek).
     onPeek: on('island:peek'),
+    onHotkey: on('island:hotkey'),
+    onShortcutStatus: on('shortcuts:status'),
     // The windows' buttons as they change ({ id, title, exe, png, front, min, flash, sessions }).
     onWindows: on('taskbar:windows'),
     // The keyboard as it changes ({ lang, native, caps, ime: { id, name, lang,

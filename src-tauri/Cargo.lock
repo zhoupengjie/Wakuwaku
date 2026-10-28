@@ -4250,7 +4250,7 @@ dependencies = [
 
 [[package]]
 name = "wakuwaku"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "agent-core",
  "agent-hub",

@@ -214,7 +214,8 @@ fn testing_webview() -> bool {
 // breakpoint, a C++ exception, and Rust's 101 (a panic, built to unwind).
 // Not 0, not 1 (ended by Task Manager or taskkill), not 0xFFFFFFFF (ended
 // by PowerShell's Stop-Process or .NET's Kill: TerminateProcess(-1)), not
-// Ctrl+C's.
+// Ctrl+C's, not 0x40010004 (ended as a debugger ends one: by Windows at a
+// logoff, by a tool).
 pub fn is_crash_code(code: u32) -> bool {
     match code {
         0xC000_013A | 0xFFFF_FFFF => false,
@@ -809,19 +810,30 @@ pub fn watch(sh: &Arc<Shared>, window: &tauri::WebviewWindow) {
 #[cfg(not(windows))]
 pub fn watch(_sh: &Arc<Shared>, _window: &tauri::WebviewWindow) {}
 
+// Whether one of WebView2's processes gone is a crash (WebView2's numbers):
+// her renderer gone or not answering, or the browser process; not one ended
+// from outside. WebView2 does not know who ended one: the browser process
+// ended by Windows at a logoff, a debugger or a tool (0x40010004) comes as
+// "unexpected", the renderer ended by Stop-Process (0xFFFFFFFF) as
+// "crashed"; their exit codes tell. A renderer not answering is still there
+// (no exit code); for one that could not start, the code says why, not who.
+fn webview_crash(kind: i32, reason: i32, code: i32) -> bool {
+    let told_by_code = matches!(kind, 0 | 1) && reason != 4;
+    matches!(kind, 0..=2) && reason != 2 && (!told_by_code || is_crash_code(code as u32))
+}
+
 // One of WebView2's processes gone (its kind, why, its exit code: WebView2's
-// numbers): said in the log; its report made and sent or told, for her
-// renderer or the browser process ended by a crash, not one killed (twice in
-// ten seconds, one report: her two pages share one renderer); she starts
-// anew for the browser, once she has run a minute. Whether to load the page
-// again (her renderer gone).
+// numbers): said in the log; its report made and sent or told, for a crash
+// (webview_crash; twice in ten seconds, one report: her two pages share one
+// renderer); she starts anew for the browser, once she has run a minute,
+// crashed or ended. Whether to load the page again (her renderer gone).
 pub fn webview_failed(sh: &Arc<Shared>, label: &str, kind: i32, reason: i32, code: i32) -> bool {
     const KINDS: [&str; 10] = ["browser-exited", "render-exited", "render-unresponsive", "frame-render-exited", "utility-exited", "sandbox-helper-exited", "gpu-exited", "ppapi-plugin-exited", "ppapi-broker-exited", "unknown-exited"];
     const REASONS: [&str; 7] = ["unexpected", "unresponsive", "terminated", "crashed", "launch-failed", "out-of-memory", "profile-deleted"];
     let kind_name = KINDS.get(kind as usize).copied().unwrap_or("unknown-exited");
     let reason_name = REASONS.get(reason as usize).copied().unwrap_or("other");
     sh.log(&format!("webview: {label}: {kind_name} ({reason_name}), exit 0x{:X}", code as u32));
-    let reportable = matches!(kind, 0..=2) && (reason != 2 || testing_webview());
+    let reportable = webview_crash(kind, reason, code) || (matches!(kind, 0..=2) && testing_webview());
     static LAST: Mutex<u64> = Mutex::new(0);
     let now = crate::now_ms();
     let again = {
@@ -874,7 +886,7 @@ pub fn webview_failed(sh: &Arc<Shared>, label: &str, kind: i32, reason: i32, cod
 
 #[cfg(test)]
 mod tests {
-    use super::{found_for, is_crash_code, is_frame, iso_minute};
+    use super::{found_for, is_crash_code, is_frame, iso_minute, webview_crash};
 
     #[test]
     fn crash_codes() {
@@ -883,6 +895,33 @@ mod tests {
         }
         for code in [0, 1, 0xC000_013A, 0x4001_0004, 259, 0xFFFF_FFFF] {
             assert!(!is_crash_code(code), "{code:#x}");
+        }
+    }
+
+    #[test]
+    fn webview_crashes() {
+        // (kind, reason, exit code), WebView2's numbers.
+        let crashes = [
+            (0, 0, 0xC000_0005u32), // the browser process, an access violation
+            (0, 3, 0x8000_0003),    // the browser process, a failed check
+            (1, 3, 0xC000_0005),    // her renderer
+            (1, 5, 0xE000_0008),    // her renderer, out of memory
+            (1, 4, 5),              // her renderer could not start
+            (2, 1, 0),              // her renderer not answering
+        ];
+        for (kind, reason, code) in crashes {
+            assert!(webview_crash(kind, reason, code as i32), "{kind} {reason} {code:#x}");
+        }
+        let not = [
+            (0, 0, 0x4001_0004u32), // the browser process ended from outside (#93)
+            (0, 0, 1),              // by Task Manager
+            (1, 3, 0xFFFF_FFFF),    // her renderer by Stop-Process
+            (1, 2, 0xC000_0005),    // her renderer, ended as WebView2 says
+            (3, 3, 0xC000_0005),    // a frame's renderer, not hers
+            (6, 0, 0xC000_0005),    // the GPU process: WebView2 starts it anew
+        ];
+        for (kind, reason, code) in not {
+            assert!(!webview_crash(kind, reason, code as i32), "{kind} {reason} {code:#x}");
         }
     }
 

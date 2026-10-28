@@ -1304,15 +1304,24 @@ mod imp {
         fn method<F: Copy>(&self, at: usize) -> F {
             unsafe { std::mem::transmute_copy(&*(*(self.0 as *const *const usize)).add(at)) }
         }
+        // An object handed out: ours only if there is one. Made only then
+        // (then, not then_some): one made anyway was dropped, released
+        // through a null pointer, and the compiler, taking that for never,
+        // left out the look for null too; asked for the way out with none
+        // there (Wi-Fi gone a moment: S_OK and null, as Windows says),
+        // she crashed (zhoupengjie/Wakuwaku#95).
+        fn held(hr: i32, out: *mut c_void) -> Option<Rt> {
+            (hr >= 0 && !out.is_null()).then(|| Rt(out))
+        }
         fn object(&self, at: usize) -> Option<Rt> {
             let mut out = std::ptr::null_mut();
             let hr = self.method::<extern "system" fn(*mut c_void, *mut *mut c_void) -> i32>(at)(self.0, &mut out);
-            (hr >= 0 && !out.is_null()).then_some(Rt(out))
+            Rt::held(hr, out)
         }
         fn item(&self, at: usize, index: u32) -> Option<Rt> {
             let mut out = std::ptr::null_mut();
             let hr = self.method::<extern "system" fn(*mut c_void, u32, *mut *mut c_void) -> i32>(at)(self.0, index, &mut out);
-            (hr >= 0 && !out.is_null()).then_some(Rt(out))
+            Rt::held(hr, out)
         }
         fn value<T: Default>(&self, at: usize) -> Option<T> {
             let mut out = T::default();
@@ -1321,7 +1330,7 @@ mod imp {
         fn cast(&self, iid: &Guid) -> Option<Rt> {
             let mut out = std::ptr::null_mut();
             let hr = self.method::<extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> i32>(0)(self.0, iid, &mut out);
-            (hr >= 0 && !out.is_null()).then_some(Rt(out))
+            Rt::held(hr, out)
         }
     }
 
@@ -1373,6 +1382,55 @@ mod imp {
             return None;
         }
         wlan.object(11)?.value::<u8>(6)
+    }
+
+    #[cfg(test)]
+    mod rt_tests {
+        use super::*;
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        // An object of our own, as WinRT's are: QueryInterface (0), Release
+        // (2), and at 6, 7 and 8 an object asked for, one by index, one
+        // refused. Each hands back nothing: S_OK and null, as
+        // GetInternetConnectionProfile does with no way out (#95), or an
+        // error. Its releases counted.
+        static RELEASED: AtomicU32 = AtomicU32::new(0);
+        extern "system" fn no_interface(_: *mut c_void, _: *const Guid, out: *mut *mut c_void) -> i32 {
+            // SAFETY: the out-parameter Rt::cast hands in.
+            unsafe { *out = std::ptr::null_mut() };
+            0x8000_4002_u32 as i32
+        }
+        extern "system" fn release(_: *mut c_void) -> u32 {
+            RELEASED.fetch_add(1, Ordering::SeqCst);
+            0
+        }
+        extern "system" fn nothing(_: *mut c_void, out: *mut *mut c_void) -> i32 {
+            // SAFETY: the out-parameter Rt::object hands in.
+            unsafe { *out = std::ptr::null_mut() };
+            0
+        }
+        extern "system" fn nothing_at(_: *mut c_void, _: u32, out: *mut *mut c_void) -> i32 {
+            // SAFETY: the out-parameter Rt::item hands in.
+            unsafe { *out = std::ptr::null_mut() };
+            0
+        }
+        extern "system" fn failing(_: *mut c_void, _: *mut *mut c_void) -> i32 {
+            0x8000_4005_u32 as i32
+        }
+
+        #[test]
+        fn nothing_handed_back_is_none_and_never_released() {
+            let table: [usize; 9] = [no_interface as usize, 0, release as usize, 0, 0, 0, nothing as usize, nothing_at as usize, failing as usize];
+            let object: *const usize = table.as_ptr();
+            let rt = Rt(&object as *const *const usize as *mut c_void);
+            assert!(rt.object(6).is_none());
+            assert!(rt.item(7, 0).is_none());
+            assert!(rt.object(8).is_none());
+            assert!(rt.cast(&IID_CONNECTION_PROFILE2).is_none());
+            assert_eq!(RELEASED.load(Ordering::SeqCst), 0);
+            drop(rt);
+            assert_eq!(RELEASED.load(Ordering::SeqCst), 1);
+        }
     }
 
     #[cfg(test)]

@@ -983,7 +983,8 @@ mod imp {
             let path: Vec<u16> = format!(r"\\.\PhysicalDrive{number}").encode_utf16().chain([0]).collect();
             // SAFETY: the path ends in 0; FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING.
             let h = unsafe { CreateFileW(path.as_ptr(), 0, 3, std::ptr::null_mut(), 3, 0, 0) };
-            (h != -1 && h != 0).then_some(Opened(h))
+            // Made only if opened: one made anyway closes what it holds as it goes.
+            (h != -1 && h != 0).then(|| Opened(h))
         }
 
         // IOCTL_STORAGE_QUERY_PROPERTY with `input` (a STORAGE_PROPERTY_QUERY

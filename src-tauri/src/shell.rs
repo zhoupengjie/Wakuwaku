@@ -98,7 +98,6 @@ mod imp {
     const SYNCHRONIZE: u32 = 0x0010_0000;
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
     const WAIT_TIMEOUT: u32 = 0x102;
-    const INFINITE: u32 = u32::MAX;
 
     static GUARDED: AtomicBool = AtomicBool::new(false);
 
@@ -419,12 +418,13 @@ mod imp {
         ok
     }
 
-    // The guard's whole life: wait for her to end, then `ended` (main.rs:
-    // the desktop's icons where they are, icons.rs), then give the taskbar
-    // back if she did not (trying for a minute, in case Explorer is
+    // The guard's whole life: wait for her to end, `watch` every two seconds
+    // meanwhile (main.rs: whether she answers, crash.rs Hang), then `ended`
+    // (main.rs: the desktop's icons where they are, icons.rs), then give the
+    // taskbar back if she did not (trying for a minute, in case Explorer is
     // restarting), and meanwhile `after` (main.rs: whether she crashed,
     // crash.rs) with her exit code and when she started (ms since 1970).
-    pub fn guard(pid: u32, file: &Path, ended: impl FnOnce(), after: impl FnOnce(Option<u32>, Option<u64>) + Send + 'static) {
+    pub fn guard(pid: u32, file: &Path, mut watch: impl FnMut(), ended: impl FnOnce(), after: impl FnOnce(Option<u32>, Option<u64>) + Send + 'static) {
         // When she started, as ms since 1970.
         let started = started(pid).map(|t| (t / 10_000).saturating_sub(11_644_473_600_000));
         let mut code = None;
@@ -432,7 +432,9 @@ mod imp {
         unsafe {
             let process = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
             if process != 0 {
-                WaitForSingleObject(process, INFINITE);
+                while WaitForSingleObject(process, 2_000) == WAIT_TIMEOUT {
+                    watch();
+                }
                 let mut c = 0u32;
                 if GetExitCodeProcess(process, &mut c) != 0 {
                     code = Some(c);
@@ -498,7 +500,7 @@ mod imp {
     pub fn spawn_guard(_file: &Path) -> bool {
         false
     }
-    pub fn guard(_pid: u32, _file: &Path, _ended: impl FnOnce(), _after: impl FnOnce(Option<u32>, Option<u64>) + Send + 'static) {}
+    pub fn guard(_pid: u32, _file: &Path, _watch: impl FnMut(), _ended: impl FnOnce(), _after: impl FnOnce(Option<u32>, Option<u64>) + Send + 'static) {}
     pub fn lone_win() -> super::LoneWin {
         super::LoneWin { taskman: None, shell: None, tray: None }
     }

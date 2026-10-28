@@ -1420,7 +1420,7 @@ mod imp {
 
         #[test]
         fn nothing_handed_back_is_none_and_never_released() {
-            let table: [usize; 9] = [no_interface as usize, 0, release as usize, 0, 0, 0, nothing as usize, nothing_at as usize, failing as usize];
+            let table: [usize; 9] = [no_interface as *const () as usize, 0, release as *const () as usize, 0, 0, 0, nothing as *const () as usize, nothing_at as *const () as usize, failing as *const () as usize];
             let object: *const usize = table.as_ptr();
             let rt = Rt(&object as *const *const usize as *mut c_void);
             assert!(rt.object(6).is_none());

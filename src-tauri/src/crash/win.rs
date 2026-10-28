@@ -1,7 +1,8 @@
 // Windows' side of crash reports: the unhandled-exception filter, a stack
-// as module+offset, the box the guard asks in, WebView2's ProcessFailed,
-// and what Windows says of itself (its version, WebView2's; its proxy is
-// proxy.rs's).
+// as module+offset, a hang seen from the guard (her windows not answering,
+// a thread's stack read from outside), the box the guard asks in, WebView2's
+// ProcessFailed, and what Windows says of itself (its version, WebView2's;
+// its proxy is proxy.rs's).
 use std::ffi::c_void;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -39,11 +40,26 @@ extern "system" {
     fn GetCurrentThreadId() -> u32;
     fn GetCurrentProcess() -> isize;
     fn TerminateProcess(process: isize, code: u32) -> i32;
+    fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+    fn OpenThread(access: u32, inherit: i32, thread: u32) -> isize;
+    fn SuspendThread(thread: isize) -> u32;
+    fn ResumeThread(thread: isize) -> u32;
+    #[cfg(target_arch = "x86_64")]
+    fn GetThreadContext(thread: isize, context: *mut Context) -> i32;
+    fn K32GetModuleBaseNameW(process: isize, module: isize, name: *mut u16, size: u32) -> u32;
+    fn LoadLibraryExW(name: *const u16, file: isize, flags: u32) -> isize;
+    fn GetProcAddress(module: isize, name: *const u8) -> *const ();
 }
+
+type Hwnd = *mut c_void;
 
 #[link(name = "user32")]
 extern "system" {
     fn MessageBoxW(hwnd: isize, text: *const u16, caption: *const u16, kind: u32) -> i32;
+    fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
+    fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
+    fn IsHungAppWindow(hwnd: Hwnd) -> i32;
+    fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
 }
 
 const FROM_ADDRESS: u32 = 0x4;
@@ -250,6 +266,174 @@ pub fn catch_native(file: &Path, started: u64) {
 pub fn end_with(code: u32) {
     // SAFETY: this process's own pseudo-handle.
     unsafe { TerminateProcess(GetCurrentProcess(), code) };
+}
+
+// --- A hang, seen from the guard --------------------------------------------------------
+
+fn class_of(hwnd: Hwnd) -> String {
+    let mut name = [0u16; 64];
+    // SAFETY: a buffer of our own, its size passed along.
+    let n = unsafe { GetClassNameW(hwnd, name.as_mut_ptr(), 64) }.max(0) as usize;
+    String::from_utf16_lossy(&name[..n])
+}
+
+// Every GUI thread has these; they say nothing of whose it is.
+fn is_ime(class: &str) -> bool {
+    class == "IME" || class == "MSCTFIME UI"
+}
+
+// The threads of process `pid` with a window Windows takes for not
+// answering (IsHungAppWindow: five seconds and more without a look at its
+// messages, as for its ghost window and the "not responding" box), each with
+// the class of one of its windows (not an IME's, if it has another).
+pub fn hung(pid: u32) -> Vec<(u32, String)> {
+    struct Seen {
+        pid: u32,
+        found: Vec<(u32, String)>,
+    }
+    extern "system" fn each(hwnd: Hwnd, param: isize) -> i32 {
+        // SAFETY: param is the Seen hung() passed, alive for the enumeration.
+        let seen = unsafe { &mut *(param as *mut Seen) };
+        let mut pid = 0u32;
+        // SAFETY: a window Windows hands us; our own u32.
+        let thread = unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+        // SAFETY: as above.
+        if pid == seen.pid && unsafe { IsHungAppWindow(hwnd) } != 0 {
+            let class = class_of(hwnd);
+            match seen.found.iter_mut().find(|(t, _)| *t == thread) {
+                Some((_, was)) if is_ime(was) && !is_ime(&class) => *was = class,
+                Some(_) => {}
+                None => seen.found.push((thread, class)),
+            }
+        }
+        1
+    }
+    let mut seen = Seen { pid, found: Vec::new() };
+    // SAFETY: a callback of ours and the Seen it fills, alive for the call.
+    unsafe { EnumWindows(each, &mut seen as *mut Seen as isize) };
+    seen.found
+}
+
+// dbghelp's functions, from Windows' own (System32 alone), looked for once:
+// SymInitializeW, SymCleanup, SymSetOptions, StackWalk64,
+// SymFunctionTableAccess64, SymGetModuleBase64. Only the guard asks, and
+// only for a hang: her start loads none of it.
+#[cfg(target_arch = "x86_64")]
+fn dbghelp() -> Option<[usize; 6]> {
+    const SEARCH_SYSTEM32: u32 = 0x800;
+    static FOUND: OnceLock<Option<[usize; 6]>> = OnceLock::new();
+    *FOUND.get_or_init(|| {
+        // SAFETY: a name of our own, null-terminated; the module kept loaded.
+        let module = unsafe { LoadLibraryExW(wide("dbghelp.dll").as_ptr(), 0, SEARCH_SYSTEM32) };
+        if module == 0 {
+            return None;
+        }
+        let mut found = [0usize; 6];
+        for (at, name) in [&b"SymInitializeW\0"[..], b"SymCleanup\0", b"SymSetOptions\0", b"StackWalk64\0", b"SymFunctionTableAccess64\0", b"SymGetModuleBase64\0"].iter().enumerate() {
+            // SAFETY: a module we loaded; names null-terminated.
+            found[at] = unsafe { GetProcAddress(module, name.as_ptr()) } as usize;
+            if found[at] == 0 {
+                return None;
+            }
+        }
+        Some(found)
+    })
+}
+
+// A thread's registers, as GetThreadContext fills them on x64 (CONTEXT:
+// 1232 bytes; the flags at 0x30, Rsp 0x98, Rbp 0xA0, Rip 0xF8).
+#[cfg(target_arch = "x86_64")]
+#[repr(C, align(16))]
+struct Context([u64; 154]);
+
+// The stack of thread `thread` of process `pid`, as module+offset, the
+// newest first (at most 32), read from outside: the thread stopped for the
+// moment it takes, and walked by dbghelp (StackWalk64), which unwinds by the
+// modules' own tables, no symbols needed. Empty when it cannot be read
+// (dbghelp missing, the thread gone, not ours to open).
+#[cfg(target_arch = "x86_64")]
+pub fn stack_of(pid: u32, thread: u32) -> Vec<String> {
+    const PROCESS_QUERY_INFORMATION: u32 = 0x0400;
+    const PROCESS_VM_READ: u32 = 0x0010;
+    const THREAD_SUSPEND_RESUME: u32 = 0x0002;
+    const THREAD_GET_CONTEXT: u32 = 0x0008;
+    const THREAD_QUERY_INFORMATION: u32 = 0x0040;
+    const CONTEXT_FULL: u64 = 0x0010_000B;
+    const MACHINE_AMD64: u32 = 0x8664;
+    // ADDRESS64's Mode (AddrModeFlat) in the upper half of its second word.
+    const FLAT: u64 = 3 << 32;
+    // SYMOPT_DEFERRED_LOADS | SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_NO_PROMPTS.
+    const OPTIONS: u32 = 0x4 | 0x200 | 0x8_0000;
+    type Init = unsafe extern "system" fn(isize, *const u16, i32) -> i32;
+    type Cleanup = unsafe extern "system" fn(isize) -> i32;
+    type Options = unsafe extern "system" fn(u32) -> u32;
+    // STACKFRAME64 is 264 bytes; room for more.
+    type Walk = unsafe extern "system" fn(u32, isize, isize, *mut [u64; 40], *mut Context, usize, usize, usize, usize) -> i32;
+    type ModuleBase = unsafe extern "system" fn(isize, u64) -> u64;
+
+    let Some([init, cleanup, options, walk, table, base]) = dbghelp() else { return Vec::new() };
+    // SAFETY: dbghelp's functions by their own signatures; handles we close;
+    // the thread resumed whatever the walk did; buffers of our own.
+    unsafe {
+        let (init, cleanup, options, walk, module_base) = (std::mem::transmute::<usize, Init>(init), std::mem::transmute::<usize, Cleanup>(cleanup), std::mem::transmute::<usize, Options>(options), std::mem::transmute::<usize, Walk>(walk), std::mem::transmute::<usize, ModuleBase>(base));
+        let process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, 0, pid);
+        if process == 0 {
+            return Vec::new();
+        }
+        let handle = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, 0, thread);
+        let mut pcs = Vec::with_capacity(32);
+        options(OPTIONS);
+        // Its modules listed (invade), for their tables and bases.
+        if handle != 0 && init(process, std::ptr::null(), 1) != 0 {
+            if SuspendThread(handle) != u32::MAX {
+                let mut context = Context([0; 154]);
+                context.0[6] = CONTEXT_FULL;
+                if GetThreadContext(handle, &mut context) != 0 {
+                    let mut frame = [0u64; 40];
+                    (frame[0], frame[1]) = (context.0[31], FLAT);
+                    (frame[4], frame[5]) = (context.0[20], FLAT);
+                    (frame[6], frame[7]) = (context.0[19], FLAT);
+                    while pcs.len() < 32 && walk(MACHINE_AMD64, process, handle, &mut frame, &mut context, 0, table, base, 0) != 0 && frame[0] != 0 {
+                        pcs.push(frame[0]);
+                    }
+                }
+                ResumeThread(handle);
+            }
+            let frames = pcs.iter().map(|&pc| place_in(process, module_base(process, pc), pc)).collect();
+            cleanup(process);
+            CloseHandle(handle);
+            CloseHandle(process);
+            return frames;
+        }
+        if handle != 0 {
+            CloseHandle(handle);
+        }
+        CloseHandle(process);
+        Vec::new()
+    }
+}
+
+#[cfg(test)]
+pub fn thread_id() -> u32 {
+    // SAFETY: no arguments.
+    unsafe { GetCurrentThreadId() }
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+pub fn stack_of(_pid: u32, _thread: u32) -> Vec<String> {
+    Vec::new()
+}
+
+// An address in another process as Buf::place writes one in hers:
+// module+offset, the module's name as a report takes it.
+#[cfg(target_arch = "x86_64")]
+fn place_in(process: isize, module: u64, pc: u64) -> String {
+    let mut name = [0u16; 260];
+    // SAFETY: a module of that process (dbghelp's base for the address), our own buffer.
+    let n = if module == 0 { 0 } else { (unsafe { K32GetModuleBaseNameW(process, module as isize, name.as_mut_ptr(), 260) }) as usize };
+    let name: String = String::from_utf16_lossy(&name[..n.min(260)]).chars().take(64).map(|c| if c.is_ascii_alphanumeric() || "_.-".contains(c) { c } else { '_' }).collect();
+    let name = if name.is_empty() { "unknown".to_string() } else { name };
+    format!("{name}+0x{:x}", pc - module)
 }
 
 // Windows' own Yes/No box, on top: Yes or not.

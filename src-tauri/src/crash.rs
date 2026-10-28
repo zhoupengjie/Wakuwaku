@@ -11,6 +11,10 @@
 //     the guard (shell.rs: her exe again, waiting on her, outside her process)
 //   - her pages' renderer (or WebView2's browser process) gone: its
 //     ProcessFailed; the page loaded again (the browser: she starts anew)
+//   - a hang: seen by the guard, a window of hers not answering (Hang):
+//     its thread's stack read from outside and kept as crashes/hang-<pid>.txt
+//     until it answers again; a report should she end while it is kept
+//     (Windows' "not responding" box closed her: 0xCFFFFFFF; Task Manager)
 // The guard makes the report as she ends; her next start, for a record no
 // guard saw (main.rs runs one while reports can be sent and are not off;
 // the taskbar home runs one anyway, shell.rs). A report is crashes/<time>-<kind>-<pid>.json, what is
@@ -36,8 +40,9 @@
 // For tests: WAKUWAKU_CRASH_URL, relays elsewhere (comma-separated; a build
 // from the source tree sends then too); WAKUWAKU_CRASH_TEST=<kind>[:<s>], a
 // crash of that kind so many seconds in (10 unless said): panic, native (a
-// write through null), exit (ended with 0xC0000374, nothing written), or
-// webview (the renderer killed: reported though killed).
+// write through null), exit (ended with 0xC0000374, nothing written),
+// webview (the renderer killed: reported though killed), or hang (her main
+// thread held for 30 s).
 mod redact;
 #[cfg(windows)]
 mod win;
@@ -182,13 +187,19 @@ fn record_panic(info: &std::panic::PanicHookInfo) {
     }
 }
 
-fn test_crash() {
-    let Ok(asked) = std::env::var(TEST_CRASH) else { return };
-    let (kind, secs) = match asked.split_once(':') {
+// The crash a test asks for, and how many seconds in.
+fn test_asked() -> Option<(String, u64)> {
+    let asked = std::env::var(TEST_CRASH).ok()?;
+    Some(match asked.split_once(':') {
         Some((kind, secs)) => (kind.to_string(), secs.parse().unwrap_or(10)),
         None => (asked, 10),
-    };
-    if kind == "webview" {
+    })
+}
+
+fn test_crash() {
+    let Some((kind, secs)) = test_asked() else { return };
+    // A hang needs her main thread, there once she is up (start).
+    if kind == "webview" || kind == "hang" {
         return;
     }
     crate::spawn_named("crash test", move || {
@@ -202,6 +213,18 @@ fn test_crash() {
             "exit" => win::end_with(0xC000_0374),
             _ => {}
         }
+    });
+}
+
+// A hang, should a test ask for one: her main thread held 30 s, her windows
+// not answering (the guard sees it at five).
+fn test_hang(sh: &Arc<Shared>) {
+    let Some(("hang", secs)) = test_asked().as_ref().map(|(k, s)| (k.as_str(), *s)) else { return };
+    let sh = sh.clone();
+    crate::spawn_named("crash test", move || {
+        std::thread::sleep(Duration::from_secs(secs));
+        sh.log("crash test: her main thread held 30 s");
+        let _ = sh.app.run_on_main_thread(|| std::thread::sleep(Duration::from_secs(30)));
     });
 }
 
@@ -261,6 +284,7 @@ fn found_for(dir: &Path, pid: u32, code: Option<u32>, started: Option<u64>, ende
     };
     let panic_file = take(format!("panic-{pid}.json")).unwrap_or_default();
     let native_file = take(format!("native-{pid}.txt")).unwrap_or_default();
+    let hang_file = take(format!("hang-{pid}.txt")).unwrap_or_default();
     let mut found = None;
     if let Some(v) = fs::read_to_string(&panic_file).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
         let at = v["time"].as_u64().unwrap_or(ended);
@@ -296,11 +320,29 @@ fn found_for(dir: &Path, pid: u32, code: Option<u32>, started: Option<u64>, ende
             at,
             uptime: uptime(at, field("started=").and_then(|s| s.parse().ok()).or(started)),
         });
+    } else if let Some(text) = fs::read_to_string(&hang_file).ok().filter(|_| code.is_some_and(|c| c != 0)) {
+        // Ended while not answering, whatever ended her (an exit code of a
+        // crash or not: Windows' box, Task Manager); her own frame the place.
+        let field = |key: &str| text.lines().find_map(|l| l.strip_prefix(key).map(str::to_string));
+        let frames: Vec<String> = text.lines().filter_map(|l| l.strip_prefix("frame=")).filter(|f| is_frame(f)).map(str::to_string).collect();
+        let since = field("seen=").and_then(|s| s.parse::<u64>().ok()).map_or(HUNG_AFTER_S, |seen| ended.saturating_sub(seen) / 1000 + HUNG_AFTER_S);
+        found = Some(Found {
+            kind: "exit",
+            pid,
+            code: code_text.clone(),
+            place: frames.iter().find(|f| f.starts_with("wakuwaku")).cloned(),
+            detail: Some(format!("hang: {} not answering, {since} s and more before she ended", thread_said(&field("window=").unwrap_or_default()))),
+            frames,
+            at: ended,
+            uptime: uptime(ended, started),
+            ..Found::default()
+        });
     } else if code.is_some_and(is_crash_code) {
         found = Some(Found { kind: "exit", pid, code: code_text, at: ended, uptime: uptime(ended, started), ..Found::default() });
     }
     let _ = fs::remove_file(&panic_file);
     let _ = fs::remove_file(&native_file);
+    let _ = fs::remove_file(&hang_file);
     found
 }
 
@@ -596,6 +638,64 @@ fn clear_waiting(data: &Path) {
 
 // --- The guard ----------------------------------------------------------------------------
 
+// How long a window goes without answering before Windows takes it for not
+// answering (IsHungAppWindow): before the guard can see it.
+const HUNG_AFTER_S: u64 = 5;
+
+// Which thread of hers a window's class says it is.
+fn thread_said(class: &str) -> String {
+    match class {
+        "Tauri Window" | "Tao Thread Event Target" | "tray_icon_app" => "her main thread".to_string(),
+        "WakuwakuTaskbarHost" | "Shell_TrayWnd" | "WakuwakuThumbs" => "her taskbar's thread".to_string(),
+        "" => "a thread of hers".to_string(),
+        other => format!("a thread of hers ({})", other.chars().filter(|c| c.is_ascii_alphanumeric() || " _-".contains(*c)).take(40).collect::<String>()),
+    }
+}
+
+// A hang, as the guard looks for one every two seconds while she runs
+// (shell.rs guard): a thread of hers with a window Windows takes for not
+// answering (win::hung), its stack read from outside then (win::stack_of)
+// and kept with what it is as crashes/hang-<pid>.txt, and said in her log;
+// once it answers again, the record gone and that said too. Should she end
+// while it is kept, her report is of it (found_for).
+#[derive(Default)]
+pub struct Hang {
+    since: Option<u64>,
+}
+
+impl Hang {
+    pub fn look(&mut self, data: &Path, pid: u32) {
+        #[cfg(windows)]
+        {
+            let file = folder(data).join(format!("hang-{pid}.txt"));
+            let log = |line: &str| tail(data, &log_line(&format!("guard: {line}")));
+            match (self.since, win::hung(pid).first()) {
+                (None, Some((thread, class))) => {
+                    let now = crate::now_ms();
+                    let frames = win::stack_of(pid, *thread);
+                    let mut text = format!("seen={now}\nthread={thread}\nwindow={class}\n");
+                    for f in &frames {
+                        text.push_str(&format!("frame={f}\n"));
+                    }
+                    let _ = fs::create_dir_all(folder(data));
+                    let _ = fs::write(&file, text);
+                    let hers = frames.iter().find(|f| f.starts_with("wakuwaku")).map(|f| format!(", hers last {f}")).unwrap_or_default();
+                    log(&format!("pid {pid}: {} not answering ({HUNG_AFTER_S} s and more): its stack kept, {} frames{hers}", thread_said(class), frames.len()));
+                    self.since = Some(now);
+                }
+                (Some(since), None) => {
+                    let _ = fs::remove_file(&file);
+                    log(&format!("pid {pid}: answering again, {} s and more after it stopped", crate::now_ms().saturating_sub(since) / 1000 + HUNG_AFTER_S));
+                    self.since = None;
+                }
+                _ => {}
+            }
+        }
+        #[cfg(not(windows))]
+        let _ = (data, pid);
+    }
+}
+
 // The guard, once she has ended (pid, its exit code, when it started and
 // ended, ms): a crash's report made; sent if she may; asked about in a box if
 // she crashed three times in ten minutes and was never asked.
@@ -657,7 +757,8 @@ pub fn start(sh: &Arc<Shared>) {
     let me = std::process::id();
     for entry in fs::read_dir(folder(&data)).into_iter().flatten().flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        let pid = name.strip_prefix("panic-").or_else(|| name.strip_prefix("native-")).and_then(|r| r.split('.').next()).and_then(|p| p.parse::<u32>().ok());
+        // A hang's record alone, its end not known (no guard saw it): gone.
+        let pid = name.strip_prefix("panic-").or_else(|| name.strip_prefix("native-")).or_else(|| name.strip_prefix("hang-")).and_then(|r| r.split('.').next()).and_then(|p| p.parse::<u32>().ok());
         let Some(pid) = pid.filter(|&p| p != me && crate::shell::started(p).is_none()) else { continue };
         if let Some(found) = found_for(&folder(&data), pid, None, None, modified_ms(&entry.path()).unwrap_or_else(crate::now_ms)) {
             let report = report_of(&data, &found, &[]);
@@ -665,6 +766,7 @@ pub fn start(sh: &Arc<Shared>) {
             sh.log(&format!("crash: pid {pid} left a {} record: report {}", found.kind, saved.map(|p| p.display().to_string()).unwrap_or_default()));
         }
     }
+    test_hang(sh);
     let sh = sh.clone();
     crate::spawn_named("crash reports", move || {
         std::thread::sleep(Duration::from_secs(20));
@@ -886,7 +988,7 @@ pub fn webview_failed(sh: &Arc<Shared>, label: &str, kind: i32, reason: i32, cod
 
 #[cfg(test)]
 mod tests {
-    use super::{found_for, is_crash_code, is_frame, iso_minute, webview_crash};
+    use super::{found_for, is_crash_code, is_frame, iso_minute, thread_said, webview_crash};
 
     #[test]
     fn crash_codes() {
@@ -960,5 +1062,62 @@ mod tests {
         let f = found_for(&dir, 80, Some(0xC000_0374), Some(1000), 61_000).unwrap();
         assert_eq!((f.kind, f.uptime), ("exit", Some(60)));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn hang_records_read() {
+        let dir = std::env::temp_dir().join(format!("wakuwaku-hang-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let record = "seen=50000\nthread=12\nwindow=Tauri Window\nframe=ntdll.dll+0xa1b4\nframe=win32u.dll+0x1c\nframe=wakuwaku-v0.3.8-windows-x64.exe+0x4c1d\nframe=C:\\bad+0x1\n";
+        // Closed by Windows' "not responding" box.
+        std::fs::write(dir.join("hang-81.txt"), record).unwrap();
+        let f = found_for(&dir, 81, Some(0xCFFF_FFFF), Some(1000), 61_000).unwrap();
+        assert_eq!((f.kind, f.code.as_deref(), f.uptime), ("exit", Some("0xCFFFFFFF"), Some(60)));
+        assert_eq!(f.place.as_deref(), Some("wakuwaku-v0.3.8-windows-x64.exe+0x4c1d"));
+        assert_eq!(f.frames, vec!["ntdll.dll+0xa1b4", "win32u.dll+0x1c", "wakuwaku-v0.3.8-windows-x64.exe+0x4c1d"]);
+        assert_eq!(f.detail.as_deref(), Some("hang: her main thread not answering, 16 s and more before she ended"));
+        assert!(!dir.join("hang-81.txt").exists());
+        // Ended by Task Manager while not answering: a hang's report too.
+        std::fs::write(dir.join("hang-82.txt"), record).unwrap();
+        assert_eq!(found_for(&dir, 82, Some(1), None, 60_000).map(|f| f.kind), Some("exit"));
+        // Found at her next start (how she ended not known), or ended as she
+        // quits: none, the record gone.
+        std::fs::write(dir.join("hang-83.txt"), record).unwrap();
+        assert!(found_for(&dir, 83, None, None, 60_000).is_none());
+        assert!(!dir.join("hang-83.txt").exists());
+        std::fs::write(dir.join("hang-84.txt"), record).unwrap();
+        assert!(found_for(&dir, 84, Some(0), None, 60_000).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn hung_threads_named() {
+        assert_eq!(thread_said("Tauri Window"), "her main thread");
+        assert_eq!(thread_said("WakuwakuTaskbarHost"), "her taskbar's thread");
+        assert_eq!(thread_said(""), "a thread of hers");
+        assert_eq!(thread_said("Odd/Class‹x›"), "a thread of hers (OddClassx)");
+    }
+
+    // A thread of this test's own process, held, its stack read as the
+    // guard reads hers: Windows' frames on top, this exe's under them.
+    #[cfg(all(windows, target_arch = "x86_64"))]
+    #[test]
+    fn a_held_threads_stack_is_read() {
+        let (tell, told) = std::sync::mpsc::channel();
+        let (hold, let_go) = std::sync::mpsc::channel::<()>();
+        let held = std::thread::spawn(move || {
+            tell.send(super::win::thread_id()).unwrap();
+            let _ = let_go.recv();
+        });
+        let thread = told.recv().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let frames = super::win::stack_of(std::process::id(), thread);
+        drop(hold);
+        held.join().unwrap();
+        assert!(frames.len() >= 3, "{frames:?}");
+        assert!(frames.iter().all(|f| is_frame(f)), "{frames:?}");
+        assert!(frames[0].starts_with("ntdll.dll+0x"), "{frames:?}");
+        let exe = std::env::current_exe().unwrap().file_name().unwrap().to_string_lossy().into_owned();
+        assert!(frames.iter().any(|f| f.starts_with(&format!("{exe}+0x"))), "{frames:?}");
     }
 }

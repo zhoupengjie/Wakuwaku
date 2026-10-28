@@ -1466,12 +1466,14 @@ fn reasonix_hook(port: u16, name: &str) {
 fn main() {
     // Her exe again, as the taskbar's guard (shell.rs): it waits for her to
     // end, and gives Windows' taskbar back if she could not; and sees
-    // whether she crashed (crash.rs; her data folder is the file's).
+    // whether she stops answering or crashed (crash.rs; her data folder is
+    // the file's).
     let args: Vec<String> = std::env::args().collect();
     if let Some((pid, file)) = shell::guard_args(&args) {
         let data = file.parent().map(PathBuf::from).unwrap_or_default();
         let after = data.clone();
-        shell::guard(pid, file, || drop(icons::hold(&data)), move |code, started| crash::after_exit(&after, pid, code, started));
+        let mut hang = crash::Hang::default();
+        shell::guard(pid, file, || hang.look(&data, pid), || drop(icons::hold(&data)), move |code, started| crash::after_exit(&after, pid, code, started));
         // Her desktop's icons as they were, should she have left them moved (icons.rs).
         icons::given_back(&data);
         return;

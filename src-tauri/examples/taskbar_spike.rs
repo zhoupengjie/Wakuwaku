@@ -1276,7 +1276,7 @@ mod win {
         if let Some((pid, file)) = shell::guard_args(&args) {
             open_log("spike.log");
             log(&format!("guard: watching {pid}"));
-            shell::guard(pid, file, || {}, |_, _| {});
+            shell::guard(pid, file, || {}, || {}, |_, _| {});
             log(&format!("guard: done; {}", state_now()));
             return;
         }

@@ -1,8 +1,9 @@
 // The prompt panel above the pet: permission prompts, plan approvals and
 // questions from Claude Code, answered with a click (or typed). The first
 // waiting one is shown; the terminal can still answer it, whichever comes first.
-// Codex's permission prompts too (allow or deny): Codex shows its own dialog
-// only once the panel hands it over. And OpenCode's (allow, always, deny),
+// Codex's permission prompts too (allow or deny) and Antigravity's (allow,
+// always allow, deny): they show their own dialog only once the panel
+// hands it over. And OpenCode's (allow, always, deny),
 // which OpenCode asks in its own window all the while; omp's plan reviews
 // (approve: it is executed; deny: omp refines it), with omp's own review
 // open meanwhile; and ZCode's (allow or deny) beside its own. DeepSeek
@@ -13,7 +14,7 @@
 ;(function (root) {
   const { t } = root?.I18n || (typeof require !== 'undefined' ? require('../shared/i18n') : { t: (_, k) => k })
   // The other agents a prompt may come from, named on it (Claude Code's: none).
-  const FROM = { codex: 'Codex', opencode: 'OpenCode', omp: 'omp', zcode: 'ZCode', dsh: 'DeepSeek Harness' }
+  const FROM = { codex: 'Codex', agy: 'Antigravity', opencode: 'OpenCode', omp: 'omp', zcode: 'ZCode', dsh: 'DeepSeek Harness' }
   // Apps whose own dialog stays open meanwhile: a prompt is handled there.
   const IN_APP = new Set(['zcode', 'dsh'])
 

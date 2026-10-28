@@ -98,6 +98,24 @@ mod imp {
         fn GetConsoleWindow() -> Hwnd;
     }
 
+    #[repr(C)]
+    struct UnicodeString {
+        length: u16,
+        maximum_length: u16,
+        buffer: *mut u16,
+    }
+
+    #[link(name = "ntdll")]
+    extern "system" {
+        fn NtQueryInformationProcess(
+            process: Handle,
+            info_class: u32,
+            info: *mut c_void,
+            info_len: u32,
+            return_len: *mut u32,
+        ) -> i32;
+    }
+
     #[link(name = "iphlpapi")]
     extern "system" {
         fn GetExtendedTcpTable(table: *mut c_void, size: *mut u32, order: i32, family: u32, class: u32, reserved: u32) -> u32;
@@ -680,6 +698,54 @@ mod imp {
         // SAFETY: two NUL-terminated strings that outlive the call.
         unsafe { ShellExecuteW(std::ptr::null_mut(), op.as_ptr(), file.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) > 32 }
     }
+
+    // Read a process's command line (Windows 8.1+ ProcessCommandLineInformation = 60).
+    pub fn cmdline_of(pid: u32) -> Option<String> {
+        unsafe {
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if process == 0 {
+                return None;
+            }
+            let mut ret_len = 0u32;
+            let mut buf = vec![0u8; 4096];
+            let mut status = NtQueryInformationProcess(process, 60, buf.as_mut_ptr().cast(), buf.len() as u32, &mut ret_len);
+            if (status as u32 == 0xC0000023 || ret_len > buf.len() as u32) && ret_len > 0 {
+                buf.resize(ret_len as usize + 64, 0);
+                status = NtQueryInformationProcess(process, 60, buf.as_mut_ptr().cast(), buf.len() as u32, &mut ret_len);
+            }
+            CloseHandle(process);
+            if status != 0 || ret_len < std::mem::size_of::<UnicodeString>() as u32 {
+                return None;
+            }
+            let us = &*(buf.as_ptr() as *const UnicodeString);
+            if us.buffer.is_null() || us.length == 0 {
+                return None;
+            }
+            let slice = std::slice::from_raw_parts(us.buffer, (us.length / 2) as usize);
+            Some(String::from_utf16_lossy(slice))
+        }
+    }
+
+    // Check whether the hook's process chain includes `agy` (CLI), and return any flags found in its command line.
+    pub fn agy_cli_info() -> Option<(u32, String)> {
+        let all = processes();
+        let named = named_chain(std::process::id(), &all);
+        for &(pid, _, ref name) in &named {
+            let n = name.to_lowercase();
+            if n == "agy.exe" || n == "agy" {
+                let cmd = cmdline_of(pid).unwrap_or_default();
+                return Some((pid, cmd));
+            }
+            if n == "node.exe" || n == "node" {
+                if let Some(cmd) = cmdline_of(pid) {
+                    if cmd.contains("antigravity-cli") || cmd.contains("agy") {
+                        return Some((pid, cmd));
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 #[cfg(not(windows))]
@@ -737,9 +803,15 @@ mod imp {
     pub fn open_url(_url: &str) -> bool {
         false
     }
+    pub fn cmdline_of(_pid: u32) -> Option<String> {
+        None
+    }
+    pub fn agy_cli_info() -> Option<(u32, String)> {
+        None
+    }
 }
 
-pub use imp::{chain_of, client_of, front_chain, hook_chain, is_listening, outermost_of, parent_names, started_ms, started_named, still_running, still_there, windows_for};
+pub use imp::{agy_cli_info, chain_of, client_of, front_chain, hook_chain, is_listening, outermost_of, parent_names, started_ms, started_named, still_running, still_there, windows_for};
 
 // A window to the front, restored if minimized (the taskbar's buttons).
 pub fn bring_window(hwnd: isize) -> bool {

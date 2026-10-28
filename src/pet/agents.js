@@ -121,7 +121,7 @@
       words: { off: 's.agyOff', unreadable: 's.agyUnreadable' },
       caps: {
         status: ['yes', 'ag.cap.status.agy'],
-        approve: ['no', 'ag.cap.approve.agy'],
+        approve: ['yes', 'ag.cap.approve.agy'],
         choose: ['no', 'ag.cap.choose.agy'],
         stats: ['yes', 'ag.cap.stats.agy'],
         mail: ['yes', 'ag.cap.mail.agy'],

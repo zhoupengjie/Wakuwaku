@@ -68,7 +68,7 @@ And more: new mail shows up in the capsule first, and you can hand a letter to C
 | DeepSeek Harness | ✓ | Allow · Deny | ✓ | ✓ with tokens | |
 | OpenCode | ✓ | Allow · Always allow · Deny | | ✓ no tokens yet | |
 | ZCode | ✓ | Allow · Deny | | ✓ no tokens yet | |
-| Antigravity | ✓ | | | ✓ with tokens | ✓ |
+| Antigravity | ✓ | Allow · Always allow · Deny | | ✓ with tokens | ✓ |
 | oh-my-pi (omp) | ✓ | Plan reviews only | | ✓ with tokens | |
 | Reasonix | ✓ | | | ✓ tokens in 2.x | |
 

@@ -48,7 +48,7 @@ use crate::{events, events_agy, events_dsh, island, jump, now_ms, pet, Responder
 // Hook events carry whole files (an Edit's PostToolUse has the file before
 // the edit), so this is generous.
 const MAX_BODY: u64 = 16 * 1024 * 1024;
-// Codex waits on a prompt's hook before it shows its own dialog: the panel
+// Codex and Antigravity wait on a prompt's hook before showing their own dialog: the panel
 // holds one this long at most.
 const CODEX_ASK_MS: u64 = 60 * 1000;
 // The hooks' events answered and not yet taken, at most (serve): past them
@@ -121,6 +121,9 @@ pub(crate) fn read_event(agent: Option<&str>, mut event: Value) -> Option<Value>
             return None;
         }
     }
+    if agent == Some("agy") {
+        events_agy::with_seen(&mut event);
+    }
     if let (Some(agent), Some(fields)) = (agent, event.as_object_mut()) {
         fields.insert("agent".into(), json!(agent));
     }
@@ -129,11 +132,15 @@ pub(crate) fn read_event(agent: Option<&str>, mut event: Value) -> Option<Value>
 
 // What an event she took (read_event) says a session is doing, each agent's
 // read its own way (agent-core) at `now`: Antigravity's given the person's
-// words and its reply from its transcript first; a DSH prompt she does not
+// words and its reply from its transcript first (its PermissionRequest in
+// Claude Code's words, from events_agy::for_ask); a DSH prompt she does not
 // hold (`held`) to be approved in DSH. Her sessions are kept from it
 // (state.rs), and the apps listening are sent it (agent-hub).
 // Also the replay tests' way in (replay.rs).
 pub(crate) fn event_for(agent: Option<&str>, event: &mut Value, held: bool, now: u64, dsh_home: &Path) -> Option<AgentEvent> {
+    if agent == Some("agy") && event["hook_event_name"] == "PermissionRequest" {
+        return agent_core::claude::to_event(event, Agent::Agy);
+    }
     let mut ev = agent_core::read(Agent::from_tag(agent), event, &agent_core::Context { now, dsh_home })?;
     if agent == Some("dsh") && event["hook_event_name"] == "PermissionRequest" && !held {
         agent_core::dsh::answered_in_dsh(&mut ev);
@@ -324,7 +331,7 @@ fn take(sh: &Shared, hook: Hook) {
                 None => drop(req),
             });
             let mut wait = sh.setting("promptWaitSec").as_u64().unwrap_or(290) * 1000;
-            if agent == Some("codex") {
+            if agent == Some("codex") || agent == Some("agy") {
                 wait = wait.min(CODEX_ASK_MS);
             }
             // DSH's in Claude Code's words, as the panel shows them.
@@ -567,7 +574,7 @@ mod tests {
         // Reasonix's PermissionRequest is told, not held: its hook waits on no answer.
         let asked = json!({ "hook_event_name": "PermissionRequest" });
         assert!(answers_none(Some("reasonix"), &asked));
-        assert!(!answers_none(None, &asked) && !answers_none(Some("codex"), &asked) && !answers_none(Some("zcode"), &asked) && !answers_none(Some("opencode"), &asked));
+        assert!(!answers_none(None, &asked) && !answers_none(Some("codex"), &asked) && !answers_none(Some("agy"), &asked) && !answers_none(Some("zcode"), &asked) && !answers_none(Some("opencode"), &asked));
         // DSH's is held only when her plugin can take her answer to it.
         assert!(!answers_none(Some("dsh"), &json!({ "hook_event_name": "PermissionRequest", "answerable": true })));
         assert!(answers_none(Some("dsh"), &json!({ "hook_event_name": "PermissionRequest", "answerable": false })));

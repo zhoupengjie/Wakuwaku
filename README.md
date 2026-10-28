@@ -69,7 +69,7 @@
 | DeepSeek Harness | ✓ | 允许 · 拒绝 | ✓ | ✓ 含 token | |
 | OpenCode | ✓ | 允许 · 以后都允许 · 拒绝 | | ✓ 不含 token | |
 | ZCode | ✓ | 允许 · 拒绝 | | ✓ 不含 token | |
-| Antigravity | ✓ | | | ✓ 含 token | ✓ |
+| Antigravity | ✓ | 允许 · 以后都允许 · 拒绝 | | ✓ 含 token | ✓ |
 | oh-my-pi（omp） | ✓ | 只有计划审批 | | ✓ 含 token | |
 | Reasonix | ✓ | | | ✓ 2.x 含 token | |
 

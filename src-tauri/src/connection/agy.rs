@@ -3,9 +3,9 @@
 // Antigravity (Google's agy, and its 2.0 app, which reads the same file) runs
 // hooks only as commands, each tool's in a block of its own by name: ours is
 // "wakuwaku". Its events: SessionStart; PreInvocation, each call of the model
-// (the first of a turn, invocationNum 0); PostToolUse; Stop. None for a prompt
-// waiting on the person: she follows its work and its end, and asks nothing
-// (events_agy.rs). Its standalone IDE runs none, as reported.
+// (the first of a turn, invocationNum 0); PreToolUse (a tool call that asks
+// the person is held on her island/panel, answered with auto_approve / deny /
+// allow: events_agy.rs); PostToolUse; Stop.
 //
 // Tried with agy 1.3.4 (2026-10-13): it runs a hook as `cmd /c "<command>"`,
 // the command's own double quotes escaped as Go escapes them (\"), which cmd
@@ -19,6 +19,7 @@ use super::*;
 pub const AGY_FLAG: &str = "--wakuwaku-agy-hook";
 const AGY_BLOCK: &str = "wakuwaku";
 const AGY_TIMEOUT: u64 = 10;
+pub const AGY_PROMPT_TIMEOUT: u64 = 300;
 
 pub fn gemini_dir() -> PathBuf {
     PathBuf::from(std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).unwrap_or_default()).join(".gemini")
@@ -70,9 +71,11 @@ pub fn agy_program(exe: &str) -> Option<String> {
 // Our block: the event's name after the flag (the payload has none).
 fn agy_block(program: &str) -> Value {
     let hook = |event: &str| json!({ "type": "command", "command": format!("{program} {AGY_FLAG} {event}"), "timeout": AGY_TIMEOUT });
+    let prompt_hook = |event: &str| json!({ "type": "command", "command": format!("{program} {AGY_FLAG} {event}"), "timeout": AGY_PROMPT_TIMEOUT });
     json!({
         "SessionStart": [hook("SessionStart")],
         "PreInvocation": [hook("PreInvocation")],
+        "PreToolUse": [{ "matcher": "", "hooks": [prompt_hook("PreToolUse")] }],
         "PostToolUse": [{ "matcher": "", "hooks": [hook("PostToolUse")] }],
         "Stop": [hook("Stop")],
     })
@@ -153,6 +156,7 @@ mod tests {
         let with = agy_install(&theirs, program);
         assert_eq!(agy_status_of(&with, Some(program)), "ok");
         assert_eq!(with["wakuwaku"]["Stop"][0]["command"], r"D:\pet\wakuwaku.exe --wakuwaku-agy-hook Stop");
+        assert_eq!(with["wakuwaku"]["PreToolUse"][0]["matcher"], "");
         assert_eq!(with["wakuwaku"]["PostToolUse"][0]["matcher"], "");
         // Theirs kept, ours alone taken out.
         assert_eq!(with["my-linter-hook"], theirs["my-linter-hook"]);

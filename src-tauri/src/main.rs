@@ -483,13 +483,14 @@ impl Shared {
         let out = self.pet.lock().unwrap().apply(ev, chain, now_ms(), self.hold());
         let Some(out) = out else { return false };
         if out.turns > 0 || out.worked_ms > 0 {
-            // Antigravity's and Reasonix's approvals never come to her, nor
+            // Reasonix's approvals never come to her, nor
             // DeepSeek Harness's through its hook bridge (through her plugin
             // they may: those given on her are counted all the same).
-            let is_agy = matches!(ev.agent, Agent::Agy | Agent::Dsh | Agent::Reasonix);
+            // Antigravity's approvals come to her since 2026-10-26 (events_agy).
+            let without_approvals = matches!(ev.agent, Agent::Dsh | Agent::Reasonix);
             self.count_today(|t| {
                 t.begun(out.turns);
-                if is_agy {
+                if without_approvals {
                     t.agy_turns += out.turns;
                 }
                 t.worked_ms += out.worked_ms;
@@ -1336,7 +1337,9 @@ fn codex_hook(port: u16) {
 }
 
 // Antigravity's hook (connection::AGY_FLAG and the event's name, which its
-// payload does not carry): its answer printed first, whatever comes after
+// payload does not carry): PreToolUse prompts wait for her answer (printed
+// as Antigravity's decision: events_agy.rs to_output), handed on to her
+// port; any other hook has its answer printed first, whatever comes after
 // (a hook that fails or answers nothing breaks agy's turn: connection/agy.rs),
 // then the event handed to her port with its name and let go (post_and_go:
 // agy waits on each hook, and her answer is nothing to it). Quit by the
@@ -1345,6 +1348,61 @@ fn codex_hook(port: u16) {
 // or a turn begins (kept till then; some 10 ms: most of a hook is its
 // process starting, some 50 to 80 ms).
 fn agy_hook(port: u16, name: &str) {
+    if name == "PreToolUse" {
+        let allow = || {
+            let mut out = std::io::stdout();
+            let _ = out.write_all(br#"{"decision":"allow"}"#);
+            let _ = out.flush();
+        };
+        let Some(mut event) = read_event() else {
+            return allow();
+        };
+        if let Some((_pid, cmd)) = jump::agy_cli_info() {
+            if let Some(obj) = event.as_object_mut() {
+                obj.insert("is_cli".into(), json!(true));
+                let words: Vec<&str> = cmd.split_whitespace().collect();
+                if words.iter().any(|&w| w == "--dangerously-skip-permissions" || w == "--dangerously_skip_permissions") {
+                    obj.insert("dangerously_skip_permissions".into(), json!(true));
+                }
+                if cmd.contains("--mode accept-edits") || cmd.contains("--mode=accept-edits") {
+                    obj.insert("cli_mode".into(), json!("accept-edits"));
+                } else if cmd.contains("--mode auto") || cmd.contains("--mode=auto") {
+                    obj.insert("cli_mode".into(), json!("auto"));
+                }
+                if words.iter().any(|&w| w == "--sandbox" || w == "--sandbox=true") {
+                    obj.insert("cli_sandbox".into(), json!(true));
+                }
+            }
+        }
+        if !events_agy::needs_approval(&event, &events_agy::read_config(), &events_agy::read_cli_settings()) {
+            return allow();
+        }
+        let who = || starts::hook_who("Antigravity", name, &[], &hook_parents());
+        if !data::may_start(&data::folder()) {
+            allow();
+            start_or_say(starts::Hook::Agy, name, who);
+            return;
+        }
+        if !jump::is_listening(port) {
+            return allow();
+        }
+        let mut ask = events_agy::for_ask(&event);
+        if let Some(fields) = ask.as_object_mut() {
+            fields.insert(jump::CODEX_CHAIN.into(), jump::chain_json(&jump::hook_chain(None)));
+        }
+        let agent = ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(connection::AGY_PROMPT_TIMEOUT - 5))).build().new_agent();
+        let reply = match agent.post(&format!("http://127.0.0.1:{port}/hook?from=wakuwaku&agent=agy")).send_json(&ask) {
+            Ok(mut res) => {
+                let body = res.body_mut().read_to_string().unwrap_or_default();
+                events_agy::to_output(&body)
+            }
+            Err(_) => r#"{"decision":"allow"}"#.to_string(),
+        };
+        let mut out = std::io::stdout();
+        let _ = out.write_all(reply.as_bytes());
+        let _ = out.flush();
+        return;
+    }
     let answer = if name == "Stop" { r#"{"decision":"allow"}"# } else { "{}" };
     let mut out = std::io::stdout();
     let _ = out.write_all(answer.as_bytes());

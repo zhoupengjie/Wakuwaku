@@ -43,6 +43,21 @@ pub fn look() -> (bool, Option<Accent>) {
     (false, None)
 }
 
+// Windows says a setting changed (WM_SETTINGCHANGE) a moment before the new
+// picture is in place: a picture picked in Settings' Background,
+// "WindowsThemeElement" 0.3 to 1.5 s before IDesktopWallpaper and the
+// registry have it, the larger the picture the longer (an 8K one 1.47 s;
+// measured 2026-10-28). Looked at only then, the old picture was seen, and
+// the new one waited for the next look (the taskbar's half minute, 28 s;
+// on the desktop the next change's word), the strip's words light or dark
+// by the old one meanwhile. So who hears it (taskbar.rs, desk.rs) looks
+// again every SETTLE_MS for SETTLE_LOOKS times, five seconds; each new word
+// starts them over.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub const SETTLE_MS: u32 = 500;
+#[cfg_attr(not(windows), allow(dead_code))]
+pub const SETTLE_LOOKS: u32 = 10;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Paper {
     // None: a plain colour, no picture.

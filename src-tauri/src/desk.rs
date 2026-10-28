@@ -1623,11 +1623,15 @@ mod imp {
     // front changes; a desktop waiting to be told its widgets' words (armed
     // only while one waits); the picture of a slideshow or of Spotlight
     // (armed only while the desktop has one: a plain picture says when it
-    // changes, WM_SETTINGCHANGE).
+    // changes, WM_SETTINGCHANGE); the looks after that word, which comes
+    // before the picture is in place (wallpaper.rs SETTLE_MS: armed for
+    // five seconds after it, SETTLE_LEFT looks left).
     const PAPER: usize = 1;
     const AGAIN_SOON: usize = 2;
     const AGAIN_LATER: usize = 3;
     const STALE: usize = 4;
+    const SETTLE: usize = 5;
+    static SETTLE_LEFT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     const WM_APP_STALE: u32 = 0x8000 + 0x62;
     const WM_APP_STOP: u32 = 0x8000 + 0x63;
 
@@ -1655,9 +1659,23 @@ mod imp {
         super::count(&super::THREAD_MSGS);
         match msg {
             // The picture, Windows' colours: looked at again, off this
-            // thread (Explorer answers the picture's questions).
+            // thread (Explorer answers the picture's questions), now and
+            // each half second for five (SETTLE; set again, it starts over).
             WM_SETTINGCHANGE | WM_DWMCOLORIZATIONCOLORCHANGED => {
                 arm_paper(hwnd);
+                std::thread::spawn(super::look_again);
+                SETTLE_LEFT.store(crate::wallpaper::SETTLE_LOOKS, std::sync::atomic::Ordering::SeqCst);
+                // SAFETY: our own window's timer, on its thread.
+                unsafe { SetTimer(hwnd, SETTLE, crate::wallpaper::SETTLE_MS, std::ptr::null()) };
+                0
+            }
+            WM_TIMER if wparam == SETTLE => {
+                let left = SETTLE_LEFT.load(std::sync::atomic::Ordering::SeqCst).saturating_sub(1);
+                SETTLE_LEFT.store(left, std::sync::atomic::Ordering::SeqCst);
+                if left == 0 {
+                    // SAFETY: our own window's timer.
+                    unsafe { KillTimer(hwnd, SETTLE) };
+                }
                 std::thread::spawn(super::look_again);
                 0
             }

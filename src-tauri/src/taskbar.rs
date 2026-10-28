@@ -246,8 +246,14 @@ mod imp {
     const WM_TRAY_CHANGED: u32 = 0x8002;
     const WM_STOP: u32 = 0x8003;
     // The strip moved: the desktop's picture under it looked at again (so
-    // too when a setting or Windows' colours change).
+    // too when a setting or Windows' colours change). The picture changed
+    // by her own settings: looked at until it is in place (settle).
     const WM_PAPER: u32 = 0x8004;
+    const WM_PAPER_SET: u32 = 0x8005;
+    // The timers on the window: the half second's tick, and the looks
+    // after Windows' word (settle).
+    const TICK: usize = 1;
+    const SETTLE: usize = 2;
     const WM_SETTINGCHANGE: u32 = 0x001A;
     const WM_DWMCOLORIZATIONCOLORCHANGED: u32 = 0x0320;
     const GCLP_HBRBACKGROUND: i32 = -10;
@@ -385,12 +391,15 @@ mod imp {
     // Windows' own record of the tray icons it keeps out (windows_kept), read once.
     static KEPT: Mutex<Option<Vec<Kept>>> = Mutex::new(None);
     // The desktop's picture under the strip and Windows' look, as
-    // sent last (send_look), and whether they are being looked at.
+    // sent last (send_look), whether they are being looked at, and whether
+    // asked again meanwhile; the looks left after Windows' word (settle).
     static PAPER: Mutex<Value> = Mutex::new(Value::Null);
     static LOOK: Mutex<Value> = Mutex::new(Value::Null);
+    static LOOK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    static LOOK_AGAIN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    static LOOKS_LEFT: AtomicU32 = AtomicU32::new(0);
     // The live pictures' window's ground (COLORREF), as set last (thumbs_ground).
     static THUMBS_GROUND: AtomicU32 = AtomicU32::new(0x001E_1C1C);
-    static LOOK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     // Windows' Start menu open, as told to the page last (start_seen).
     static START_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     // The windows over a display (fills_display), each with that display, as
@@ -1799,9 +1808,10 @@ mod imp {
     // accent: { base, light, dark } }), for the strip to be as Windows' own
     // taskbar is; the live pictures' window's ground with it (thumbs_ground).
     // Looked at when the strip moves, when Windows says a setting or its
-    // colours changed, and every five seconds (a slideshow, Spotlight); on
-    // a thread of its own, one at a time: Windows' answer goes through
-    // Explorer, which may be busy, and the tray's messages come to this one.
+    // colours changed (and each half second for five after: settle), and
+    // every half minute (a slideshow, Spotlight); on a thread of its own,
+    // one at a time (send_look): Windows' answer goes through Explorer,
+    // which may be busy, and the tray's messages come to this one.
     // How many times Windows flashes a taskbar button for a window asking
     // for attention (Control Panel\Desktop\ForegroundFlashCount, a string;
     // 7 unless set; 0: until the window comes to the front).
@@ -1843,20 +1853,61 @@ mod imp {
         key.ok().and_then(|k| k.get_value::<u32, _>("ShowTaskViewButton").ok()) != Some(0)
     }
 
-    // From outside (settings.rs, the wallpaper changed by her own settings:
-    // Windows says nothing of that): the desktop looked at now.
+    // From outside (bars.rs, a bar's page ready): the desktop looked at now.
     pub fn look_now() {
         send_look();
     }
 
+    // From outside (settings.rs, the wallpaper changed by her own settings:
+    // Windows says nothing of a change through IDesktopWallpaper): looked at
+    // now and until the picture is in place, as after Windows' word.
+    pub fn paper_set() {
+        let ours = OURS.load(Ordering::SeqCst);
+        if ours == 0 {
+            send_look();
+            return;
+        }
+        // SAFETY: a posted message to the host's own window, no pointers.
+        unsafe { PostMessageW(ours as Hwnd, WM_PAPER_SET, 0, 0) };
+    }
+
+    // Asked while a look is under way (which may have read the picture
+    // before it changed): once more after it, not dropped. Asked before the
+    // busy mark is tried, and cleared as each look begins, so a word between
+    // a look's end and its check is not lost.
     fn send_look() {
+        LOOK_AGAIN.store(true, Ordering::SeqCst);
         if LOOK_BUSY.swap(true, Ordering::SeqCst) {
             return;
         }
-        std::thread::spawn(|| {
+        std::thread::spawn(|| loop {
+            LOOK_AGAIN.store(false, Ordering::SeqCst);
             look_at_desktop();
             LOOK_BUSY.store(false, Ordering::SeqCst);
+            if !LOOK_AGAIN.load(Ordering::SeqCst) || LOOK_BUSY.swap(true, Ordering::SeqCst) {
+                break;
+            }
         });
+    }
+
+    // Windows' word that a setting changed, before the picture it speaks of
+    // is in place (wallpaper.rs SETTLE_MS): looked at now and every half
+    // second for five seconds, on the host's thread (its window's timer).
+    fn settle(hwnd: Hwnd) {
+        send_look();
+        LOOKS_LEFT.store(wallpaper::SETTLE_LOOKS, Ordering::SeqCst);
+        // SAFETY: our own window's timer, on its thread; set again, it starts over.
+        unsafe { SetTimer(hwnd, SETTLE, wallpaper::SETTLE_MS, std::ptr::null()) };
+    }
+
+    fn settling(hwnd: Hwnd) {
+        let left = LOOKS_LEFT.load(Ordering::SeqCst).saturating_sub(1);
+        LOOKS_LEFT.store(left, Ordering::SeqCst);
+        if left == 0 {
+            // SAFETY: our own window's timer, on its thread.
+            unsafe { KillTimer(hwnd, SETTLE) };
+        }
+        send_look();
     }
 
     fn look_at_desktop() {
@@ -2216,7 +2267,7 @@ mod imp {
             let hooks: Vec<isize> = WINDOW_EVENTS.iter().map(|&(min, max)| SetWinEventHook(min, max, 0, on_event, 0, 0, 0)).collect();
             SHELL_MSG.store(RegisterWindowMessageW(wide("SHELLHOOK").as_ptr()), Ordering::SeqCst);
             let shell_hook = RegisterShellHookWindow(hwnd) != 0;
-            SetTimer(hwnd, 1, 500, std::ptr::null());
+            SetTimer(hwnd, TICK, 500, std::ptr::null());
             TICKS.store(0, Ordering::SeqCst);
             *TUG.lock().unwrap() = Tug::new();
             let tray = systray::start(strip, hwnd as isize, WM_TRAY_CHANGED);
@@ -2234,7 +2285,9 @@ mod imp {
                 UnhookWinEvent(hook);
             }
             DeregisterShellHookWindow(hwnd);
-            KillTimer(hwnd, 1);
+            KillTimer(hwnd, TICK);
+            KillTimer(hwnd, SETTLE);
+            LOOKS_LEFT.store(0, Ordering::SeqCst);
             log(&format!("tray handed back; it was handed {}", systray::seen()));
             systray::stop();
             thumbs(Vec::new());
@@ -3121,6 +3174,7 @@ mod imp {
 
     extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
         match msg {
+            WM_TIMER if wparam == SETTLE => settling(hwnd),
             WM_TIMER => tick(),
             WM_TASKBAR_SHOWN => {
                 // SAFETY: a plain check of Explorer's window.
@@ -3129,7 +3183,8 @@ mod imp {
                 }
             }
             WM_TRAY_CHANGED => send_icons(),
-            WM_PAPER | WM_DWMCOLORIZATIONCOLORCHANGED | WM_SETTINGCHANGE => send_look(),
+            WM_PAPER => send_look(),
+            WM_PAPER_SET | WM_DWMCOLORIZATIONCOLORCHANGED | WM_SETTINGCHANGE => settle(hwnd),
             WM_STOP => {
                 watch(false);
                 // SAFETY: ending this thread's loop.
@@ -3170,6 +3225,7 @@ mod imp {
     pub fn resend(_sh: &Shared) {}
     pub fn wake() {}
     pub fn look_now() {}
+    pub fn paper_set() {}
     pub fn look_value() -> serde_json::Value {
         serde_json::Value::Null
     }
@@ -3214,7 +3270,7 @@ mod imp {
     }
 }
 
-pub use imp::{end_task_on, explorer_room, give_back, handing_back, is_up, set_edge, look_for_other, look_now, look_value, note, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
+pub use imp::{end_task_on, explorer_room, give_back, handing_back, is_up, set_edge, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
 
 // A number Windows keeps for a setting of its own (end_task_on, seconds_on):
 // on once set, but for 0.

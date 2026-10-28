@@ -158,6 +158,21 @@ fn explorers_battery(id: u32, exe: &str) -> bool {
     id == EXPLORERS_BATTERY && exe.eq_ignore_ascii_case("explorer.exe")
 }
 
+// The window tray-icon keeps her own tray icon on (tauri's tray).
+#[cfg_attr(not(windows), allow(dead_code))]
+const HER_TRAY_ICON: &str = "tray_icon_app";
+
+// Whether a window is told TaskbarCreated, as programs are asked for their
+// icons: not Explorer's taskbars, which show themselves; of hers only her
+// tray icon's, her taskbar's own window hearing it as Explorer started again.
+// Hers had been left out (2026-10-10), and her icon, added while Explorer's
+// tray was first (she starts before her taskbar is up), never came to hers
+// but from a change, which names no callback: a press on it did nothing.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn asked(own: bool, class: &str) -> bool {
+    class != "Shell_TrayWnd" && class != "Shell_SecondaryTrayWnd" && (!own || class == HER_TRAY_ICON)
+}
+
 // A message of Explorer's battery handed on to its tray, for the log
 // (zhoupengjie/Wakuwaku#85: on 22621 Explorer failed fast a moment after
 // one went by ours while it was starting, its icon handed on as #62 has it;
@@ -193,7 +208,7 @@ mod imp {
     use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, Ordering};
     use std::sync::Mutex;
 
-    use super::{battery_said, explorers_battery, file_name, guid_bytes, holds, icon_name, nim_name, path_in, Holds, Press, Shown, EXPLORERS_BATTERY};
+    use super::{asked, battery_said, explorers_battery, file_name, guid_bytes, holds, icon_name, nim_name, path_in, Holds, Press, Shown, EXPLORERS_BATTERY};
 
     type Hwnd = *mut c_void;
     type Handle = isize;
@@ -863,7 +878,7 @@ mod imp {
         let mut name = [0u16; 32];
         let n = unsafe { GetClassNameW(hwnd, name.as_mut_ptr(), 32) }.max(0) as usize;
         let class = String::from_utf16_lossy(&name[..n]);
-        if pid != std::process::id() && class != "Shell_TrayWnd" && class != "Shell_SecondaryTrayWnd" {
+        if asked(pid == std::process::id(), &class) {
             // SAFETY: a registered message with no pointers.
             unsafe { SendNotifyMessageW(hwnd, msg as u32, 0, 0) };
         }
@@ -1204,11 +1219,26 @@ mod imp {
     // A press on an icon, told to its program as Explorer tells it. at: the
     // pointer on the screen.
     pub fn tell(key: u64, press: Press, at: (i32, i32)) -> bool {
-        let icons = ICONS.lock().unwrap();
-        let Some(i) = icons.iter().find(|i| i.key == key) else { return false };
+        // What is needed of it, the list let go before anything is sent: her
+        // own icon's menu, opened on the press, would hold it (every
+        // program's tray messages waiting) until it closed.
+        struct Told {
+            hwnd: u32,
+            id: u32,
+            callback: u32,
+            version: u32,
+            pid: u32,
+            exe: String,
+        }
+        let found = ICONS.lock().unwrap().iter().find(|i| i.key == key).map(|i| Told { hwnd: i.hwnd, id: i.id, callback: i.callback, version: i.version, pid: i.pid, exe: i.exe.clone() });
+        let Some(i) = found else { return false };
         if i.callback == 0 {
             return false;
         }
+        // Her own icon's window is on the thread a press comes on (a
+        // command's), where a send is a call: posted, its menu opens after
+        // the press is done with, not inside it.
+        let hers = i.pid == std::process::id();
         let send = |event: u32| {
             let (w, l) = if i.version >= 4 {
                 ((at.0 as u16 as usize) | ((at.1 as u16 as usize) << 16), ((event & 0xffff) | ((i.id & 0xffff) << 16)) as isize)
@@ -1216,7 +1246,13 @@ mod imp {
                 (i.id as usize, event as isize)
             };
             // SAFETY: the program's window and the message it asked for; no pointers.
-            unsafe { SendNotifyMessageW(hwnd_of(i.hwnd), i.callback, w, l) };
+            unsafe {
+                if hers {
+                    PostMessageW(hwnd_of(i.hwnd), i.callback, w, l);
+                } else {
+                    SendNotifyMessageW(hwnd_of(i.hwnd), i.callback, w, l);
+                }
+            }
         };
         // The program's window put in front, as the taskbar does: a menu
         // opened while its program is not in front does not close on a press
@@ -1516,6 +1552,21 @@ mod tests {
         // Another program's icon of that uID, or one whose process is gone.
         assert!(!explorers_battery(1225, "QQ.exe"));
         assert!(!explorers_battery(1225, "pid 0"));
+    }
+
+    #[test]
+    fn programs_are_asked_for_their_icons_and_her_own_tray_icon_too() {
+        assert!(asked(false, "WeChatMainWndForPC"));
+        assert!(asked(false, HER_TRAY_ICON));
+        // Hers: her tray icon's window alone; not her taskbar's, her pages'.
+        assert!(asked(true, HER_TRAY_ICON));
+        assert!(!asked(true, "WakuwakuTaskbarHost"));
+        assert!(!asked(true, "Chrome_WidgetWin_1"));
+        // Explorer's taskbars and hers.
+        for own in [false, true] {
+            assert!(!asked(own, "Shell_TrayWnd"));
+            assert!(!asked(own, "Shell_SecondaryTrayWnd"));
+        }
     }
 
     #[test]

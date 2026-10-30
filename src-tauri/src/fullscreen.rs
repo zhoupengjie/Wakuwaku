@@ -2,9 +2,9 @@
 // elsewhere it never reports one.
 //
 // Full screen: the foreground window covers its whole monitor and has no title
-// bar, or has one by its style and lies exactly on the monitor (fills). A
-// maximised window has one and goes past the monitor's edges or stops at the
-// taskbar, so it is not. And only on a display she is on (on: their rects; none given, any): a
+// bar, or has one by its style and covers it unmaximised, or lies exactly on
+// it (fills). A maximised window has one and goes past the monitor's edges
+// or stops at the taskbar, so it is not. And only on a display she is on (on: their rects; none given, any): a
 // video full screen on the second display hid her taskbar on the main one
 // (the user, 2026-10-13); Windows' own steps aside only on its own display.
 
@@ -63,6 +63,7 @@ mod imp {
         fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
         fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
         fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
+        fn IsZoomed(hwnd: Hwnd) -> i32;
         fn MonitorFromWindow(hwnd: Hwnd, flags: u32) -> *mut c_void;
         fn GetMonitorInfoW(monitor: *mut c_void, info: *mut MonitorInfo) -> i32;
         fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
@@ -122,20 +123,25 @@ mod imp {
         style & WS_CAPTION == WS_CAPTION
     }
 
-    // Whether a window of this style at this rect (left, top, right,
-    // bottom) is full screen on a display at that one: without a title bar,
-    // covering all of it (a pixel past it on every side, as HELLDIVERS 2's,
-    // is all of it); with one by its style, laid exactly on it. Kazumi's
-    // player full screen (window_manager 0.5.1's setFullScreen) keeps
-    // WS_CAPTION, draws no frame (its WM_NCCALCSIZE) and is set to the
-    // display's rect; her taskbar stayed over its video
-    // (zhoupengjie/Wakuwaku#98). A window maximised is never exactly on it:
-    // its frame goes past the work area's edges.
-    fn fills(style: u32, r: (i32, i32, i32, i32), m: (i32, i32, i32, i32)) -> bool {
+    // Whether a window of this style, maximised or not, at this rect (left,
+    // top, right, bottom) is full screen on a display at that one: without
+    // a title bar, covering all of it (a pixel past it on every side, as
+    // HELLDIVERS 2's, is all of it); with one by its style, covering it and
+    // not maximised, or laid exactly on it. Kazumi's player full screen
+    // (window_manager 0.5.1's setFullScreen) keeps WS_CAPTION, draws no
+    // frame (its WM_NCCALCSIZE) and is set to the display's rect, maximised
+    // still if it was; her taskbar stayed over its video
+    // (zhoupengjie/Wakuwaku#98). Along the top, Windows' own put away and
+    // set to hide itself, such a window was moved on to (-11, -11) past
+    // every side, as one maximised over the whole display lies (the test
+    // VM, 2026-10-30). A window maximised is never exactly on it: its frame
+    // goes past the work area's edges.
+    fn fills(style: u32, zoomed: bool, r: (i32, i32, i32, i32), m: (i32, i32, i32, i32)) -> bool {
+        let covers = r.0 <= m.0 && r.1 <= m.1 && r.2 >= m.2 && r.3 >= m.3;
         if titled(style) {
-            r == m
+            r == m || (covers && !zoomed)
         } else {
-            r.0 <= m.0 && r.1 <= m.1 && r.2 >= m.2 && r.3 >= m.3
+            covers
         }
     }
 
@@ -177,7 +183,7 @@ mod imp {
             }
             let m = &info.monitor;
             let mon = (m.left, m.top, m.right - m.left, m.bottom - m.top);
-            let covers = fills(style, (rect.left, rect.top, rect.right, rect.bottom), (m.left, m.top, m.right, m.bottom));
+            let covers = fills(style, IsZoomed(hwnd) != 0, (rect.left, rect.top, rect.right, rect.bottom), (m.left, m.top, m.right, m.bottom));
             Some((covers && !SKIP_PROGRAMS.contains(&program_of(hwnd).as_str())).then_some(mon))
         }
     }
@@ -228,19 +234,24 @@ mod imp {
             // Kazumi's player full screen: WS_OVERLAPPEDWINDOW less the
             // sizing border and the maximise box, shown, on the display's
             // rect (zhoupengjie/Wakuwaku#98).
-            assert!(fills(0x10ca_0000, mon, mon));
-            // The same a pixel off: a window placed, not a full screen.
-            assert!(!fills(0x10ca_0000, (0, 0, 2560, 1439), mon));
+            assert!(fills(0x10ca_0000, false, mon, mon));
+            // Maximised before it went full screen: still so.
+            assert!(fills(0x11ca_0000, true, mon, mon));
+            // Moved on past every side as one maximised over the whole
+            // display lies, but not maximised.
+            assert!(fills(0x10ca_0000, false, (-11, -11, 2571, 1451), mon));
+            // A pixel short: a window placed, not a full screen.
+            assert!(!fills(0x10ca_0000, false, (0, 0, 2560, 1439), mon));
             // A window maximised, its frame past the work area's edges: with
             // the taskbar's room kept, and with none (Windows' own hiding itself).
-            assert!(!fills(0x15cf_0000, (-11, -11, 2571, 1379), mon));
-            assert!(!fills(0x15cf_0000, (-11, -11, 2571, 1451), mon));
+            assert!(!fills(0x15cf_0000, true, (-11, -11, 2571, 1379), mon));
+            assert!(!fills(0x15cf_0000, true, (-11, -11, 2571, 1451), mon));
             // HELLDIVERS 2's, a pixel past it on every side (#63); and a
             // borderless one short of the foot.
-            assert!(fills(0x9488_0000, (-1, -1, 2561, 1441), mon));
-            assert!(!fills(0x9488_0000, (0, 0, 2560, 1368), mon));
+            assert!(fills(0x9488_0000, false, (-1, -1, 2561, 1441), mon));
+            assert!(!fills(0x9488_0000, false, (0, 0, 2560, 1368), mon));
             // On a display left of the main one.
-            assert!(fills(0x10ca_0000, (-1920, 0, 0, 1080), (-1920, 0, 0, 1080)));
+            assert!(fills(0x10ca_0000, false, (-1920, 0, 0, 1080), (-1920, 0, 0, 1080)));
         }
 
         #[test]

@@ -2436,6 +2436,12 @@ mod imp {
     // showing it once a second or so. In normal use it is next to never
     // shown again (none in 71 hours of the taskbar home, 2026-10-20); a few
     // at once (Explorer started again on several displays) is nothing.
+    // Shown again many times within one tick is one time: Explorer's own
+    // taskbar, put away and set to hide itself (her strip along the top or
+    // a side), shows itself again in bursts as it takes that state and as a
+    // window goes full screen, 8 times in 30 to 440 ms, and she left the
+    // taskbar to nobody (the test VM, 2026-10-30, zhoupengjie/Wakuwaku#98);
+    // #69's, all the while, is two a second so, caught in some four.
     const TUG_TICKS: u32 = 20;
     const TUG_TIMES: usize = 8;
 
@@ -2455,6 +2461,10 @@ mod imp {
         // tug of war (once; from then on it is left to the other program).
         fn shown(&mut self, tick: u32) -> bool {
             if self.lost {
+                return false;
+            }
+            // Once already this tick.
+            if self.seen > 0 && self.at[(self.seen - 1) % TUG_TIMES] == tick {
                 return false;
             }
             self.at[self.seen % TUG_TIMES] = tick;
@@ -2513,14 +2523,25 @@ mod imp {
             assert!((0..2000).step_by(3).all(|tick| !tug.shown(tick)));
         }
 
-        // Many times within a tick (its show events, #69's 7 or 8 a second):
-        // a tug of war, told once.
+        // A burst within a tick or two (Explorer's own taskbar showing itself
+        // as it is set to hide itself, or as a window goes full screen): no
+        // tug of war (zhoupengjie/Wakuwaku#98).
         #[test]
-        fn a_burst_is_a_tug_of_war() {
+        fn a_burst_is_nothing() {
             let mut tug = Tug::new();
-            let told: Vec<bool> = (0..TUG_TIMES as u32 + 5).map(|i| tug.shown(100 + i / 8)).collect();
-            assert_eq!(told.iter().filter(|t| **t).count(), 1);
-            assert!(told[TUG_TIMES - 1]);
+            assert!((0..TUG_TIMES * 2).all(|_| !tug.shown(100)));
+            assert!((0..TUG_TIMES * 2).all(|i| !tug.shown(200 + (i / TUG_TIMES) as u32)));
+        }
+
+        // Shown again 7 or 8 times a second all the while (its show events,
+        // #69's): a tug of war, told once, in some four seconds.
+        #[test]
+        fn shown_again_all_the_while_is_a_tug_of_war() {
+            let mut tug = Tug::new();
+            // Every 130 ms, the tick 500 ms.
+            let told: Vec<u32> = (0..100u32).filter(|i| tug.shown(i * 130 / 500)).map(|i| i * 130).collect();
+            assert_eq!(told.len(), 1);
+            assert!((3000..=4500).contains(&told[0]), "{told:?}");
         }
 
         // Seen by the timer at every tick, put away and shown again each
@@ -2546,19 +2567,21 @@ mod imp {
         // after (counted from the first, both halves would fall short).
         #[test]
         fn the_window_slides() {
+            let half = TUG_TIMES as u32 / 2;
             let mut tug = Tug::new();
             assert!(!tug.shown(0));
-            assert!((0..TUG_TIMES / 2).all(|_| !tug.shown(TUG_TICKS - 2)));
-            let told: Vec<bool> = (0..TUG_TIMES / 2).map(|_| tug.shown(TUG_TICKS + 2)).collect();
+            assert!((0..half).all(|i| !tug.shown(TUG_TICKS - half + i)));
+            let told: Vec<bool> = (0..half).map(|i| tug.shown(TUG_TICKS + 1 + i)).collect();
             assert_eq!(told.last(), Some(&true));
         }
 
-        // A short burst, then quiet, then another: each counted alone.
+        // A run of ticks, then quiet, then another: each counted alone.
         #[test]
-        fn bursts_far_apart_are_apart() {
+        fn runs_far_apart_are_apart() {
+            let n = TUG_TIMES as u32 - 1;
             let mut tug = Tug::new();
-            assert!((0..TUG_TIMES - 1).all(|_| !tug.shown(10)));
-            assert!((0..TUG_TIMES - 1).all(|_| !tug.shown(10 + TUG_TICKS)));
+            assert!((0..n).all(|i| !tug.shown(10 + i)));
+            assert!((0..n).all(|i| !tug.shown(10 + n + TUG_TICKS + i)));
         }
     }
 

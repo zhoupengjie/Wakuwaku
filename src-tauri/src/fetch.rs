@@ -131,8 +131,26 @@ pub fn parse_pet_ref(input: &str) -> Result<String, PetError> {
         .ok_or_else(|| err("noId", json!({ "ref": text })))
 }
 
-fn agent() -> ureq::Agent {
-    ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(30))).build().new_agent()
+// How long a request may take, all told.
+const TIMEOUT: Duration = Duration::from_secs(30);
+
+// A GET the way her other requests go (proxy::web_ways: as the General
+// page's Network proxy says, Windows' proxy first by default, then
+// straight). Straight alone, the gallery timed out where codex-pets.net is
+// reached only through a proxy, a browser on the same computer fine
+// (zhoupengjie/Wakuwaku#99). The first answer counts, an error status too;
+// a way that does not get one, the next is tried, the last one's error kept.
+fn get(url: &str) -> Result<ureq::http::Response<ureq::Body>, ureq::Error> {
+    let mut last = ureq::Error::ConnectionFailed;
+    for way in crate::proxy::web_ways(url) {
+        let Some(agent) = way.agent(TIMEOUT) else { continue };
+        match agent.get(url).header("user-agent", "wakuwaku").call() {
+            Err(e @ ureq::Error::StatusCode(_)) => return Err(e),
+            Err(e) => last = e,
+            answered => return answered,
+        }
+    }
+    Err(last)
 }
 
 fn http_err(url: &str, e: ureq::Error) -> PetError {
@@ -145,9 +163,8 @@ fn http_err(url: &str, e: ureq::Error) -> PetError {
 // Downloads the pet into <dir>/<id>/. Returns { id, name, author, warning? }.
 pub fn download_pet(input: &str, dir: &Path) -> Result<Value, PetError> {
     let id = parse_pet_ref(input)?;
-    let agent = agent();
     let api = format!("{SITE}/api/pets/{id}");
-    let body: Value = match agent.get(&api).header("user-agent", "wakuwaku").call() {
+    let body: Value = match get(&api) {
         Ok(mut res) => res.body_mut().read_json().map_err(|e| err("network", json!({ "message": e.to_string(), "url": api })))?,
         Err(ureq::Error::StatusCode(404)) => return Err(err("notFound", json!({ "id": id }))),
         Err(e) => return Err(http_err(&api, e)),
@@ -161,10 +178,7 @@ pub fn download_pet(input: &str, dir: &Path) -> Result<Value, PetError> {
     if sheet_url.scheme() != "https" || !sheet_url.host_str().is_some_and(is_site_host) {
         return Err(err("sheetElsewhere", json!({ "url": sheet_url.as_str() })));
     }
-    let sheet = agent
-        .get(sheet_url.as_str())
-        .header("user-agent", "wakuwaku")
-        .call()
+    let sheet = get(sheet_url.as_str())
         .map_err(|e| http_err(sheet_url.as_str(), e))?
         .body_mut()
         .with_config()
@@ -211,10 +225,7 @@ fn gallery_url(page: u64, sort: &str, query: &str) -> String {
 // the gallery shows is passed on, and only pictures from the site itself.
 pub fn gallery(page: u64, sort: &str, query: &str) -> Result<Value, PetError> {
     let url = gallery_url(page, sort, query);
-    let body: Value = agent()
-        .get(&url)
-        .header("user-agent", "wakuwaku")
-        .call()
+    let body: Value = get(&url)
         .map_err(|e| http_err(&url, e))?
         .body_mut()
         .read_json()
@@ -338,6 +349,28 @@ mod tests {
         assert_eq!(gallery_url(0, "popular", ""), "https://codex-pets.net/api/pets?page=1&pageSize=12&sort=popular");
         assert_eq!(gallery_url(2, "newest", " "), "https://codex-pets.net/api/pets?page=2&pageSize=12&sort=new");
         assert_eq!(gallery_url(1, "x", "猫 cat&sort=new"), "https://codex-pets.net/api/pets?page=1&pageSize=12&sort=popular&q=%E7%8C%AB+cat%26sort%3Dnew");
+    }
+
+    #[test]
+    fn the_gallery_goes_the_way_the_network_proxy_says() {
+        use std::io::{Read, Write};
+        // A proxy of our own that notes what it is asked and turns it away.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let asked = std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 512];
+            let n = s.read(&mut buf).unwrap_or(0);
+            let _ = s.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
+            String::from_utf8_lossy(&buf[..n]).lines().next().unwrap_or("").to_string()
+        });
+        crate::proxy::set_web(&json!({ "mode": "manual", "kind": "http", "address": format!("127.0.0.1:{port}") }));
+        let got = gallery(1, "new", "");
+        crate::proxy::set_web(&Value::Null);
+        // Not asked (gone straight): let it go.
+        let _ = std::net::TcpStream::connect(("127.0.0.1", port)).map(|mut s| s.write_all(b"nothing\r\n"));
+        assert_eq!(asked.join().unwrap(), "CONNECT codex-pets.net:443 HTTP/1.1");
+        assert_eq!(got.err().map(|e| e.code), Some("network"));
     }
 
     #[test]

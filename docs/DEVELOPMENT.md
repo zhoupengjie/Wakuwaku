@@ -48,7 +48,7 @@ src-tauri/
     clock.rs              任务栏时钟的悬停提示：完整日期（用户自己的日期格式）、Windows 设的附加时钟
     updates.rs            软件更新：看 GitHub 和 Gitee 的最新发布、在岛上提示、下载校验替换并重启
     crash.rs, crash/      崩溃报告：panic 钩子、未处理异常过滤器、守护进程看退出码、WebView2 进程挂掉；常开的尾日志、脱敏（redact.rs）、问一次、发到中转
-    proxy.rs              网络代理（通用页，netProxy）：她联网（更新、崩溃报告、LHM 下载、插件、市场）怎么走（web_ways）、自己跟跳转的 GET（get，更新和市场共用）、「测试」；Windows 的系统代理、手填的代理地址（邮件也用）
+    proxy.rs              网络代理（通用页，netProxy）：她联网（更新、崩溃报告、LHM 下载、插件、市场、宠物图库）怎么走（web_ways）、自己跟跳转的 GET（get，更新和市场共用）、「测试」；Windows 的系统代理、手填的代理地址（邮件也用）
     wallpaper.rs          每块显示器的桌面壁纸：文件、摆法、底色（IDesktopWallpaper），给任务栏的云母用
     settings.rs           设置看到的快照、校验后的设置补丁、设置的各个命令
     pointer.rs            两个窗口共用的点击穿透
@@ -730,7 +730,7 @@ zhoupengjie/Wakuwaku#44：exe 改名后 Run 还指着旧文件，开机什么也
 - **两个地方**：GitHub 和 Gitee（[gitee.com/zhoupengjie/Wakuwaku](https://gitee.com/zhoupengjie/Wakuwaku)，给国内用户的副本；代码和 tag 同步过去，发布要在 Gitee 上另建，见下面「发布到 Gitee」）。
 - **检查**：同时问两边，都带 User-Agent、不带 token：GitHub 是 `GET https://api.github.com/repos/zhoupengjie/Wakuwaku/releases/latest`，404（还没有发布）当作没有。Gitee **不用它的 API**：不登录时每个 IP 只有大约 60 次，用完后一个多小时都返回 403（Rate Limit Exceeded），国内很多人共用一个出口 IP；它的 `releases/latest` 还是"最后编辑的那个"，JSON 里也没有 `draft`、`html_url`、`size`、`digest`。所以改读仓库的 tag，和 `git clone` 一样（`GET https://gitee.com/zhoupengjie/Wakuwaku.git/info/refs?service=git-upload-pack`，pkt-line 格式），取版本最高的 tag（`v` 加数字开头；名字里有 `-` 的算预发布，跳过：只看 tag 分不出 Gitee 上的预发布，所以 Gitee 上的预发布 tag 必须带 `-`）。再按 Gitee 存放附件的固定地址取这个 tag 的 `…/releases/download/<tag>/<exe>.sha256`（`sha256sum` 的格式，也接受只有十六进制）：取得到就说明这一版在 Gitee 上已经发好（脚本先传 exe 再传 `.sha256`），exe 地址和发布页地址（`…/releases/tag/<tag>`）也按固定格式拼；404 说明这个 tag 在 Gitee 上还没有发布，Gitee 这边就当作没有。两边取版本高的；两边版本一样时，校验值优先用 GitHub 的 `digest`，两边都给了却不一样就不装（`mismatch`）。只有一边答不上来时只记日志；两边都答不上来才算检查失败。启动 20 秒后一次，之后每天一次（线程每 10 分钟看一眼是否到期；失败的话一小时后再试，只记日志）。草稿、预发布不算；`tag_name` 去掉 `v` 后和 `CARGO_PKG_VERSION` 按数字逐段比（0.10.0 > 0.9.0，带 `-` 后缀的预发布排在同号正式版前面）。设置 `autoUpdateCheck`（默认开）关掉就不再自己检查；「现在检查」随时可点。
 - **先从哪边下载**：设置 `updateFrom`：`auto`（默认）在中国先 Gitee、其他地方先 GitHub；也可以设成 `gitee` / `github`。"在中国"是 Windows 的时区为 `China Standard Time`，或系统语言是 `zh-CN` / `zh-Hans…`（只算一次）。先下的那边失败（下载出错或校验不对）就换另一边，界面上写着正在从哪边下载。发布页（「查看说明」）也打开先下载那一边的。
-- **怎么连**（zhoupengjie/Wakuwaku#68）：检查和下载都和她别的请求（崩溃报告、LHM 下载、插件联网）一样，照通用页「网络」组的「网络代理」（设置 `netProxy`：`{ mode: system | manual | none, kind, address }`，没设就是 `system`；`proxy::web_ways`，启动时和改了设置时 `proxy::set_web` 记下）走：
+- **怎么连**（zhoupengjie/Wakuwaku#68）：检查和下载都和她别的请求（崩溃报告、LHM 下载、插件联网、宠物图库）一样，照通用页「网络」组的「网络代理」（设置 `netProxy`：`{ mode: system | manual | none, kind, address }`，没设就是 `system`；`proxy::web_ways`，启动时和改了设置时 `proxy::set_web` 记下）走：
   - **跟随系统**：设了 Windows 系统代理（Clash、v2rayN 打开「系统代理」）且环境变量里没有代理时，先走系统代理，不行再直连；`ProxyOverride` 里的主机直连；环境变量里有代理就交给 ureq。
   - **手动**：只走填的代理（HTTP 或 SOCKS5），用邮件那套自己写的穿法（`mail::proxy::through`：CONNECT 或 SOCKS5，域名交给代理解析），不再直连。第一次选手动时先填上系统代理的地址，没有就是 `127.0.0.1:7890`。
   - **不用**：直连，环境变量里的代理也不用。本机（localhost、127.*、::1）怎样都直连。

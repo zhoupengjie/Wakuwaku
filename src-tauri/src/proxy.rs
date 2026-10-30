@@ -1,13 +1,13 @@
 // Proxies: Windows' own, as Settings (Network, Proxy) has it and as Clash or
 // v2rayN set it when their "system proxy" is on, read for the web (the
-// updates, the crash reports, LHM's download, the plugins: web_ways, a URL
-// for ureq, tried before going straight) and for mail (mail/proxy.rs: an
-// address and a kind to go through); and a proxy as one is typed in. The
-// registry's ProxyServer is "host:port" for every protocol, or one for each:
-// "http=host:port;https=host:port;socks=host:port"; ProxyOverride lists the
-// hosts reached straight ("localhost;127.*;10.*;<local>", <local> being a
-// name without a dot). A PAC script (AutoConfigURL, Clash's "PAC mode") is
-// not read: as no proxy.
+// updates, the crash reports, LHM's download, the plugins, the pets'
+// gallery: web_ways, a URL for ureq, tried before going straight) and for
+// mail (mail/proxy.rs: an address and a kind to go through); and a proxy as
+// one is typed in. The registry's ProxyServer is "host:port" for every
+// protocol, or one for each: "http=host:port;https=host:port;socks=host:port";
+// ProxyOverride lists the hosts reached straight ("localhost;127.*;10.*;
+// <local>", <local> being a name without a dot). A PAC script (AutoConfigURL,
+// Clash's "PAC mode") is not read: as no proxy.
 //
 // Which way, the General page's Network proxy says (the setting netProxy,
 // zhoupengjie/Wakuwaku#68): Windows' (the default), one typed in, or none;
@@ -216,7 +216,7 @@ pub fn web_system_view() -> Value {
     p.map_or(Value::Null, |p| json!({ "kind": p.kind.name(), "address": p.at() }))
 }
 
-// --- The web (updates, crash reports, LHM's download, the plugins) --------
+// --- The web (updates, crash reports, LHM's download, the plugins, pets) --
 
 // Every request of hers to the web goes one way, as netProxy says. Windows'
 // (system): through Windows' proxy first where one is set (and none in the

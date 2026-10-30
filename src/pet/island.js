@@ -2158,6 +2158,15 @@
       window.pet.seat(seat)
     }
   }
+  // A run grown or shrunk moves her slot in it: the tray's icons come in a
+  // few seconds after the strip is drawn, a program adds one, the monitor's
+  // numbers get wider. Her island goes with it; it stayed where the slot had
+  // been, over the monitor and the tray's chevron, until something drew the
+  // strip anew (zhoupengjie/Wakuwaku#98).
+  const slotWatch = new ResizeObserver(() => {
+    if (taskbarBuilt && isOn() && home() === 'taskbar') placeSlot()
+  })
+  for (const zone of Object.values(zones)) slotWatch.observe(zone)
 
   // The settings beside a side bar, from her capsule's top (or foot, in the
   // bar's lower half), kept 8 px off the screen's ends.

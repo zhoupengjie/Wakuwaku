@@ -875,7 +875,7 @@ CPU 主要花在 GPU 进程和渲染进程上，两边几乎一样（页面是�
 - **显示窗口会激活它**：tao 只在窗口第一次显示时不激活，之后 `show()` 用的是 `SW_SHOW`，被显示的窗口会成为本程序的活动窗口（本程序在前台时还会抢走前台），岛就会收到失焦事件，设置跟着收起。也不能绕开 tao 自己调 `ShowWindow`：tao 记的状态一旦是"不可见"，之后改任何窗口样式（比如切换点击穿透）时都会补一个 `SW_HIDE`。所以她的窗口都经 `Shared::show_window` 显示：之后 0.5 秒内岛的失焦不算数，设置开着时焦点马上还给岛。
 - **系统通知**：未安装（没有开始菜单快捷方式）的程序要先在 `HKCU\Software\Classes\AppUserModelId\<id>` 登记名字和图标，toast 才会显示。
 - **搬动 Rust 工程之后**：`target/` 里的构建产物带着绝对路径，搬家后要 `cargo clean` 一次。
-- **全屏判断**：最大化窗口会比屏幕多出几像素边框，但底部止于任务栏；判断全屏还要看有没有标题栏。
+- **全屏判断**：最大化窗口会比屏幕多出几像素边框，但底部止于任务栏；判断全屏还要看有没有标题栏。没有标题栏的，盖住整块显示器就算（HELLDIVERS 2 每边多出 1 像素，#63）；样式上有标题栏的，只有窗口矩形恰好等于显示器时才算（`fullscreen.rs` 的 `fills`）。Kazumi 的播放器全屏用的是 window_manager 0.5.1 的 `setFullScreen`：只去掉 `WS_THICKFRAME` 和 `WS_MAXIMIZEBOX`，保留 `WS_CAPTION`，靠 `WM_NCCALCSIZE` 不画边框，再把窗口设成显示器的 `rcMonitor`，以前因为有标题栏一律不算全屏（#98）。Explorer 自己对带标题栏的窗口看客户区，但 window_manager 按工作区算客户区，任务栏在顶部时客户区会缩进去，所以这里看窗口矩形。
 - **hook 回包必须是对象**：服务端只会回对象，其他任何值都回 `{}`。
 - **压缩时被打回空闲**：自动压缩会触发 `SessionStart`（`source: compact`），要忽略。
 - **Linux 的中文 locale**：`zh_CN.UTF-8` 里下划线是单词字符，`/^zh\b/` 匹配不上（`i18n.js` 的 `detectLang`）。

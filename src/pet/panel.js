@@ -27,7 +27,10 @@
   let lang = 'en'
   let config = {}
   let asks = []
-  const canAnswerWithHotkey = ask => !!ask && (ask.kind === 'permission' || ask.kind === 'plan') && !IN_APP.has(ask.from) && ask.canAnswer !== false
+  // The keys answer what the buttons do: an approval or a plan, theirs too
+  // (zcode, dsh), whose own dialog closes as the answer reaches it
+  // (zhoupengjie/Wakuwaku#97).
+  const canAnswerWithHotkey = ask => !!ask && (ask.kind === 'permission' || ask.kind === 'plan') && ask.canAnswer !== false
   const keyHintOf = (key, ask) => (canAnswerWithHotkey(ask) && config.shortcutsEnabled && config[key] ? config[key] : '')
   let shownId = null
   let step = 0

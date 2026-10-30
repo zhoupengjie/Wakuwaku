@@ -2,8 +2,9 @@
 // elsewhere it never reports one.
 //
 // Full screen: the foreground window covers its whole monitor and has no title
-// bar. A maximised window has one (and stops at the taskbar), so it is not.
-// And only on a display she is on (on: their rects; none given, any): a
+// bar, or has one by its style and lies exactly on the monitor (fills). A
+// maximised window has one and goes past the monitor's edges or stops at the
+// taskbar, so it is not. And only on a display she is on (on: their rects; none given, any): a
 // video full screen on the second display hid her taskbar on the main one
 // (the user, 2026-10-13); Windows' own steps aside only on its own display.
 
@@ -121,6 +122,23 @@ mod imp {
         style & WS_CAPTION == WS_CAPTION
     }
 
+    // Whether a window of this style at this rect (left, top, right,
+    // bottom) is full screen on a display at that one: without a title bar,
+    // covering all of it (a pixel past it on every side, as HELLDIVERS 2's,
+    // is all of it); with one by its style, laid exactly on it. Kazumi's
+    // player full screen (window_manager 0.5.1's setFullScreen) keeps
+    // WS_CAPTION, draws no frame (its WM_NCCALCSIZE) and is set to the
+    // display's rect; her taskbar stayed over its video
+    // (zhoupengjie/Wakuwaku#98). A window maximised is never exactly on it:
+    // its frame goes past the work area's edges.
+    fn fills(style: u32, r: (i32, i32, i32, i32), m: (i32, i32, i32, i32)) -> bool {
+        if titled(style) {
+            r == m
+        } else {
+            r.0 <= m.0 && r.1 <= m.1 && r.2 >= m.2 && r.3 >= m.3
+        }
+    }
+
     // None: the foreground window is one of ours (keep what was decided).
     pub fn check(own: &[isize], on: &[(i32, i32, i32, i32)]) -> Option<bool> {
         covering(own).map(|c| c.is_some_and(|mon| on.is_empty() || on.contains(&mon)))
@@ -148,9 +166,7 @@ mod imp {
             if SKIP_CLASSES.contains(&String::from_utf16_lossy(&name[..n]).as_str()) {
                 return Some(None);
             }
-            if titled(GetWindowLongPtrW(hwnd, GWL_STYLE) as u32) {
-                return Some(None);
-            }
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
             let mut rect = Rect::default();
             if GetWindowRect(hwnd, &mut rect) == 0 {
                 return Some(None);
@@ -161,7 +177,7 @@ mod imp {
             }
             let m = &info.monitor;
             let mon = (m.left, m.top, m.right - m.left, m.bottom - m.top);
-            let covers = rect.left <= m.left && rect.top <= m.top && rect.right >= m.right && rect.bottom >= m.bottom;
+            let covers = fills(style, (rect.left, rect.top, rect.right, rect.bottom), (m.left, m.top, m.right, m.bottom));
             Some((covers && !SKIP_PROGRAMS.contains(&program_of(hwnd).as_str())).then_some(mon))
         }
     }
@@ -204,7 +220,28 @@ mod imp {
 
     #[cfg(test)]
     mod tests {
-        use super::titled;
+        use super::{fills, titled};
+
+        #[test]
+        fn what_fills_a_display() {
+            let mon = (0, 0, 2560, 1440);
+            // Kazumi's player full screen: WS_OVERLAPPEDWINDOW less the
+            // sizing border and the maximise box, shown, on the display's
+            // rect (zhoupengjie/Wakuwaku#98).
+            assert!(fills(0x10ca_0000, mon, mon));
+            // The same a pixel off: a window placed, not a full screen.
+            assert!(!fills(0x10ca_0000, (0, 0, 2560, 1439), mon));
+            // A window maximised, its frame past the work area's edges: with
+            // the taskbar's room kept, and with none (Windows' own hiding itself).
+            assert!(!fills(0x15cf_0000, (-11, -11, 2571, 1379), mon));
+            assert!(!fills(0x15cf_0000, (-11, -11, 2571, 1451), mon));
+            // HELLDIVERS 2's, a pixel past it on every side (#63); and a
+            // borderless one short of the foot.
+            assert!(fills(0x9488_0000, (-1, -1, 2561, 1441), mon));
+            assert!(!fills(0x9488_0000, (0, 0, 2560, 1368), mon));
+            // On a display left of the main one.
+            assert!(fills(0x10ca_0000, (-1920, 0, 0, 1080), (-1920, 0, 0, 1080)));
+        }
 
         #[test]
         fn a_title_bar_is_both_bits() {

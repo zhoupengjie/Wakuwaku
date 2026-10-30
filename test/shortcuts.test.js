@@ -52,17 +52,24 @@ describe('global shortcuts behavioral tests', () => {
       assert.deepEqual(res, { type: 'open' })
     })
 
-    it('if prompt must be answered in-app (IN_APP or canAnswer === false), only opens island', () => {
-      assert.deepEqual(
-        decideHotkeyAction({
-          which: 'allow',
-          ask: { id: 104, kind: 'permission', from: 'zcode' },
-          shownId: 104,
-          isArmed: true,
-          islandOpen: true,
-        }),
-        { type: 'open' }
-      )
+    it('ZCode and DeepSeek Harness approvals are answered by the keys as by the buttons (#97)', () => {
+      for (const from of ['zcode', 'dsh']) {
+        for (const which of ['allow', 'deny']) {
+          assert.deepEqual(
+            decideHotkeyAction({
+              which,
+              ask: { id: 104, kind: 'permission', from },
+              shownId: 104,
+              isArmed: true,
+              islandOpen: true,
+            }),
+            { type: 'answer', which, id: 104 }
+          )
+        }
+      }
+    })
+
+    it('if prompt cannot be answered on the island (canAnswer === false), only opens island', () => {
       assert.deepEqual(
         decideHotkeyAction({
           which: 'allow',

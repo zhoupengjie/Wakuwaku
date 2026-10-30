@@ -96,7 +96,12 @@ mod imp {
         fn AttachConsole(pid: u32) -> i32;
         fn FreeConsole() -> i32;
         fn GetConsoleWindow() -> Hwnd;
+        fn GetStdHandle(which: u32) -> Handle;
+        fn SetStdHandle(which: u32, handle: Handle) -> i32;
     }
+
+    // STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE.
+    const STD_HANDLES: [u32; 3] = [-10i32 as u32, -11i32 as u32, -12i32 as u32];
 
     #[repr(C)]
     struct UnicodeString {
@@ -571,16 +576,32 @@ mod imp {
     // (it owns the console's window), or the console's own. Never
     // while this program has a console of its own (a debug build): it would
     // have to let go of it to look.
+    //
+    // Attaching makes the console's handles her standard ones, and letting
+    // go closes them without putting hers back: their numbers, reused for a
+    // file she opens after, were her stderr, and a write there was refused
+    // (os error 5), which eprintln! takes for a panic. tray-icon's, its
+    // icon not removed as she quit on her taskbar, ended her so
+    // (zhoupengjie/Wakuwaku#100). So hers (none, in a release build) are put
+    // back as they were.
     fn console_window(pid: u32) -> Option<isize> {
         static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
         let _one = ONE_AT_A_TIME.lock().unwrap();
-        // SAFETY: attached only for these few calls, and let go of again.
+        // SAFETY: attached only for these few calls, and let go of again;
+        // the standard handles put back are the ones she had.
         unsafe {
-            if !GetConsoleWindow().is_null() || AttachConsole(pid) == 0 {
+            if !GetConsoleWindow().is_null() {
+                return None;
+            }
+            let hers = STD_HANDLES.map(|which| GetStdHandle(which));
+            if AttachConsole(pid) == 0 {
                 return None;
             }
             let console = GetConsoleWindow();
             FreeConsole();
+            for (which, handle) in STD_HANDLES.into_iter().zip(hers) {
+                SetStdHandle(which, handle);
+            }
             if console.is_null() {
                 return None;
             }

@@ -62,6 +62,7 @@ src-tauri/
     power.rs              省电：后台线程一直、整个进程和 WebView2 的进程在静默时交给效率核（EcoQoS），静默时页面内存设为低；多久没碰键盘鼠标
     gpu.rs                她那块屏由哪块显卡输出（D3DKMT），WebView2 就在那块上渲染
     focus.rs              前台窗口：设置拿走键盘前记下，收起时还回去
+    frameless.rs          她的窗口不留标题栏样式：tao 写回样式时拿掉 WS_CAPTION，分层窗口才不会被画上旧式外框（见「踩过的坑」）
     winkeys.rs            任务栏的 Win 键：Win+1…9、Win+T、Win+B 从藏起来的 Windows 任务栏接过来（低级键盘钩子，自己的线程），按她的顺序
     jump.rs               点会话就到它的窗口：会话的进程链、找窗口、叫到前面、桌面版的会话链接
     widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、今天的 token、监控），什么时候冒头
@@ -873,6 +874,7 @@ CPU 主要花在 GPU 进程和渲染进程上，两边几乎一样（页面是�
 - **16 位 PNG**：Tauri 的 PNG 解码只要 8 位 RGBA，托盘和窗口图标都用 8 位（`make-icons.js` 加了 `-depth 8`）。
 - **单击 ✕ 又打开了设置**：同一次 click 冒泡到岛上，岛那时已经不在设置里，就当成"单击打开"。岛的 click 忽略来自设置面板里的点击。
 - **显示窗口会激活它**：tao 只在窗口第一次显示时不激活，之后 `show()` 用的是 `SW_SHOW`，被显示的窗口会成为本程序的活动窗口（本程序在前台时还会抢走前台），岛就会收到失焦事件，设置跟着收起。也不能绕开 tao 自己调 `ShowWindow`：tao 记的状态一旦是"不可见"，之后改任何窗口样式（比如切换点击穿透）时都会补一个 `SW_HIDE`。所以她的窗口都经 `Shared::show_window` 显示：之后 0.5 秒内岛的失焦不算数，设置开着时焦点马上还给岛。
+- **窗口上多出一圈旧式外框**：tao 给没有装饰的窗口也留着 `WS_CAPTION`（她的窗口样式是 `0x14C80000`），只靠 `WM_NCCALCSIZE` 让工作区占满窗口。她的窗口又是分层的（点击穿透的 `WS_EX_LAYERED`），分层窗口的非工作区不归 DWM 画（`DWMWA_NCRENDERING_ENABLED` 是 0）。窗口收到 `WM_DWMNCRENDERINGCHANGED(0)` 之后，别的程序对活动窗口调 `PrintWindow`，窗口的线程收到跨线程送来的 `WM_PAINT`，里面带一个 `WM_NCPAINT(1)`，`DefWindowProc` 就把 Basic 样式的外框（标题栏、图标、关闭钮、淡蓝边框）画到窗口自己的表面上，正好整个窗口那么大。页面在 WebView2 里，盖在上面，那块表面没人再画，所以外框一直留到退出（再来一次 `PrintWindow` 倒会把它擦掉），窗口移动时也跟着走；有没有外框，`GetWindowLongPtr` 读到的样式都一样。用户机器上（2026-11-01）调 `PrintWindow` 的是 Windhawk 的 `macos-minimize-animation`（注入所有进程，开着 `launch_animation`）：它把有 `WS_CAPTION` 的顶层窗口当成程序启动，第一次 `ShowWindow(SW_SHOW)` 时先 cloak，显示后一两百毫秒再从工作线程 `PrintWindow(PW_RENDERFULLCONTENT)` 截图做动画。`SW_SHOW` 会激活窗口（上一条），岛第一次显示会把活动窗口抢走，所以她在外面时桌宠要看截图和岛谁先到，时有时无，岛几乎每次都中（实测 32 次：桌宠 13 次，岛 32 次）；她在家、只显示岛时等不到 `WM_DWMNCRENDERINGCHANGED(0)`，`WM_NCPAINT(1)` 来了也画不出来（32 次都没有）。`frameless.rs` 在 `Shared::own_window` 里子类化她的窗口，`WM_STYLECHANGING` 时拿掉 `WS_CAPTION`（tao 每改一次标志就把自己的样式写回去）：没有标题栏样式就没有东西可画，这个模组也不再把她当程序窗口（同样各 32 次，都没有）。**别只按一种颜色判断有没有外框**：活动时标题栏是 `#9BB7D3`、关闭钮是红的，失去激活时标题栏是 `#C1D0DE`、关闭钮是灰的（截图偶尔来得晚一点时就是这样），边框的颜色还随缩放变（`#C7DAEE`、`#CCDEF0`、`#D7E4F2`）；两边的边框加关闭钮一起看，再用截图确认。
 - **系统通知**：未安装（没有开始菜单快捷方式）的程序要先在 `HKCU\Software\Classes\AppUserModelId\<id>` 登记名字和图标，toast 才会显示。
 - **搬动 Rust 工程之后**：`target/` 里的构建产物带着绝对路径，搬家后要 `cargo clean` 一次。
 - **全屏判断**：最大化窗口会比屏幕多出几像素边框，但底部止于任务栏；判断全屏还要看有没有标题栏。没有标题栏的，盖住整块显示器就算（HELLDIVERS 2 每边多出 1 像素，#63）；样式上有标题栏的，盖住整块显示器且没有最大化，或者窗口矩形恰好等于显示器（全屏前已经最大化）时才算（`fullscreen.rs` 的 `fills`）。任务栏在顶部时，这样的窗口在测试虚拟机里会被挪到每边多出 11 像素，和整块屏幕都是工作区时最大化窗口的位置一样，但它并没有最大化。Kazumi 的播放器全屏用的是 window_manager 0.5.1 的 `setFullScreen`：只去掉 `WS_THICKFRAME` 和 `WS_MAXIMIZEBOX`，保留 `WS_CAPTION`，靠 `WM_NCCALCSIZE` 不画边框，再把窗口设成显示器的 `rcMonitor`，以前因为有标题栏一律不算全屏（#98）。Explorer 自己对带标题栏的窗口看客户区，但 window_manager 按工作区算客户区，任务栏在顶部时客户区会缩进去，所以这里看窗口矩形。

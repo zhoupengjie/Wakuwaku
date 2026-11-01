@@ -171,15 +171,24 @@
   // Degrees, turning clockwise (her feet to the left, the pointer going right).
   const TILT_MOST = 32
   const TILT_PER_SPEED = 0.03
-  const STRETCH_MOST = 0.1
-  const STRETCH_PER_SPEED = 0.00012
+  const STRETCH_MOST = 0.06
+  const STRETCH_PER_SPEED = 0.00008
   const SPRING = 90
   const DAMP = 7
+  // Her pace is smoothed, twice, over about this long (s). Moves come in their
+  // own time, not one to a step: taken as they came, it was nothing every
+  // other step and double the next, and she shivered between stretched and
+  // not 30 times a second, which reads as two of her, one over the other.
+  const PACE_OVER = 0.07
+  // No more steps than this far apart (ms), whatever the display's rate.
+  const SWING_STEP_MS = 8
 
   function swinging() {
     let angle = 0
     let speed = 0
     let moved = 0
+    let rough = 0
+    let pace = 0
     return {
       // Moved this far (logical px) since the last step.
       push(dx) {
@@ -187,14 +196,17 @@
       },
       // A step of dt seconds; how she hangs now.
       step(dt) {
-        const pace = moved / dt
+        const k = Math.min(1, dt / PACE_OVER)
+        rough += (moved / dt - rough) * k
+        pace += (rough - pace) * k
+        if (Math.abs(pace) < 1 && Math.abs(rough) < 1) rough = pace = 0
         moved = 0
         const want = Math.max(-TILT_MOST, Math.min(TILT_MOST, pace * TILT_PER_SPEED))
         speed += (SPRING * (want - angle) - DAMP * speed) * dt
         angle = Math.max(-TILT_MOST, Math.min(TILT_MOST, angle + speed * dt))
         return { angle, stretch: 1 + Math.min(STRETCH_MOST, Math.abs(pace) * STRETCH_PER_SPEED) }
       },
-      settled: () => Math.abs(angle) < 0.3 && Math.abs(speed) < 2,
+      settled: () => Math.abs(angle) < 0.3 && Math.abs(speed) < 2 && pace === 0,
     }
   }
 
@@ -256,7 +268,7 @@
   // d: the bridge's pet (surfaces, go, walkStop); film: what pet.js draws
   // (pose, react, sound, closeList); stage: her box and what is round it (set,
   // tilt, bits, umbrella, asleep); hidden, reduced, sheet (2: with the look
-  // rows); now, wait, random.
+  // rows); now, wait, random, frame (the next frame of the display).
   function create(d) {
     const { pet, film, stage, now, wait, random } = d
     let config = {}
@@ -278,7 +290,6 @@
     let pattedAt = -Infinity
     let planned = null
     let swung = null
-    let hang = null
     let unsaid = null
     let lastStep = 0
     let shake = shaking()
@@ -330,16 +341,17 @@
     function stepSwing() {
       if (!swung) return
       const at = now()
-      const dt = Math.min(0.05, Math.max(0.008, (at - lastStep) / 1000))
-      lastStep = at
-      const { angle, stretch } = swung.step(dt)
-      stage.tilt(angle, stretch)
-      if (!held && swung.settled()) return endSwing()
-      hang = setTimeout(stepSwing, 16)
+      if (at - lastStep >= SWING_STEP_MS) {
+        const dt = Math.min(0.05, (at - lastStep) / 1000)
+        lastStep = at
+        const { angle, stretch } = swung.step(dt)
+        stage.tilt(angle, stretch)
+        if (!held && swung.settled()) return endSwing()
+      }
+      d.frame(stepSwing)
     }
 
     function endSwing() {
-      clearTimeout(hang)
       swung = null
       stage.tilt(0, 1)
       stage.set('held', false)
@@ -796,11 +808,16 @@
     }
     let umbrella = null
     let zzz = null
+    let hung = ''
     return {
       set: (name, on) => sprite.classList.toggle(`her-${name}`, on),
+      // Written only as it changes: each write is a frame of her window.
       tilt(angle, stretch) {
         const style = sprite.style
-        style.setProperty('--her-tilt', `${angle.toFixed(2)}deg`)
+        const now = `${angle.toFixed(1)} ${stretch.toFixed(3)}`
+        if (now === hung) return
+        hung = now
+        style.setProperty('--her-tilt', `${angle.toFixed(1)}deg`)
         style.setProperty('--her-sy', stretch.toFixed(3))
         style.setProperty('--her-sx', (1 / stretch).toFixed(3))
         if (angle === 0 && stretch === 1) for (const v of ['--her-tilt', '--her-sy', '--her-sx']) style.removeProperty(v)
@@ -847,6 +864,7 @@
       now: () => performance.now(),
       wait: ms => new Promise(done => setTimeout(done, ms)),
       random: Math.random,
+      frame: requestAnimationFrame,
     })
     pet.onUpdate(data => machine.update(data))
     pet.onDragStart(() => machine.pressed())

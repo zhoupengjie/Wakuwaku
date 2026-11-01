@@ -37,6 +37,10 @@ const FLY_MS: f64 = 380.0;
 const HINT_H: f64 = 30.0;
 // Under her umbrella she sways once in about this long.
 const SWAY_MS: f64 = 1600.0;
+// Her window going somewhere with the hand, or by itself, each step this far
+// apart: every 31 ms (main.rs says why), a display of 320 Hz showed the same
+// place ten times over and the eye saw a string of her behind the pointer.
+pub const KEEP_UP_MS: u64 = 8;
 
 // The way one of her moves goes (go; src/pet/play.js says which).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -687,7 +691,7 @@ pub fn poll(sh: &Arc<Shared>, cursor: (i32, i32)) -> u64 {
                     }
                 }
             }
-            16
+            KEEP_UP_MS
         } else {
             // She goes with the window she stands on, or it goes from under her.
             let mut carried_along = false;
@@ -742,7 +746,7 @@ pub fn poll(sh: &Arc<Shared>, cursor: (i32, i32)) -> u64 {
             // Her window dragged by its title bar, or just gone somewhere: she
             // keeps up with it.
             let keeps_up = carried_along || (w.perch.is_some() && is_down);
-            if w.ct.over || keeps_up { 16 } else if seen.forward { 30 } else if seen.near || is_looking { 80 } else { 200 }
+            if keeps_up { KEEP_UP_MS } else if w.ct.over { 16 } else if seen.forward { 30 } else if seen.near || is_looking { 80 } else { 200 }
         }
     };
 
@@ -1101,7 +1105,7 @@ pub fn go(sh: &Shared, to: (i32, i32), ms: f64, way: Way, on: Option<isize>) -> 
     let started = Instant::now();
     let ms = ms.max(1.0);
     let arrived = loop {
-        std::thread::sleep(Duration::from_millis(16));
+        std::thread::sleep(Duration::from_millis(KEEP_UP_MS));
         let t = (started.elapsed().as_secs_f64() * 1000.0 / ms).min(1.0);
         let p = {
             let mut w = sh.win.lock().unwrap();

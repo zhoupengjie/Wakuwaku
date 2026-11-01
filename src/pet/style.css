@@ -416,11 +416,14 @@ body {
     transform 0.14s ease-out;
 }
 
-/* Hanging from the pointer: from the top of her head, each lean as it comes. */
+/* Hanging from the pointer: from the top of her head, each lean as it comes,
+   her box on a layer of its own so that a lean is no repaint. */
 #pet.her-held {
   --her-from: 50% 6%;
   cursor: grabbing;
+  clip-path: none;
   transition: none;
+  will-change: transform;
 }
 
 /* Running up the side of a window, her feet on it. */

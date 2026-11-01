@@ -816,7 +816,8 @@ zhoupengjie/Wakuwaku#44：exe 改名后 Run 还指着旧文件，开机什么也
 - **屏幕顶**：她窗口上面那块是留给头顶的字的，站在靠上的窗口时可以伸出屏幕顶（`Win::kept_high`，`keep_on_screen` 和 `walk` 在 `perch` 时用它），她本人必须在屏幕里。
 - **事件**：`pet:drag-start`（按下，还没算拎起来）、`pet:let-go { moved, carried }`（放手、没被吸回家：`let_go` 判断完才发，所以被吸回去时不会掉）、`pet:perch-gone`、`pet:front`（前台窗口换了，只有开着 `play` 才看）。`pet:drag` 飞回家时也发，所以只有 `pet:drag-start` 之后的才算拎起来。
 - **姿势**：图里没有坐和躺，用每只宠物都有的东西拼：坐是 Jumping 第 0 帧（起跳前蹲下）；躺是这一帧和整个 `#pet` 转 ±90°；跑上窗口侧边是 Run 加转 ±90°（`her-wall-r`：墙在右边，脚朝右，往前就是往上），所以她的中线离墙半个身高（`routeUp`）；探头是 `#pet` 的 `clip-path` 切掉下面 46%，窗口往下沉同样多。转和切都在 `#pet` 本身，所以点击也跟着：切掉的那部分点到的是下面的窗口。
-- **动效**（`docs/design/style.md`）：拎着时才有定时器（`swinging`，弹簧，16ms 一步，放手摆停了就停）；灰、爱心、星星、感叹号都是播完就删的元素；小伞只在下落时；瞌睡的 Zzz 淡入后不动，符合「没人在电脑前时全部停下」。不理她的计时只在可以出发时才排（`plan`），别的时候不空转。`prefers-reduced-motion` 时整个不做。
+- **跟手**：拖她、她跟着窗口走、`go` 都是 8ms 一步（`pet::KEEP_UP_MS`，约 120 次/秒）。指针线程的 `park_timeout(16ms)` 在 Windows 上要等到时钟的下一格，实测 31ms、约 34 次/秒，320Hz 的屏上同一个位置显示十帧，快速拖动时眼睛看到一串她；`thread::sleep` 准（16ms 就是 16ms），所以这么短的等待用它。关着 `play` 时拖动也一样受益。
+- **动效**（`docs/design/style.md`）：拎着时才有逐帧的步子（`swinging`，弹簧，跟着 `requestAnimationFrame`，至少隔 8ms 算一步，放手摆停了就停，没变就不写样式）；步速平滑两次（`PACE_OVER`）：移动不是每步一次，不平滑的话一步是 0、下一步是两倍，她在拉长和不拉长之间抖，看着就是两个她叠在一起；灰、爱心、星星、感叹号都是播完就删的元素；小伞只在下落时；瞌睡的 Zzz 淡入后不动，符合「没人在电脑前时全部停下」。不理她的计时只在可以出发时才排（`plan`），别的时候不空转。`prefers-reduced-motion` 时整个不做。
 - **试**：`node --test test/play.test.js`、`cargo test pet`（`Way` 的路径、`kept_high`、`follow`）。整体：测试副本带 `WAKUWAKU_DEBUG=1`，`/debug/eval` 里 `window.Play.machine.wander()` 不用等 5 分钟，`window.Play.machine.state()` 看姿势，`/health` 的 `window.perch` 看站在哪个窗口。
 
 ## 精灵图

@@ -173,6 +173,23 @@ test('lifted, she trails behind the way she is carried, and comes to rest swingi
   assert.ok(swing.settled())
 })
 
+test('moves coming in their own time, not one to a step, she does not shiver', () => {
+  const swing = swinging()
+  const hung = []
+  // Carried at one pace, a move every other step, as the pointer's loop and
+  // her frames fall out.
+  for (let i = 0; i < 120; i++) {
+    if (i % 2) swing.push(16)
+    hung.push(swing.step(0.016))
+  }
+  const settled = hung.slice(60)
+  for (let i = 1; i < settled.length; i++) {
+    assert.ok(Math.abs(settled[i].stretch - settled[i - 1].stretch) < 0.005, `stretch ${settled[i - 1].stretch} then ${settled[i].stretch}`)
+    assert.ok(Math.abs(settled[i].angle - settled[i - 1].angle) < 0.5, `angle ${settled[i - 1].angle} then ${settled[i].angle}`)
+  }
+  assert.ok(settled.at(-1).stretch > 1, 'still stretched by going fast')
+})
+
 test('however hard she is carried, she leans only so far', () => {
   const swing = swinging()
   for (let i = 0; i < 200; i++) {
@@ -259,6 +276,7 @@ function pretend(t, { s = screen(), config = { play: true }, random = () => 0.9,
     now: () => world.time,
     wait: async () => {},
     random,
+    frame: fn => setTimeout(fn, 16),
   })
   world.tick = async ms => {
     world.time += ms

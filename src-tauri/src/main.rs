@@ -1943,7 +1943,14 @@ fn main() {
                     _ => 200,
                 };
                 let wait = if quiet { wait.max(1000) } else { wait };
-                std::thread::park_timeout(Duration::from_millis(wait));
+                // A park's timeout runs on to the next tick of Windows' clock
+                // (16 ms came to 31 here, some 34 looks a second); a sleep
+                // keeps time, and nothing has to wake it in so short a wait.
+                if wait <= pet::KEEP_UP_MS {
+                    std::thread::sleep(Duration::from_millis(wait));
+                } else {
+                    std::thread::park_timeout(Duration::from_millis(wait));
+                }
             });
 
             // The widgets: today's from the start; the tokens' each minute

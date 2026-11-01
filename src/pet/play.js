@@ -864,7 +864,7 @@
       now: () => performance.now(),
       wait: ms => new Promise(done => setTimeout(done, ms)),
       random: Math.random,
-      frame: requestAnimationFrame,
+      frame: fn => requestAnimationFrame(fn),
     })
     pet.onUpdate(data => machine.update(data))
     pet.onDragStart(() => machine.pressed())

@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
 
-const { cut, topsOf, spotUnder, nearestIn, goalOf, routeUp, fallMs, hopHigh, swinging, shaking, rubbing, create, IGNORED_MS, PEEK_CUT, FLOAT_FROM, HOP_EVERY_MS, WAVE_AFTER_MS } = require('../src/pet/play')
+const { cut, topsOf, spotUnder, nearestIn, goalOf, routeUp, fallMs, hopHigh, swinging, shaking, rubbing, create, attach, IGNORED_MS, PEEK_CUT, FLOAT_FROM, HOP_EVERY_MS, WAVE_AFTER_MS } = require('../src/pet/play')
 
 // 2560 x 1335 of work area at 150%, a medium pet, as on the user's screen.
 const CELL = [158, 172]
@@ -227,6 +227,51 @@ test('stroked: the pointer back and forth a few times, far enough each way', () 
   // Too slowly.
   const slow = rubbing()
   assert.equal([0, 10, 0, 10, 0].some((x, i) => slow.add(x, i * 900)), false)
+})
+
+test("in her page, lifted by the bridge's words, she leans: the page's own calls made as a page makes them", t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const clock = { now: 0 }
+  t.mock.method(performance, 'now', () => clock.now)
+  const frames = []
+  const node = () => ({ style: { setProperty() {} }, classList: { add() {} }, addEventListener() {}, append() {}, remove() {} })
+  Object.assign(globalThis, {
+    document: { hidden: false, addEventListener() {}, createElement: node },
+    matchMedia: () => ({ matches: false }),
+    // As the browser's: called on anything but the window, an illegal invocation.
+    requestAnimationFrame(fn) {
+      if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation')
+      frames.push(fn)
+    },
+  })
+  t.after(() => {
+    delete globalThis.document
+    delete globalThis.matchMedia
+    delete globalThis.requestAnimationFrame
+  })
+  const vars = new Map()
+  const sprite = {
+    classList: { toggle() {} },
+    style: { setProperty: (name, value) => vars.set(name, value), removeProperty: name => vars.delete(name) },
+    addEventListener() {},
+    getBoundingClientRect: () => ({ top: 0, height: 100 }),
+  }
+  const heard = {}
+  const on = name => fn => {
+    heard[name] = fn
+  }
+  const pet = { onUpdate: on('update'), onDragStart: on('start'), onDrag: on('drag'), onDragEnd: on('end'), onLetGo: on('letGo'), onPerchGone: on('gone'), onFront: on('front'), onQuiet: on('quiet'), surfaces: async () => null, go: async () => true }
+  const film = { pose() {}, react() {}, sound() {}, closeList() {} }
+  attach({ pet, sprite, fx: { append() {} }, film, sheet: () => 2, sf: () => 1.5 })
+  heard.update({ config: { play: true }, mood: 'idle' })
+  heard.start()
+  for (let i = 0; i < 40; i++) {
+    clock.now += 10
+    heard.drag(30)
+    for (const fn of frames.splice(0)) fn()
+  }
+  assert.ok(parseFloat(vars.get('--her-tilt')) > 5, `leaning ${vars.get('--her-tilt')}`)
+  assert.ok(parseFloat(vars.get('--her-sy')) > 1, 'stretched')
 })
 
 // --- What she does, on a pretend bridge ------------------------------------------------

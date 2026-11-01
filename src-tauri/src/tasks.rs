@@ -28,8 +28,9 @@ pub struct Keys {
 
 // The clear taskbar (taskbar.rs fills_display): a window maximized on its
 // display; her island at the top of the screen (island.rs look_over_max):
-// one on its display; and (look_under) one under it.
-pub use imp::{maximized, maximized_on, reaches_into};
+// one on its display; and (look_under) one under it. Her, playing (pet.rs
+// surfaces, poll): the windows up on this desktop, and the one she stands on.
+pub use imp::{maximized, maximized_on, reaches_into, stood_on, windows_up};
 
 #[cfg(windows)]
 mod imp {
@@ -523,6 +524,46 @@ mod imp {
             }
         }
         false
+    }
+
+    // The windows with buttons, not minimized, front to back, each where it
+    // is seen (left, top, right, bottom): what she can stand on, and what
+    // stands in her way (pet.rs surfaces). As in reaches_into, the desktop's
+    // window lifted over them ends the list.
+    pub fn windows_up() -> Vec<(isize, (i32, i32, i32, i32))> {
+        let mut all: Vec<isize> = Vec::new();
+        // SAFETY: collect() only pushes, while all lives.
+        unsafe { EnumWindows(collect, &mut all as *mut Vec<isize> as isize) };
+        let me = std::process::id();
+        let mut up = Vec::new();
+        for h in all {
+            let hwnd = h as Hwnd;
+            // SAFETY: plain queries about a window being enumerated.
+            if unsafe { IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0 } {
+                continue;
+            }
+            let f = frame_of(hwnd);
+            if is_desktop(h) && f.right > f.left && f.bottom > f.top {
+                break;
+            }
+            if is_task(hwnd, me) {
+                up.push((h, (f.left, f.top, f.right, f.bottom)));
+            }
+        }
+        up
+    }
+
+    // That window where it is seen, while she can stand on it: still there,
+    // shown, on this desktop, neither minimized nor maximized (pet.rs poll).
+    pub fn stood_on(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+        let h = hwnd as Hwnd;
+        // SAFETY: plain queries; a window gone answers no.
+        let up = unsafe { IsWindow(h) != 0 && IsWindowVisible(h) != 0 && IsIconic(h) == 0 && IsZoomed(h) == 0 };
+        if !up || is_cloaked(h) {
+            return None;
+        }
+        let f = frame_of(h);
+        Some((f.left, f.top, f.right, f.bottom))
     }
 
     const DWMWA_EXTENDED_FRAME_BOUNDS: u32 = 9;
@@ -1680,6 +1721,12 @@ mod imp {
     }
     pub fn reaches_into(_r: (i32, i32, i32, i32)) -> bool {
         false
+    }
+    pub fn windows_up() -> Vec<(isize, (i32, i32, i32, i32))> {
+        Vec::new()
+    }
+    pub fn stood_on(_hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+        None
     }
     pub fn is_start(_hwnd: isize) -> bool {
         false

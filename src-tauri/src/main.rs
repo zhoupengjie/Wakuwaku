@@ -1008,6 +1008,27 @@ async fn pet_walk_stop(app: AppHandle) {
     pet::stop_walking(&shared(&app));
 }
 
+// Her playing (src/pet/play.js): what she can stand on where she is.
+#[tauri::command]
+async fn pet_surfaces(app: AppHandle, window: WebviewWindow) -> Value {
+    if is_island(&window) {
+        return Value::Null;
+    }
+    pet::surfaces(&shared(&app))
+}
+
+// Her feet to (x, y), physical px, over ms the way given (pet.rs Way), and
+// there standing on the window on, if any. Answers when she is there.
+#[tauri::command]
+async fn pet_go(app: AppHandle, window: WebviewWindow, x: i32, y: i32, ms: f64, how: String, bend: Option<f64>, on: Option<isize>) -> bool {
+    if is_island(&window) {
+        return false;
+    }
+    let sh = shared(&app);
+    let way = pet::Way::of(&how, bend.unwrap_or(0.0));
+    tauri::async_runtime::spawn_blocking(move || pet::go(&sh, (x, y), ms, way, on)).await.unwrap_or(false)
+}
+
 #[tauri::command]
 async fn island_holding(app: AppHandle, is_holding: bool) {
     island::set_holding(&shared(&app), is_holding);
@@ -1687,6 +1708,8 @@ fn main() {
             pet_shortcuts_pause,
             pet_walk,
             pet_walk_stop,
+            pet_surfaces,
+            pet_go,
             island_holding,
             island_editing,
             island_seat,

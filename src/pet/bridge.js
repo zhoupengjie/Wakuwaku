@@ -50,6 +50,13 @@
     onCursor: on('pet:cursor'),
     onDrag: on('pet:drag'),
     onDragEnd: on('pet:drag-end'),
+    // Her playing (play.js, pet.rs): a press on her that may lift her; let go
+    // and not taken into her home ({ moved, carried }); the window she stands
+    // on gone from under her; another window in front.
+    onDragStart: on('pet:drag-start'),
+    onLetGo: on('pet:let-go'),
+    onPerchGone: on('pet:perch-gone'),
+    onFront: on('pet:front'),
     // Carried out of her home, the button still held, or let go ({ on }).
     onCarried: on('pet:carried'),
     onAsks: on('pet:asks'),
@@ -80,6 +87,11 @@
     // Out of the queue: it answers when the walk is over.
     walk: (dx, ms) => invoke('pet_walk', { dx, ms }).catch(() => false),
     walkStop: () => send('pet_walk_stop'),
+    // What she can stand on (pet.rs surfaces); her feet to (x, y) over ms the
+    // way given, and there on the window on, if any: both in physical px, and
+    // out of the queue, the move answering when it is over.
+    surfaces: () => invoke('pet_surfaces').catch(() => null),
+    go: (x, y, ms, how, bend, on) => invoke('pet_go', { x: Math.round(x), y: Math.round(y), ms, how, bend: bend || 0, on: on ?? null }).catch(() => false),
     // The island's page: she broke free of the drop (her middle this far from
     // the cursor), the button was let go, the button is held on her.
     releaseHer: offset => send('island_release', { offset: offset || {} }),

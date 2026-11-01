@@ -185,6 +185,7 @@
     mail: [],
     walk: true,
     look: true,
+    play: false,
     hold: 8,
     endCue: 'ring',
     idleHideMin: 30,
@@ -1152,6 +1153,8 @@
     // The plugin market (market.rs market).
     market: ({ what, arg }) => marketCommand(what, arg),
     pet_walk: () => false,
+    pet_surfaces: () => null,
+    pet_go: () => false,
     pet_answer: ({ id }) => {
       const ok = answered(id)
       later(push)

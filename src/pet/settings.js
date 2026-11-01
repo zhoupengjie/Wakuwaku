@@ -686,6 +686,7 @@
         ${row(esc(T('s.details')), esc(T('s.detailsNote')), sw('details', s.details !== false))}
         ${row(esc(T('s.walk')), esc(T('s.walkNote')), sw('walk', s.walk))}
         ${row(esc(T('s.look')), '', sw('look', s.look))}
+        ${row(esc(T('s.play')), esc(T('s.playNote')), sw('play', s.play))}
       </div>
       ${part('pets', pagePets())}`
   }

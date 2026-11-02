@@ -14,6 +14,8 @@
 //                      ?agent=opencode: an OpenCode event, from her plugin in it (events_tests.rs opencode)
 //                      ?agent=omp: an oh-my-pi one, from her extension inside omp
 //                      (integrations/omp/wakuwaku.ts, events_tests.rs omp)
+//                      ?agent=workbuddy: a WorkBuddy one, from the hooks in its
+//                      settings.json (connection/workbuddy.rs)
 //   GET  /v1/info      the agents' sessions told to other apps on this machine (agent-hub,
 //   GET  /v1/sessions  its lib.rs says how): the hub; the sessions; each event as it comes
 //   GET  /v1/events    (Server-Sent Events). The last two take the token in her data
@@ -58,7 +60,8 @@ const HOOKS_WAITING: usize = 256;
 // Which agent's hook the request comes from (?agent=codex, ?agent=agy,
 // ?agent=zcode, ?agent=dsh, ?agent=reasonix: handed on by this program,
 // main.rs; ?agent=opencode: her plugin in OpenCode; ?agent=omp: her
-// extension in omp); none for Claude Code's.
+// extension in omp; ?agent=workbuddy: its own HTTP hooks); none for Claude
+// Code's.
 fn agent_of(url: &str) -> Option<&'static str> {
     let (_, query) = url.split_once('?')?;
     query.split('&').find_map(|p| match p {
@@ -69,6 +72,7 @@ fn agent_of(url: &str) -> Option<&'static str> {
         "agent=zcode" => Some("zcode"),
         "agent=dsh" => Some("dsh"),
         "agent=reasonix" => Some("reasonix"),
+        "agent=workbuddy" => Some("workbuddy"),
         _ => None,
     })
 }
@@ -565,6 +569,7 @@ mod tests {
         assert_eq!(agent_of("/hook?from=wakuwaku&agent=zcode"), Some("zcode"));
         assert_eq!(agent_of("/hook?from=wakuwaku&agent=dsh"), Some("dsh"));
         assert_eq!(agent_of("/hook?from=wakuwaku&agent=reasonix"), Some("reasonix"));
+        assert_eq!(agent_of("/hook?from=wakuwaku&agent=workbuddy"), Some("workbuddy"));
         assert_eq!(agent_of("/hook?from=wakuwaku"), None);
         assert_eq!(agent_of("/hook?agent=codexx"), None);
         assert_eq!(agent_of("/hook"), None);

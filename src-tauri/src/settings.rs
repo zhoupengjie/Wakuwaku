@@ -16,7 +16,7 @@ const PLUGIN_DOCS: &str = "https://github.com/zhoupengjie/wakuwaku/blob/main/doc
 
 // Each agent's own page, by its id (src/pet/agents.js), for the Agent page's
 // other supported tools: the only pages it may open.
-const AGENT_SITES: [(&str, &str); 8] = [
+const AGENT_SITES: [(&str, &str); 9] = [
     ("claude", "https://claude.com/product/claude-code"),
     ("codex", "https://developers.openai.com/codex"),
     ("agy", "https://antigravity.google/"),
@@ -25,6 +25,7 @@ const AGENT_SITES: [(&str, &str); 8] = [
     ("zcode", "https://zcode.z.ai/"),
     ("dsh", "https://github.com/deepseek-ai/deepseek-harness"),
     ("reasonix", "https://github.com/esengine/DeepSeek-Reasonix"),
+    ("workbuddy", "https://www.codebuddy.cn/docs/workbuddy/Overview"),
 ];
 
 // When an agent's last event came (ms), 0 never (main.rs seen).
@@ -97,7 +98,7 @@ fn agent_row(sh: &Shared, agent: Agent) -> AgentRow {
             view.insert("hooksShown".into(), json!(connection::shown_path(&connection::dsh_hooks_file())));
             Own::Dsh(view)
         }
-        Agent::Agy | Agent::Opencode | Agent::Zcode => Own::Nothing {},
+        Agent::Agy | Agent::Opencode | Agent::Zcode | Agent::Workbuddy => Own::Nothing {},
     };
     let file = connection::file(agent);
     AgentRow {

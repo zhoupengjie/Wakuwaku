@@ -15,8 +15,8 @@ tauri-build = { version = "2", features = [] }
 # nothing of how she shows it; agent-hub, those sessions told to other apps
 # on this machine (/v1). Changing them: docs/DEVELOPMENT.md (their checkout
 # beside this one, patched in for a build of hers meanwhile).
-agent-core = { git = "https://github.com/zhoupengjie/agent-hub", tag = "v0.2.7" }
-agent-hub = { git = "https://github.com/zhoupengjie/agent-hub", tag = "v0.2.7" }
+agent-core = { git = "https://github.com/zhoupengjie/agent-hub", tag = "v0.2.8" }
+agent-hub = { git = "https://github.com/zhoupengjie/agent-hub", tag = "v0.2.8" }
 # macos-private-api: her windows see-through on macOS (tauri.conf.json
 # macOSPrivateApi); nothing elsewhere.
 tauri = { version = "2", features = ["tray-icon", "image-png", "protocol-asset", "macos-private-api"] }

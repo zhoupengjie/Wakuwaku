@@ -174,7 +174,7 @@ pixel-cat/                  three-skies/
 - An `id` is unique among packs of its kind. A pet pack whose `id` is the name of a pet already there that is no pack's (the default `claude-chan`, one downloaded from codex-pets.net, one made by hand, one of Codex's) is refused, and that pet is left as it is; so is a wallpaper pack whose `id` is a folder in her wallpapers that is no pack's. She marks each pack's folder with a `pack.json` of her own (a pack's own `pack.json` is replaced by hers).
 - The same `id` again is its update (from the market's daily look, or a newer `.zip` from a file): the files are replaced, and what was chosen stays chosen: the pet in use is still her, the slideshow on its folder goes on. Uninstalled from its page on the Plugins page (资源包, Packs), the pet in use gives way to the default pet; a slideshow on its folder ends on the picture it showed, so the desktop stays as it was.
 - From a file, as a plugin: Plugins page › 显示 › 从文件安装… (Install from file…). She asks first, marks it not reviewed, and says it is pictures only.
-- `examples/packs/wallpaper-sample` is a wallpaper pack (three gradients and a preview). There is no example pet pack: the default pet's art is not free to hand on as a pack of its own.
+- The repository keeps no example pack. There is none for a pet either: the default pet's art is not free to hand on as a pack of its own.
 
 ## The market
 

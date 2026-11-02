@@ -276,17 +276,18 @@ fn set_ignore(sh: &Shared, ignore: Option<bool>) {
 // The screen's edge her taskbar is along (taskbarEdge); split, the top: her
 // strip is the top bar, Start and the programs in the dock (bars.rs).
 pub fn edge(sh: &Shared) -> Edge {
-    match sh.setting("taskbarEdge").as_str() {
-        Some("split") => Edge::Top,
-        word => Edge::of(word.unwrap_or("bottom")),
+    if is_split(sh) {
+        return Edge::Top;
     }
+    Edge::of(sh.setting("taskbarEdge").as_str().unwrap_or("bottom"))
 }
 
-// Her taskbar split in two (taskbarEdge split, docs/design/specs/dock-topbar.md):
-// a top bar (the strip, here) and a dock at the foot with Start and the
-// programs (bars.rs), the home the taskbar.
+// The top bar and the dock (display split, a home beside the island and the
+// taskbar, docs/design/specs/dock-topbar.md): her taskbar split in two, a
+// top bar (the strip, here) and a dock at the foot with Start and the
+// programs (bars.rs); a taskbar as her windows have it (Shared::home).
 pub fn is_split(sh: &Shared) -> bool {
-    sh.home() == "taskbar" && sh.setting("taskbarEdge").as_str() == Some("split")
+    sh.setting("display").as_str() == Some("split")
 }
 
 // The strip's thickness (logical): Windows' own, or split, the top bar's

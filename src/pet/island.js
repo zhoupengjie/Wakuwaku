@@ -397,7 +397,8 @@
   // This page draws her home in the home's window; her own window draws her.
   const isOn = () => ROLE === 'island'
   // Her home: the island, or the taskbar.
-  const home = () => (config.display === 'taskbar' ? 'taskbar' : 'island')
+  // The top bar and the dock (split) are her taskbar too, split in two (isSplit).
+  const home = () => (config.display === 'taskbar' || config.display === 'split' ? 'taskbar' : 'island')
   // A strip across the screen (the taskbar): the other sessions have tags in it.
   // The taskbar's strip the desktop's picture through (mica.js), neither
   // solid nor clear.
@@ -434,9 +435,10 @@
   // Windows' own, or top, left, right. Its look turns with it (style.css
   // tb-top, tb-left, tb-right).
   const tbEdge = () => (isSplit() ? 'top' : home() === 'taskbar' && ['top', 'left', 'right'].includes(config.taskbarEdge) ? config.taskbarEdge : 'bottom')
-  // Split in two (taskbarEdge split): the strip is a top bar, Start and the
-  // programs in the dock at the foot (bars.rs, bar.js), not on it.
-  const isSplit = () => home() === 'taskbar' && config.taskbarEdge === 'split'
+  // The top bar and the dock (display split, a home of its own beside the
+  // island and the taskbar): the strip is a top bar, Start and the programs
+  // in the dock at the foot (bars.rs, bar.js), not on it.
+  const isSplit = () => config.display === 'split'
   // The strip's thickness: Windows' own, or split, the top bar's (style.css tb-slim).
   const stripH = () => (isSplit() && config.splitBar !== 48 ? SLIM_H : TASKBAR_H)
   const isSlim = () => stripH() === SLIM_H
@@ -1253,7 +1255,8 @@
     if (home() !== 'taskbar') return Anchor.grown(r, width, height, anchor())
     const fromRight = tbEdge() === 'right' || (!isSide() && body.classList.contains('isl-right'))
     const fromFoot = tbEdge() === 'bottom' || (isSide() && body.classList.contains('isl-low'))
-    return { x: fromRight ? r.right - width : r.left, y: fromFoot ? r.bottom - height : r.top, width, height }
+    const fromMid = !isSide() && slotMiddle != null && body.classList.contains('isl-mid')
+    return { x: fromMid ? midLeft(width) : fromRight ? r.right - width : r.left, y: fromFoot ? r.bottom - height : r.top, width, height }
   }
 
   // Changing size: under the smaller of its two boxes (where they meet),
@@ -1413,6 +1416,7 @@
   function setSize({ width, height }) {
     island.style.width = `${width}px`
     island.style.height = `${height}px`
+    if (home() === 'taskbar' && !isSide()) placeMid(width)
     // The taskbar's left end is square, and what grows up from it is rounded
     // above (on its Mica, her capsule and all it grows into round).
     // What grows from her end is flat where it meets the strip: the strip's
@@ -2161,14 +2165,32 @@
     const shifted = (oledOn && parseFloat(document.documentElement.style.getPropertyValue('--oled-x'))) || 0
     const r = herSlot.getBoundingClientRect()
     const left = r.left - shifted + pad
-    const atRight = (r.left + r.right) / 2 - shifted > innerWidth / 2
+    // In the middle run (the top bar's, split: her in the middle) what it
+    // grows into grows from her capsule's middle (isl-mid, placeMid).
+    const mid = zones.center.contains(herSlot)
+    const atRight = !mid && (r.left + r.right) / 2 - shifted > innerWidth / 2
     body.classList.toggle('isl-right', atRight)
+    body.classList.toggle('isl-mid', mid)
+    slotMiddle = mid ? (r.left + r.right) / 2 - shifted : null
+    placeMid()
     document.documentElement.style.setProperty('--isl-x', `${onPixels(atRight ? innerWidth - (r.right - shifted - pad) : left)}px`)
     const seat = Math.round(left + taskCompactH() / 2)
     if (seat !== seatSent) {
       seatSent = seat
       window.pet.seat(seat)
     }
+  }
+  // Her slot's middle along the strip while it is in the middle run (placeSlot),
+  // and where her island's left edge lies to be about it at a width: the
+  // middle, kept 8 px off the screen's ends (as the settings at an end are).
+  let slotMiddle = null
+  const midLeft = width => Math.min(Math.max(8, slotMiddle - width / 2), innerWidth - width - 8)
+  // Its left edge there for the width it has (or is going to: setSize), set
+  // as the width is, on the same spring (style.css isl-mid), so it grows and
+  // shrinks about its middle all the way.
+  function placeMid(width = parseFloat(island.style.width)) {
+    if (slotMiddle == null || !(width > 0)) return
+    document.documentElement.style.setProperty('--isl-mx', `${onPixels(view === 'compact' ? slotMiddle - width / 2 : midLeft(width))}px`)
   }
   // On a side bar: the slot as tall as her upright capsule, from the bar's
   // top, or from its foot in its lower half (isl-low: what it grows into

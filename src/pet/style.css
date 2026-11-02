@@ -3449,6 +3449,27 @@ body.isl-right.home-taskbar #island[data-view='settings'] {
   right: 8px;
 }
 
+/* In the middle run (the top bar's default, split: island.js placeSlot,
+   isl-mid), about her capsule's middle: its left edge set for each width
+   (placeMid, --isl-mx) and moved on the width's own spring, so it grows and
+   shrinks about the middle all the way; the settings too, not at an end. */
+body.isl-mid.home-taskbar #island,
+body.isl-mid.home-taskbar.tb-capsule #island:not([data-view='settings']),
+body.isl-mid.home-taskbar #island[data-view='settings'] {
+  left: var(--isl-mx, var(--isl-x, 0px));
+  right: auto;
+}
+
+body.isl-mid.home-taskbar #island {
+  transition:
+    width 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    height 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    border-radius 0.4s ease,
+    left 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    top 0.3s ease,
+    bottom 0.3s ease;
+}
+
 /* Editing it (island.js editTaskbar): each part outlined, to be dragged;
    each run a soft box (an empty one a place to drop into); her island lets
    the pointer through to its slot. */

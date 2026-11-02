@@ -143,12 +143,12 @@ fn defaults() -> Map<String, Value> {
         "taskbarButtons": "icons",
         "taskbarAlign": "center",
         // The screen's edge it is along: bottom (Windows' own place), top,
-        // left or right (side bars: an upright capsule, icons alone); or
-        // split, a top bar and a dock at the foot (island.rs is_split): the
+        // left or right (side bars: an upright capsule, icons alone).
+        "taskbarEdge": "bottom",
+        // The top bar and the dock (display split, island.rs is_split): the
         // top bar 32 px or 48, the dock out of the way of a window touching
         // it or kept in the room Windows' own keeps, quick settings and the
         // clock in the top bar or the dock.
-        "taskbarEdge": "bottom",
         "splitBar": 32,
         "splitDock": "hide",
         "splitKeys": "top",
@@ -229,8 +229,15 @@ pub fn load(dir: &Path) -> Map<String, Value> {
             settings.insert("display".into(), json!("island"));
         }
         // A settings file brought from Windows: no taskbar of hers here.
-        Some("taskbar") if !cfg!(windows) => {
+        Some("taskbar" | "split") if !cfg!(windows) => {
             settings.insert("display".into(), json!("island"));
+        }
+        // The top bar and the dock as a position of the taskbar's (before
+        // it was a home of its own, 2026-11-02): that home, the taskbar's
+        // position the bottom again.
+        Some("taskbar") if settings.get("taskbarEdge").and_then(Value::as_str) == Some("split") => {
+            settings.insert("display".into(), json!("split"));
+            settings.insert("taskbarEdge".into(), json!("bottom"));
         }
         _ => {}
     }
@@ -569,5 +576,23 @@ mod tests {
         let mut s = settings(json!({ "taskbarLayout": null }));
         drop_part(&mut s, "tags");
         assert_eq!(s["taskbarLayout"], Value::Null);
+    }
+
+    // The top bar and the dock kept as a position of the taskbar's: a home
+    // of its own now, the taskbar's position the bottom again.
+    #[test]
+    fn the_top_bar_and_dock_as_a_position_becomes_a_home() {
+        let dir = std::env::temp_dir().join(format!("wakuwaku-split-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("config.json"), r#"{ "display": "taskbar", "taskbarEdge": "split", "splitBar": 48 }"#).unwrap();
+        let s = load(&dir);
+        // (Elsewhere no taskbar of hers: the island, the edge left as it was.)
+        let want = if cfg!(windows) { ("split", "bottom") } else { ("island", "split") };
+        assert_eq!((s["display"].as_str(), s["taskbarEdge"].as_str(), s["splitBar"].as_u64()), (Some(want.0), Some(want.1), Some(48)));
+        // A taskbar along an edge stays as it is.
+        fs::write(dir.join("config.json"), r#"{ "display": "taskbar", "taskbarEdge": "left" }"#).unwrap();
+        let s = load(&dir);
+        assert_eq!(s["taskbarEdge"].as_str(), Some("left"));
+        let _ = fs::remove_dir_all(dir);
     }
 }

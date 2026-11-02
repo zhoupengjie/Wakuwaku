@@ -62,10 +62,10 @@
     // Her taskbar on another display (bars.rs): the strip alone.
     bar: [0, SCREEN[1] - STRIP, SCREEN[0], STRIP],
     // Split (taskbarEdge split, a shot's split): her strip the top bar, its
-    // room under it; the dock at the foot, as high as Windows' room there
-    // (its page puts it in the middle, bar.css .b-dock).
+    // room under it; the dock's glass 2 px off the foot, 44 high (its page
+    // puts it in the middle, bar.css .b-dock).
     top: [0, 0, SCREEN[0], STRIP + 640],
-    dock: [0, SCREEN[1] - STRIP, SCREEN[0], STRIP],
+    dock: [0, SCREEN[1] - 46, SCREEN[0], 44],
   }
   // The island's window at a top corner (islandPos: left, right), as
   // island.rs puts it (zhoupengjie/Wakuwaku#59; anchor.js
@@ -813,11 +813,11 @@
     {
       id: 'settings-look-split',
       section: 'settings',
-      title: '设置 · 外观，任务栏位置「顶栏 + dock」',
+      title: '设置 · 外观，任务栏位置「顶栏 + dock」（在她下面，以她为中）',
       page: 'island',
       home: 'taskbar',
       split: true,
-      view: [0, 0, 560, 720],
+      view: [400, 0, 800, 720],
       world: F => ({ ...busy(F), edge: 'split', config: { splitBar: 32, splitDock: 'hide', splitKeys: 'top' } }),
       steps: async p => {
         p.emit('island:settings', { tab: 'look' })

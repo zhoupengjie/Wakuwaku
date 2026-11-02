@@ -679,7 +679,7 @@
     let look = null
     // Her theme as her island shows it: Windows' mode, from the taskbar's
     // look there, else from pet:update at the top of the screen.
-    const themeNow = () => (payload?.config?.display === 'taskbar' ? (look?.mode === 'light' ? 'light' : 'dark') : payload?.winLight === true ? 'light' : 'dark')
+    const themeNow = () => (['taskbar', 'split'].includes(payload?.config?.display) ? (look?.mode === 'light' ? 'light' : 'dark') : payload?.winLight === true ? 'light' : 'dark')
     const host = createHost({
       invoke: (cmd, args) => window.pet.addons.call(cmd, args),
       make: (id, src) => {

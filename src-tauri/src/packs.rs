@@ -735,17 +735,6 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
-    // The example in the repository (examples/packs) goes in as a zip of it would.
-    #[test]
-    fn the_example_wallpaper_pack_reads() {
-        let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/packs/wallpaper-sample");
-        let files: Vec<(String, Vec<u8>)> = fs::read_dir(&folder).unwrap().flatten().map(|e| (e.file_name().to_string_lossy().into_owned(), fs::read(e.path()).unwrap())).collect();
-        let pkg = open_package(package(&files.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect::<Vec<_>>())).unwrap();
-        assert_eq!((pkg.manifest.id.as_str(), pkg.manifest.kind, pkg.manifest.name.get("zh")), ("wallpaper-sample", Kind::Wallpaper, "三种天色"));
-        let pictures: Vec<&str> = pkg.files.iter().map(|(_, p)| p.as_str()).filter(|p| is_picture(p)).collect();
-        assert_eq!(pictures.len(), 3, "{pictures:?}: its preview none of them");
-    }
-
     // In use as the Look page says it: the slideshow on its folder.
     #[test]
     fn a_wallpaper_pack_is_in_use_while_the_slideshow_is_on_its_folder() {

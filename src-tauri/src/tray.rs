@@ -125,10 +125,12 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     for key in ["walk", "look"] {
         menu.append(&CheckMenuItem::with_id(app, key, t(&format!("menu.{key}")), true, flag(key), None::<&str>)?)?;
     }
-    // Her home: the island or the taskbar.
+    // Her home: the island, the taskbar, or the top bar and the dock.
     let homes = Submenu::new(app, t("menu.home"), true)?;
-    for id in ["island", "taskbar"] {
-        homes.append(&CheckMenuItem::with_id(app, format!("display:{id}"), t(&format!("menu.{id}")), true, home == id, None::<&str>)?)?;
+    let display = sh.setting("display");
+    for id in ["island", "taskbar", "split"] {
+        let on = if id == "island" { home == "island" } else { display.as_str() == Some(id) };
+        homes.append(&CheckMenuItem::with_id(app, format!("display:{id}"), t(&format!("menu.{id}")), true, on, None::<&str>)?)?;
     }
     menu.append(&homes)?;
     menu.append(&MenuItem::with_id(app, "out", out_label, true, None::<&str>)?)?;

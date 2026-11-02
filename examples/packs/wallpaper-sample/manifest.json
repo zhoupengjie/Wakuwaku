@@ -1,8 +1,0 @@
-{
-  "id": "wallpaper-sample",
-  "kind": "wallpaper",
-  "name": { "en": "Three skies", "zh": "三种天色" },
-  "description": { "en": "Dusk, a lake in the morning and an aurora, in soft gradients", "zh": "黄昏、清晨的湖和极光，柔和的渐变" },
-  "version": "1.0.0",
-  "author": "wakuwaku"
-}

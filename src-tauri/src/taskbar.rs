@@ -379,6 +379,10 @@ mod imp {
     // The live pictures shown (window, thumbnail), over the windows listed above a button.
     static THUMBS: Mutex<Vec<(isize, isize)>> = Mutex::new(Vec::new());
     static THUMB_HOST: AtomicIsize = AtomicIsize::new(0);
+    // The same for the windows minimized into the dock (split, bars.rs
+    // show_mins): a window of their own, there as long as the dock is up.
+    static DOCK_THUMBS: Mutex<Vec<(isize, isize)>> = Mutex::new(Vec::new());
+    static DOCK_HOST: AtomicIsize = AtomicIsize::new(0);
     static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
     // The keyboard's thread, and what it sent last.
     static KEYS: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
@@ -1413,8 +1417,18 @@ mod imp {
     // window's at (x, y, w, h) on the screen, physical, its shape kept, on
     // the window of their own laid over those rooms. None: all taken away.
     pub fn thumbs(items: Vec<(isize, (i32, i32, i32, i32))>) {
-        let host = THUMB_HOST.load(Ordering::SeqCst) as Hwnd;
-        let mut shown = THUMBS.lock().unwrap();
+        place_thumbs(THUMB_HOST.load(Ordering::SeqCst) as Hwnd, &mut THUMBS.lock().unwrap(), items);
+    }
+
+    // The windows minimized into the dock, each its live picture where the
+    // dock's page left room for it (bars.rs show_mins); none, taken away.
+    pub fn dock_thumbs(items: Vec<(isize, (i32, i32, i32, i32))>) {
+        place_thumbs(DOCK_HOST.load(Ordering::SeqCst) as Hwnd, &mut DOCK_THUMBS.lock().unwrap(), items);
+    }
+
+    // Windows' live pictures of windows (DWM thumbnails) in a host window of
+    // ours, laid over the rooms (screen, physical) and above the rest.
+    fn place_thumbs(host: Hwnd, shown: &mut Vec<(isize, isize)>, items: Vec<(isize, (i32, i32, i32, i32))>) {
         for (_, thumb) in shown.drain(..) {
             // SAFETY: a thumbnail of ours.
             unsafe { DwmUnregisterThumbnail(thumb) };
@@ -2145,6 +2159,8 @@ mod imp {
             "network" => Some("ms-settings:network"),
             "dateTime" => Some("ms-settings:dateandtime"),
             "notifySettings" => Some("ms-settings:notifications"),
+            // The dock's Recycle Bin (split).
+            "recycleBin" => Some("shell:RecycleBinFolder"),
             _ => None,
         };
         if let Some(page) = page {
@@ -2273,6 +2289,25 @@ mod imp {
                 SetLayeredWindowAttributes(host, 0, 255, LWA_ALPHA);
                 THUMB_HOST.store(host as isize, Ordering::SeqCst);
             }
+            // Another, the same, for the windows minimized into the dock.
+            let dock_host = CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT,
+                thumbs_class.as_ptr(),
+                std::ptr::null(),
+                WS_POPUP,
+                0,
+                0,
+                0,
+                0,
+                std::ptr::null_mut(),
+                0,
+                instance,
+                std::ptr::null_mut(),
+            );
+            if !dock_host.is_null() {
+                SetLayeredWindowAttributes(dock_host, 0, 255, LWA_ALPHA);
+                DOCK_HOST.store(dock_host as isize, Ordering::SeqCst);
+            }
             CREATED_MSG.store(shell::taskbar_created(), Ordering::SeqCst);
             EXPLORER.store(shell::taskbars().first().copied().unwrap_or(0), Ordering::SeqCst);
             EXPLORER_PID.store(shell::explorer_pid(), Ordering::SeqCst);
@@ -2303,9 +2338,11 @@ mod imp {
             log(&format!("tray handed back; it was handed {}", systray::seen()));
             systray::stop();
             thumbs(Vec::new());
-            let host = THUMB_HOST.swap(0, Ordering::SeqCst);
-            if host != 0 {
-                DestroyWindow(host as Hwnd);
+            dock_thumbs(Vec::new());
+            for host in [THUMB_HOST.swap(0, Ordering::SeqCst), DOCK_HOST.swap(0, Ordering::SeqCst)] {
+                if host != 0 {
+                    DestroyWindow(host as Hwnd);
+                }
             }
             DestroyWindow(hwnd);
             OURS.store(0, Ordering::SeqCst);
@@ -2329,6 +2366,9 @@ mod imp {
                 unsafe { PostMessageW(OURS.load(Ordering::SeqCst) as Hwnd, WM_TASKBAR_SHOWN, 0, hwnd as isize) };
                 return;
             }
+        }
+        if matches!(event, EVENT_OBJECT_SHOW | EVENT_SYSTEM_FOREGROUND | EVENT_OBJECT_LOCATIONCHANGE) {
+            keep_under_bar(hwnd as isize, event == EVENT_OBJECT_LOCATIONCHANGE);
         }
         // A window to the front, or the one in front sized (full screen, or
         // no longer: a video, F11): looked at at once, not at the clock's
@@ -2362,6 +2402,80 @@ mod imp {
             }
         }
         wake_tasks();
+    }
+
+    // Her strip along the top (the top bar, split, too): what pops up over it
+    // or opens at the foot for a taskbar goes under it. A program with an
+    // icon in her tray put its popup at the very top, over the bar (WeChat's
+    // new message, the user, 2026-11-02: the tray it hands its icon to is at
+    // the top, Windows' own taskbar it asks of at the foot); Windows' own
+    // quick settings, notifications and the rest (is_shell_flyout) open at
+    // the foot whatever the taskbar's edge: moved up under it, at the right,
+    // as under a taskbar at the top. Each time it shows or moves there, not
+    // waiting on its program (SWP_ASYNCWINDOWPOS); never while a button is
+    // held (a window being dragged), nor her own windows, nor Start and
+    // search (in the middle, Windows' own business); and no more than a few
+    // times a second for one window, should its program move it back.
+    // Every move of every window comes here (moved): its frame looked at
+    // first, its program only for one over the strip, or Windows' flyout at
+    // the foot as it opens (shown, to the front; known by its window after).
+    static UNDER_BAR: Mutex<Vec<(isize, u32, Instant)>> = Mutex::new(Vec::new());
+    static FLYOUTS: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+
+    fn keep_under_bar(hwnd: isize, moved: bool) {
+        const SWP_NOSIZE: u32 = 0x1;
+        const SWP_NOZORDER: u32 = 0x4;
+        const SWP_ASYNCWINDOWPOS: u32 = 0x4000;
+        if *EDGE.lock().unwrap() != Edge::Top || !is_up() {
+            return;
+        }
+        let Some(strip) = *STRIP.lock().unwrap() else { return };
+        let Some((l, t, r, b)) = tasks::frame(hwnd) else { return };
+        let ((mx, my, mw, mh), sf) = monitor_of(strip);
+        if r <= mx || l >= mx + mw || b <= my || t >= my + mh {
+            return;
+        }
+        let bar = strip.1 + strip.3;
+        let over = t < bar && b > strip.1;
+        let foot = b > my + mh * 2 / 3 && b - t < mh * 3 / 4 && (!moved || FLYOUTS.lock().unwrap().contains(&hwnd));
+        if !over && !foot {
+            return;
+        }
+        let Some(p) = tasks::popup_of(hwnd) else { return };
+        if p.pid == std::process::id() || tasks::is_start(hwnd) {
+            return;
+        }
+        let flyout = tasks::is_shell_flyout(hwnd);
+        if flyout {
+            let mut known = FLYOUTS.lock().unwrap();
+            if !known.contains(&hwnd) {
+                known.push(hwnd);
+                let n = known.len();
+                known.drain(..n.saturating_sub(16));
+            }
+        }
+        // Windows' flyout standing on the foot; a tray program's popup over the strip.
+        let wants = if flyout { b > my + mh * 2 / 3 && b - t < mh * 3 / 4 } else { p.tool && t < bar && b > strip.1 && b - t < mh / 2 && crate::systray::holders().contains(&p.pid) };
+        if !wants || crate::pet::any_down() == Some(true) {
+            return;
+        }
+        {
+            let mut moved = UNDER_BAR.lock().unwrap();
+            moved.retain(|(_, _, at)| at.elapsed() < Duration::from_secs(5));
+            let n = moved.iter().filter(|(h, _, _)| *h == hwnd).map(|(_, n, _)| *n).max().unwrap_or(0);
+            if n >= 20 {
+                return;
+            }
+            moved.push((hwnd, n + 1, Instant::now()));
+            if n == 0 {
+                log(&format!("{} of {} at ({l}, {t}, {r}, {b}): moved under the strip along the top", if flyout { "Windows' flyout" } else { "a tray program's popup" }, p.program));
+            }
+        }
+        let gap = (8.0 * sf).round() as i32;
+        let x = if flyout { p.rect.0 + (mx + mw - gap - r) } else { p.rect.0 };
+        let y = p.rect.1 + (bar + gap - t);
+        // SAFETY: another program's window, moved without waiting on it.
+        unsafe { SetWindowPos(hwnd as Hwnd, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS) };
     }
 
     // The desktop to the front: "show the desktop" (Win+D, four fingers
@@ -2403,6 +2517,54 @@ mod imp {
             // Split: Start is in the dock, which comes up while it is open (bars.rs).
             crate::bars::start_seen(&sh, open);
         }
+    }
+
+    // The Recycle Bin, for the dock (split): whether anything is in it, and
+    // Windows' own picture of it so (empty or full: its stock icons), drawn
+    // once each.
+    pub fn recycle_bin() -> Value {
+        #[repr(C)]
+        struct StockIconInfo {
+            size: u32,
+            icon: isize,
+            sys_index: i32,
+            icon_index: i32,
+            path: [u16; 260],
+        }
+        #[repr(C)]
+        struct BinInfo {
+            size: u32,
+            bytes: i64,
+            items: i64,
+        }
+        #[link(name = "shell32")]
+        extern "system" {
+            fn SHGetStockIconInfo(siid: i32, flags: u32, info: *mut StockIconInfo) -> i32;
+            fn SHQueryRecycleBinW(root: *const u16, info: *mut BinInfo) -> i32;
+        }
+        #[link(name = "user32")]
+        extern "system" {
+            fn DestroyIcon(icon: isize) -> i32;
+        }
+        const SIID_RECYCLER: i32 = 31;
+        const SIID_RECYCLERFULL: i32 = 32;
+        const SHGSI_ICON: u32 = 0x100;
+        static BIN_PNGS: Mutex<[Option<String>; 2]> = Mutex::new([None, None]);
+        let mut info = BinInfo { size: std::mem::size_of::<BinInfo>() as u32, bytes: 0, items: 0 };
+        // SAFETY: our own struct, of the size it says; null: every drive's bin.
+        let full = unsafe { SHQueryRecycleBinW(std::ptr::null(), &mut info) } == 0 && info.items > 0;
+        let mut pngs = BIN_PNGS.lock().unwrap();
+        let slot = &mut pngs[full as usize];
+        if slot.is_none() {
+            let mut stock = StockIconInfo { size: std::mem::size_of::<StockIconInfo>() as u32, icon: 0, sys_index: 0, icon_index: 0, path: [0; 260] };
+            // SAFETY: our own struct, of the size it says; the icon is ours to destroy.
+            if unsafe { SHGetStockIconInfo(if full { SIID_RECYCLERFULL } else { SIID_RECYCLER }, SHGSI_ICON, &mut stock) } == 0 && stock.icon != 0 {
+                *slot = png_of(stock.icon, 32);
+                // SAFETY: the icon the call made for us.
+                unsafe { DestroyIcon(stock.icon) };
+            }
+        }
+        json!({ "full": full, "png": slot.clone() })
     }
 
     // Windows' Start menu open, as last seen (start_seen).
@@ -3263,6 +3425,10 @@ mod imp {
     pub fn keys_now() -> serde_json::Value {
         serde_json::Value::Null
     }
+    pub fn recycle_bin() -> serde_json::Value {
+        serde_json::Value::Null
+    }
+    pub fn dock_thumbs(_items: Vec<(isize, (i32, i32, i32, i32))>) {}
     pub fn take(_sh: &Shared, _strip: (i32, i32, i32, i32)) -> bool {
         true
     }
@@ -3323,7 +3489,7 @@ mod imp {
     }
 }
 
-pub use imp::{end_task_on, explorer_room, give_back, handing_back, is_up, keys_now, set_edge, start_open, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
+pub use imp::{dock_thumbs, end_task_on, explorer_room, give_back, handing_back, is_up, keys_now, recycle_bin, set_edge, start_open, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
 
 // A number Windows keeps for a setting of its own (end_task_on, seconds_on):
 // on once set, but for 0.

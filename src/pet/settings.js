@@ -48,8 +48,10 @@
   const PART_OF = { pets: 'look', place: 'look', paper: 'look', shortcuts: 'now', alerts: 'now', connect: 'agents', update: 'now', net: 'now', crash: 'now' }
   const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
   const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
-  const HOMES = ['island', 'taskbar']
-  const HOME_KEY = { island: 's.displayIsland', taskbar: 's.displayTaskbar' }
+  const HOMES = ['island', 'taskbar', 'split']
+  const HOME_KEY = { island: 's.displayIsland', taskbar: 's.displayTaskbar', split: 's.displaySplit' }
+  // Her taskbar the home: along an edge, or split into the top bar and the dock.
+  const onTaskbar = s => s.display === 'taskbar' || s.display === 'split'
   // How long what she tells stays (停留多久): the quick choices, until seen,
   // and Custom, whole seconds typed in a box beside them (flow.js holdSecs,
   // zhoupengjie/Wakuwaku#59).
@@ -493,7 +495,7 @@
   const winMode = () => (snap.winLook?.light ? 'light' : 'dark')
   const ilookFor = () => ilookMode || winMode()
   // Her home's: the taskbar's, or the top of the screen's.
-  const isTop = () => snap.settings.display !== 'taskbar'
+  const isTop = () => !onTaskbar(snap.settings)
   const ilookKey = () => (isTop() ? 'islandTopLook' : 'islandLook')
   const ilookDefault = mode => (isTop() ? ITOP_DEFAULT : ILOOK_DEFAULT)[mode]
   const ilookPresets = mode => (isTop() ? ITOP_PRESETS[mode].filter(([id]) => id !== 'mica' || snap.plate === true) : ILOOK_PRESETS[mode])
@@ -641,7 +643,7 @@
   // Windows' own keeps, quick settings and the clock in the top bar or the dock.
   function splitRows() {
     const s = snap.settings
-    if (s.taskbarEdge !== 'split') return ''
+    if (s.display !== 'split') return ''
     const bar = s.splitBar === 48 ? 48 : 32
     const dock = s.splitDock === 'room' ? 'room' : 'hide'
     const keys = s.splitKeys === 'dock' ? 'dock' : 'top'
@@ -654,7 +656,7 @@
 
   function layoutRow() {
     // The top bar (split): no presets, its own default (island.js SPLIT_PRESET); edited as ever.
-    if (snap.settings.taskbarEdge === 'split') return row(esc(T('s.taskbarLayout')), esc(T('s.layoutSplit')), `<button class="pbtn sm" data-tb-edit>${esc(T('s.layoutEdit'))}</button>`)
+    if (snap.settings.display === 'split') return row(esc(T('s.taskbarLayout')), esc(T('s.layoutSplit')), `<button class="pbtn sm" data-tb-edit>${esc(T('s.layoutEdit'))}</button>`)
     const preset = window.Island?.tbPreset?.() || 'win11'
     const presets = ['win11', 'left', 'herRight'].map(p => [p, T(`s.layout.${p}`)])
     const note = T(preset === 'custom' ? 's.layoutCustom' : 's.layoutNote')
@@ -669,7 +671,7 @@
   // edited as her menu's 编辑任务栏布局 does (data-tb-edit).
   function islandPosRow() {
     const s = snap.settings
-    if (s.display === 'taskbar') return row(esc(T('s.islandPos')), esc(T('s.islandPosTaskbar')), `<button class="pbtn sm" data-tb-edit>${esc(T('s.islandPosEdit'))}</button>`)
+    if (onTaskbar(s)) return row(esc(T('s.islandPos')), esc(T('s.islandPosTaskbar')), `<button class="pbtn sm" data-tb-edit>${esc(T('s.islandPosEdit'))}</button>`)
     const notch = window.Island?.notched?.() === true
     const pos = !notch && ['left', 'right'].includes(s.islandPos) ? s.islandPos : 'center'
     const places = ['left', 'center', 'right'].map(p => [p, T(`s.islandPos.${p}`), notch && p !== 'center'])
@@ -693,11 +695,12 @@
   function pageLook() {
     const s = snap.settings
     return `${sec(T('home.display'))}<div class="modes">
-        <div class="mode${s.display === 'taskbar' ? '' : ' on'}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div></div>
+        <div class="mode${onTaskbar(s) ? '' : ' on'}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div><div class="ml">${esc(T('s.displayIslandGoing'))}</div></div>
         <div class="mode${s.display === 'taskbar' ? ' on' : ''}" data-mode="taskbar"><div class="pv"><s></s></div><div class="l"><span class="rd"></span>${esc(T('s.displayTaskbar'))}</div></div>
+        <div class="mode${s.display === 'split' ? ' on' : ''}" data-mode="split"><div class="pv"><u></u><b></b></div><div class="l"><span class="rd"></span>${esc(T('s.displaySplit'))}</div></div>
       </div>
-      ${s.display === 'taskbar' ? `<div class="grp"><div class="note">${esc(T('s.taskbarNote'))}</div></div><div class="grp">${row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right', 'split'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${splitRows()}${displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${['left', 'right', 'split'].includes(s.taskbarEdge) ? row(esc(T('s.taskbarButtons')), esc(T(s.taskbarEdge === 'split' ? 's.taskbarButtonsDock' : 's.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
-      ${part('place', '')}<div class="grp">${islandPosRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${s.display === 'taskbar' || window.pet.mac ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${s.display === 'taskbar' ? '' : ilookRow()}</div>
+      ${onTaskbar(s) ? `<div class="grp"><div class="note">${esc(T(s.display === 'split' ? 's.splitNote' : 's.taskbarNote'))}</div></div><div class="grp">${s.display === 'split' ? splitRows() : row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${s.display === 'split' || ['left', 'right'].includes(s.taskbarEdge) ? row(esc(T('s.taskbarButtons')), esc(T(s.display === 'split' ? 's.taskbarButtonsDock' : 's.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
+      ${part('place', '')}<div class="grp">${islandPosRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${onTaskbar(s) || window.pet.mac ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${onTaskbar(s) ? '' : ilookRow()}</div>
       ${pageWindows()}
       ${sec(T('s.her'))}<div class="grp">
         ${row(esc(T('menu.size')), '', seg('scale', SIZES.map(([name, scale]) => [scale, T(`menu.${name}`)]), s.scale))}

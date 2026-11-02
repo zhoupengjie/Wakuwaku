@@ -6,6 +6,13 @@
 // capsule comes at its start, "waiting for your approval · N", a press
 // showing the prompt in her island there. What it shows comes as bar:state
 // (bars.rs refresh); a press asks what the main taskbar's would (taskbar.rs).
+// Split (state.dock: taskbarEdge split, docs/design/specs/dock-topbar.md),
+// the dock on her own display: Start and her strip's programs in a piece of
+// glass in the middle of the foot, as wide as it asks its window to be
+// (dock_size), Windows' acrylic on its window (state.acrylic); after the
+// programs the windows minimized into it and the Recycle Bin, as macOS has
+// them; quick settings and the clock after them if set so (state.keys). Out
+// of the way of a window touching it, its window slides down (bars.rs slide).
 ;(function () {
   const { invoke } = window.__TAURI__.core
   const { listen } = window.__TAURI__.event
@@ -39,6 +46,7 @@
     return n
   }
   const isSide = () => state.edge === 'left' || state.edge === 'right'
+  const isDock = () => state.dock === true
   const isLight = () => state.look?.mode === 'light'
   // How a clear strip fills in (taskbarClearWhen), as island.js reads it: as
   // Mica (the default) or solid, or never.
@@ -47,14 +55,15 @@
   // screen on this display (bars.rs fills) it fills in as Mica or solid,
   // unless it is to stay clear always, as hers does on hers (island.js isFilled).
   const ground = () => {
-    const material = state.material || 'clear'
+    // The dock is glass: Windows' acrylic, or the desktop's picture (Mica), clear or not; or solid.
+    const material = isDock() ? (state.material === 'black' ? 'black' : 'mica') : state.material || 'clear'
     if (material !== 'clear' || !state.filled || clearWhen() === 'always') return material
     return clearWhen() === 'solid' ? 'black' : 'mica'
   }
   // Clear, filling in as Mica: its Mica drawn all along, unseen till then,
   // so that it fades in and out whole as hers does (style.css tb-clear-mica),
   // not its tint at once and the picture after.
-  const clearMica = () => (state.material || 'clear') === 'clear' && clearWhen() === 'mica'
+  const clearMica = () => !isDock() && (state.material || 'clear') === 'clear' && clearWhen() === 'mica'
 
   // The Start mark, drawn on the screen's own pixels (as the main taskbar's, island.js drawStartMark).
   let startScale = 0
@@ -172,7 +181,8 @@
 
   function drawHer() {
     const asks = state.asks
-    const on = !!asks && asks.n > 0
+    // Not in the dock: her island on the top bar, over it, has the prompts.
+    const on = !isDock() && !!asks && asks.n > 0
     if (her.hidden === on) her.hidden = !on
     body.classList.toggle('b-her', on)
     if (!on) {
@@ -225,6 +235,11 @@
     for (const m of ['clear', 'black', 'mica']) body.classList.toggle(`b-${m}`, ground() === m)
     body.classList.toggle('b-clear-mica', clearMica())
     body.classList.toggle('b-start', state.align === 'left')
+    body.classList.toggle('b-dock', isDock())
+    body.classList.toggle('b-keys', isDock() && state.keys === true)
+    quick.hidden = !(isDock() && state.keys === true)
+    body.classList.toggle('b-acrylic', isDock() && state.acrylic === true)
+    if (state.keysNow) showKeys(state.keysNow)
     const accent = state.look?.accent
     if (accent) body.style.setProperty('--accent', isLight() ? accent.dark || accent.base : accent.light || accent.base)
     document.documentElement.lang = state.lang === 'zh' ? 'zh-CN' : 'en'
@@ -232,6 +247,9 @@
     taskView.hidden = state.look?.taskView !== true
     taskView.title = t(state.lang, 'taskbar.taskView')
     drawWindows()
+    drawMins()
+    drawBin(state.bin)
+    if (isDock()) requestAnimationFrame(askSize)
     tickClock()
     drawHer()
     drawMica()
@@ -242,7 +260,8 @@
   // its tint (style.css) until the picture comes.
   const mica = window.Mica.mount(document.getElementById('mica'))
   function drawMica() {
-    const under = ground() === 'mica' || clearMica()
+    // Windows' acrylic under the dock: no picture of its own.
+    const under = (ground() === 'mica' || clearMica()) && !(isDock() && state.acrylic === true)
     if (under && state.paper) mica.set(state.paper, innerWidth, innerHeight, isLight() ? 'light' : 'dark')
     else if (!under) mica.clear()
   }
@@ -307,6 +326,9 @@
     })
   }
   document.addEventListener('click', e => {
+    // A window minimized into the dock: back, to the front (drawMins).
+    const mini = e.target.closest('[data-min]')
+    if (mini) return call('taskbar_window', { id: Number(mini.dataset.min), what: 'front' })
     const node = e.target.closest('[data-app]')
     if (node) return pressAt(e, node)
     // Her capsule: the prompt shown in her island on the main display (bars.rs bar_asks).
@@ -436,11 +458,166 @@
     )
   }
 
+  // --- The dock (split) ------------------------------------------------------------
+  // As wide as Start and its programs (and quick settings and the clock),
+  // asked of its window as they come and go (bars.rs dock_size).
+  // Ready once its programs are in: its window shows then, all at once
+  // (bars.rs reveal), not with Start alone and its programs after.
+  const strip = document.getElementById('bar')
+  let asked = ''
+  function askSize() {
+    if (!isDock()) return
+    const w = Math.ceil(strip.offsetWidth)
+    const ready = (state.windows || []).length > 0
+    if (`${w} ${ready}` === asked) return
+    asked = `${w} ${ready}`
+    // Its Mica as wide as it (bar.css .b-dock #mica).
+    body.style.setProperty('--dock-w', `${w}px`)
+    call('dock_size', { w, dpr: devicePixelRatio || 1, ready })
+  }
+  new ResizeObserver(askSize).observe(strip)
+  // Windows' Start menu open: Start lit, as the main taskbar's (island.js startButton).
+  listen('dock:start', e => start.classList.toggle('open', e.payload?.open === true), { target })
+
+  // Quick settings in the dock (state.keys): the network's way out and the
+  // volume, as the main taskbar's button draws them (island.js showNet,
+  // showVolume), from what Windows says (dock:keys, taskbar.rs keys_loop);
+  // a press opens Windows' own (Win+A), the wheel on it the volume.
+  const quick = document.querySelector('.quick')
+  const [netBack, netFront] = quick.querySelectorAll('.net span')
+  const [volBack, volFront] = quick.querySelectorAll('.vol span')
+  const NET = { wired: '', wifi: '', other: '', none: '' }
+  const WIFI = ['', '', '', '']
+  function showKeys(k) {
+    const kind = k?.net || 'other'
+    const level = kind === 'wifi' && Number.isInteger(k?.bars) ? Math.min(Math.max(k.bars, 1), 4) : 0
+    netFront.textContent = level ? WIFI[level - 1] : NET[kind] || NET.other
+    netBack.textContent = level ? NET.wifi : ''
+    netBack.hidden = !level
+    const [vol, muted] = Array.isArray(k?.volume) ? k.volume : [null, false]
+    volFront.textContent = muted ? '' : vol == null || vol >= 67 ? '' : vol >= 34 ? '' : vol > 0 ? '' : ''
+    volBack.hidden = !!muted
+    quick.title = t(state.lang, 'taskbar.quick')
+  }
+  listen('dock:keys', e => showKeys(e.payload), { target })
+  let wheelGathered = 0
+  quick.addEventListener(
+    'wheel',
+    e => {
+      e.preventDefault()
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY
+      wheelGathered = Math.abs(dy) >= 50 ? Math.sign(dy) * 100 : wheelGathered + dy
+      const steps = Math.trunc(wheelGathered / 100)
+      if (!steps) return
+      wheelGathered -= steps * 100
+      call('taskbar_volume', { steps: -steps })
+    },
+    { passive: false },
+  )
+
+  // The windows minimized into the dock (split), as macOS has them: each a
+  // room for its live picture (Windows draws it there: bars.rs dock_thumbs),
+  // its program's icon at its corner, its title in its tip; a press brings
+  // it back. One minimized grows into its place, the dock widening with it
+  // (its window as wide as it, each frame: askSize); one brought back
+  // shrinks away (the user, 2026-11-02: they came and went at once). The
+  // live pictures off meanwhile, back where the rooms are once it is still;
+  // told again as the dock's window changes.
+  const mins = document.getElementById('mins')
+  const minSep = document.getElementById('minsep')
+  const MIN_W = 60
+  const MIN_MS = 220
+  let minMoving = 0
+  function drawMins() {
+    const list = isDock() ? (state.windows || []).flatMap(app => (app.windows || []).filter(w => w.min).map(w => ({ app, w }))) : []
+    const drawn = JSON.stringify(list.map(({ app, w }) => [w.id, w.title, app.png]))
+    if (drawn === mins.dataset.drawn) return
+    const first = mins.dataset.drawn === undefined
+    mins.dataset.drawn = drawn
+    const want = new Set(list.map(({ w }) => String(w.id)))
+    for (const b of [...mins.querySelectorAll('[data-min]')]) {
+      if (want.has(b.dataset.min)) continue
+      // Brought back: no longer pressed as it goes.
+      delete b.dataset.min
+      moveMin(b, false).then(() => {
+        b.remove()
+        minSep.hidden = !mins.querySelector('[data-min]')
+      })
+    }
+    let after = null
+    for (const { app, w } of list) {
+      let b = mins.querySelector(`[data-min="${CSS.escape(String(w.id))}"]`)
+      if (!b) {
+        b = el('div', 'win mini')
+        b.dataset.min = w.id
+        b.append(el('span', 'room'), Object.assign(el('img', 'badge'), { alt: '', draggable: false }))
+        if (after) after.after(b)
+        else mins.prepend(b)
+        if (!first) moveMin(b, true)
+      }
+      b.title = w.title || app.name || ''
+      const badge = b.querySelector('.badge')
+      if (badge.getAttribute('src') !== (app.png || '')) badge.src = app.png || ''
+      after = b
+    }
+    if (list.length) minSep.hidden = false
+    else if (!mins.querySelector('.mini')) minSep.hidden = true
+    sendMins()
+  }
+  // Grown in from nothing, or shrunk away; its live picture off meanwhile.
+  function moveMin(b, coming) {
+    minMoving++
+    call('dock_thumbs', { items: [], dpr: devicePixelRatio || 1 })
+    const out = { width: '0px', opacity: 0, transform: 'scale(0.5)' }
+    const shown = { width: `${MIN_W}px`, opacity: 1, transform: 'none' }
+    const quiet = matchMedia('(prefers-reduced-motion: reduce)').matches
+    const a = b.animate(coming ? [out, shown] : [shown, out], { duration: quiet ? 1 : MIN_MS, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'forwards' })
+    return a.finished
+      .catch(() => {})
+      .then(() => {
+        if (coming) a.cancel()
+        if (--minMoving === 0) sendMins()
+      })
+  }
+  function sendMins() {
+    if (!isDock() || minMoving > 0) return
+    requestAnimationFrame(() => {
+      const items = [...mins.querySelectorAll('[data-min]')].map(b => {
+        const r = b.querySelector('.room').getBoundingClientRect()
+        return [Number(b.dataset.min), r.left, r.top, r.width, r.height]
+      })
+      call('dock_thumbs', { items, dpr: devicePixelRatio || 1 })
+    })
+  }
+
+  // The Recycle Bin, last in the dock (split): Windows' own picture of it,
+  // empty or full (bars.rs look_at_bin); a press opens it.
+  const bin = document.querySelector('.bin')
+  const binSep = document.getElementById('binsep')
+  function drawBin(b) {
+    bin.hidden = binSep.hidden = !isDock()
+    if (!isDock()) return
+    const img = bin.querySelector('img')
+    if (b?.png && img.getAttribute('src') !== b.png) img.src = b.png
+    img.hidden = !b?.png
+    bin.classList.toggle('full', b?.full === true)
+    bin.title = t(state.lang, b?.full ? 'dock.binFull' : 'dock.bin')
+  }
+  listen(
+    'dock:bin',
+    e => {
+      state.bin = e.payload
+      drawBin(state.bin)
+    },
+    { target },
+  )
+
   tickClock()
   addEventListener('resize', () => {
     startScale = 0
     drawStart()
     drawMica()
+    sendMins()
   })
   listen('bar:state', e => {
     state = e.payload || state

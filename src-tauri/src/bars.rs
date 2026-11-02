@@ -11,6 +11,15 @@
 // (shell.rs rehide), and their work areas whole (keep_work).
 // Not while her home is the island, nor while her taskbar is not up; an
 // app full screen on a display hides that display's alone.
+// Split (island.rs is_split, docs/design/specs/dock-topbar.md): one on her
+// display too, the dock: Start and the programs at the foot of the screen,
+// her strip the top bar. A window of its own (dock-1, ...) as big as its
+// glass, as wide as its page asks (dock_size), in the middle of the foot in
+// the band as high as Windows' room there; Windows' acrylic on the window
+// itself (backplate.rs acrylic), so what is behind it shows blurred through
+// it, the windows too, not the desktop's picture; in that room (splitDock
+// room), or keeping none and sliding down out of the way of a window
+// touching it (hide: look_under, poll, slide).
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -45,7 +54,59 @@ struct Bar {
     work_at: Option<Instant>,
     // Its page's zoom as set last (fit_zoom).
     zoom: f64,
+    // The dock on her display (split), not a strip on another; how wide its
+    // page asks it to be (its px, and their scale), whether a window of the
+    // programs on it flashes for attention (refresh), and Windows' acrylic
+    // on it as set (dark or light; none: its page draws Mica or solid).
+    dock: bool,
+    asked: Option<(f64, f64)>,
+    flashing: bool,
+    acrylic: Option<bool>,
+    // The windows minimized into it, each where its page left room for its
+    // live picture (its px from its corner) and their scale (show_mins).
+    mins: Vec<(isize, (f64, f64, f64, f64))>,
+    mins_sf: f64,
+    // The Recycle Bin as last told it (empty or full), and when looked at.
+    bin: Value,
+    bin_at: Option<Instant>,
+    // Shown yet (reveal): the dock comes once its programs are in, at once.
+    shown: bool,
+    // The dock out of the way of a window touching it (stow_look).
+    stow: Stow,
 }
+
+// The dock out of the way of a window touching it (splitDock hide): a
+// window's frame reaching into it (under, look_under), it slides down off
+// the screen, a line left at the foot, and the pointer goes through to the
+// window; the pointer resting at the foot of the screen calls it up
+// (called), and it goes again once the pointer has been off it a while.
+#[derive(Default)]
+struct Stow {
+    stowed: bool,
+    under: bool,
+    called: bool,
+    edge_since: Option<Instant>,
+    pressed: bool,
+    away_since: Option<Instant>,
+}
+
+// The dock: in the band as high as Windows' room along the foot (logical),
+// its glass (its window) 44 high and 2 px off the foot (bar.css .b-dock);
+// out of the way, its top 3 px left on the screen, the line the pointer
+// calls it up from.
+const DOCK_H: f64 = 48.0;
+const DOCK_GLASS: f64 = 44.0;
+const DOCK_GAP: f64 = 2.0;
+const DOCK_PEEK: f64 = 3.0;
+const DOCK_SLIDE_MS: u64 = 180;
+// The pointer this close to the foot of the screen (logical), this long, no
+// button held meanwhile, calls it up (as her island at the top: island.rs
+// call_look, but sooner: the user, 2026-11-02); off it (and this much
+// beside or above it, or the foot of the screen) this long, it goes.
+const DOCK_EDGE_PX: f64 = 2.0;
+const DOCK_EDGE_MS: u128 = 150;
+const DOCK_BAND: f64 = 12.0;
+const DOCK_LEAVE_MS: u128 = 600;
 
 static BARS: Mutex<Vec<Bar>> = Mutex::new(Vec::new());
 
@@ -104,24 +165,54 @@ pub fn sync(sh: &Arc<Shared>) {
     let up = taskbar::is_up();
     let all = wanted(sh) && up;
     let home = island::display(sh);
-    let edge = island::edge(sh);
-    let want: Vec<Area> = if all { sh.screens().areas.into_iter().filter(|a| Some(a.mon) != home).collect() } else { Vec::new() };
+    // Split, the others' along the bottom (island.rs bars_edge).
+    let edge = island::bars_edge(sh);
+    let areas = sh.screens().areas;
+    // (display, the dock?): a strip on each of the others; split, the dock on hers.
+    let mut want: Vec<(Area, bool)> = if all { areas.iter().filter(|a| Some(a.mon) != home).map(|a| (*a, false)).collect() } else { Vec::new() };
+    if up && island::is_split(sh) {
+        want.extend(areas.iter().find(|a| Some(a.mon) == home).map(|a| (*a, true)));
+    }
     let (gone, made, moved) = {
         let mut bars = BARS.lock().unwrap();
         let mut gone = Vec::new();
         bars.retain(|b| {
-            let keep = want.iter().any(|a| a.mon == b.mon && a.sf == b.sf) && b.edge == edge;
+            let keep = want.iter().any(|(a, dock)| a.mon == b.mon && a.sf == b.sf && *dock == b.dock) && b.edge == edge;
             if !keep {
                 gone.push(Gone::of(b));
             }
             keep
         });
         let mut made = Vec::new();
-        for a in &want {
-            if !bars.iter().any(|b| b.mon == a.mon) {
-                let label = format!("bar-{}", NEXT.fetch_add(1, Ordering::SeqCst));
-                bars.push(Bar { label: label.clone(), mon: a.mon, sf: a.sf, edge, hwnd: 0, strip: None, ready: false, hidden: false, sent: Value::Null, paper: Value::Null, work_side: None, work_at: None, zoom: 1.0 });
-                made.push((label, *a));
+        for (a, dock) in &want {
+            if !bars.iter().any(|b| b.mon == a.mon && b.dock == *dock) {
+                let label = format!("{}-{}", if *dock { "dock" } else { "bar" }, NEXT.fetch_add(1, Ordering::SeqCst));
+                bars.push(Bar {
+                    label: label.clone(),
+                    mon: a.mon,
+                    sf: a.sf,
+                    edge,
+                    hwnd: 0,
+                    strip: None,
+                    ready: false,
+                    hidden: false,
+                    sent: Value::Null,
+                    paper: Value::Null,
+                    work_side: None,
+                    work_at: None,
+                    zoom: 1.0,
+                    dock: *dock,
+                    asked: None,
+                    flashing: false,
+                    acrylic: None,
+                    mins: Vec::new(),
+                    mins_sf: 1.0,
+                    bin: Value::Null,
+                    bin_at: None,
+                    shown: false,
+                    stow: Stow::default(),
+                });
+                made.push((label, *a, *dock));
             }
         }
         let moved = gone.len() + made.len() > 0;
@@ -130,11 +221,11 @@ pub fn sync(sh: &Arc<Shared>) {
     for g in gone {
         close(sh, g);
     }
-    for (label, area) in made {
-        create(sh, label, area, edge);
+    for (label, area, dock) in made {
+        create(sh, label, area, edge, dock);
     }
     if moved {
-        sh.log(&format!("bars: {} on the other displays", BARS.lock().unwrap().len()));
+        sh.log(&format!("bars: {} on the other displays and as the dock", BARS.lock().unwrap().len()));
         // A list open over one gone goes with it.
         send_pop(sh);
     }
@@ -156,17 +247,22 @@ struct Gone {
     mon: Mon,
     edge: Edge,
     work_side: Option<i32>,
+    // The dock, which has no app bar.
+    dock: bool,
 }
 
 impl Gone {
     fn of(b: &Bar) -> Gone {
-        Gone { label: b.label.clone(), hwnd: b.hwnd, mon: b.mon, edge: b.edge, work_side: b.work_side }
+        Gone { label: b.label.clone(), hwnd: b.hwnd, mon: b.mon, edge: b.edge, work_side: b.work_side, dock: b.dock }
     }
 }
 
 fn close(sh: &Shared, g: Gone) {
-    if g.hwnd != 0 {
+    if g.hwnd != 0 && !g.dock {
         appbar::remove(g.hwnd);
+    }
+    if g.dock {
+        taskbar::dock_thumbs(Vec::new());
     }
     if let Some(win) = window(sh, &g.label) {
         let _ = win.destroy();
@@ -189,7 +285,10 @@ pub fn keep_work(sh: &Shared) {
     let now = Instant::now();
     let due: Vec<(String, Mon, Edge, Mon)> = {
         let mut bars = BARS.lock().unwrap();
+        // The dock keeps no work area of its own: Windows' room along the
+        // foot is it, or none (it steps out of the way).
         bars.iter_mut()
+            .filter(|b| !b.dock)
             .filter_map(|b| {
                 let strip = b.strip?;
                 if b.work_at.is_some_and(|at| now.duration_since(at) < Duration::from_secs(2)) {
@@ -277,11 +376,12 @@ fn give_work(sh: &Shared, label: &str, mon: Mon, edge: Edge, side: i32) {
 // Its window made off the main thread (a menu click may be what asks, and
 // building there waits on itself), its strip asked of Windows along the
 // edge of its own display, as thick as hers at that display's scale.
-fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge) {
+fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
     let sh = sh.clone();
     std::thread::spawn(move || {
         let thick = (island::TASKBAR_H * area.sf).round() as i32;
-        let strip = edge.strip(area.mon, thick);
+        // The dock: in the middle of the foot, as wide as its page will ask (dock_size).
+        let strip = if dock { dock_rect(area.mon, area.sf, DOCK_H * 8.0) } else { edge.strip(area.mon, thick) };
         let built = WebviewWindowBuilder::new(&sh.app, &label, WebviewUrl::App("pet/bar.html".into()))
             .title("wakuwaku bar")
             .inner_size(strip.2 as f64 / area.sf, strip.3 as f64 / area.sf)
@@ -310,7 +410,8 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge) {
         let hwnd = 0;
         crate::tasks::no_transitions(hwnd);
         sh.own_window(&win);
-        let granted = if hwnd != 0 && appbar::register(hwnd) { appbar::place(hwnd, area.mon, edge, thick) } else { strip };
+        // The dock asks Windows for no room: Windows' own keeps it, or none is kept.
+        let granted = if dock { strip } else if hwnd != 0 && appbar::register(hwnd) { appbar::place(hwnd, area.mon, edge, thick) } else { strip };
         lay(&win, granted);
         // Zoomed before its page lays out (fit_zoom).
         let zoom = 1.0 / island::text_size(&sh);
@@ -329,7 +430,18 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge) {
         };
         // Taken away again while it was being made.
         if gone {
-            return close(&sh, Gone { label, hwnd, mon: area.mon, edge, work_side: None });
+            return close(&sh, Gone { label, hwnd, mon: area.mon, edge, work_side: None, dock });
+        }
+        // The dock shows once its page has its programs (dock_size ready), or
+        // a moment on whatever it has, sliding up from the foot all at once.
+        if dock {
+            let sh = sh.clone();
+            let label = label.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(DOCK_READY_AT_MOST);
+                reveal(&sh, &label);
+            });
+            return;
         }
         let _ = win.show();
         let laid = match (win.outer_position(), win.outer_size()) {
@@ -354,6 +466,289 @@ fn lay(win: &WebviewWindow, rect: Mon) {
     let _ = win.set_position(PhysicalPosition::new(rect.0, rect.1));
     let _ = win.set_size(PhysicalSize::new(rect.2.max(1) as u32, rect.3.max(1) as u32));
     let _ = win.set_position(PhysicalPosition::new(rect.0, rect.1));
+}
+
+// --- The dock (split) -----------------------------------------------------------------
+
+// Its window (physical): w wide (physical, no narrower than it is high, no
+// wider than the display), its glass high at sf, in the middle of the
+// display's foot DOCK_GAP off it.
+fn dock_rect(mon: Mon, sf: f64, w: f64) -> Mon {
+    let height = (DOCK_GLASS * sf).round() as i32;
+    let gap = (DOCK_GAP * sf).round() as i32;
+    let width = (w.round() as i32).clamp(height, mon.2.max(height));
+    (mon.0 + (mon.2 - width) / 2, mon.1 + mon.3 - gap - height, width, height)
+}
+
+// Its window's top (physical) up, or out of the way: down past the foot
+// but for its top DOCK_PEEK.
+fn dock_top(rect: Mon, mon: Mon, sf: f64, stowed: bool) -> i32 {
+    if stowed { mon.1 + mon.3 - ((DOCK_PEEK * sf).round() as i32).max(1) } else { rect.1 }
+}
+
+// Its window slid to where it is to be, up or down (its acrylic goes with
+// it, as the page could not take it), eased out over DOCK_SLIDE_MS; a newer
+// slide stops an older one.
+static SLIDE: AtomicU32 = AtomicU32::new(0);
+
+fn slide(sh: &Shared, win: WebviewWindow, x: i32, to: i32) {
+    let me = SLIDE.fetch_add(1, Ordering::SeqCst) + 1;
+    // Its minimized windows' pictures off as it goes, back once it is up.
+    show_mins(sh, true);
+    let sh = crate::shared(&sh.app);
+    std::thread::spawn(move || {
+        let from = win.outer_position().map_or(to, |p| p.y);
+        let steps = (DOCK_SLIDE_MS / 15).max(1);
+        for n in 1..=steps {
+            if SLIDE.load(Ordering::SeqCst) != me {
+                return;
+            }
+            let t = n as f64 / steps as f64;
+            let eased = 1.0 - (1.0 - t).powi(3);
+            let _ = win.set_position(PhysicalPosition::new(x, from + ((to - from) as f64 * eased).round() as i32));
+            std::thread::sleep(Duration::from_millis(15));
+        }
+        if SLIDE.load(Ordering::SeqCst) == me {
+            show_mins(&sh, false);
+        }
+    });
+}
+
+// The dock shown the first time: from below the foot of the screen, slid
+// up to where it is to be (out of the way already, a window touching it:
+// its top at the foot), once.
+const DOCK_READY_AT_MOST: Duration = Duration::from_millis(1500);
+
+fn reveal(sh: &Shared, label: &str) {
+    let at = {
+        let mut bars = BARS.lock().unwrap();
+        let Some(b) = bars.iter_mut().find(|b| b.label == label && b.dock && !b.shown) else { return };
+        let Some(rect) = b.strip else { return };
+        b.shown = true;
+        (rect, b.mon, b.sf, b.stow.stowed, b.hidden)
+    };
+    let (rect, mon, sf, stowed, hidden) = at;
+    let Some(win) = window(sh, label) else { return };
+    lay(&win, (rect.0, mon.1 + mon.3, rect.2, rect.3));
+    if hidden {
+        return;
+    }
+    let _ = win.show();
+    sh.log(&format!("bars: the dock up, its programs in ({rect:?})"));
+    slide(sh, win, rect.0, dock_top(rect, mon, sf, stowed));
+}
+
+// Where the dock's page left room for the windows minimized into it (each
+// window's id and x, y, w, h in its px; dpr, their scale): their live
+// pictures there while it is up.
+#[tauri::command]
+pub fn dock_thumbs(app: tauri::AppHandle, window: WebviewWindow, items: Vec<(i64, f64, f64, f64, f64)>, dpr: Option<f64>) {
+    let sh = crate::shared(&app);
+    {
+        let mut bars = BARS.lock().unwrap();
+        let Some(b) = bars.iter_mut().find(|b| b.label == window.label() && b.dock) else { return };
+        b.mins = items.into_iter().map(|(h, x, y, w, ht)| (h as isize, (x, y, w, ht))).collect();
+        b.mins_sf = page_scale(dpr, b.sf);
+    }
+    show_mins(&sh, false);
+}
+
+// The minimized windows' live pictures on the dock, where its page left
+// room for them, while it is up (not out of the way, nor sliding: off,
+// nor hidden by an app full screen); none else.
+fn show_mins(_sh: &Shared, off: bool) {
+    let items = {
+        let bars = BARS.lock().unwrap();
+        bars.iter()
+            .find(|b| b.dock && b.ready && b.shown && !b.hidden && !b.stow.stowed && !off)
+            .and_then(|b| b.strip.map(|r| (r, b)))
+            .map(|(r, b)| {
+                let px = |v: f64| (v * b.mins_sf).round() as i32;
+                b.mins.iter().map(|&(h, (x, y, w, ht))| (h, (r.0 + px(x), r.1 + px(y), px(w), px(ht)))).collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
+    taskbar::dock_thumbs(items);
+}
+
+// Its page laid out: as wide as it asks (w, its px; dpr, their scale), laid
+// again in the middle of the foot, its wallpaper read for where it is now.
+#[tauri::command]
+pub fn dock_size(app: tauri::AppHandle, window: WebviewWindow, w: f64, dpr: Option<f64>, ready: Option<bool>) {
+    let sh = crate::shared(&app);
+    // Its programs in: it shows now (as wide as it is with them), once.
+    let shown = BARS.lock().unwrap().iter().any(|b| b.label == window.label() && b.shown);
+    if ready == Some(true) && !shown {
+        let label = window.label().to_string();
+        let sh = sh.clone();
+        std::thread::spawn(move || {
+            // Laid at its width first (below), then up.
+            std::thread::sleep(Duration::from_millis(30));
+            reveal(&sh, &label);
+        });
+    }
+    let laid = {
+        let mut bars = BARS.lock().unwrap();
+        let Some(b) = bars.iter_mut().find(|b| b.label == window.label() && b.dock) else { return };
+        let page_sf = page_scale(dpr, b.sf);
+        b.asked = Some((w, page_sf));
+        let rect = dock_rect(b.mon, b.sf, w * page_sf);
+        (b.strip != Some(rect)).then(|| {
+            b.strip = Some(rect);
+            (rect, dock_top(rect, b.mon, b.sf, b.stow.stowed))
+        })
+    };
+    let Some((rect, top)) = laid else { return };
+    // Out of the way, it stays down there at its new width; not shown yet,
+    // below the foot, where it will slide up from (reveal).
+    let not_yet = BARS.lock().unwrap().iter().any(|b| b.label == window.label() && !b.shown);
+    let top = if not_yet { BARS.lock().unwrap().iter().find(|b| b.label == window.label()).map_or(top, |b| b.mon.1 + b.mon.3) } else { top };
+    lay(&window, (rect.0, top, rect.2, rect.3));
+    show_mins(&sh, false);
+    // Its Mica's picture where it is now; none to draw under Windows' acrylic
+    // (as it grows a frame at a time, each frame read it again).
+    if BARS.lock().unwrap().iter().any(|b| b.label == window.label() && b.acrylic.is_none()) {
+        sh.log(&format!("bars: the dock {} px wide, laid at {rect:?}", w.round()));
+        std::thread::spawn(move || read_papers(&sh));
+    }
+}
+
+// One look at the pointer (poll; physical) for the dock out of the way:
+// whether it is to be now, called up or let go as stow_look says. Returns
+// ms until the next look: sooner near the foot of the screen.
+pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
+    let hides = island::is_split(sh) && !island::dock_keeps_room(sh);
+    let held = OPEN.lock().unwrap().as_ref().map(|p| p.bar.clone());
+    let changed = {
+        let mut bars = BARS.lock().unwrap();
+        // Not before it has come up (reveal).
+        let Some(b) = bars.iter_mut().find(|b| b.dock && b.ready && !b.hidden && b.shown) else { return 500 };
+        let Some(rect) = b.strip else { return 500 };
+        // Kept up while its list or menu is open, Windows' Start menu is, or
+        // a window of its programs flashes for attention.
+        let keep = !hides || held.as_deref() == Some(b.label.as_str()) || taskbar::start_open() || b.flashing;
+        let now = Instant::now();
+        let stowed = stow_look(&mut b.stow, rect, b.mon, b.sf, cursor, keep, now, || crate::pet::any_down().unwrap_or(false));
+        (stowed != b.stow.stowed).then(|| {
+            b.stow.stowed = stowed;
+            (b.label.clone(), stowed, rect.0, dock_top(rect, b.mon, b.sf, stowed))
+        })
+    };
+    if let Some((label, stowed, x, top)) = changed {
+        sh.log(&format!("bars: the dock {}", if stowed { "out of the way of the window touching it" } else { "up" }));
+        if let Some(win) = window(sh, &label) {
+            // Out of the way, the pointer goes through it to the window.
+            let _ = win.set_ignore_cursor_events(stowed);
+            slide(sh, win, x, top);
+        }
+    }
+    look_at_bin(sh);
+    let near = BARS.lock().unwrap().iter().find(|b| b.dock).is_some_and(|b| cursor.1 >= b.mon.1 + b.mon.3 - (60.0 * b.sf) as i32);
+    if hides && near { 40 } else { 300 }
+}
+
+// Out of the way or not, at one look: a window touching it (under), not
+// kept up (keep), not called up by the pointer resting at the display's
+// foot (cursor; mon, the display; sf its scale), or let go by it since.
+// down: whether a button is held, asked only at the foot.
+fn stow_look(s: &mut Stow, rect: Mon, mon: Mon, sf: f64, cursor: (i32, i32), keep: bool, now: Instant, down: impl FnOnce() -> bool) -> bool {
+    let px = |v: f64| (v * sf).round() as i32;
+    let foot = mon.1 + mon.3;
+    // On it or this near it, down to the foot of the screen (the gap under
+    // its glass is its own: the pointer resting there is on it).
+    let on = |band: i32| cursor.0 >= rect.0 - band && cursor.0 < rect.0 + rect.2 + band && cursor.1 >= rect.1 - band && cursor.1 < foot;
+    let at_foot = cursor.0 >= mon.0 && cursor.0 < mon.0 + mon.2 && cursor.1 >= foot - px(DOCK_EDGE_PX).max(1) && cursor.1 < foot;
+    if keep || !s.under {
+        s.called = false;
+        s.edge_since = None;
+        s.away_since = None;
+        s.pressed = false;
+        return false;
+    }
+    if s.called || (!s.stowed && on(0)) {
+        s.called = true;
+        // Up while the pointer is on it or near it, or still at the foot of
+        // the screen it was called up from: gone from there and back, it was
+        // let go and called again, over and over (the user, 2026-11-02).
+        if on(px(DOCK_BAND)) || at_foot {
+            s.away_since = None;
+            return false;
+        }
+        if now.duration_since(*s.away_since.get_or_insert(now)).as_millis() < DOCK_LEAVE_MS {
+            return false;
+        }
+        s.called = false;
+        s.away_since = None;
+        return true;
+    }
+    if !at_foot {
+        s.edge_since = None;
+        s.pressed = false;
+        return true;
+    }
+    s.pressed = s.pressed || down();
+    let since = *s.edge_since.get_or_insert(now);
+    if s.pressed || now.duration_since(since).as_millis() < DOCK_EDGE_MS {
+        return true;
+    }
+    s.called = true;
+    s.edge_since = None;
+    false
+}
+
+// The dock's Recycle Bin: looked at every few seconds (empty or full, as
+// Windows draws it: taskbar.rs recycle_bin), its page told as it changes.
+const BIN_EVERY: Duration = Duration::from_secs(3);
+
+fn look_at_bin(sh: &Shared) {
+    let due = BARS.lock().unwrap().iter().find(|b| b.dock && b.ready).map(|b| (b.label.clone(), b.bin_at.is_none_or(|at| at.elapsed() >= BIN_EVERY)));
+    let Some((label, true)) = due else { return };
+    let now = taskbar::recycle_bin();
+    let changed = {
+        let mut bars = BARS.lock().unwrap();
+        let Some(b) = bars.iter_mut().find(|b| b.label == label) else { return };
+        b.bin_at = Some(Instant::now());
+        (b.bin != now).then(|| {
+            b.bin = now.clone();
+        })
+    };
+    if changed.is_some() {
+        let _ = sh.app.emit_to(label.as_str(), "dock:bin", now);
+    }
+}
+
+// A window touching the dock, or none now (with her island's look_under,
+// main.rs): kept for poll.
+pub fn look_under(sh: &Shared) {
+    let hides = island::is_split(sh) && !island::dock_keeps_room(sh);
+    let rect = BARS.lock().unwrap().iter().find(|b| b.dock && b.ready && !b.hidden).and_then(|b| b.strip);
+    // Kept as it was while nobody is about.
+    let Some(rect) = rect.filter(|_| !sh.is_quiet()) else { return };
+    let on = hides && crate::tasks::reaches_into(rect);
+    let mut bars = BARS.lock().unwrap();
+    if let Some(b) = bars.iter_mut().find(|b| b.dock) {
+        if std::mem::replace(&mut b.stow.under, on) != on {
+            sh.log(&format!("bars: {} the dock {rect:?}", if on { "a window touching" } else { "no window touching" }));
+        }
+    }
+}
+
+// The keyboard, the network and the volume as they change (taskbar.rs
+// keys_loop): told the dock, for quick settings in it (splitKeys dock).
+pub fn keys(sh: &Shared, now: &Value) {
+    let docks: Vec<String> = BARS.lock().unwrap().iter().filter(|b| b.dock && b.ready).map(|b| b.label.clone()).collect();
+    for label in docks {
+        let _ = sh.app.emit_to(label.as_str(), "dock:keys", now.clone());
+    }
+}
+
+// Windows' Start menu opened or closed (taskbar.rs start_seen): the dock's
+// Start button lit as it is open, the dock up meanwhile (poll).
+pub fn start_seen(sh: &Shared, open: bool) {
+    let docks: Vec<String> = BARS.lock().unwrap().iter().filter(|b| b.dock).map(|b| b.label.clone()).collect();
+    for label in docks {
+        let _ = sh.app.emit_to(label.as_str(), "dock:start", json!({ "open": open }));
+    }
 }
 
 // Its page has its listeners up: told what to show; its display's
@@ -441,7 +836,7 @@ pub fn bar_asks(app: tauri::AppHandle) {
 // One of them up on a display no app full screen covers: her capsule there
 // shows the prompts waiting (main.rs asks_seen).
 pub fn any_shown() -> bool {
-    BARS.lock().unwrap().iter().any(|b| b.ready && !b.hidden && b.strip.is_some())
+    BARS.lock().unwrap().iter().any(|b| b.ready && !b.hidden && b.strip.is_some() && !b.dock)
 }
 
 // An app full screen covering a display (or none): that display's taskbar
@@ -460,10 +855,12 @@ pub fn full_screen(sh: &Shared, cover: Option<Mon>) {
             .collect()
     };
     for (label, hide) in changed {
-        if let Some(win) = window(sh, &label) {
+        let shown = BARS.lock().unwrap().iter().find(|b| b.label == label).is_none_or(|b| !b.dock || b.shown);
+        if let Some(win) = window(sh, &label).filter(|_| shown || hide) {
             let _ = if hide { win.hide() } else { win.show() };
         }
         sh.log(&format!("bars: {label} {}", if hide { "stepped aside (an app full screen there)" } else { "back" }));
+        show_mins(sh, false);
         // A list open over one stepped aside goes with it.
         if hide {
             send_pop(sh);
@@ -751,19 +1148,63 @@ fn fills(all: &Value, mon: Mon) -> bool {
 // clear one fills in, light or dark and the accent, her island's look), her
 // language; the prompts waiting and her sheet, for her capsule.
 pub fn refresh(sh: &Shared) {
-    let bars: Vec<(String, Mon, f64, Value, Value)> = BARS.lock().unwrap().iter().filter(|b| b.ready).map(|b| (b.label.clone(), b.mon, b.sf, b.sent.clone(), b.paper.clone())).collect();
+    let bars: Vec<(String, Mon, f64, Value, Value, bool)> = BARS.lock().unwrap().iter().filter(|b| b.ready).map(|b| (b.label.clone(), b.mon, b.sf, b.sent.clone(), b.paper.clone(), b.dock)).collect();
     if bars.is_empty() {
         return;
     }
     let all = taskbar::windows_now();
     let look = taskbar::look_value();
     let spread = spread();
-    let edge = island::edge(sh);
+    let edge = island::bars_edge(sh);
     let asks = waiting(&sh.asks.lock().unwrap().views());
     let pet = sh.setting("pet");
     let sprite = crate::data::pets(&sh.dir).into_iter().find(|p| Some(p.id.as_str()) == pet.as_str());
-    for (label, mon, sf, sent, paper) in bars {
+    // The dock's: the buttons of her strip, in its order (as Win+digit counts
+    // them, winkeys.rs ordered); whether a window of them flashes.
+    let order: Vec<String> = sh.setting("taskbarOrder").as_array().map(|o| o.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()).unwrap_or_default();
+    let docked = Value::Array(crate::winkeys::ordered(&for_main(sh, &all), &order));
+    let flashing = docked.as_array().into_iter().flatten().flat_map(|a| a["windows"].as_array().into_iter().flatten()).any(|w| w["flash"] == true);
+    for b in BARS.lock().unwrap().iter_mut().filter(|b| b.dock) {
+        b.flashing = flashing;
+    }
+    // Windows' acrylic on the dock, tinted for Windows' mode: not solid
+    // (taskbarMaterial black), and Windows has it (transparency effects on:
+    // backplate.rs available); else its page draws the desktop's picture.
+    let light = look["mode"].as_str() == Some("light");
+    let acrylic = (sh.setting("taskbarMaterial").as_str() != Some("black") && crate::backplate::available()).then_some(!light);
+    let docks: Vec<(String, isize)> = BARS
+        .lock()
+        .unwrap()
+        .iter_mut()
+        .filter(|b| b.dock && b.hwnd != 0 && b.acrylic != acrylic)
+        .map(|b| {
+            b.acrylic = acrylic;
+            (b.label.clone(), b.hwnd)
+        })
+        .collect();
+    for (label, hwnd) in docks {
+        // On the window's own thread, where Windows' calls on it belong.
+        let _ = sh.app.run_on_main_thread(move || {
+            crate::backplate::acrylic(hwnd, acrylic);
+        });
+        let how = match acrylic {
+            Some(true) => "on, dark",
+            Some(false) => "on, light",
+            None => "off",
+        };
+        sh.log(&format!("bars: {label}'s acrylic {how}"));
+    }
+    let bins: std::collections::HashMap<String, Value> = BARS.lock().unwrap().iter().filter(|b| b.dock).map(|b| (b.label.clone(), b.bin.clone())).collect();
+    for (label, mon, sf, sent, paper, dock) in bars {
         let state = json!({
+            "dock": dock,
+            // Windows' acrylic on it: its glass a tint over it, no Mica.
+            "acrylic": dock && acrylic.is_some(),
+            // Its Recycle Bin, as last looked at (look_at_bin).
+            "bin": if dock { bins.get(&label).cloned().unwrap_or(Value::Null) } else { Value::Null },
+            // Split: quick settings and the clock in the dock, or in the top bar (splitKeys).
+            "keys": dock && sh.setting("splitKeys").as_str() == Some("dock"),
+            "keysNow": if dock { taskbar::keys_now() } else { Value::Null },
             "edge": edge.word(),
             "align": sh.setting("taskbarAlign"),
             "material": sh.setting("taskbarMaterial"),
@@ -773,7 +1214,7 @@ pub fn refresh(sh: &Shared) {
             "islandLook": sh.setting("islandLook"),
             "lang": sh.lang(),
             "sf": sf,
-            "windows": buttons_for(&all, mon, false, spread),
+            "windows": if dock { docked.clone() } else { buttons_for(&all, mon, false, spread) },
             "asks": asks,
             "sprite": sprite.as_ref().map(|p| p.url()),
             "spriteVersion": sprite.as_ref().map_or(2, |p| p.version),
@@ -850,6 +1291,61 @@ mod tests {
         // Along a side: beside it, centred on the button up and down.
         assert_eq!(pop_rect(Edge::Left, (2560, 0, 72, 1080), mon, (2566, 500, 60, 66), (300, 200)), (2632, 433, 300, 200));
         assert_eq!(pop_rect(Edge::Right, (4408, 0, 72, 1080), mon, (4414, 500, 60, 66), (300, 200)), (4108, 433, 300, 200));
+    }
+
+    #[test]
+    fn the_dock_in_the_middle_of_the_foot() {
+        // 1920 x 1080 at 125%: its glass 55 px high, 3 off the foot (2 at
+        // 125%, rounded), as wide as asked.
+        let mon = (0, 0, 1920, 1080);
+        assert_eq!(dock_rect(mon, 1.25, 500.0), (710, 1022, 500, 55));
+        // Never narrower than high, never wider than the display.
+        assert_eq!(dock_rect(mon, 1.25, 10.0), (932, 1022, 55, 55));
+        assert_eq!(dock_rect(mon, 1.25, 5000.0), (0, 1022, 1920, 55));
+        // A display left of the main one.
+        assert_eq!(dock_rect((-1920, 0, 1920, 1080), 1.0, 400.0), (-1160, 1034, 400, 44));
+        // Out of the way: down but for its top 3 px (4 at 125%).
+        assert_eq!(dock_top((710, 1022, 500, 55), mon, 1.25, true), 1076);
+        assert_eq!(dock_top((710, 1022, 500, 55), mon, 1.25, false), 1022);
+    }
+
+    #[test]
+    fn the_dock_steps_aside_and_is_called_back() {
+        let mon = (0, 0, 1920, 1080);
+        let rect = (710, 1020, 500, 60);
+        let t = Instant::now();
+        let ms = |n: u64| t + Duration::from_millis(n);
+        let mut s = Stow::default();
+        // No window touching it: up, wherever the pointer is.
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (100, 100), false, t, || false));
+        // One touching it, the pointer elsewhere: down.
+        s.under = true;
+        assert!(stow_look(&mut s, rect, mon, 1.25, (100, 100), false, t, || false));
+        s.stowed = true;
+        // Kept up (its list open, Start, a window flashing): up.
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (100, 100), true, t, || false));
+        // At the foot, anywhere along it: up once it has rested there 150 ms.
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, t, || false));
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(100), || false));
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(160), || false));
+        s.stowed = false;
+        // Still at the foot, away from it along there: up, however long.
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(2000), || false));
+        // The gap under its glass is its own.
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (900, 1078), false, ms(2100), || false));
+        // Then on it, or near it: up; off it, down 600 ms after.
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (900, 1040), false, ms(2200), || false));
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (900, 1010), false, ms(2300), || false));
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (900, 500), false, ms(2400), || false));
+        assert!(stow_look(&mut s, rect, mon, 1.25, (900, 500), false, ms(3050), || false));
+        s.stowed = true;
+        // A button held at the foot (a window dragged down): not called up.
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(4000), || true));
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(5000), || false));
+        // Off the foot, the press forgotten: called up again by resting there.
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 900), false, ms(5100), || false));
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(5200), || false));
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(5400), || false));
     }
 
     #[test]

@@ -167,6 +167,7 @@ mod imp {
     const DWMWA_COLOR_NONE: u32 = 0xFFFF_FFFE;
     const WCA_ACCENT_POLICY: u32 = 19;
     const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
+    const ACCENT_DISABLED: u32 = 0;
     // The accent's own tint (ABGR) over its blur, as faint as reads as
     // Windows' acrylic in each mode: its luminosity comes from it (alpha
     // 0 is not drawn at all). The island's ground does the rest.
@@ -217,6 +218,26 @@ mod imp {
         let data = CompositionData { attribute: WCA_ACCENT_POLICY, data: &policy as *const AccentPolicy as *const c_void, size: std::mem::size_of::<AccentPolicy>() };
         // SAFETY: a window of ours and structs alive for the call.
         unsafe { f(hwnd, &data) != 0 }
+    }
+
+    // A window of ours given the acrylic itself (her dock, bars.rs): what is
+    // behind it blurred, tinted for Windows' mode, its corners DWM's round
+    // ones, no border; or taken off again (dark None). Whether it took.
+    pub fn acrylic(hwnd: isize, dark: Option<bool>) -> bool {
+        let hwnd = hwnd as Hwnd;
+        // SAFETY: a window of ours and a value alive for the call.
+        let attr = |a: u32, v: u32| unsafe { DwmSetWindowAttribute(hwnd, a, &v as *const u32 as *const c_void, 4) };
+        let Some(dark) = dark else {
+            let Some(f) = set_composition() else { return false };
+            let policy = AccentPolicy { state: ACCENT_DISABLED, flags: 0, gradient: 0, animation: 0 };
+            let data = CompositionData { attribute: WCA_ACCENT_POLICY, data: &policy as *const AccentPolicy as *const c_void, size: std::mem::size_of::<AccentPolicy>() };
+            // SAFETY: a window of ours and structs alive for the call.
+            return unsafe { f(hwnd, &data) != 0 };
+        };
+        attr(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND);
+        attr(DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE);
+        attr(DWMWA_USE_IMMERSIVE_DARK_MODE, dark as u32);
+        accent(hwnd, dark)
     }
 
     // Tried once on a hidden window of the system's own class, made and
@@ -448,9 +469,12 @@ mod imp {
     pub fn set(_plate: Option<Plate>, _under: isize, _fade_ms: u32) {}
     pub fn wish(_plate: Option<Plate>, _under: isize, _fade_ms: u32) {}
     pub fn again() {}
+    pub fn acrylic(_hwnd: isize, _dark: Option<bool>) -> bool {
+        false
+    }
 }
 
-pub use imp::{again, available};
+pub use imp::{acrylic, again, available};
 
 // Her app, for the pages to be drawn anew should the accent be refused.
 static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();

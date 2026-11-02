@@ -302,8 +302,9 @@
   const config = () => ({
     ...DEFAULTS,
     lang: world.lang,
-    display: world.home,
-    taskbarEdge: world.edge,
+    // The top bar and the dock (world.edge split, the preview's word for it): a home of its own.
+    display: world.home === 'taskbar' && world.edge === 'split' ? 'split' : world.home,
+    taskbarEdge: world.edge === 'split' ? 'bottom' : world.edge,
     taskbarMaterial: world.material,
     ...(world.taskbarLayout ? { taskbarLayout: world.taskbarLayout } : {}),
     deskLayout: world.deskLayout,
@@ -468,7 +469,7 @@
   function stripPaper() {
     const [w, h] = world.screen
     const s = world.strip
-    const at = { bottom: [0, -(h - s)], top: [0, 0], left: [0, 0], right: [-(w - s), 0] }[world.edge] || [0, -(h - s)]
+    const at = { bottom: [0, -(h - s)], top: [0, 0], split: [0, 0], left: [0, 0], right: [-(w - s), 0] }[world.edge] || [0, -(h - s)]
     return { url: world.wallpaper, position: 'fill', color: '#1b2533', mon: [...at, w, h], screen: [...at, w, h], sf: 1 }
   }
 
@@ -477,7 +478,9 @@
   function deskState() {
     const [w, h] = world.screen
     const s = world.home === 'taskbar' ? world.strip : 0
-    const work = { bottom: [0, 0, w, h - s], top: [0, s, w, h - s], left: [s, 0, w - s, h], right: [0, 0, w - s, h] }[world.edge] || [0, 0, w, h - s]
+    // Split: the top bar's (32 unless 48), the dock keeping no room (splitDock hide).
+    const top = world.edge === 'split' ? splitH() : s
+    const work = { bottom: [0, 0, w, h - s], top: [0, s, w, h - s], split: [0, top, w, h - top], left: [s, 0, w - s, h], right: [0, 0, w - s, h] }[world.edge] || [0, 0, w, h - s]
     // accent: Windows' (as taskbar:look has it, and desk.rs sends it), for what is picked with Ctrl.
     return { key: 'd1', primary: true, keys: ['d1'], sf: 1, size: [w, h], work, lang: world.lang, light: world.mode === 'light', accent: world.accent, detailed: config().details !== false, home: world.home, sprite: world.sprite, layout: world.deskLayout }
   }
@@ -492,18 +495,41 @@
 
   // Her taskbar on another display (bars.rs bar:state): Start, the windows,
   // the clock; her capsule at its start while a prompt waits.
+  // A plain Recycle Bin for the dock (Windows draws its own there).
+  const BIN_PICTURE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M9 10h14l-1.3 17H10.3z" fill="#cfd8e3"/><path d="M7 7.5h18v2.5H7z" fill="#aeb9c7"/><path d="M13 5h6v2.5h-6z" fill="#aeb9c7"/></svg>')}`
+
+  // The desktop's picture for the dock at the foot, from its window's corner (bars.rs paper_from).
+  function dockPaper() {
+    const [w, h] = world.screen
+    const at = [0, -(h - 46)]
+    return { url: world.wallpaper, position: 'fill', color: '#1b2533', mon: [...at, w, h], screen: [...at, w, h], sf: 1 }
+  }
+
+  // Split, the top bar's thickness (island.rs strip_h).
+  const splitH = () => (config().splitBar === 48 ? 48 : 32)
+
   function barState() {
     const c = config()
+    // Split, the dock on her display (bars.rs refresh): along the foot, its
+    // keys if set so, the desktop's picture from its window's corner.
+    const dock = world.edge === 'split'
     return {
+      dock,
+      keys: dock && c.splitKeys === 'dock',
+      keysNow: dock ? world.keys : null,
+      // No Windows' acrylic here: the desktop's picture under it (Mica).
+      acrylic: false,
+      // Windows' own picture of the Recycle Bin is not here: a plain one.
+      bin: dock ? { full: false, png: BIN_PICTURE } : null,
       windows: world.windows,
       look: look(),
-      edge: world.edge,
+      edge: dock ? 'bottom' : world.edge,
       align: c.taskbarAlign,
       material: world.material,
       clearWhen: c.taskbarClearWhen,
       filled: false,
       lang: world.lang,
-      paper: stripPaper(),
+      paper: dock ? dockPaper() : stripPaper(),
       sprite: world.sprite,
       spriteVersion: 2,
       islandLook: c.islandLook,
@@ -525,6 +551,10 @@
     if (role === 'island') {
       emit('taskbar:look', look())
       if (world.home === 'taskbar') {
+        // Split: the top bar as thick as Windows gave it, in the screen's px
+        // as island.rs tell_strip sends it (the shots are at twice the scale).
+        const dpr = devicePixelRatio || 1
+        if (world.edge === 'split') emit('taskbar:strip', { thick: Math.round(splitH() * dpr), win: [Math.round(innerWidth * dpr), Math.round(innerHeight * dpr)], sf: dpr })
         emit('taskbar:wallpaper', stripPaper())
         emit('taskbar:windows', world.windows)
         emit('taskbar:keys', world.keys)

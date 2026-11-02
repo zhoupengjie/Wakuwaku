@@ -282,9 +282,11 @@ impl Shared {
     }
 
     // Her home: 'island' or 'taskbar' (island.rs).
+    // Her home as her windows have it: the island, or the taskbar, which the
+    // top bar and the dock are too (display split: island.rs is_split).
     pub fn home(&self) -> &'static str {
         match self.setting("display").as_str() {
-            Some("taskbar") => "taskbar",
+            Some("taskbar" | "split") => "taskbar",
             _ => "island",
         }
     }
@@ -530,7 +532,7 @@ impl Shared {
     // On in the island, put on the taskbar (taskbarLayout) while she is the
     // taskbar, or on the desktop (deskLayout): a built-in one is worked out then.
     pub fn is_widget_wanted(&self, id: &str) -> bool {
-        self.is_widget_on(id) || (self.setting("display") == "taskbar" && settings::is_on_taskbar(&self.setting("taskbarLayout"), id)) || (cfg!(windows) && settings::is_on_desk(&self.setting("deskLayout"), id))
+        self.is_widget_on(id) || (self.home() == "taskbar" && settings::is_on_taskbar(&self.setting("taskbarLayout"), id)) || (cfg!(windows) && settings::is_on_desk(&self.setting("deskLayout"), id))
     }
 
     // The widgets with something to say, each saying whether it is on.
@@ -625,7 +627,7 @@ impl Shared {
 
     pub fn change(self: &Arc<Self>, patch: Value) {
         let Value::Object(patch) = patch else { return };
-        let touches_visibility = ["dnd", "display", "out", "hideInFullscreen", "taskbarEdge", "taskbarDisplays"].iter().any(|k| patch.contains_key(*k));
+        let touches_visibility = ["dnd", "display", "out", "hideInFullscreen", "taskbarEdge", "taskbarDisplays", "splitBar", "splitDock"].iter().any(|k| patch.contains_key(*k));
         let touches_top = ["settingsPin", "settingsTop"].iter().any(|k| patch.contains_key(*k));
         let touches_monitor = ["monitor", "monitorSource", "widgetsOff"].iter().any(|k| patch.contains_key(*k));
         let touches_stow = patch.contains_key("islandHideUnder");
@@ -820,7 +822,7 @@ impl Shared {
 
 // --- Where she is -----------------------------------------------------------------
 
-// A new home: the island or the taskbar (she goes into it).
+// A new home: the island, the taskbar, or the top bar and the dock (she goes into it).
 pub fn set_display(sh: &Arc<Shared>, display: &str) {
     if sh.setting("display").as_str() == Some(display) && !sh.flag("out") {
         return;
@@ -1709,6 +1711,8 @@ fn main() {
             settings::settings_agent,
             settings::settings_cpu_sensors,
             bars::bar_ready,
+            bars::dock_size,
+            bars::dock_thumbs,
             desk::desk_ready,
             desk::desk_shapes,
             desk::desk_hold,
@@ -1916,7 +1920,7 @@ fn main() {
                 // desk.rs), the looks are someone's at once, not a turn later.
                 let quiet = pointer.check_quiet();
                 let wait = match at {
-                    (Some(her), Some(home)) => pet::poll(&pointer, her).min(island::poll(&pointer, home)).min(desk::poll(&pointer, home)),
+                    (Some(her), Some(home)) => pet::poll(&pointer, her).min(island::poll(&pointer, home)).min(desk::poll(&pointer, home)).min(bars::poll(&pointer, home)),
                     _ => 200,
                 };
                 let wait = if quiet { wait.max(1000) } else { wait };
@@ -2051,6 +2055,8 @@ fn main() {
                 watcher.look_fullscreen(asked);
                 island::look_over_max(&watcher);
                 island::look_under(&watcher);
+                // The dock out of the way of a window touching it (bars.rs).
+                bars::look_under(&watcher);
             });
 
             // Endings held for a while; prompts out of time; sessions gone

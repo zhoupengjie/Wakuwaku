@@ -904,6 +904,11 @@ mod imp {
         tell_all();
     }
 
+    // The programs with an icon in her tray (their processes).
+    pub fn holders() -> Vec<u32> {
+        ICONS.lock().unwrap().iter().map(|i| i.pid).filter(|&p| p != 0).collect()
+    }
+
     pub fn place(rect: (i32, i32, i32, i32)) {
         let ours = OURS.load(Ordering::SeqCst);
         if ours != 0 {
@@ -1462,6 +1467,9 @@ mod imp {
         false
     }
     pub fn place(_rect: (i32, i32, i32, i32)) {}
+    pub fn holders() -> Vec<u32> {
+        Vec::new()
+    }
     pub fn first() -> bool {
         false
     }
@@ -1494,7 +1502,7 @@ mod imp {
 }
 
 #[allow(unused_imports)]
-pub use imp::{aside, ask_again, describe, first, handed_back, keep_first, notes, place, scan_held, seen, set_aside, set_rects, shown, start, stop, sweep, tell};
+pub use imp::{aside, ask_again, describe, first, handed_back, holders, keep_first, notes, place, scan_held, seen, set_aside, set_rects, shown, start, stop, sweep, tell};
 
 #[cfg(test)]
 mod tests {

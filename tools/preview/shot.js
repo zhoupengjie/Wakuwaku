@@ -24,7 +24,8 @@
   Object.assign(wall.style, { left: `${-vx}px`, top: `${-vy}px`, width: `${SW}px`, height: `${SH}px`, backgroundImage: `url("${Q.get('wall') || 'assets/wall.jpg'}")` })
 
   // The pages and their windows: the shot's own, or the desktop's and her home's.
-  const pages = shot.page === 'screen' ? [['desk', S.WINDOWS.desk], ['island', S.homeWindowOf(shot)]] : [[shot.page, S.windowOf(shot)]]
+  // Split, the dock's too, at the foot (bars.rs).
+  const pages = shot.page === 'screen' ? [['desk', S.WINDOWS.desk], ['island', S.homeWindowOf(shot)], ...(shot.split ? [['bar', S.WINDOWS.dock]] : [])] : [[shot.page, S.windowOf(shot)]]
   const frames = pages.map(([role, [wx, wy, ww, wh]]) => {
     const frame = document.createElement('iframe')
     Object.assign(frame.style, { left: `${wx - vx}px`, top: `${wy - vy}px`, width: `${ww}px`, height: `${wh}px` })

@@ -5,6 +5,8 @@
 // the market on its kind; and the examples as the market's check takes them.
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
+const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 
 const A = require('../src/pet/addonui')
@@ -113,13 +115,23 @@ test('every word of the packs is there, in both languages', () => {
   }
 })
 
-test('the example wallpaper pack passes the market’s check, small, its pictures at its top', () => {
-  const r = pkg.read(path.join(__dirname, '..', 'examples', 'packs', 'wallpaper-sample'), { market: false })
-  assert.deepEqual(r.errors, [])
-  assert.deepEqual(r.warnings.map(w => w.code), [])
-  assert.equal(r.kind, 'wallpaper')
-  const pictures = r.files.filter(f => /\.(png|jpe?g|webp)$/.test(f.path) && !f.path.startsWith('preview.'))
-  assert.ok(pictures.length >= 2 && pictures.every(f => !f.path.includes('/')), 'two or more, at its top')
-  assert.ok(r.unpacked <= 200 * 1024, `${r.unpacked} bytes in all`)
-  assert.ok(pkg.previewOf(r)?.startsWith('data:image/png;base64,'), 'its preview, inlined')
+// A wallpaper pack as one is made (the repository keeps no example of one
+// since 2026-11-02): pictures at its top and a preview, as the market takes it.
+test('a wallpaper pack passes the market’s check, its pictures at its top', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wk-pack-'))
+  const png = Buffer.from('\x89PNG\r\n\x1a\n....', 'latin1')
+  const manifest = { id: 'three-skies', kind: 'wallpaper', name: { en: 'Three skies', zh: '三种天色' }, description: { en: 'Dusk, a lake and an aurora', zh: '黄昏、湖和极光' }, version: '1.0.0', author: 'wakuwaku' }
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest))
+  for (const f of ['dusk.png', 'lake.png', 'aurora.png', 'preview.png']) fs.writeFileSync(path.join(dir, f), png)
+  try {
+    const r = pkg.read(dir, { market: false })
+    assert.deepEqual(r.errors, [])
+    assert.deepEqual(r.warnings.map(w => w.code), [])
+    assert.equal(r.kind, 'wallpaper')
+    const pictures = r.files.filter(f => /\.(png|jpe?g|webp)$/.test(f.path) && !f.path.startsWith('preview.'))
+    assert.ok(pictures.length === 3 && pictures.every(f => !f.path.includes('/')), 'three, at its top')
+    assert.ok(pkg.previewOf(r)?.startsWith('data:image/png;base64,'), 'its preview, inlined')
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
 })

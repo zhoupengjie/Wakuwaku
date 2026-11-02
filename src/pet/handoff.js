@@ -156,10 +156,9 @@
   }
 
   // Parts drawn after the dust has set out (the programs' buttons come a
-  // moment after the taskbar is taken: sooner than that along the top or a
-  // side, with no picture to wait for, they came with none and just
-  // appeared): dust of their own, gathering from the screen's side, each
-  // coming as its dust lands.
+  // moment after the taskbar is taken, the tray's icons later): they come
+  // in as the rest did, no dust of their own. Each had a burst of its own,
+  // and the start looked as if it came in batches (the user, 2026-11-02).
   let late = null
   // When the last of it lands (performance.now()).
   let lateEnd = 0
@@ -170,13 +169,36 @@
     if (!bar) return
     late = new MutationObserver(records => {
       const fresh = records.flatMap(r => [...r.addedNodes]).filter(n => n.nodeType === 1 && n.matches(PARTS) && n.getClientRects().length)
-      const to = fresh.flatMap(el => pointsOn(el, 16))
-      if (!to.length) return
-      const lands = settle(to.map(() => ({ ...awayFromStrip(), c: GLINTS[(Math.random() * GLINTS.length) | 0] })), to, false)
-      for (const el of fresh) comeAt(el, lands.get(el) ?? SETTLE_MS)
-      lateEnd = Math.max(lateEnd, performance.now() + Math.max(SETTLE_MS + 250, ...lands.values()))
+      for (const el of fresh) comeAt(el, 160)
     })
     late.observe(bar, { childList: true, subtree: true })
+  }
+
+  // Her parts in by now: none come for SETTLED_MS (the programs' buttons,
+  // the tray's icons, the monitor's readings), or SETTLED_MOST_MS gone.
+  const SETTLED_MS = 250
+  const SETTLED_MOST_MS = 1000
+  function settled() {
+    return new Promise(resolve => {
+      const bar = document.getElementById('bar-rest')
+      const fresh = records => records.some(r => [...r.addedNodes].some(n => n.nodeType === 1 && (n.matches(PARTS) || !!n.querySelector?.(PARTS))))
+      const done = () => {
+        clearTimeout(quietly)
+        clearTimeout(most)
+        watch?.disconnect()
+        resolve()
+      }
+      let quietly = setTimeout(done, SETTLED_MS)
+      const most = setTimeout(done, SETTLED_MOST_MS)
+      const watch =
+        bar &&
+        new MutationObserver(records => {
+          if (!fresh(records)) return
+          clearTimeout(quietly)
+          quietly = setTimeout(done, SETTLED_MS)
+        })
+      watch?.observe(bar, { childList: true, subtree: true })
+    })
   }
 
   // A part coming as its dust lands (hidden till then).
@@ -344,17 +366,25 @@
       return pet.taskbar.handoff('covered')
     }
     if (next === 'go') {
-      step++
-      // Hers shows now, its parts each waiting for their dust (arrive).
-      unhide()
+      const mine = ++step
       if (quiet()) {
+        unhide()
         drop()
         return pet.taskbar.handoff('done')
       }
-      const to = partsPoints(MOST)
-      if (picture) return arrive(settle(crumble(), to))
+      // Hers shows now, its parts each waiting for their dust (arrive).
+      if (picture) {
+        unhide()
+        return arrive(settle(crumble(), partsPoints(MOST)))
+      }
       // Nothing to crumble (no picture; a strip along another edge than
-      // Windows' own): the dust gathers from the screen's side of the strip.
+      // Windows' own, the top bar): nothing covered meanwhile, so the dust
+      // waits for her parts to be in, and gathers from the screen's side of
+      // the strip into all of them at once.
+      await settled()
+      if (mine !== step) return
+      unhide()
+      const to = partsPoints(MOST)
       const from = to.map(() => ({ ...awayFromStrip(), c: GLINTS[(Math.random() * GLINTS.length) | 0] }))
       return arrive(settle(from, to, false))
     }

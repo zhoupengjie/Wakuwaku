@@ -290,6 +290,11 @@ mod imp {
         KEEP_ROOM.store(keep, Ordering::SeqCst);
     }
 
+    // Whether it keeps it, as last set (keep_room).
+    pub fn kept_room() -> bool {
+        KEEP_ROOM.load(Ordering::SeqCst)
+    }
+
     // Windows' taskbar put away on every display: hers is the taskbar while
     // she is up, on her display alone or on all of them (taskbarDisplays). A
     // display without hers has none at all, as with Windows' own "show my
@@ -484,6 +489,9 @@ mod imp {
     }
     pub fn rehide() {}
     pub fn keep_room(_keep: bool) {}
+    pub fn kept_room() -> bool {
+        true
+    }
     pub fn room(_mon: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
         None
     }
@@ -515,7 +523,7 @@ mod imp {
     }
 }
 
-pub use imp::{desktop_up, explorer_pid, explorer_tray, guard, hide, keep_room, lone_win, recover, rehide, restore, room, running_for, show_bars, shown_room, spawn_guard, started, taskbar_created, taskbars, visible};
+pub use imp::{desktop_up, explorer_pid, explorer_tray, guard, hide, keep_room, kept_room, lone_win, recover, rehide, restore, room, running_for, show_bars, shown_room, spawn_guard, started, taskbar_created, taskbars, visible};
 
 // The shell's windows Win pressed alone may go by, none of them hers
 // (zhoupengjie/Wakuwaku#54, where it opened no Start after she was quit,

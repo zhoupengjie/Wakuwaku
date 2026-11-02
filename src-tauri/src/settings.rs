@@ -567,7 +567,8 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         // Crash reports sent by themselves, never, or asked about (crash.rs).
         "crashReports" => matches!(v.as_str(), Some("auto" | "off" | "ask")),
         // The taskbar home stands in for Windows' own: elsewhere, only the island.
-        "display" => v.as_str() == Some("island") || (cfg!(windows) && v.as_str() == Some("taskbar")),
+        // The top bar and the dock (split) stand in for Windows' taskbar too.
+        "display" => v.as_str() == Some("island") || (cfg!(windows) && matches!(v.as_str(), Some("taskbar" | "split"))),
         "islandWidth" => matches!(v.as_str(), Some("narrow" | "normal" | "wide")),
         // Where her island sits at the top of the screen (anchor.js, #59).
         "islandPos" => is_island_pos(v),
@@ -578,6 +579,13 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "taskbarButtons" => matches!(v.as_str(), Some("icons" | "labels")),
         "taskbarAlign" => matches!(v.as_str(), Some("center" | "left")),
         "taskbarEdge" => matches!(v.as_str(), Some("bottom" | "top" | "left" | "right")),
+        // The top bar and the dock (display split,
+        // docs/design/specs/dock-topbar.md): the top bar's thickness, the
+        // dock out of the way of windows or kept in the room Windows' own
+        // keeps, quick settings and the clock in the top bar or the dock.
+        "splitBar" => matches!(v.as_u64(), Some(32 | 48)),
+        "splitDock" => matches!(v.as_str(), Some("hide" | "room")),
+        "splitKeys" => matches!(v.as_str(), Some("top" | "dock")),
         "taskbarDisplays" => matches!(v.as_str(), Some("main" | "all")),
         // The taskbar's parts in three runs (island.js tbLayout), each once.
         "taskbarLayout" => v.is_null() || is_taskbar_layout(v),

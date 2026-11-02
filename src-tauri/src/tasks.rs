@@ -31,6 +31,18 @@ pub struct Keys {
 // one on its display; and (look_under) one under it.
 pub use imp::{maximized, maximized_on, reaches_into};
 
+// Another program's window as a top bar of hers may have to keep it off
+// itself (taskbar.rs keep_under_bar; its frame as seen: frame): its
+// program (pid, file name), its window's rect (left, top, right, bottom), and
+// whether it is a tool window popped up (not a menu, a tip, an IME's), as a
+// notification's is; Windows' own flyouts (is_shell_flyout) by their program.
+pub struct Popup {
+    pub pid: u32,
+    pub program: String,
+    pub rect: (i32, i32, i32, i32),
+    pub tool: bool,
+}
+
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
@@ -1594,6 +1606,40 @@ mod imp {
         ["startmenuexperiencehost.exe", "searchhost.exe", "shellexperiencehost.exe", "shellhost.exe"].contains(&name.as_str())
     }
 
+    // A window's frame as it is seen (left, top, right, bottom), while it is
+    // shown and not minimized: a cheap first look (popup_of asks its program).
+    pub fn frame(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+        let h = hwnd as Hwnd;
+        // SAFETY: plain queries about a window; a gone one answers nothing.
+        if unsafe { IsWindowVisible(h) == 0 || IsIconic(h) != 0 } {
+            return None;
+        }
+        let f = frame_of(h);
+        Some((f.left, f.top, f.right, f.bottom))
+    }
+
+    // A window shown, not minimized, not a child: as a Popup (above).
+    pub fn popup_of(hwnd: isize) -> Option<super::Popup> {
+        const GWL_STYLE: i32 = -16;
+        const WS_CHILD: isize = 0x4000_0000;
+        let h = hwnd as Hwnd;
+        // SAFETY: plain queries about a window; a gone one answers nothing.
+        let (style, ex) = unsafe {
+            if IsWindowVisible(h) == 0 || IsIconic(h) != 0 {
+                return None;
+            }
+            (GetWindowLongPtrW(h, GWL_STYLE), GetWindowLongPtrW(h, GWL_EXSTYLE))
+        };
+        if style & WS_CHILD != 0 {
+            return None;
+        }
+        let class = class_of(h);
+        let tool = ex & WS_EX_TOOLWINDOW != 0 && !["#32768", "tooltips_class32", "SysShadow"].contains(&class.as_str()) && !class.contains("IME");
+        let pid = pid_of(h);
+        let r = rect_of(h);
+        Some(super::Popup { pid, program: file_name(&path_of(pid)), rect: (r.left, r.top, r.right, r.bottom), tool })
+    }
+
     // Windows' search, in front (taskbar.rs open: pressed again, it closes).
     pub fn is_search(hwnd: isize) -> bool {
         file_name(&path_of(pid_of(hwnd as Hwnd))).eq_ignore_ascii_case("searchhost.exe")
@@ -1642,6 +1688,12 @@ mod imp {
         "other"
     }
     pub fn wifi_bars() -> Option<u8> {
+        None
+    }
+    pub fn popup_of(_hwnd: isize) -> Option<super::Popup> {
+        None
+    }
+    pub fn frame(_hwnd: isize) -> Option<(i32, i32, i32, i32)> {
         None
     }
     pub fn is_shell_flyout(_hwnd: isize) -> bool {
@@ -1746,7 +1798,7 @@ mod imp {
     }
 }
 
-pub use imp::{alive, app_id, app_name, process_app_id, close, cover, covered, is_topmost, destroy_icon, file_icon, front, icon_of, in_use, ime_native, is_ours, is_desktop, is_search, is_shell_flyout, is_start, is_task_window, keys_cheap, keys_held, launch, launch_as_admin, list, net, wifi_bars, dwm_flush, no_transitions, plain_program_icon, press, press_all, raise_own, raise_top, shift_down, title, toggle_native, under_desktop, window_menu, with_com, end_task, launch_with, launch_as_admin_with};
+pub use imp::{alive, app_id, app_name, process_app_id, close, cover, covered, is_topmost, destroy_icon, file_icon, front, icon_of, in_use, ime_native, is_ours, is_desktop, is_search, is_shell_flyout, is_start, frame, popup_of, is_task_window, keys_cheap, keys_held, launch, launch_as_admin, list, net, wifi_bars, dwm_flush, no_transitions, plain_program_icon, press, press_all, raise_own, raise_top, shift_down, title, toggle_native, under_desktop, window_menu, with_com, end_task, launch_with, launch_as_admin_with};
 
 #[cfg(test)]
 mod tests {

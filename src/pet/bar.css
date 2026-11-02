@@ -571,3 +571,219 @@ body {
     opacity: 0;
   }
 }
+
+/* --- The dock (split: bar.js isDock; docs/design/specs/dock-topbar.md §4) ------------
+   Start and the programs in a piece of glass, its window (44 high, 2 px off
+   the foot, as wide as what is in it: bars.rs dock_size; in the middle of
+   it, should it be wider for a moment or in the preview). Windows' acrylic
+   on the window itself (b-acrylic, bars.rs refresh): what is behind it,
+   the windows too, blurred through a tint; without it (transparency effects
+   off) the desktop's picture as the strip's Mica (mica.js); or solid. Its
+   corners DWM's round ones (8 px); a hairline round it and a light along
+   its top. Out of the way, its window slides down but for its top (bars.rs
+   slide). No show-the-desktop sliver, no lead; the clock and quick settings
+   after a line only if set so (b-keys). */
+.b-dock #bar {
+  inset: 0 auto 0 50%;
+  width: max-content;
+  transform: translateX(-50%);
+  padding: 0 6px;
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.b-dock.b-acrylic #bar {
+  background: rgba(32, 32, 32, 0.4);
+}
+
+.b-dock.b-acrylic.b-light #bar {
+  background: rgba(243, 243, 243, 0.5);
+}
+
+.b-dock.b-acrylic #mica {
+  display: none;
+}
+
+.b-dock.b-light #bar {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.b-dock.b-black #bar {
+  background: #1c1c1c;
+}
+
+.b-dock.b-light.b-black #bar {
+  background: #f3f3f3;
+}
+
+.b-dock #mica {
+  inset: 0 auto 0 50%;
+  width: var(--dock-w, 100%);
+  border-radius: 8px;
+  transform: translateX(-50%);
+}
+
+.b-dock #apps {
+  flex: none;
+  gap: 2px;
+}
+
+.b-dock #wins {
+  gap: 2px;
+}
+
+.b-dock .win {
+  width: 40px;
+}
+
+.b-dock #lead,
+.b-dock .desk {
+  display: none;
+}
+
+.b-dock #end {
+  display: none;
+}
+
+.b-dock.b-keys #end {
+  display: flex;
+  gap: 2px;
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  align-self: center;
+  height: 24px;
+  overflow: visible;
+}
+
+.b-dock.b-light.b-keys #end {
+  border-left-color: rgba(0, 0, 0, 0.1);
+}
+
+.b-dock.b-keys #end > * {
+  align-self: center;
+}
+
+/* Windows' Start menu open: Start lit, as on the main taskbar. */
+.b-dock .start.open {
+  background: rgba(255, 255, 255, 0.17);
+}
+
+.b-dock.b-light .start.open {
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Quick settings in it (b-keys): the network and the volume in Windows'
+   own icon font, the faint arcs and waves under the solid ones, as the
+   main taskbar's button (style.css #bar-rest .tquick). */
+.quick[hidden] {
+  display: none;
+}
+
+.quick {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.quick:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.b-light .quick:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.quick .fi {
+  position: relative;
+  display: block;
+  font: normal 16px/1 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+}
+
+.quick .fi .back {
+  opacity: 0.35;
+}
+
+.quick .net .back:not([hidden]) + .front,
+.quick .vol .front {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.quick .vol .back[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
+/* After the programs, as macOS has them: the windows minimized into it (a
+   room for each one's live picture, which Windows draws there, and its
+   program's icon at its corner) and the Recycle Bin, each after a line. */
+.dsep {
+  display: none;
+  flex: none;
+  align-self: center;
+  width: 1px;
+  height: 24px;
+  margin: 0 6px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.b-light .dsep {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.b-dock .dsep:not([hidden]) {
+  display: block;
+}
+
+#mins {
+  display: none;
+}
+
+.b-dock #mins {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.b-dock .mini {
+  width: 60px;
+  overflow: hidden;
+}
+
+.mini .room {
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 40px;
+  height: 28px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.b-light .mini .room {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.mini .badge {
+  position: absolute;
+  right: 2px;
+  bottom: 3px;
+  width: 16px;
+  height: 16px;
+}
+
+.bin[hidden] {
+  display: none;
+}

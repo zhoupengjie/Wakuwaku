@@ -625,7 +625,7 @@ impl Shared {
 
     pub fn change(self: &Arc<Self>, patch: Value) {
         let Value::Object(patch) = patch else { return };
-        let touches_visibility = ["dnd", "display", "out", "hideInFullscreen", "taskbarEdge", "taskbarDisplays"].iter().any(|k| patch.contains_key(*k));
+        let touches_visibility = ["dnd", "display", "out", "hideInFullscreen", "taskbarEdge", "taskbarDisplays", "splitBar", "splitDock"].iter().any(|k| patch.contains_key(*k));
         let touches_top = ["settingsPin", "settingsTop"].iter().any(|k| patch.contains_key(*k));
         let touches_monitor = ["monitor", "monitorSource", "widgetsOff"].iter().any(|k| patch.contains_key(*k));
         let touches_stow = patch.contains_key("islandHideUnder");
@@ -1709,6 +1709,7 @@ fn main() {
             settings::settings_agent,
             settings::settings_cpu_sensors,
             bars::bar_ready,
+            bars::dock_size,
             desk::desk_ready,
             desk::desk_shapes,
             desk::desk_hold,
@@ -1916,7 +1917,7 @@ fn main() {
                 // desk.rs), the looks are someone's at once, not a turn later.
                 let quiet = pointer.check_quiet();
                 let wait = match at {
-                    (Some(her), Some(home)) => pet::poll(&pointer, her).min(island::poll(&pointer, home)).min(desk::poll(&pointer, home)),
+                    (Some(her), Some(home)) => pet::poll(&pointer, her).min(island::poll(&pointer, home)).min(desk::poll(&pointer, home)).min(bars::poll(&pointer, home)),
                     _ => 200,
                 };
                 let wait = if quiet { wait.max(1000) } else { wait };
@@ -2051,6 +2052,8 @@ fn main() {
                 watcher.look_fullscreen(asked);
                 island::look_over_max(&watcher);
                 island::look_under(&watcher);
+                // The dock out of the way of a window touching it (bars.rs).
+                bars::look_under(&watcher);
             });
 
             // Endings held for a while; prompts out of time; sessions gone

@@ -577,7 +577,15 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "taskbarClearWhen" => matches!(v.as_str(), Some("mica" | "solid" | "always")),
         "taskbarButtons" => matches!(v.as_str(), Some("icons" | "labels")),
         "taskbarAlign" => matches!(v.as_str(), Some("center" | "left")),
-        "taskbarEdge" => matches!(v.as_str(), Some("bottom" | "top" | "left" | "right")),
+        // Along an edge, or split in two (split: a top bar and a dock at the
+        // foot, docs/design/specs/dock-topbar.md).
+        "taskbarEdge" => matches!(v.as_str(), Some("bottom" | "top" | "left" | "right" | "split")),
+        // Split: the top bar's thickness, the dock out of the way of windows
+        // or kept in the room Windows' own keeps, quick settings and the
+        // clock in the top bar or the dock.
+        "splitBar" => matches!(v.as_u64(), Some(32 | 48)),
+        "splitDock" => matches!(v.as_str(), Some("hide" | "room")),
+        "splitKeys" => matches!(v.as_str(), Some("top" | "dock")),
         "taskbarDisplays" => matches!(v.as_str(), Some("main" | "all")),
         // The taskbar's parts in three runs (island.js tbLayout), each once.
         "taskbarLayout" => v.is_null() || is_taskbar_layout(v),

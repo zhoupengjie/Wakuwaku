@@ -636,7 +636,25 @@
 
   // The taskbar's layout (island.js tbLayout): a preset, or one dragged
   // into shape on the strip itself (the button: the settings close for it).
+  // Split in two (taskbarEdge split, docs/design/specs/dock-topbar.md): the
+  // top bar's thickness, the dock out of the way of windows or in the room
+  // Windows' own keeps, quick settings and the clock in the top bar or the dock.
+  function splitRows() {
+    const s = snap.settings
+    if (s.taskbarEdge !== 'split') return ''
+    const bar = s.splitBar === 48 ? 48 : 32
+    const dock = s.splitDock === 'room' ? 'room' : 'hide'
+    const keys = s.splitKeys === 'dock' ? 'dock' : 'top'
+    return (
+      row(esc(T('s.splitBar')), esc(T('s.splitBarNote')), seg('splitBar', [32, 48].map(h => [h, T('s.splitBar.px', { n: h })]), bar)) +
+      row(esc(T('s.splitDock')), esc(T(`s.splitDockNote.${dock}`)), seg('splitDock', ['hide', 'room'].map(d => [d, T(`s.splitDock.${d}`)]), dock)) +
+      row(esc(T('s.splitKeys')), esc(T(`s.splitKeysNote.${keys}`)), seg('splitKeys', ['top', 'dock'].map(k => [k, T(`s.splitKeys.${k}`)]), keys))
+    )
+  }
+
   function layoutRow() {
+    // The top bar (split): no presets, its own default (island.js SPLIT_PRESET); edited as ever.
+    if (snap.settings.taskbarEdge === 'split') return row(esc(T('s.taskbarLayout')), esc(T('s.layoutSplit')), `<button class="pbtn sm" data-tb-edit>${esc(T('s.layoutEdit'))}</button>`)
     const preset = window.Island?.tbPreset?.() || 'win11'
     const presets = ['win11', 'left', 'herRight'].map(p => [p, T(`s.layout.${p}`)])
     const note = T(preset === 'custom' ? 's.layoutCustom' : 's.layoutNote')
@@ -678,7 +696,7 @@
         <div class="mode${s.display === 'taskbar' ? '' : ' on'}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div></div>
         <div class="mode${s.display === 'taskbar' ? ' on' : ''}" data-mode="taskbar"><div class="pv"><s></s></div><div class="l"><span class="rd"></span>${esc(T('s.displayTaskbar'))}</div></div>
       </div>
-      ${s.display === 'taskbar' ? `<div class="grp"><div class="note">${esc(T('s.taskbarNote'))}</div></div><div class="grp">${row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${['left', 'right'].includes(s.taskbarEdge) ? row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
+      ${s.display === 'taskbar' ? `<div class="grp"><div class="note">${esc(T('s.taskbarNote'))}</div></div><div class="grp">${row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right', 'split'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${splitRows()}${displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${['left', 'right', 'split'].includes(s.taskbarEdge) ? row(esc(T('s.taskbarButtons')), esc(T(s.taskbarEdge === 'split' ? 's.taskbarButtonsDock' : 's.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
       ${part('place', '')}<div class="grp">${islandPosRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${s.display === 'taskbar' || window.pet.mac ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${s.display === 'taskbar' ? '' : ilookRow()}</div>
       ${pageWindows()}
       ${sec(T('s.her'))}<div class="grp">
@@ -3915,7 +3933,7 @@
         gallery.items = []
         return loadGallery(false)
       }
-      const value = ['lang', 'monitorSource', 'islandPos', 'islandWidth', 'taskbarMaterial', 'taskbarClearWhen', 'taskbarButtons', 'taskbarAlign', 'taskbarEdge', 'taskbarDisplays', 'mailAgent', 'mailOffline', 'updateFrom', 'endCue'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
+      const value = ['lang', 'monitorSource', 'islandPos', 'islandWidth', 'taskbarMaterial', 'taskbarClearWhen', 'taskbarButtons', 'taskbarAlign', 'taskbarEdge', 'taskbarDisplays', 'splitDock', 'splitKeys', 'mailAgent', 'mailOffline', 'updateFrom', 'endCue'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
       return patch({ [key]: value })
     }
     const tile = at('[data-tile]')

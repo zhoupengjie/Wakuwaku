@@ -11,6 +11,12 @@
 // (shell.rs rehide), and their work areas whole (keep_work).
 // Not while her home is the island, nor while her taskbar is not up; an
 // app full screen on a display hides that display's alone.
+// Split (island.rs is_split, docs/design/specs/dock-topbar.md): one on her
+// display too, the dock: Start and the programs at the foot of the screen,
+// her strip the top bar. A window of its own (dock-1, ...) as wide as its
+// page asks (dock_size), in the middle of the foot as high as Windows'
+// room there; in that room (splitDock room), or keeping none and stepping
+// out of the way of a window touching it (hide: look_under, poll).
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -45,7 +51,41 @@ struct Bar {
     work_at: Option<Instant>,
     // Its page's zoom as set last (fit_zoom).
     zoom: f64,
+    // The dock on her display (split), not a strip on another; how wide its
+    // page asks it to be (its px, and their scale), and whether a window of
+    // the programs on it flashes for attention (refresh).
+    dock: bool,
+    asked: Option<(f64, f64)>,
+    flashing: bool,
+    // The dock out of the way of a window touching it (stow_look).
+    stow: Stow,
 }
+
+// The dock out of the way of a window touching it (splitDock hide): a
+// window's frame reaching into it (under, look_under), it slides down off
+// the screen, a line left at the foot, and the pointer goes through to the
+// window; the pointer resting at the foot of the screen calls it up
+// (called), and it goes again once the pointer has been off it a while.
+#[derive(Default)]
+struct Stow {
+    stowed: bool,
+    under: bool,
+    called: bool,
+    edge_since: Option<Instant>,
+    pressed: bool,
+    away_since: Option<Instant>,
+}
+
+// The dock: as high as Windows' room along the foot (logical), and its
+// glass in it 2 px off the foot (bar.css .b-dock).
+const DOCK_H: f64 = 48.0;
+// The pointer this close to the foot of the screen (logical), this long, no
+// button held meanwhile, calls it up (as her island at the top: island.rs
+// call_look); off it (and this much beside or above it) this long, it goes.
+const DOCK_EDGE_PX: f64 = 2.0;
+const DOCK_EDGE_MS: u128 = 350;
+const DOCK_BAND: f64 = 12.0;
+const DOCK_LEAVE_MS: u128 = 600;
 
 static BARS: Mutex<Vec<Bar>> = Mutex::new(Vec::new());
 
@@ -104,24 +144,48 @@ pub fn sync(sh: &Arc<Shared>) {
     let up = taskbar::is_up();
     let all = wanted(sh) && up;
     let home = island::display(sh);
-    let edge = island::edge(sh);
-    let want: Vec<Area> = if all { sh.screens().areas.into_iter().filter(|a| Some(a.mon) != home).collect() } else { Vec::new() };
+    // Split, the others' along the bottom (island.rs bars_edge).
+    let edge = island::bars_edge(sh);
+    let areas = sh.screens().areas;
+    // (display, the dock?): a strip on each of the others; split, the dock on hers.
+    let mut want: Vec<(Area, bool)> = if all { areas.iter().filter(|a| Some(a.mon) != home).map(|a| (*a, false)).collect() } else { Vec::new() };
+    if up && island::is_split(sh) {
+        want.extend(areas.iter().find(|a| Some(a.mon) == home).map(|a| (*a, true)));
+    }
     let (gone, made, moved) = {
         let mut bars = BARS.lock().unwrap();
         let mut gone = Vec::new();
         bars.retain(|b| {
-            let keep = want.iter().any(|a| a.mon == b.mon && a.sf == b.sf) && b.edge == edge;
+            let keep = want.iter().any(|(a, dock)| a.mon == b.mon && a.sf == b.sf && *dock == b.dock) && b.edge == edge;
             if !keep {
                 gone.push(Gone::of(b));
             }
             keep
         });
         let mut made = Vec::new();
-        for a in &want {
-            if !bars.iter().any(|b| b.mon == a.mon) {
-                let label = format!("bar-{}", NEXT.fetch_add(1, Ordering::SeqCst));
-                bars.push(Bar { label: label.clone(), mon: a.mon, sf: a.sf, edge, hwnd: 0, strip: None, ready: false, hidden: false, sent: Value::Null, paper: Value::Null, work_side: None, work_at: None, zoom: 1.0 });
-                made.push((label, *a));
+        for (a, dock) in &want {
+            if !bars.iter().any(|b| b.mon == a.mon && b.dock == *dock) {
+                let label = format!("{}-{}", if *dock { "dock" } else { "bar" }, NEXT.fetch_add(1, Ordering::SeqCst));
+                bars.push(Bar {
+                    label: label.clone(),
+                    mon: a.mon,
+                    sf: a.sf,
+                    edge,
+                    hwnd: 0,
+                    strip: None,
+                    ready: false,
+                    hidden: false,
+                    sent: Value::Null,
+                    paper: Value::Null,
+                    work_side: None,
+                    work_at: None,
+                    zoom: 1.0,
+                    dock: *dock,
+                    asked: None,
+                    flashing: false,
+                    stow: Stow::default(),
+                });
+                made.push((label, *a, *dock));
             }
         }
         let moved = gone.len() + made.len() > 0;
@@ -130,11 +194,11 @@ pub fn sync(sh: &Arc<Shared>) {
     for g in gone {
         close(sh, g);
     }
-    for (label, area) in made {
-        create(sh, label, area, edge);
+    for (label, area, dock) in made {
+        create(sh, label, area, edge, dock);
     }
     if moved {
-        sh.log(&format!("bars: {} on the other displays", BARS.lock().unwrap().len()));
+        sh.log(&format!("bars: {} on the other displays and as the dock", BARS.lock().unwrap().len()));
         // A list open over one gone goes with it.
         send_pop(sh);
     }
@@ -156,16 +220,18 @@ struct Gone {
     mon: Mon,
     edge: Edge,
     work_side: Option<i32>,
+    // The dock, which has no app bar.
+    dock: bool,
 }
 
 impl Gone {
     fn of(b: &Bar) -> Gone {
-        Gone { label: b.label.clone(), hwnd: b.hwnd, mon: b.mon, edge: b.edge, work_side: b.work_side }
+        Gone { label: b.label.clone(), hwnd: b.hwnd, mon: b.mon, edge: b.edge, work_side: b.work_side, dock: b.dock }
     }
 }
 
 fn close(sh: &Shared, g: Gone) {
-    if g.hwnd != 0 {
+    if g.hwnd != 0 && !g.dock {
         appbar::remove(g.hwnd);
     }
     if let Some(win) = window(sh, &g.label) {
@@ -189,7 +255,10 @@ pub fn keep_work(sh: &Shared) {
     let now = Instant::now();
     let due: Vec<(String, Mon, Edge, Mon)> = {
         let mut bars = BARS.lock().unwrap();
+        // The dock keeps no work area of its own: Windows' room along the
+        // foot is it, or none (it steps out of the way).
         bars.iter_mut()
+            .filter(|b| !b.dock)
             .filter_map(|b| {
                 let strip = b.strip?;
                 if b.work_at.is_some_and(|at| now.duration_since(at) < Duration::from_secs(2)) {
@@ -277,11 +346,12 @@ fn give_work(sh: &Shared, label: &str, mon: Mon, edge: Edge, side: i32) {
 // Its window made off the main thread (a menu click may be what asks, and
 // building there waits on itself), its strip asked of Windows along the
 // edge of its own display, as thick as hers at that display's scale.
-fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge) {
+fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
     let sh = sh.clone();
     std::thread::spawn(move || {
         let thick = (island::TASKBAR_H * area.sf).round() as i32;
-        let strip = edge.strip(area.mon, thick);
+        // The dock: in the middle of the foot, as wide as its page will ask (dock_size).
+        let strip = if dock { dock_rect(area.mon, area.sf, DOCK_H * 8.0) } else { edge.strip(area.mon, thick) };
         let built = WebviewWindowBuilder::new(&sh.app, &label, WebviewUrl::App("pet/bar.html".into()))
             .title("wakuwaku bar")
             .inner_size(strip.2 as f64 / area.sf, strip.3 as f64 / area.sf)
@@ -310,7 +380,8 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge) {
         let hwnd = 0;
         crate::tasks::no_transitions(hwnd);
         sh.own_window(&win);
-        let granted = if hwnd != 0 && appbar::register(hwnd) { appbar::place(hwnd, area.mon, edge, thick) } else { strip };
+        // The dock asks Windows for no room: Windows' own keeps it, or none is kept.
+        let granted = if dock { strip } else if hwnd != 0 && appbar::register(hwnd) { appbar::place(hwnd, area.mon, edge, thick) } else { strip };
         lay(&win, granted);
         // Zoomed before its page lays out (fit_zoom).
         let zoom = 1.0 / island::text_size(&sh);
@@ -329,7 +400,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge) {
         };
         // Taken away again while it was being made.
         if gone {
-            return close(&sh, Gone { label, hwnd, mon: area.mon, edge, work_side: None });
+            return close(&sh, Gone { label, hwnd, mon: area.mon, edge, work_side: None, dock });
         }
         let _ = win.show();
         let laid = match (win.outer_position(), win.outer_size()) {
@@ -354,6 +425,149 @@ fn lay(win: &WebviewWindow, rect: Mon) {
     let _ = win.set_position(PhysicalPosition::new(rect.0, rect.1));
     let _ = win.set_size(PhysicalSize::new(rect.2.max(1) as u32, rect.3.max(1) as u32));
     let _ = win.set_position(PhysicalPosition::new(rect.0, rect.1));
+}
+
+// --- The dock (split) -----------------------------------------------------------------
+
+// Its window (physical): w wide (physical, no narrower than it is high, no
+// wider than the display), DOCK_H high at sf, in the middle of the
+// display's foot.
+fn dock_rect(mon: Mon, sf: f64, w: f64) -> Mon {
+    let height = (DOCK_H * sf).round() as i32;
+    let width = (w.round() as i32).clamp(height, mon.2.max(height));
+    (mon.0 + (mon.2 - width) / 2, mon.1 + mon.3 - height, width, height)
+}
+
+// Its page laid out: as wide as it asks (w, its px; dpr, their scale), laid
+// again in the middle of the foot, its wallpaper read for where it is now.
+#[tauri::command]
+pub fn dock_size(app: tauri::AppHandle, window: WebviewWindow, w: f64, dpr: Option<f64>) {
+    let sh = crate::shared(&app);
+    let laid = {
+        let mut bars = BARS.lock().unwrap();
+        let Some(b) = bars.iter_mut().find(|b| b.label == window.label() && b.dock) else { return };
+        let page_sf = page_scale(dpr, b.sf);
+        b.asked = Some((w, page_sf));
+        let rect = dock_rect(b.mon, b.sf, w * page_sf);
+        (b.strip != Some(rect)).then(|| {
+            b.strip = Some(rect);
+            rect
+        })
+    };
+    let Some(rect) = laid else { return };
+    lay(&window, rect);
+    sh.log(&format!("bars: the dock {} px wide, laid at {rect:?}", w.round()));
+    std::thread::spawn(move || read_papers(&sh));
+}
+
+// One look at the pointer (poll; physical) for the dock out of the way:
+// whether it is to be now, called up or let go as stow_look says. Returns
+// ms until the next look: sooner near the foot of the screen.
+pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
+    let hides = island::is_split(sh) && !island::dock_keeps_room(sh);
+    let held = OPEN.lock().unwrap().as_ref().map(|p| p.bar.clone());
+    let changed = {
+        let mut bars = BARS.lock().unwrap();
+        let Some(b) = bars.iter_mut().find(|b| b.dock && b.ready && !b.hidden) else { return 500 };
+        let Some(rect) = b.strip else { return 500 };
+        // Kept up while its list or menu is open, Windows' Start menu is, or
+        // a window of its programs flashes for attention.
+        let keep = !hides || held.as_deref() == Some(b.label.as_str()) || taskbar::start_open() || b.flashing;
+        let now = Instant::now();
+        let stowed = stow_look(&mut b.stow, rect, b.mon, b.sf, cursor, keep, now, || crate::pet::any_down().unwrap_or(false));
+        (stowed != b.stow.stowed).then(|| {
+            b.stow.stowed = stowed;
+            (b.label.clone(), stowed)
+        })
+    };
+    if let Some((label, stowed)) = changed {
+        sh.log(&format!("bars: the dock {}", if stowed { "out of the way of the window touching it" } else { "up" }));
+        if let Some(win) = window(sh, &label) {
+            // Out of the way, the pointer goes through it to the window.
+            let _ = win.set_ignore_cursor_events(stowed);
+        }
+        let _ = sh.app.emit_to(label.as_str(), "dock:stow", json!({ "stowed": stowed }));
+    }
+    let near = BARS.lock().unwrap().iter().find(|b| b.dock).is_some_and(|b| cursor.1 >= b.mon.1 + b.mon.3 - (60.0 * b.sf) as i32);
+    if hides && near { 100 } else { 300 }
+}
+
+// Out of the way or not, at one look: a window touching it (under), not
+// kept up (keep), not called up by the pointer resting at the display's
+// foot (cursor; mon, the display; sf its scale), or let go by it since.
+// down: whether a button is held, asked only at the foot.
+fn stow_look(s: &mut Stow, rect: Mon, mon: Mon, sf: f64, cursor: (i32, i32), keep: bool, now: Instant, down: impl FnOnce() -> bool) -> bool {
+    let px = |v: f64| (v * sf).round() as i32;
+    let on = |band: i32| cursor.0 >= rect.0 - band && cursor.0 < rect.0 + rect.2 + band && cursor.1 >= rect.1 - band && cursor.1 < rect.1 + rect.3;
+    if keep || !s.under {
+        s.called = false;
+        s.edge_since = None;
+        s.away_since = None;
+        s.pressed = false;
+        return false;
+    }
+    if s.called || (!s.stowed && on(0)) {
+        s.called = true;
+        if on(px(DOCK_BAND)) {
+            s.away_since = None;
+            return false;
+        }
+        if now.duration_since(*s.away_since.get_or_insert(now)).as_millis() < DOCK_LEAVE_MS {
+            return false;
+        }
+        s.called = false;
+        s.away_since = None;
+        return true;
+    }
+    let foot = mon.1 + mon.3;
+    let at_foot = cursor.0 >= mon.0 && cursor.0 < mon.0 + mon.2 && cursor.1 >= foot - px(DOCK_EDGE_PX).max(1) && cursor.1 < foot;
+    if !at_foot {
+        s.edge_since = None;
+        s.pressed = false;
+        return true;
+    }
+    s.pressed = s.pressed || down();
+    let since = *s.edge_since.get_or_insert(now);
+    if s.pressed || now.duration_since(since).as_millis() < DOCK_EDGE_MS {
+        return true;
+    }
+    s.called = true;
+    s.edge_since = None;
+    false
+}
+
+// A window touching the dock, or none now (with her island's look_under,
+// main.rs): kept for poll.
+pub fn look_under(sh: &Shared) {
+    let hides = island::is_split(sh) && !island::dock_keeps_room(sh);
+    let rect = BARS.lock().unwrap().iter().find(|b| b.dock && b.ready && !b.hidden).and_then(|b| b.strip);
+    // Kept as it was while nobody is about.
+    let Some(rect) = rect.filter(|_| !sh.is_quiet()) else { return };
+    let on = hides && crate::tasks::reaches_into(rect);
+    let mut bars = BARS.lock().unwrap();
+    if let Some(b) = bars.iter_mut().find(|b| b.dock) {
+        if std::mem::replace(&mut b.stow.under, on) != on {
+            sh.log(&format!("bars: {} the dock {rect:?}", if on { "a window touching" } else { "no window touching" }));
+        }
+    }
+}
+
+// The keyboard, the network and the volume as they change (taskbar.rs
+// keys_loop): told the dock, for quick settings in it (splitKeys dock).
+pub fn keys(sh: &Shared, now: &Value) {
+    let docks: Vec<String> = BARS.lock().unwrap().iter().filter(|b| b.dock && b.ready).map(|b| b.label.clone()).collect();
+    for label in docks {
+        let _ = sh.app.emit_to(label.as_str(), "dock:keys", now.clone());
+    }
+}
+
+// Windows' Start menu opened or closed (taskbar.rs start_seen): the dock's
+// Start button lit as it is open, the dock up meanwhile (poll).
+pub fn start_seen(sh: &Shared, open: bool) {
+    let docks: Vec<String> = BARS.lock().unwrap().iter().filter(|b| b.dock).map(|b| b.label.clone()).collect();
+    for label in docks {
+        let _ = sh.app.emit_to(label.as_str(), "dock:start", json!({ "open": open }));
+    }
 }
 
 // Its page has its listeners up: told what to show; its display's
@@ -441,7 +655,7 @@ pub fn bar_asks(app: tauri::AppHandle) {
 // One of them up on a display no app full screen covers: her capsule there
 // shows the prompts waiting (main.rs asks_seen).
 pub fn any_shown() -> bool {
-    BARS.lock().unwrap().iter().any(|b| b.ready && !b.hidden && b.strip.is_some())
+    BARS.lock().unwrap().iter().any(|b| b.ready && !b.hidden && b.strip.is_some() && !b.dock)
 }
 
 // An app full screen covering a display (or none): that display's taskbar
@@ -751,19 +965,33 @@ fn fills(all: &Value, mon: Mon) -> bool {
 // clear one fills in, light or dark and the accent, her island's look), her
 // language; the prompts waiting and her sheet, for her capsule.
 pub fn refresh(sh: &Shared) {
-    let bars: Vec<(String, Mon, f64, Value, Value)> = BARS.lock().unwrap().iter().filter(|b| b.ready).map(|b| (b.label.clone(), b.mon, b.sf, b.sent.clone(), b.paper.clone())).collect();
+    let bars: Vec<(String, Mon, f64, Value, Value, bool, bool)> =
+        BARS.lock().unwrap().iter().filter(|b| b.ready).map(|b| (b.label.clone(), b.mon, b.sf, b.sent.clone(), b.paper.clone(), b.dock, b.stow.stowed)).collect();
     if bars.is_empty() {
         return;
     }
     let all = taskbar::windows_now();
     let look = taskbar::look_value();
     let spread = spread();
-    let edge = island::edge(sh);
+    let edge = island::bars_edge(sh);
     let asks = waiting(&sh.asks.lock().unwrap().views());
     let pet = sh.setting("pet");
     let sprite = crate::data::pets(&sh.dir).into_iter().find(|p| Some(p.id.as_str()) == pet.as_str());
-    for (label, mon, sf, sent, paper) in bars {
+    // The dock's: the buttons of her strip, in its order (as Win+digit counts
+    // them, winkeys.rs ordered); whether a window of them flashes.
+    let order: Vec<String> = sh.setting("taskbarOrder").as_array().map(|o| o.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()).unwrap_or_default();
+    let docked = Value::Array(crate::winkeys::ordered(&for_main(sh, &all), &order));
+    let flashing = docked.as_array().into_iter().flatten().flat_map(|a| a["windows"].as_array().into_iter().flatten()).any(|w| w["flash"] == true);
+    for b in BARS.lock().unwrap().iter_mut().filter(|b| b.dock) {
+        b.flashing = flashing;
+    }
+    for (label, mon, sf, sent, paper, dock, stowed) in bars {
         let state = json!({
+            "dock": dock,
+            "stowed": stowed,
+            // Split: quick settings and the clock in the dock, or in the top bar (splitKeys).
+            "keys": dock && sh.setting("splitKeys").as_str() == Some("dock"),
+            "keysNow": if dock { taskbar::keys_now() } else { Value::Null },
             "edge": edge.word(),
             "align": sh.setting("taskbarAlign"),
             "material": sh.setting("taskbarMaterial"),
@@ -773,7 +1001,7 @@ pub fn refresh(sh: &Shared) {
             "islandLook": sh.setting("islandLook"),
             "lang": sh.lang(),
             "sf": sf,
-            "windows": buttons_for(&all, mon, false, spread),
+            "windows": if dock { docked.clone() } else { buttons_for(&all, mon, false, spread) },
             "asks": asks,
             "sprite": sprite.as_ref().map(|p| p.url()),
             "spriteVersion": sprite.as_ref().map_or(2, |p| p.version),
@@ -850,6 +1078,53 @@ mod tests {
         // Along a side: beside it, centred on the button up and down.
         assert_eq!(pop_rect(Edge::Left, (2560, 0, 72, 1080), mon, (2566, 500, 60, 66), (300, 200)), (2632, 433, 300, 200));
         assert_eq!(pop_rect(Edge::Right, (4408, 0, 72, 1080), mon, (4414, 500, 60, 66), (300, 200)), (4108, 433, 300, 200));
+    }
+
+    #[test]
+    fn the_dock_in_the_middle_of_the_foot() {
+        // 1920 x 1080 at 125%: 60 px high, as wide as asked.
+        let mon = (0, 0, 1920, 1080);
+        assert_eq!(dock_rect(mon, 1.25, 500.0), (710, 1020, 500, 60));
+        // Never narrower than high, never wider than the display.
+        assert_eq!(dock_rect(mon, 1.25, 10.0), (930, 1020, 60, 60));
+        assert_eq!(dock_rect(mon, 1.25, 5000.0), (0, 1020, 1920, 60));
+        // A display left of the main one.
+        assert_eq!(dock_rect((-1920, 0, 1920, 1080), 1.0, 400.0), (-1160, 1032, 400, 48));
+    }
+
+    #[test]
+    fn the_dock_steps_aside_and_is_called_back() {
+        let mon = (0, 0, 1920, 1080);
+        let rect = (710, 1020, 500, 60);
+        let t = Instant::now();
+        let ms = |n: u64| t + Duration::from_millis(n);
+        let mut s = Stow::default();
+        // No window touching it: up, wherever the pointer is.
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (100, 100), false, t, || false));
+        // One touching it, the pointer elsewhere: down.
+        s.under = true;
+        assert!(stow_look(&mut s, rect, mon, 1.25, (100, 100), false, t, || false));
+        s.stowed = true;
+        // Kept up (its list open, Start, a window flashing): up.
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (100, 100), true, t, || false));
+        // At the foot, anywhere along it: up once it has rested there 350 ms.
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, t, || false));
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(300), || false));
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(360), || false));
+        s.stowed = false;
+        // Then on it, or near it: up; off it, down 600 ms after.
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (900, 1040), false, ms(400), || false));
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (900, 1010), false, ms(500), || false));
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (900, 500), false, ms(600), || false));
+        assert!(stow_look(&mut s, rect, mon, 1.25, (900, 500), false, ms(1250), || false));
+        s.stowed = true;
+        // A button held at the foot (a window dragged down): not called up.
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(2000), || true));
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(3000), || false));
+        // Off the foot, the press forgotten: called up again by resting there.
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 900), false, ms(3100), || false));
+        assert!(stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(3200), || false));
+        assert!(!stow_look(&mut s, rect, mon, 1.25, (300, 1079), false, ms(3600), || false));
     }
 
     #[test]

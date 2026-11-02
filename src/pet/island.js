@@ -157,6 +157,12 @@
   // portrait in it.
   const TASKBAR_H = 48
   const TASKBAR_ROOM = 640
+  // Split in two (taskbarEdge split, docs/design/specs/dock-topbar.md), the
+  // top bar thinner unless set to 48 (splitBar; island.rs SLIM_H): her
+  // capsule in it 26 high, 3 off its edge, her portrait 20 (stripH).
+  const SLIM_H = 32
+  const SLIM_HEAD = 20
+  const SLIM_CAPSULE_Y = 3
   // The settings above the taskbar: clear of it, and room for their shadow.
   const TASKBAR_GAP = 8
   const TASKBAR_SHADE = 12
@@ -427,7 +433,15 @@
   // The screen's edge the taskbar is along (taskbarEdge): bottom, as
   // Windows' own, or top, left, right. Its look turns with it (style.css
   // tb-top, tb-left, tb-right).
-  const tbEdge = () => (home() === 'taskbar' && ['top', 'left', 'right'].includes(config.taskbarEdge) ? config.taskbarEdge : 'bottom')
+  const tbEdge = () => (isSplit() ? 'top' : home() === 'taskbar' && ['top', 'left', 'right'].includes(config.taskbarEdge) ? config.taskbarEdge : 'bottom')
+  // Split in two (taskbarEdge split): the strip is a top bar, Start and the
+  // programs in the dock at the foot (bars.rs, bar.js), not on it.
+  const isSplit = () => home() === 'taskbar' && config.taskbarEdge === 'split'
+  // The strip's thickness: Windows' own, or split, the top bar's (style.css tb-slim).
+  const stripH = () => (isSplit() && config.splitBar !== 48 ? SLIM_H : TASKBAR_H)
+  const isSlim = () => stripH() === SLIM_H
+  const taskHead = () => (isSlim() ? SLIM_HEAD : TASK_HEAD)
+  const capsuleY = () => (isSlim() ? SLIM_CAPSULE_Y : CAPSULE_Y)
   // Along the left or right of the screen: upright, its runs top, middle,
   // bottom, its buttons one above another.
   const isSide = () => tbEdge() === 'left' || tbEdge() === 'right'
@@ -451,7 +465,7 @@
     return { width, height: timed ? inset + TASK_HEAD + SIDE_CLOCK : width }
   }
   // The compact taskbar island's height: the strip's, or the capsule's.
-  const taskCompactH = () => (isCapsule() ? TASKBAR_H - 2 * CAPSULE_Y : TASKBAR_H)
+  const taskCompactH = () => (isCapsule() ? stripH() - 2 * capsuleY() : stripH())
   // In her seat: there is a pet to show, and she is not out on the desktop.
   const isHome = () => !!spriteUrl && (config.out !== true || isComingHome)
   const isAsking = () => isOn() && !panel.hidden
@@ -574,7 +588,7 @@
         clock.dataset.live = 'time'
         clock.style.color = hue()[now.mood]
       }
-      compact.replaceChildren(...(isHome() ? [] : [stillHer(TASK_HEAD)]), ...(hint || at ? [clock] : []))
+      compact.replaceChildren(...(isHome() ? [] : [stillHer(taskHead())]), ...(hint || at ? [clock] : []))
       compact.classList.toggle('bare', !(hint || at))
       compact.style.width = ''
       compact.title = hint ? t(lang, 'hint.tip', { list: toolNames() }) : Status.brief(lang, now, { detailed: isDetailed() })
@@ -992,9 +1006,9 @@
     }
     if (view === 'compact') {
       // At a Mac's screen top, in the middle of the band's height.
-      const [px, at] = home() === 'taskbar' ? [TASK_HEAD, (taskCompactH() - TASK_HEAD) / 2] : [HEAD, screenTop ? (screenTop.height - HEAD) / 2 : 6]
+      const [px, at] = home() === 'taskbar' ? [taskHead(), (taskCompactH() - taskHead()) / 2] : [HEAD, screenTop ? (screenTop.height - HEAD) / 2 : 6]
       const left = home() === 'taskbar' ? at : screenTop ? 10 : 6
-      if (home() === 'taskbar') portrait(TASK_HEAD, TASK_HEAD * PER_PX, at, at)
+      if (home() === 'taskbar') portrait(taskHead(), taskHead() * PER_PX, at, at)
       else portrait(HEAD, HEAD_SCALE, left, at)
       // The dot over her portrait's top-right, 2 px out; 1 px in on an
       // upright capsule, whose round top would cut it (the island clips).
@@ -1053,7 +1067,7 @@
 
   // The window with no extra room, by home: the taskbar is as wide as the
   // screen, with its room above.
-  const baseRoom = () => (home() === 'taskbar' ? { width: innerWidth, height: TASKBAR_H + TASKBAR_ROOM } : BASE)
+  const baseRoom = () => (home() === 'taskbar' ? { width: innerWidth, height: stripH() + TASKBAR_ROOM } : BASE)
 
   function roomFor(want) {
     // The taskbar: what grows up from it, or the settings standing above it,
@@ -1061,8 +1075,8 @@
     // is kept as high as the settings ever are, settingsMax).
     if (home() === 'taskbar' && isSide()) return null
     if (home() === 'taskbar') {
-      const height = want.height + TASKBAR_SHADE + (view === 'settings' ? TASKBAR_H + TASKBAR_GAP : isCapsule() ? CAPSULE_Y : 0)
-      if (height <= TASKBAR_H + TASKBAR_ROOM) return null
+      const height = want.height + TASKBAR_SHADE + (view === 'settings' ? stripH() + TASKBAR_GAP : isCapsule() ? capsuleY() : 0)
+      if (height <= stripH() + TASKBAR_ROOM) return null
       return { width: innerWidth, height }
     }
     const width = want.width + 48
@@ -1084,8 +1098,8 @@
       const at = parseFloat(document.documentElement.style.getPropertyValue('--isl-y')) || 0
       return innerHeight - at - TASKBAR_GAP - TASKBAR_SHADE
     }
-    const tall = Math.min(TASKBAR_H + TASKBAR_ROOM, (screen.height || Infinity) - TASKBAR_GAP)
-    return tall - TASKBAR_SHADE - (isCapsule() ? CAPSULE_Y : 0)
+    const tall = Math.min(stripH() + TASKBAR_ROOM, (screen.height || Infinity) - TASKBAR_GAP)
+    return tall - TASKBAR_SHADE - (isCapsule() ? capsuleY() : 0)
   }
 
   // Opened up from the strip, or closed (part: island, pops): opening when
@@ -1756,6 +1770,12 @@
     left: { left: ['her', 'start', 'apps'], center: [], right: TB_RIGHT },
     herRight: { left: ['start', 'apps'], center: [], right: [...TB_RIGHT, 'her'] },
   }
+  // Split, the top bar's: no Start, no programs (they are in the dock), her
+  // in the middle (docs/design/specs/dock-topbar.md §2); quick settings and
+  // the clock in the dock too if set so (splitKeys dock, bar.js).
+  const inDock = () => ['start', 'apps', ...(config.splitKeys === 'dock' ? ['quick', 'clock'] : [])]
+  const splitParts = () => TB_PARTS.filter(p => !inDock().includes(p))
+  const splitPreset = () => ({ left: [], center: ['her'], right: TB_RIGHT.filter(p => !inDock().includes(p)) })
   const herSlot = el('span', 'tslot')
   // The tray's icons and the marks of what uses the microphone, camera or
   // location: one part.
@@ -1780,7 +1800,21 @@
   // there as a widget is that part (widgets.js monitorAsPart).
   function tbLayout(saved = editLayout || config.taskbarLayout) {
     const base = saved && typeof saved === 'object' ? saved : config.taskbarAlign === 'left' ? TB_PRESETS.left : TB_PRESETS.win11
+    if (isSplit()) return Widgets.monitorAsPart(Widgets.layoutOf(splitOf(base), splitParts(), splitPreset(), TB_OPTIONAL))
     return Widgets.monitorAsPart(Widgets.layoutOf(base, TB_PARTS, TB_PRESETS.win11, TB_OPTIONAL))
+  }
+  // A layout for the top bar (split): Start and the programs (and quick
+  // settings and the clock, in the dock) left out. One
+  // kept for a strip along an edge (with them in it) that has her at its
+  // start and nothing else in the middle, as Windows 11's (the default),
+  // has her in the middle; one edited on the top bar is as it was left.
+  function splitOf(layout) {
+    const runs = ['left', 'center', 'right']
+    const forEdge = runs.some(k => Array.isArray(layout?.[k]) && layout[k].some(p => p === 'start' || p === 'apps'))
+    const run = k => (Array.isArray(layout?.[k]) ? layout[k] : []).filter(p => !inDock().includes(p))
+    const out = { left: run('left'), center: run('center'), right: run('right') }
+    if (forEdge && out.left[0] === 'her' && !out.center.length) out.center.push(out.left.shift())
+    return out
   }
   // Whether the strip has the monitor's part.
   const hasMonitorPart = (layout = tbLayout()) => Object.values(layout).some(run => run.includes('monitor'))
@@ -1808,7 +1842,8 @@
     }
     node._entry = e
     // Several in one place are medium (a side bar's: small).
-    if (Widgets.isSource(e) || Widgets.isGroup(e)) node.dataset.size = isSide() || (e.size === 'S' && !Widgets.isGroup(e)) ? 'S' : 'M'
+    // Along a side, and on the thin top bar (split), small.
+    if (Widgets.isSource(e) || Widgets.isGroup(e)) node.dataset.size = isSide() || isSlim() || (e.size === 'S' && !Widgets.isGroup(e)) ? 'S' : 'M'
     return node
   }
 
@@ -3944,7 +3979,7 @@
     body.classList.toggle('tb-clear-mica', clearMica)
     body.classList.toggle('tb-filled', isFilled())
     body.classList.toggle('tb-solid', isFilled() && clearWhen() === 'solid')
-    if (isMica() || clearMica) mica.set(paper, isSide() ? TASKBAR_H : innerWidth, isSide() ? innerHeight : TASKBAR_H, look.mode)
+    if (isMica() || clearMica) mica.set(paper, isSide() ? TASKBAR_H : innerWidth, isSide() ? innerHeight : stripH(), look.mode)
     else mica.clear()
     drawIslandLook()
     measureBackdrop()
@@ -4001,7 +4036,7 @@
   function measureBackdrop() {
     if (!isClear()) return
     const width = isSide() ? TASKBAR_H : innerWidth
-    const height = isSide() ? innerHeight : TASKBAR_H
+    const height = isSide() ? innerHeight : stripH()
     const key = JSON.stringify([paper, width, height])
     if (!paper || key === backdropKey) return
     backdropKey = key
@@ -4151,10 +4186,12 @@
   function tickClock() {
     const d = new Date()
     const time = d.toLocaleTimeString(lang === 'zh' ? 'zh-CN' : undefined, { hour: '2-digit', minute: '2-digit', second: look.seconds ? '2-digit' : undefined })
-    const date = d.toLocaleDateString(lang === 'zh' ? 'zh-CN' : undefined, isSide() ? { month: 'numeric', day: 'numeric' } : { year: 'numeric', month: 'numeric', day: 'numeric' })
+    // On the slim top bar one line, as a menu bar's: the date with its weekday, then the time.
+    const slim = isSlim()
+    const date = d.toLocaleDateString(lang === 'zh' ? 'zh-CN' : undefined, slim ? { month: 'long', day: 'numeric', weekday: 'short' } : isSide() ? { month: 'numeric', day: 'numeric' } : { year: 'numeric', month: 'numeric', day: 'numeric' })
     if (clockBox.dataset.at !== time + date) {
       clockBox.dataset.at = time + date
-      clockBox.replaceChildren(el('b', '', time), el('i', '', date))
+      clockBox.replaceChildren(...(slim ? [el('i', '', date), el('b', '', time)] : [el('b', '', time), el('i', '', date)]))
     }
     clockBox.classList.toggle('secs', look.seconds === true)
     // The tip each minute, not each second.
@@ -5019,6 +5056,9 @@
     seatPanel()
     body.classList.toggle('has-her', isHome())
     for (const e of ['top', 'left', 'right']) body.classList.toggle(`tb-${e}`, tbEdge() === e)
+    // Split: the top bar (no Start, no programs, no show-the-desktop sliver), thin or not (style.css).
+    body.classList.toggle('tb-split', isSplit())
+    body.classList.toggle('tb-slim', isSlim())
     body.classList.toggle('hinting', isHinting() && isHome())
     document.documentElement.style.setProperty('--hint-accent', hintAccent())
     drawNews()
@@ -5420,10 +5460,10 @@
   // Her portrait in the closed island (x, y, px across): her own, or her
   // still one while she is out.
   function avatarBox() {
-    if (isHome()) return { x: parseFloat(her.style.left) || 0, y: parseFloat(her.style.top) || 0, px: parseFloat(her.style.width) || TASK_HEAD }
+    if (isHome()) return { x: parseFloat(her.style.left) || 0, y: parseFloat(her.style.top) || 0, px: parseFloat(her.style.width) || taskHead() }
     const still = compact.querySelector('.still-her')
     if (still) return { x: still.offsetLeft, y: still.offsetTop, px: still.offsetWidth }
-    return { x: 9, y: 9, px: TASK_HEAD }
+    return { x: 9, y: 9, px: taskHead() }
   }
 
   // The dot over her portrait's top-right, as the hint's (placeHer): 2 px

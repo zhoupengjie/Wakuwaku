@@ -4230,6 +4230,91 @@ html.handoff-wait body.home-taskbar #island-row {
   transform: none;
 }
 
+/* --- The top bar, split in two (island.js isSplit; taskbarEdge split, tb-split) ----
+   Along the top as tb-top, without Start and the programs (in the dock at
+   the foot: bars.rs, bar.js) and without the show-the-desktop sliver
+   (docs/design/specs/dock-topbar.md). Thin unless set to 48 (tb-slim,
+   splitBar 32, §2): its buttons 28 high, her capsule 26 and 3 off its
+   edge with her portrait 20 (island.js SLIM_HEAD), the clock (its date
+   first) and the monitor on one line, the widgets small; what opens from
+   it 8 px under it. */
+.tb-split #bar-rest .tdesk {
+  display: none;
+}
+
+.tb-slim.home-taskbar #bar-rest {
+  height: 32px;
+}
+
+.tb-slim.home-taskbar #island-compact {
+  height: 32px;
+  font-size: 12px;
+}
+
+.tb-slim.home-taskbar.has-her #island-compact {
+  padding-left: 34px;
+}
+
+.tb-slim.home-taskbar.tb-capsule #island-compact {
+  height: 26px;
+}
+
+.tb-slim.home-taskbar.tb-capsule.has-her #island-compact {
+  padding-left: 31px;
+}
+
+.tb-slim.tb-top.home-taskbar.tb-capsule #island:not([data-view='settings']) {
+  top: 3px;
+}
+
+.tb-slim.tb-top.home-taskbar #island[data-view='settings'] {
+  top: 40px;
+}
+
+.tb-slim.tb-top #bar-rest :is(.tfly, .wpop, .wgpop, .wstk, .wmenu),
+.tb-slim.tb-top .tbtools {
+  top: 38px;
+}
+
+.tb-slim.tb-top .tbmark {
+  top: 2px;
+}
+
+.tb-slim.tb-top .tbedit {
+  top: 84px;
+}
+
+.tb-slim.tb-top .tblib {
+  top: 140px;
+}
+
+.tb-slim #bar-rest :is(.start, .tview, .ticon, .tchev, .tquick, .tclock, .tpriv .fi, .kbd .ime, .tw-widget, .tw-plugin, .tw-group),
+.tb-slim.home-taskbar #bar-rest .mon.rows {
+  height: 28px;
+  border-radius: 5px;
+}
+
+.tb-slim #bar-rest :is(.tquick, .tclock) {
+  padding: 0 8px;
+}
+
+.tb-slim #bar-rest .tclock {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.tb-slim #bar-rest .mon.rows {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.tb-slim #bar-rest .start svg {
+  width: 18px;
+  height: 18px;
+}
+
 /* --- The taskbar along a side (island.js isSide; taskbarEdge left or right,
    tb-side with tb-left or tb-right) -------------------------------------------------
    Upright, 48 px wide, the whole screen tall: its runs top, middle and

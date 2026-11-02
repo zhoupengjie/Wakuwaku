@@ -143,8 +143,15 @@ fn defaults() -> Map<String, Value> {
         "taskbarButtons": "icons",
         "taskbarAlign": "center",
         // The screen's edge it is along: bottom (Windows' own place), top,
-        // left or right (side bars: an upright capsule, icons alone).
+        // left or right (side bars: an upright capsule, icons alone); or
+        // split, a top bar and a dock at the foot (island.rs is_split): the
+        // top bar 32 px or 48, the dock out of the way of a window touching
+        // it or kept in the room Windows' own keeps, quick settings and the
+        // clock in the top bar or the dock.
         "taskbarEdge": "bottom",
+        "splitBar": 32,
+        "splitDock": "hide",
+        "splitKeys": "top",
         // OLED's guard, on unless turned off: the island's and the taskbar's
         // icons and words a screen pixel off by turns (island.js oledShift).
         "oledShift": true,

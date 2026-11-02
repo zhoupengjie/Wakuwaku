@@ -33,6 +33,9 @@ const ISLAND: (f64, f64) = (760.0, 132.0);
 // quick settings open just above it), and the room above it for what opens
 // (a window growing up moves its top-left corner). The window is the two.
 pub const TASKBAR_H: f64 = 48.0;
+// Split in two (taskbarEdge split): the top bar thinner by default, as a
+// menu bar (splitBar 32; 48 as Windows'), docs/design/specs/dock-topbar.md.
+pub const SLIM_H: f64 = 32.0;
 // As high as the settings ever are (they stand above the strip, island.js
 // settingsMax): opening them never moves the window, which would flash.
 const TASKBAR_ROOM: f64 = 640.0;
@@ -83,9 +86,10 @@ pub struct Island {
     hwnd: isize,
     // The bar's or the taskbar's strip, as Windows granted it (physical x,
     // y, w, h), and what it was asked for (the display, the height, the
-    // home): asked again only on a change.
+    // home, the edge, whether Windows' own keeps its room along the foot):
+    // asked again only on a change.
     bar: Option<(i32, i32, i32, i32)>,
-    bar_for: Option<((i32, i32, i32, i32), i32, &'static str, Edge)>,
+    bar_for: Option<((i32, i32, i32, i32), i32, &'static str, Edge, bool)>,
     // The strip is a bar of ours Windows knows (appbar.rs), not one laid over
     // the room Windows' own taskbar keeps (taskbar.rs explorer_room).
     bar_own: bool,
@@ -202,12 +206,13 @@ impl Island {
     // Physical. The taskbar is as long as its strip (its display, or what
     // Windows granted of it), with its room beside it: above a bottom bar,
     // below a top one, inside a side one's.
-    fn size_for(&self, home: &str, area: &Area, edge: Edge) -> (i32, i32) {
+    // The strip strip_h thick (logical).
+    fn size_for(&self, home: &str, area: &Area, edge: Edge, strip_h: f64) -> (i32, i32) {
         let sf = self.sf();
         let side = home == "taskbar" && edge.is_side();
         let base = match home {
-            "taskbar" if side => (TASKBAR_H + SIDE_ROOM, self.bar.map_or(area.mon.3, |b| b.3) as f64 / sf),
-            "taskbar" => (area.mon.2 as f64 / sf, TASKBAR_H + TASKBAR_ROOM),
+            "taskbar" if side => (strip_h + SIDE_ROOM, self.bar.map_or(area.mon.3, |b| b.3) as f64 / sf),
+            "taskbar" => (area.mon.2 as f64 / sf, strip_h + TASKBAR_ROOM),
             _ => ISLAND,
         };
         let (w, h) = match self.room {
@@ -268,9 +273,39 @@ fn set_ignore(sh: &Shared, ignore: Option<bool>) {
     }
 }
 
-// The screen's edge her taskbar is along (taskbarEdge).
+// The screen's edge her taskbar is along (taskbarEdge); split, the top: her
+// strip is the top bar, Start and the programs in the dock (bars.rs).
 pub fn edge(sh: &Shared) -> Edge {
-    Edge::of(sh.setting("taskbarEdge").as_str().unwrap_or("bottom"))
+    match sh.setting("taskbarEdge").as_str() {
+        Some("split") => Edge::Top,
+        word => Edge::of(word.unwrap_or("bottom")),
+    }
+}
+
+// Her taskbar split in two (taskbarEdge split, docs/design/specs/dock-topbar.md):
+// a top bar (the strip, here) and a dock at the foot with Start and the
+// programs (bars.rs), the home the taskbar.
+pub fn is_split(sh: &Shared) -> bool {
+    sh.home() == "taskbar" && sh.setting("taskbarEdge").as_str() == Some("split")
+}
+
+// The strip's thickness (logical): Windows' own, or split, the top bar's
+// (splitBar: 32 unless set to 48).
+pub fn strip_h(sh: &Shared) -> f64 {
+    if is_split(sh) && sh.setting("splitBar").as_u64() != Some(48) { SLIM_H } else { TASKBAR_H }
+}
+
+// Split, the dock kept in the room Windows' own keeps along the foot
+// (splitDock room), maximized windows stopping at it; else (hide, the
+// default) it keeps none and steps out of the way of a window touching it.
+pub fn dock_keeps_room(sh: &Shared) -> bool {
+    is_split(sh) && sh.setting("splitDock").as_str() == Some("room")
+}
+
+// The edge of the strips on the other displays (bars.rs): hers, or split,
+// the bottom, as they are now.
+pub fn bars_edge(sh: &Shared) -> Edge {
+    if is_split(sh) { Edge::Bottom } else { edge(sh) }
 }
 
 // The display it is on: where it is, else the primary one.
@@ -297,12 +332,13 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
     let edge = edge(sh);
     let area = area(sh)?;
     let wanted = Side::of(sh.setting("islandPos").as_str().unwrap_or("center"));
+    let thick = strip_h(sh);
     let mut isl = sh.island.lock().unwrap();
     isl.sf = area.sf;
-    let size = isl.size_for(home, &area, edge);
+    let size = isl.size_for(home, &area, edge, thick);
     let pos = match home {
         // The window's edge on the strip's outer one, the room inside it.
-        "taskbar" => window_at(edge, isl.bar.unwrap_or_else(|| edge.strip(area.mon, (TASKBAR_H * area.sf).round() as i32)), size),
+        "taskbar" => window_at(edge, isl.bar.unwrap_or_else(|| edge.strip(area.mon, (thick * area.sf).round() as i32)), size),
         // On a Mac the notch's place, over the menu bar (notch.rs), the
         // centre whatever the setting; elsewhere at the top of the work area
         // (below a taskbar that sits at the top), at the side islandPos says
@@ -428,9 +464,12 @@ fn sync_bar(sh: &Shared, keep: bool) {
 fn sync_bar_now(sh: &Shared, keep: bool) {
     let home = sh.home();
     let edge = match home {
-        "taskbar" => Some((edge(sh), TASKBAR_H)),
+        "taskbar" => Some((edge(sh), strip_h(sh))),
         _ => None,
     };
+    // Windows' own keeps its room along the foot for a strip there to lie
+    // over, or for the dock kept in it (split); none else (taskbar.rs set_edge).
+    let room = edge.is_some_and(|(e, _)| e == Edge::Bottom) || dock_keeps_room(sh);
     let want = match (keep, edge) {
         (true, Some((edge, h))) => area(sh).map(|a| (a, edge, (h * a.sf).round() as i32)),
         _ => None,
@@ -442,7 +481,7 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
     if hwnd == 0 {
         return;
     }
-    let ask = want.map(|(a, edge, h)| (a.mon, h, home, edge));
+    let ask = want.map(|(a, edge, h)| (a.mon, h, home, edge, room));
     if held == ask {
         return;
     }
@@ -450,7 +489,7 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
     // taken away only if there is one: over Windows' room there is none, and
     // asking goes to the taskbar's window of the tray, on the taskbar's
     // thread, waited for (quitting, the main thread).
-    if let Some((_, _, was, _)) = held.filter(|h| Some(h.2) != ask.map(|a| a.2)) {
+    if let Some((_, _, was, _, _)) = held.filter(|h| Some(h.2) != ask.map(|a| a.2)) {
         // The desktop's icons where they are, before the work area goes
         // back under them (icons.rs hold).
         if was == "taskbar" {
@@ -483,8 +522,8 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
             }
         }
         // Windows' own keeps its room along the bottom for a bottom strip,
-        // and none for another edge (taskbar.rs set_edge).
-        taskbar::set_edge(edge);
+        // and none for another edge, but for the dock kept in it (taskbar.rs set_edge).
+        taskbar::set_edge(edge, room);
         // Another copy of her holds it: nothing taken (it waits).
         if !taskbar::take(sh, strip) {
             return;
@@ -610,6 +649,8 @@ fn place(sh: &Shared) {
     // Its home changed, perhaps (the taskbar's zoom, or none).
     fit_zoom(sh);
     tell_strip(sh, false);
+    // Split or no longer: the dock comes or goes with the strip (bars.rs).
+    crate::bars::sync(&crate::shared(&sh.app));
     let Some((pos, size)) = fitted else { return };
     if let Some(win) = window(sh) {
         lay(&win, pos, size);
@@ -1324,6 +1365,7 @@ pub fn seat(sh: &Shared) -> Option<(i32, i32)> {
     let home = sh.home();
     let edge = edge(sh);
     let area = area(sh)?;
+    let thick = strip_h(sh);
     let (bar, seat_at, closed, at) = {
         let isl = sh.island.lock().unwrap();
         (isl.bar, isl.seat_at, closed_rect(&isl), isl.at)
@@ -1331,7 +1373,7 @@ pub fn seat(sh: &Shared) -> Option<(i32, i32)> {
     let px = |v: f64| (v * area.sf).round() as i32;
     Some(match home {
         "taskbar" => {
-            let (x, y, w, h) = bar.unwrap_or_else(|| edge.strip(area.mon, px(TASKBAR_H)));
+            let (x, y, w, h) = bar.unwrap_or_else(|| edge.strip(area.mon, px(thick)));
             let at = px(seat_at.unwrap_or(TASKBAR_SEAT));
             match edge {
                 Edge::Bottom => (x + at, y),

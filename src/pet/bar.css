@@ -571,3 +571,186 @@ body {
     opacity: 0;
   }
 }
+
+/* --- The dock (split: bar.js isDock; docs/design/specs/dock-topbar.md §4) ------------
+   Start and the programs in a piece of glass in the middle of the foot, 44
+   high and 2 px off it, as wide as what is in it (its window as wide,
+   bars.rs dock_size; in the middle of it, should it be wider for a moment
+   or in the preview): the desktop's picture under it as the strip's Mica
+   (mica.js), or solid; a hairline round it and a light along its top. No
+   show-the-desktop sliver, no lead; the clock and quick settings after a
+   line only if set so (b-keys). */
+.b-dock #bar {
+  inset: 2px auto 2px 50%;
+  width: max-content;
+  transform: translateX(-50%);
+  padding: 0 6px;
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.b-dock.b-light #bar {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.b-dock.b-black #bar {
+  background: #1c1c1c;
+}
+
+.b-dock.b-light.b-black #bar {
+  background: #f3f3f3;
+}
+
+.b-dock #mica {
+  inset: 2px auto 2px 50%;
+  width: var(--dock-w, 100%);
+  border-radius: 12px;
+  transform: translateX(-50%);
+  transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.b-dock #apps {
+  flex: none;
+  gap: 2px;
+}
+
+.b-dock #wins {
+  gap: 2px;
+}
+
+.b-dock .win {
+  width: 40px;
+}
+
+.b-dock #lead,
+.b-dock .desk {
+  display: none;
+}
+
+.b-dock #end {
+  display: none;
+}
+
+.b-dock.b-keys #end {
+  display: flex;
+  gap: 2px;
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  align-self: center;
+  height: 24px;
+  overflow: visible;
+}
+
+.b-dock.b-light.b-keys #end {
+  border-left-color: rgba(0, 0, 0, 0.1);
+}
+
+.b-dock.b-keys #end > * {
+  align-self: center;
+}
+
+/* Windows' Start menu open: Start lit, as on the main taskbar. */
+.b-dock .start.open {
+  background: rgba(255, 255, 255, 0.17);
+}
+
+.b-dock.b-light .start.open {
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Quick settings in it (b-keys): the network and the volume in Windows'
+   own icon font, the faint arcs and waves under the solid ones, as the
+   main taskbar's button (style.css #bar-rest .tquick). */
+.quick[hidden] {
+  display: none;
+}
+
+.quick {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.quick:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.b-light .quick:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.quick .fi {
+  position: relative;
+  display: block;
+  font: normal 16px/1 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
+}
+
+.quick .fi .back {
+  opacity: 0.35;
+}
+
+.quick .net .back:not([hidden]) + .front,
+.quick .vol .front {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.quick .vol .back[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
+/* Out of the way of a window touching it (bars.rs poll): slid down off the
+   screen, the pointer going through its window (bars.rs); a line left at
+   the foot, which the pointer resting there calls it up from. */
+.b-dock.b-stowed #bar,
+.b-dock.b-stowed #mica {
+  transform: translate(-50%, calc(100% + 4px));
+}
+
+#stub {
+  display: none;
+}
+
+.b-dock #stub {
+  display: block;
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: min(132px, 100%);
+  height: 3px;
+  border-radius: 2px 2px 0 0;
+  background: rgba(255, 255, 255, 0.45);
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.b-dock.b-light #stub {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.b-dock.b-stowed #stub {
+  opacity: 1;
+  transition-delay: 0.25s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .b-dock #bar,
+  .b-dock #mica {
+    transition-duration: 0.01s;
+  }
+}

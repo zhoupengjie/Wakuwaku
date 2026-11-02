@@ -318,9 +318,10 @@ mod imp {
     static TICKS: AtomicU32 = AtomicU32::new(0);
     static WORK_BOTTOM: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
     // The screen's edge the strip is along (island.rs, taskbarEdge), and the
-    // one the work area was last made whole for (strip_moved).
+    // one the work area was last made whole for (strip_moved), with whether
+    // Windows' own kept its room along the foot then (split, the dock in it).
     static EDGE: Mutex<Edge> = Mutex::new(Edge::Bottom);
-    static WORK_EDGE: Mutex<Option<Edge>> = Mutex::new(None);
+    static WORK_EDGE: Mutex<Option<(Edge, bool)>> = Mutex::new(None);
     // The strip as granted (physical); since when (tick) the work area has
     // reached into it, and when it was last taken again for that.
     static STRIP: Mutex<Option<(i32, i32, i32, i32)>> = Mutex::new(None);
@@ -439,8 +440,9 @@ mod imp {
     // The edge her strip is along: Windows' own taskbar keeps its room along
     // the bottom for a bottom strip to lie over, and hides itself (keeping
     // none) for another edge, where an empty band would be left at the
-    // bottom (shell.rs keep_room); put away again at once if it is up.
-    pub fn set_edge(edge: Edge) {
+    // bottom (shell.rs keep_room), but for her dock kept in that room (room:
+    // split, splitDock room); put away again at once if it is up.
+    pub fn set_edge(edge: Edge, room: bool) {
         // Back to the bottom from another edge: the desktop's icons where
         // they are, before Windows' taskbar takes its room back and the
         // desktop moves them (icons.rs hold).
@@ -452,9 +454,10 @@ mod imp {
             }
         }
         let was = std::mem::replace(&mut *EDGE.lock().unwrap(), edge);
-        shell::keep_room(edge == Edge::Bottom);
-        if was != edge && is_up() {
-            log(&format!("the strip now along the {edge:?}: Windows' kept room {}", if edge == Edge::Bottom { "kept" } else { "let go" }));
+        let kept = shell::kept_room();
+        shell::keep_room(room);
+        if (was != edge || kept != room) && is_up() {
+            log(&format!("the strip now along the {edge:?}: Windows' kept room {}", if room { "kept" } else { "let go" }));
             shell::rehide();
         }
     }
@@ -915,6 +918,8 @@ mod imp {
             let now = json!({ "lang": keys.lang, "native": native, "caps": keys.caps, "ime": crate::inputs::now(), "net": net, "bars": wifi, "use": used, "volume": volume, "battery": battery });
             if now != sent {
                 let _ = sh.app.emit_to("island", "taskbar:keys", now.clone());
+                // Split, quick settings perhaps in the dock (bars.rs).
+                crate::bars::keys(&sh, &now);
                 *SENT_KEYS.lock().unwrap() = now.clone();
                 sent = now;
             }
@@ -1740,8 +1745,9 @@ mod imp {
         // then the top's as well (2026-10-12). Along the bottom Windows' own
         // takes its room back and sets it whole itself.
         let edge = *EDGE.lock().unwrap();
-        let was = std::mem::replace(&mut *WORK_EDGE.lock().unwrap(), Some(edge));
-        if is_up() && was != Some(edge) && edge != Edge::Bottom {
+        let room = shell::kept_room();
+        let was = std::mem::replace(&mut *WORK_EDGE.lock().unwrap(), Some((edge, room)));
+        if is_up() && was != Some((edge, room)) && edge != Edge::Bottom {
             let ((x, y, w, h), _) = monitor_of(strip);
             let mut r = Rect { left: x, top: y, right: x + w, bottom: y + h };
             match edge {
@@ -1750,11 +1756,17 @@ mod imp {
                 Edge::Right => r.right = strip.0,
                 Edge::Bottom => r.bottom = strip.1,
             }
+            // Split with the dock kept in the room Windows' own keeps along
+            // the foot: the work area stops there too (as it does now, should
+            // Windows not have taken its room back yet; it sets it itself as it does).
+            if room {
+                r.bottom = shell::room((x, y, w, h)).map_or(work_area().bottom.min(y + h), |foot| foot.1);
+            }
             log(&format!("the strip now along the {edge:?}: work area made ({}, {}, {}, {})", r.left, r.top, r.right, r.bottom));
             set_work_area(r);
             *WORK_SIDE.lock().unwrap() = Some((edge, edge.inner(strip)));
             icons_out(strip, edge);
-        } else if is_up() && was.is_some_and(|w| w != Edge::Bottom) && edge == Edge::Bottom {
+        } else if is_up() && was.is_some_and(|w| w.0 != Edge::Bottom) && edge == Edge::Bottom {
             // Back along the bottom: the work area the display less the room
             // Windows' own keeps there (or the whole of it, that room not back
             // yet), the side the last edge took given back. Windows' own made
@@ -2388,7 +2400,19 @@ mod imp {
         }
         if let Some(sh) = sh() {
             let _ = sh.app.emit_to("island", "taskbar:start", json!({ "open": open }));
+            // Split: Start is in the dock, which comes up while it is open (bars.rs).
+            crate::bars::start_seen(&sh, open);
         }
+    }
+
+    // Windows' Start menu open, as last seen (start_seen).
+    pub fn start_open() -> bool {
+        START_OPEN.load(Ordering::SeqCst)
+    }
+
+    // The keyboard, the network, the volume and the battery as last sent (keys_loop).
+    pub fn keys_now() -> Value {
+        SENT_KEYS.lock().unwrap().clone()
     }
 
     // The shell hook: a window flashing for attention (until it is in
@@ -3232,7 +3256,13 @@ mod imp {
         false
     }
     pub fn handing_back() {}
-    pub fn set_edge(_edge: crate::appbar::Edge) {}
+    pub fn set_edge(_edge: crate::appbar::Edge, _room: bool) {}
+    pub fn start_open() -> bool {
+        false
+    }
+    pub fn keys_now() -> serde_json::Value {
+        serde_json::Value::Null
+    }
     pub fn take(_sh: &Shared, _strip: (i32, i32, i32, i32)) -> bool {
         true
     }
@@ -3293,7 +3323,7 @@ mod imp {
     }
 }
 
-pub use imp::{end_task_on, explorer_room, give_back, handing_back, is_up, set_edge, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
+pub use imp::{end_task_on, explorer_room, give_back, handing_back, is_up, keys_now, set_edge, start_open, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
 
 // A number Windows keeps for a setting of its own (end_task_on, seconds_on):
 // on once set, but for 0.

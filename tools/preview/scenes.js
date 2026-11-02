@@ -61,6 +61,11 @@
     desk: [0, 0, SCREEN[0], SCREEN[1]],
     // Her taskbar on another display (bars.rs): the strip alone.
     bar: [0, SCREEN[1] - STRIP, SCREEN[0], STRIP],
+    // Split (taskbarEdge split, a shot's split): her strip the top bar, its
+    // room under it; the dock at the foot, as high as Windows' room there
+    // (its page puts it in the middle, bar.css .b-dock).
+    top: [0, 0, SCREEN[0], STRIP + 640],
+    dock: [0, SCREEN[1] - STRIP, SCREEN[0], STRIP],
   }
   // The island's window at a top corner (islandPos: left, right), as
   // island.rs puts it (zhoupengjie/Wakuwaku#59; anchor.js
@@ -554,6 +559,35 @@
       view: STRIP_VIEW,
       world: F => ({ ...home(F), material, sessions: [F.session('working')] }),
     })),
+    // Split (docs/design/specs/dock-topbar.md): the top bar and the dock at
+    // the foot, 32 px and out of the way by default; 48 px with quick
+    // settings and the clock in the dock. A screen shot: the desktop's page,
+    // the top bar's and the dock's.
+    ...[
+      ['split', '顶栏 + dock · 默认（32 px）', {}],
+      ['split-48-keys', '顶栏 + dock · 48 px，快速设置和时钟在 dock', { splitBar: 48, splitKeys: 'dock' }],
+    ].map(([id, title, config]) => ({
+      id: `taskbar-${id}`,
+      section: 'taskbar',
+      title,
+      page: 'screen',
+      home: 'taskbar',
+      split: true,
+      view: WHOLE,
+      budget: 4000,
+      world: F => ({ ...home(F), edge: 'split', sessions: [F.session('working'), F.others()[0]], deskLayout: [], config: { splitBar: 32, splitDock: 'hide', splitKeys: 'top', ...config } }),
+    })),
+    {
+      id: 'taskbar-split-open',
+      section: 'taskbar',
+      title: '顶栏 + dock · 她在顶栏正中，往下展开',
+      page: 'island',
+      home: 'taskbar',
+      split: true,
+      view: [400, 0, 800, 300],
+      steps: p => p.hover('#island'),
+      world: F => ({ ...home(F), edge: 'split', sessions: [F.session('working'), F.others()[0]], config: { splitBar: 32, splitDock: 'hide', splitKeys: 'top' } }),
+    },
     {
       id: 'taskbar-side-screen',
       section: 'taskbar',
@@ -774,6 +808,22 @@
         await p.wait(600)
       },
     })),
+    // Split (docs/design/specs/dock-topbar.md §1): the 外观 page under the
+    // top bar, its position 顶栏 + dock and the three rows that come with it.
+    {
+      id: 'settings-look-split',
+      section: 'settings',
+      title: '设置 · 外观，任务栏位置「顶栏 + dock」',
+      page: 'island',
+      home: 'taskbar',
+      split: true,
+      view: [0, 0, 560, 720],
+      world: F => ({ ...busy(F), edge: 'split', config: { splitBar: 32, splitDock: 'hide', splitKeys: 'top' } }),
+      steps: async p => {
+        p.emit('island:settings', { tab: 'look' })
+        await p.wait(600)
+      },
+    },
     {
       id: 'settings-general-open',
       section: 'settings',
@@ -1336,9 +1386,9 @@
   // Where the island sits at the top in a shot: its own, else its scene's, else the centre.
   const posOf = s => s.islandPos || (s.scene && sceneById(s.scene)?.islandPos) || 'center'
   // Her home's window in a shot: the taskbar's, or the island's where it sits.
-  const homeWindowOf = s => (homeOf(s) === 'island' ? islandWindow(posOf(s)) : WINDOWS.taskbar)
+  const homeWindowOf = s => (homeOf(s) === 'island' ? islandWindow(posOf(s)) : s.split ? WINDOWS.top : WINDOWS.taskbar)
   // Where a shot's page lies on the screen (a screen shot: the desktop's; her home's frame is put by shot.js).
-  const windowOf = s => (s.page === 'desk' || s.page === 'bar' || s.page === 'screen' ? WINDOWS[s.page === 'screen' ? 'desk' : s.page] : homeWindowOf(s))
+  const windowOf = s => (s.page === 'bar' && s.split ? WINDOWS.dock : s.page === 'desk' || s.page === 'bar' || s.page === 'screen' ? WINDOWS[s.page === 'screen' ? 'desk' : s.page] : homeWindowOf(s))
 
   // Where the island sits, into a world's settings (as the settings keep it).
   const withPos = (w, pos) => (pos ? { ...w, config: { ...(w.config || {}), islandPos: pos } } : w)
@@ -1374,6 +1424,7 @@
     page: s.page,
     scene: s.scene || null,
     home: homeOf(s),
+    split: !!s.split,
     view: s.view,
     window: windowOf(s),
     budget: s.budget || DEFAULT_BUDGET,

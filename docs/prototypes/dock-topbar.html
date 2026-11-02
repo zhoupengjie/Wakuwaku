@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>顶栏 + dock · 外观样例</title>
+<style>
+/* 手做的样子，不是她的真代码：尺寸、颜色照现在的任务栏（src/pet/style.css）。
+   屏幕按 1536×864 逻辑像素画（1080p、125%），整块按窗口缩放。 */
+:root {
+  --idle: #8e8e93; --working: #5e9bff; --waiting: #ffb340; --done: #34d27b; --review: #b18cff; --error: #ff5c6c;
+  --spring: cubic-bezier(0.3, 1.45, 0.5, 1);
+  --page: #141416; --panel: #1f1f22; --panel-line: rgba(255,255,255,.08); --panel-fg: #f5f5f7; --panel-dim: #a1a1a6;
+  --seg: #2c2c2e; --seg-on: #4a4a4e; --seg-fg: #f5f5f7;
+}
+:root[data-theme='light'] {
+  --page: #e4e4ea; --panel: #fbfbfd; --panel-line: rgba(0,0,0,.08); --panel-fg: #1c1c1e; --panel-dim: #6e6e73;
+  --seg: #ececf0; --seg-on: #ffffff; --seg-fg: #1c1c1e;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 13px/1.45 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
+  background: var(--page); color: var(--panel-fg);
+  display: grid; grid-template-columns: minmax(0, 1fr) 312px; overflow: hidden;
+}
+button { font: inherit; color: inherit; }
+.mono { font-family: 'Cascadia Mono', Consolas, monospace; }
+.ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- 舞台：一块缩放的屏幕 ---------- */
+#stage { position: relative; display: flex; align-items: center; justify-content: center; padding: 16px; min-width: 0; min-height: 0; }
+#frame { position: relative; overflow: hidden; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.06); flex: none; }
+#screen {
+  position: absolute; left: 0; top: 0; width: 1536px; height: 864px; transform-origin: 0 0; overflow: hidden;
+  background: #3b4a63 url(../../tools/preview/assets/wall.jpg) center / cover;
+  user-select: none; cursor: default;
+  --T: 48px; --R: 48px; --Rwork: var(--R); --capw: 288px;
+  /* 深色：照 Windows 11 的深色任务栏和弹出面板 */
+  --mica: rgba(30, 30, 32, .76); --ink: #f5f5f7; --dim: #a1a1a6; --hair: rgba(255,255,255,.1);
+  --wash: rgba(255,255,255,.11); --wash-on: rgba(255,255,255,.17);
+  --isl: #2c2c2c; --isl-ink: #f5f5f7; --isl-dim: #a1a1a6; --isl-line: rgba(255,255,255,.1); --isl-step: rgba(255,255,255,.06);
+  --glass: rgba(40, 40, 42, .62); --glass-line: rgba(255,255,255,.09);
+  --fly: rgba(36, 36, 38, .94); --fly-tile: rgba(255,255,255,.07);
+  --accent: #4cc2ff; --accent-ink: #000;
+}
+#screen.light {
+  --mica: rgba(243, 243, 243, .78); --ink: #1c1c1e; --dim: #5c5c60; --hair: rgba(0,0,0,.08);
+  --wash: rgba(0,0,0,.05); --wash-on: rgba(255,255,255,.7);
+  --isl: #f3f3f3; --isl-ink: #1c1c1e; --isl-dim: #6e6e73; --isl-line: rgba(0,0,0,.09); --isl-step: rgba(0,0,0,.05);
+  --glass: rgba(249, 249, 249, .72); --glass-line: rgba(0,0,0,.08);
+  --fly: rgba(243, 243, 243, .95); --fly-tile: rgba(0,0,0,.05);
+  --accent: #0067c0; --accent-ink: #fff;
+}
+#screen.slim { --T: 32px; --capw: 256px; }
+#screen.big { --R: 64px; }
+#screen.auto { --Rwork: 0px; }
+
+/* ---------- 桌面上的东西 ---------- */
+.dicon { position: absolute; left: 10px; width: 76px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px; border-radius: 4px;
+  color: #fff; font-size: 12px; text-shadow: 0 1px 3px rgba(0,0,0,.7); z-index: 1; }
+.dicon svg { width: 40px; height: 40px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+.dicon:hover { background: rgba(255,255,255,.14); }
+
+#win { position: absolute; z-index: 5; display: flex; flex-direction: column; background: #0f1115; color: #d7dae0; overflow: hidden;
+  transition: bottom .3s ease; }
+.desk-max #win { left: 0; right: 0; top: var(--T); bottom: var(--Rwork); }
+.desk-win #win { left: 200px; top: calc(var(--T) + 80px); width: 820px; height: 470px; border-radius: 8px; box-shadow: 0 24px 60px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.08); }
+.desk-none #win { display: none; }
+#win .wtitle { flex: none; height: 34px; display: flex; align-items: center; background: #1b1e24; font-size: 12px; color: #9aa0aa; }
+#win .wtab { height: 26px; margin: 8px 0 0 8px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-radius: 6px 6px 0 0; background: #0f1115; color: #e5e7eb; }
+#win .wtab i { width: 7px; height: 7px; border-radius: 50%; background: var(--working); }
+#win .wctl { margin-left: auto; display: flex; height: 100%; }
+#win .wctl span { width: 46px; display: grid; place-items: center; color: #c9ccd2; }
+#win pre { margin: 0; padding: 14px 18px; font: 13px/1.65 'Cascadia Mono', Consolas, monospace; white-space: pre-wrap; color: #c9ccd2; }
+#win pre b { color: #e5e7eb; font-weight: 600; }
+#win pre .g { color: #7ee2a8; } #win pre .d { color: #6b717c; } #win pre .o { color: #d97757; } #win pre .a { color: var(--waiting); }
+
+/* ---------- 顶栏：自己登记的 AppBar（ABE_TOP），云母 ---------- */
+#topbar { position: absolute; left: 0; right: 0; top: 0; height: var(--T); z-index: 20; display: flex; align-items: center; color: var(--ink); font-size: 12px; white-space: nowrap; }
+#topbar::before { content: ''; position: absolute; inset: 0; z-index: -1; background: var(--mica); backdrop-filter: blur(48px) saturate(1.7); box-shadow: inset 0 -1px 0 var(--hair); }
+.run { display: flex; align-items: center; gap: 2px; height: 100%; }
+.r-left { padding-left: 6px; }
+.r-right { margin-left: auto; padding-right: 4px; }
+.slot { flex: none; width: calc(var(--capw) + 8px); height: 1px; display: none; }
+.her-left .slot { display: block; }
+
+/* 每个部件一格 40 px 高的按钮，和现在的任务栏一样；细顶栏上 28 px */
+.tb { flex: none; height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 6px; cursor: pointer; transition: background .12s ease; }
+.slim #topbar .tb { height: 28px; padding: 0 8px; border-radius: 5px; }
+.tb:hover { background: var(--wash); }
+.tb svg { width: 16px; height: 16px; flex: none; }
+.tb.on { background: var(--wash-on); }
+.wg { gap: 9px; }
+.wg .wi { color: var(--c); }
+.wg .two { display: flex; flex-direction: column; line-height: 1.25; }
+.wg .two b { font-weight: 500; font-size: 12px; }
+.wg .two i { font-style: normal; font-size: 11.5px; color: var(--dim); }
+.slim .wg .two { flex-direction: row; gap: 6px; align-items: baseline; }
+.slim .wg .two i { display: none; }
+.mon { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; line-height: 1.25; font-size: 11px; font-variant-numeric: tabular-nums; margin-right: 6px; }
+.mon span { display: flex; gap: 10px; }
+.mon em { font-style: normal; color: var(--dim); margin-right: 3px; }
+.slim .mon { flex-direction: row; gap: 10px; }
+.tray { display: flex; align-items: center; }
+.tray .tb { padding: 0 7px; }
+.chev svg { transform: rotate(180deg); }  /* 顶栏上 ^ 朝下 */
+.mark { width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
+.ime { font-size: 13px; padding: 0 9px; }
+.quick { gap: 10px; }
+.clock { flex-direction: column; align-items: flex-end; justify-content: center; gap: 0; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.clock b { font-weight: 500; }
+.clock i { font-style: normal; color: var(--dim); }
+.slim #topbar .clock { flex-direction: row; gap: 6px; align-items: baseline; }
+
+/* ---------- 她：顶栏里的一颗胶囊，往下长 ---------- */
+#island {
+  position: absolute; z-index: 30; top: 5px; left: 50%; transform: translateX(-50%);
+  width: var(--capw); height: 38px; border-radius: 19px; overflow: hidden;
+  background: var(--isl); color: var(--isl-ink); box-shadow: 0 0 0 1px var(--isl-line); cursor: pointer;
+  transition: width .56s var(--spring), height .56s var(--spring), border-radius .4s ease, box-shadow .3s ease, top .3s ease;
+}
+.her-left #island { left: 6px; transform: none; }
+.slim #island { top: 3px; height: 26px; border-radius: 13px; }
+#island.open { width: 452px; height: 202px; border-radius: 22px; }
+#island.ask { width: 476px; height: 176px; border-radius: 22px; }
+#island:is(.open, .ask) { box-shadow: 0 10px 30px rgba(0,0,0,.45), 0 0 0 1px var(--isl-line); }
+.slim #island:is(.open, .ask) { top: 4px; }
+.view { position: absolute; left: 0; top: 0; opacity: 0; transform: scale(.96); transform-origin: 20% 0; transition: opacity .16s ease, transform .16s ease; pointer-events: none; }
+#island:not(.open):not(.ask) .v-compact, #island.open .v-open, #island.ask .v-ask { opacity: 1; transform: none; transition-delay: .1s; pointer-events: auto; }
+
+.v-compact { width: 100%; height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 16px 0 7px; font-size: 13px; }
+.slim .v-compact { height: 26px; gap: 8px; padding: 0 12px 0 3px; font-size: 12px; }
+.v-compact .words { flex: 1; min-width: 0; }
+.v-compact .plus { flex: none; font-size: 11px; color: var(--isl-dim); }
+.v-compact .clk { flex: none; font-variant-numeric: tabular-nums; }
+
+/* 她的头像：精灵图的一格，缩小、对着脸；外圈是心情色 */
+.face { position: relative; flex: none; width: 24px; height: 24px; border-radius: 50%; overflow: hidden; background: var(--isl-step); }
+.slim .v-compact .face { width: 20px; height: 20px; }
+.face::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--ring, transparent); }
+.sheet { position: absolute; left: 0; top: 0; width: 192px; height: 208px; overflow: hidden; transform-origin: 0 0; }
+.film { position: absolute; left: 0; top: 0; width: 1536px; height: 2288px; background: url(../../pets/claude-chan/spritesheet.webp) no-repeat; will-change: transform; }
+.body { position: relative; flex: none; width: 96px; height: 104px; overflow: hidden; }
+
+.v-open { width: 452px; padding: 12px 16px 12px 10px; }
+.v-open .top { display: flex; gap: 10px; }
+.v-open .info { flex: 1; min-width: 0; padding-top: 6px; }
+.v-open .nm { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.v-open .nm b { font-weight: 600; }
+.v-open .nm span { color: var(--isl-dim); }
+.v-open .nm .clk { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--isl-ink); }
+.v-open .step { margin-top: 6px; display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.v-open .step .bar { flex: none; width: 54px; height: 4px; border-radius: 2px; background: var(--isl-step); overflow: hidden; }
+.v-open .step .bar i { display: block; width: 60%; height: 100%; background: var(--working); border-radius: 2px; }
+.v-open .reply { margin-top: 6px; font-size: 12px; line-height: 1.5; color: var(--isl-dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.v-open .rows { margin-top: 6px; border-top: 1px solid var(--isl-line); padding-top: 6px; }
+.v-open .row { height: 30px; display: flex; align-items: center; gap: 10px; padding: 0 8px; border-radius: 8px; font-size: 12.5px; }
+.v-open .row:hover { background: var(--isl-step); }
+.v-open .row i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.v-open .row b { font-weight: 500; flex: none; }
+.v-open .row span { color: var(--isl-dim); flex: 1; min-width: 0; }
+.v-open .row em { font-style: normal; font-variant-numeric: tabular-nums; }
+
+.v-ask { width: 476px; padding: 14px 16px; }
+.v-ask .hd { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.v-ask .hd b { font-weight: 600; }
+.v-ask .hd span { color: var(--isl-dim); }
+.v-ask .hd .clk { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--waiting); }
+.v-ask code { display: block; margin-top: 12px; padding: 9px 12px; border-radius: 8px; background: var(--isl-step); font: 12.5px/1.5 'Cascadia Mono', Consolas, monospace; }
+.v-ask .why { margin-top: 8px; font-size: 12px; color: var(--isl-dim); }
+.v-ask .btns { margin-top: 14px; display: flex; gap: 8px; }
+.v-ask .btns button { height: 32px; padding: 0 14px; border-radius: 8px; border: 0; cursor: pointer; background: var(--isl-step); box-shadow: inset 0 0 0 1px var(--isl-line); font-size: 12.5px; }
+.v-ask .btns button.yes { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+.v-ask .btns kbd { font: 11px 'Segoe UI', sans-serif; opacity: .65; margin-left: 6px; }
+.v-ask .btns .go { margin-left: auto; background: none; box-shadow: none; color: var(--isl-dim); padding: 0 4px; }
+
+/* ---------- dock：开始和程序按钮 ---------- */
+#dock {
+  position: absolute; z-index: 25; left: 50%; bottom: 2px; transform: translateX(-50%);
+  height: calc(var(--R) - 4px); display: flex; align-items: center; gap: 2px; padding: 0 6px; border-radius: 12px;
+  background: var(--glass); backdrop-filter: blur(36px) saturate(1.7);
+  box-shadow: 0 0 0 1px var(--glass-line), inset 0 1px 0 rgba(255,255,255,.06), 0 6px 22px rgba(0,0,0,.22);
+  color: var(--ink); font-size: 12px; white-space: nowrap;
+  transition: transform .34s cubic-bezier(.2,.8,.2,1);
+}
+.big #dock { border-radius: 18px; padding: 0 8px; gap: 4px; }
+.strip #dock { left: 0; right: 0; bottom: 0; height: var(--R); transform: none; justify-content: center; border-radius: 0;
+  background: var(--mica); backdrop-filter: blur(48px) saturate(1.7); box-shadow: inset 0 1px 0 var(--hair); }
+.db { position: relative; flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 6px; cursor: pointer; transition: background .12s ease; }
+.db > svg { width: 24px; height: 24px; transition: transform .42s var(--spring); }
+.big .db { width: 54px; height: 54px; border-radius: 10px; }
+.big .db > svg { width: 38px; height: 38px; }
+.db:hover { background: var(--wash); }
+.db:active > svg { transform: scale(.82); transition-duration: .08s; }
+.db.front { background: var(--wash-on); }
+.db.run::after { content: ''; position: absolute; left: 50%; bottom: 2px; width: 6px; height: 3px; border-radius: 2px; background: #8e8e93; transform: translateX(-50%); transition: width .2s ease, background .2s ease; }
+.db.front::after { width: 18px; background: var(--accent); }
+/* 会话的小点：哪个窗口里有会话，按它的心情色 */
+.db .sd { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px var(--glass-ring, rgba(40,40,42,.9)); transition: background .2s ease; }
+.light .db .sd { --glass-ring: rgba(249,249,249,.95); }
+.big .db .sd { top: 6px; right: 6px; width: 10px; height: 10px; }
+.db::before { content: attr(data-name); position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translate(-50%, 4px); padding: 5px 10px; border-radius: 6px;
+  background: var(--fly); color: var(--ink); box-shadow: 0 4px 16px rgba(0,0,0,.25), 0 0 0 1px var(--glass-line); font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .12s ease, transform .12s ease; }
+.db:hover::before { opacity: 1; transform: translate(-50%, 0); transition-delay: .35s; }
+.sep { flex: none; width: 1px; height: 24px; margin: 0 6px; background: var(--hair); }
+.big .sep { height: 34px; }
+.dock-keys { display: none; align-items: center; gap: 2px; }
+.keys-dock .dock-keys { display: flex; }
+.strip.keys-dock .dock-keys { position: absolute; right: 6px; top: 0; bottom: 0; }
+.strip .dock-keys .sep { display: none; }
+
+/* 自动隐藏：有窗口碰到它时往下让开，只留一道细边；指针在屏幕底边停一下就回来 */
+.auto.desk-max:not(.revealed) #dock { transform: translate(-50%, calc(100% + 12px)); }
+.auto.desk-max.strip:not(.revealed) #dock { transform: translateY(100%); }
+#stub { position: absolute; z-index: 24; left: 50%; bottom: 0; width: 132px; height: 3px; margin-left: -66px; border-radius: 2px 2px 0 0; background: rgba(255,255,255,.45); opacity: 0; transition: opacity .2s ease; }
+.strip #stub { left: 0; width: 100%; margin: 0; border-radius: 0; }
+.auto.desk-max:not(.revealed) #stub { opacity: 1; transition-delay: .25s; }
+#edge { position: absolute; z-index: 26; left: 0; right: 0; bottom: 0; height: 6px; display: none; }
+.auto.desk-max:not(.revealed) #edge { display: block; }
+
+/* ---------- Windows 自己的面板（只从底部弹出） ---------- */
+#fly { position: absolute; z-index: 40; bottom: calc(var(--Rnow, 48px) + 12px); border-radius: 8px; background: var(--fly); color: var(--ink);
+  backdrop-filter: blur(40px) saturate(1.6); box-shadow: 0 16px 48px rgba(0,0,0,.4), 0 0 0 1px var(--glass-line);
+  opacity: 0; transform: translateY(16px); pointer-events: none; transition: opacity .18s ease, transform .3s cubic-bezier(.1,.9,.2,1); padding: 18px; }
+#fly.show { opacity: 1; transform: none; pointer-events: auto; }
+#fly.k-start { left: 50%; margin-left: -300px; width: 600px; height: 520px; }
+#fly.k-quick, #fly.k-cal { right: 12px; width: 360px; }
+.f-search { height: 34px; border-radius: 17px; background: var(--fly-tile); box-shadow: inset 0 -1px 0 var(--accent); display: flex; align-items: center; padding: 0 16px; color: var(--dim); }
+.f-h { margin: 18px 4px 10px; font-weight: 600; font-size: 13px; }
+.f-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px 4px; }
+.f-app { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 2px; border-radius: 6px; font-size: 11.5px; color: var(--dim); }
+.f-app svg, .f-app .ph { width: 30px; height: 30px; }
+.f-app .ph { border-radius: 7px; background: var(--fly-tile); }
+.f-rec { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+.f-rec div { height: 40px; border-radius: 6px; display: flex; align-items: center; gap: 10px; padding: 0 8px; color: var(--dim); font-size: 12px; }
+.f-rec i { width: 26px; height: 26px; border-radius: 5px; background: var(--fly-tile); flex: none; }
+.f-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.f-tile { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11.5px; color: var(--dim); }
+.f-tile span { width: 100%; height: 48px; border-radius: 6px; background: var(--fly-tile); }
+.f-tile.on span { background: var(--accent); }
+.f-slide { margin-top: 16px; height: 4px; border-radius: 2px; background: var(--fly-tile); position: relative; }
+.f-slide i { position: absolute; left: 0; top: 0; height: 100%; width: 62%; border-radius: 2px; background: var(--accent); }
+.f-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 12px; color: var(--dim); }
+.f-cal b { height: 34px; display: grid; place-items: center; font-weight: 400; border-radius: 50%; color: var(--ink); }
+.f-cal b.now { background: var(--accent); color: var(--accent-ink); }
+
+/* 样例的说明：不是界面的一部分 */
+.note { position: absolute; z-index: 45; padding: 6px 10px; border-radius: 6px; background: rgba(255, 214, 102, .95); color: #3a2c00; font-size: 12px; line-height: 1.45;
+  box-shadow: 0 4px 14px rgba(0,0,0,.25); max-width: 340px; pointer-events: none; }
+#flynote { opacity: 0; transition: opacity .2s ease; }
+#flynote.show { opacity: 1; }
+#guides { position: absolute; inset: 0; z-index: 44; pointer-events: none; display: none; }
+.guides #guides { display: block; }
+.gline { position: absolute; left: 0; right: 0; border-top: 1.5px dashed rgba(255, 214, 102, .95); }
+#g-top { top: var(--T); }
+#g-bot { bottom: var(--Rwork); }
+#g-top .note { top: 8px; left: 16px; }
+#g-bot .note { bottom: 8px; left: 16px; }
+#g-work { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+
+/* ---------- 右边：样例的开关 ---------- */
+#panel { overflow: auto; padding: 18px 18px 24px; background: var(--panel); border-left: 1px solid var(--panel-line); }
+#panel h1 { margin: 0; font-size: 15px; font-weight: 600; }
+#panel .lead { margin: 6px 0 14px; color: var(--panel-dim); font-size: 12px; }
+.grp { padding: 10px 0; border-top: 1px solid var(--panel-line); }
+.grp .t { font-size: 12.5px; margin-bottom: 7px; }
+.segs { display: flex; padding: 2px; border-radius: 8px; background: var(--seg); }
+.segs button { flex: 1; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--panel-dim); cursor: pointer; font-size: 12.5px; }
+.segs button.on { background: var(--seg-on); color: var(--seg-fg); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+.grp .d { margin-top: 7px; color: var(--panel-dim); font-size: 12px; line-height: 1.55; min-height: 0; }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.acts button { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--panel-line); background: var(--seg); color: var(--panel-fg); cursor: pointer; font-size: 12.5px; }
+.acts button:hover { background: var(--seg-on); }
+
+@media (max-width: 900px) {
+  body { grid-template-columns: 1fr; grid-template-rows: auto auto; overflow: auto; height: auto; }
+  html, body { height: auto; }
+  #stage { padding: 16px; }
+  #panel { border-left: 0; border-top: 1px solid var(--panel-line); overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #island, .view, #dock, #fly, #win { transition-duration: .01s !important; }
+}
+</style>
+</head>
+<body>
+<div id="stage"><div id="frame"><div id="screen">
+
+  <div class="dicon" style="top: calc(var(--T) + 10px)">
+    <svg viewBox="0 0 40 40"><path d="M11 12h18l-1.6 22H12.6z" fill="#cfd8e3"/><path d="M9 9.5h22v3H9z" fill="#aeb9c7"/><path d="M16 7h8v2.5h-8z" fill="#aeb9c7"/><path d="M16 16v14M20 16v14M24 16v14" stroke="#94a0b0" stroke-width="1.4"/></svg>
+    回收站
+  </div>
+  <div class="dicon" style="top: calc(var(--T) + 96px)">
+    <svg viewBox="0 0 40 40"><rect x="5" y="8" width="30" height="20" rx="2" fill="#3a8ee6"/><rect x="7" y="10" width="26" height="16" rx="1" fill="#8fd0ff"/><path d="M15 32h10M20 28v4" stroke="#cfd8e3" stroke-width="2.2" stroke-linecap="round"/></svg>
+    此电脑
+  </div>
+
+  <div id="win">
+    <div class="wtitle"><span class="wtab"><i id="tabdot"></i>Claude Code · wakuwaku</span><span class="wctl"><span>—</span><span>☐</span><span>✕</span></span></div>
+<pre><span class="o">✻</span> <b>Claude Code</b> <span class="d">· ~/Projects/wakuwaku</span>
+
+<span class="d">&gt;</span> 跑一遍 desk 的测试，看看 #98 修好没有
+
+<span class="g">●</span> 先跑桌面小工具的测试。
+
+<span class="g">●</span> <b>Bash</b>(cargo test -p wakuwaku desk::)
+  <span class="d">⎿</span>  running 42 tests
+     test desk::tests::grid_snaps_to_72 ... <span class="g">ok</span>
+     test desk::tests::stack_turns_on_wheel ... <span class="g">ok</span>
+     test desk::tests::wheel_goes_to_the_icon_view ... <span class="g">ok</span>
+     <span class="d">… 39 个还在跑</span>
+
+<span id="termlast"><span class="o">✻</span> 跑测试中… <span class="d">(<span class="clk">2:14</span> · esc 打断)</span></span></pre>
+  </div>
+
+  <!-- 顶栏 -->
+  <div id="topbar">
+    <div class="run r-left">
+      <span class="slot"></span>
+      <span class="tb wg" style="--c: #ffb340"><svg class="wi" viewBox="0 0 16 16"><path d="M4.5 12.5h7a3 3 0 0 0 .3-6 4 4 0 0 0-7.6 1A2.5 2.5 0 0 0 4.5 12.5z" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/></svg><span class="two"><b>11°</b><i>Dresden · 阴</i></span></span>
+      <span class="tb wg" style="--c: #34d27b"><svg class="wi" viewBox="0 0 16 16"><path d="M3 13V8M6.5 13V4M10 13V9.5M13.5 13V6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="two"><b>12 轮 · 1:43</b><i>今天</i></span></span>
+      <span class="tb wg" style="--c: #5e9bff"><svg class="wi" viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9" rx="1.8" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M2.6 4.6L8 8.6l5.4-4" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg><span class="two"><b>3</b><i>未读</i></span></span>
+    </div>
+    <div class="run r-right" id="right">
+      <span class="tb mon"><span><span><em>CPU</em>17%</span><span><em>内存</em>44%</span></span><span><span><em>↓</em>7.4K</span><span><em>↑</em>337K</span></span></span>
+      <span class="tray">
+        <span class="tb chev"><svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="tb"><svg viewBox="0 0 16 16"><path d="M4.5 12.5h7a3 3 0 0 0 .3-6 4 4 0 0 0-7.6 1A2.5 2.5 0 0 0 4.5 12.5z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg></span>
+        <span class="tb"><span class="mark" style="--c: #36cfc9"></span></span>
+        <span class="tb"><span class="mark" style="--c: #b18cff"></span></span>
+      </span>
+      <span class="tb ime">中</span>
+      <span class="tb quick" id="quick" data-fly="quick"><svg viewBox="0 0 16 16"><path d="M1.5 6.2a9.5 9.5 0 0 1 13 0M3.7 8.5a6.3 6.3 0 0 1 8.6 0M5.9 10.8a3.1 3.1 0 0 1 4.2 0" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><circle cx="8" cy="13" r="1.1" fill="currentColor"/></svg><svg viewBox="0 0 16 16"><path d="M2.5 6h2.2L8 3.2v9.6L4.7 10H2.5z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/><path d="M10.5 5.8a3 3 0 0 1 0 4.4M12.3 4a5.6 5.6 0 0 1 0 8" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg></span>
+      <span class="tb clock" id="clock" data-fly="cal"><b id="time">14:42</b><i id="date">2026/11/2</i></span>
+    </div>
+  </div>
+
+  <!-- 她 -->
+  <div id="island">
+    <div class="view v-compact">
+      <span class="face" style="--ring: var(--working)" data-px="24"><span class="sheet"><span class="film"></span></span></span>
+      <span class="words ellip" id="cwords">跑测试 · desk::tests</span>
+      <span class="plus">+1</span>
+      <span class="clk">2:14</span>
+    </div>
+    <div class="view v-open">
+      <div class="top">
+        <span class="body"><span class="sheet" style="transform: scale(.5)"><span class="film"></span></span></span>
+        <div class="info">
+          <div class="nm"><b>wakuwaku</b><span>Claude Code</span><span class="clk">2:14</span></div>
+          <div class="step"><span class="bar"><i></i></span><span class="ellip">跑测试：cargo test -p wakuwaku desk::</span></div>
+          <div class="reply">改好了 fullscreen.rs 的 fills：带标题栏、盖满显示器又没最大化的窗口也算全屏。正在跑桌面小工具的测试。</div>
+        </div>
+      </div>
+      <div class="rows">
+        <div class="row" style="--c: var(--working)"><i></i><b>Codex</b><span class="ellip">修 Kazumi 全屏时任务栏不让开</span><em>0:42</em></div>
+        <div class="row" style="--c: var(--done)"><i></i><b>omp</b><span class="ellip">写完 DEVELOPMENT.md 里「她的家」那一节</span><em>12:05</em></div>
+      </div>
+    </div>
+    <div class="view v-ask">
+      <div class="hd"><span class="face" style="--ring: var(--waiting)" data-px="24"><span class="sheet"><span class="film"></span></span></span><b>Claude Code 想运行命令</b><span>wakuwaku</span><span class="clk">等你</span></div>
+      <code>cargo test -p wakuwaku fullscreen::</code>
+      <div class="why">看看 #98 的全屏判断改完以后，原来的测试还过不过。</div>
+      <div class="btns"><button class="yes" data-answer>允许<kbd>Alt+Y</kbd></button><button data-answer>以后都允许</button><button data-answer>拒绝<kbd>Alt+N</kbd></button><button class="go" data-answer>去终端处理</button></div>
+    </div>
+  </div>
+
+  <!-- dock -->
+  <div id="stub"></div>
+  <div id="edge"></div>
+  <div id="dock">
+    <span class="db start" data-name="开始" data-fly="start"><svg viewBox="0 0 24 24"><defs><linearGradient id="sb" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse"><stop class="sb0" offset="0" stop-color="#77f3ff"/><stop class="sb1" offset="1" stop-color="#0c9eff"/></linearGradient></defs><g fill="url(#sb)"><rect x="2" y="2" width="9.5" height="9.5" rx="1"/><rect x="12.5" y="2" width="9.5" height="9.5" rx="1"/><rect x="2" y="12.5" width="9.5" height="9.5" rx="1"/><rect x="12.5" y="12.5" width="9.5" height="9.5" rx="1"/></g></svg></span>
+    <span class="db run" data-name="文件资源管理器"><svg viewBox="0 0 24 24"><path d="M2.5 6.5a2 2 0 0 1 2-2h4.6l2 2h8.4a2 2 0 0 1 2 2v1h-19z" fill="#e8a317"/><path d="M2.5 9h19v8.5a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2z" fill="#ffc83d"/></svg></span>
+    <span class="db run" data-name="浏览器"><svg viewBox="0 0 24 24"><defs><linearGradient id="gb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#50e6ff"/><stop offset="1" stop-color="#0f6cbd"/></linearGradient></defs><circle cx="12" cy="12" r="9.5" fill="url(#gb)"/><path d="M2.5 12h19M12 2.5c3.2 3 3.2 16 0 19M12 2.5c-3.2 3-3.2 16 0 19" stroke="#fff" stroke-opacity=".8" stroke-width="1.2" fill="none"/></svg></span>
+    <span class="db run front" data-name="终端 · Claude Code 在跑测试" id="term"><svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="16" rx="3.5" fill="#26262a" stroke="#5a5a62"/><path d="M6.5 9.5l3 2.5-3 2.5" stroke="#9fe870" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.5 15h5" stroke="#e5e5ea" stroke-width="1.7" stroke-linecap="round"/></svg><span class="sd" id="termdot" style="--c: var(--working)"></span></span>
+    <span class="db run" data-name="代码编辑器 · Codex 在改 fullscreen.rs"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4.5" fill="#1f7fe0"/><path d="M9.5 8.5L6 12l3.5 3.5M14.5 8.5L18 12l-3.5 3.5" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sd" style="--c: var(--working)"></span></span>
+    <span class="db run" data-name="Claude"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4.5" fill="#d97757"/><path d="M7.5 8h9a1 1 0 0 1 1 1v5.2a1 1 0 0 1-1 1h-5l-3 2.6v-2.6h-1a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" fill="#fff"/></svg></span>
+    <span class="db" data-name="邮件"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5" fill="#0f6cbd"/><path d="M3.6 6.6l8.4 6.4 8.4-6.4" stroke="#cfe4ff" stroke-width="1.6" fill="none" stroke-linejoin="round"/></svg></span>
+    <span class="db" data-name="音乐"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4.5" fill="#f2557b"/><path d="M10 16.5V8l7-1.5V15" stroke="#fff" stroke-width="1.6" fill="none" stroke-linejoin="round"/><circle cx="8.5" cy="16.5" r="2" fill="#fff"/><circle cx="15.5" cy="15" r="2" fill="#fff"/></svg></span>
+    <span class="dock-keys" id="dockkeys"><span class="sep"></span></span>
+  </div>
+
+  <!-- Windows 自己的面板 -->
+  <div id="fly"></div>
+  <div class="note" id="flynote"></div>
+
+  <div id="guides">
+    <div class="gline" id="g-top"><span class="note" id="g-top-t"></span></div>
+    <div class="gline" id="g-bot"><span class="note" id="g-bot-t"></span></div>
+    <span class="note" id="g-work">工作区：最大化的窗口铺满两条虚线之间</span>
+  </div>
+
+</div></div></div>
+
+<aside id="panel">
+  <h1>顶栏 + dock · 外观样例</h1>
+  <p class="lead">手做的样子，不是她的真代码；尺寸和颜色照现在的任务栏，屏幕按 1080p、125% 画。鼠标停在胶囊上看展开，点开始、快速设置、时钟看 Windows 自己的面板从哪弹出来。</p>
+  <div id="groups"></div>
+  <div class="grp">
+    <div class="t">演示</div>
+    <div class="acts"><button id="act-ask">来一个批准</button><button id="act-start">点开始</button><button id="act-quick">点快速设置</button></div>
+  </div>
+</aside>
+
+<script>
+;(function () {
+  const $ = s => document.querySelector(s)
+  const screen = $('#screen'), frame = $('#frame'), stage = $('#stage')
+  const island = $('#island'), dock = $('#dock'), fly = $('#fly'), flynote = $('#flynote')
+  const right = $('#right'), dockKeys = $('#dockkeys'), quick = $('#quick'), clock = $('#clock')
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  // 样例的开关：每一组一个键，选中的一项和它的说明。
+  const GROUPS = [
+    { key: 'theme', title: '深浅色', opts: [['dark', '深色'], ['light', '浅色']] },
+    { key: 'bar', title: '顶栏', opts: [['std', '48 px'], ['slim', '32 px']], notes: {
+      std: '和现在的任务栏一样高：时钟两行，胶囊、托盘、插件都照旧。',
+      slim: '更像菜单栏。胶囊矮到 26 px，时钟一行；顶栏上每个部件都要按 32 px 再排一遍。' } },
+    { key: 'her', title: '她在顶栏', opts: [['center', '正中'], ['left', '左端']], notes: {
+      center: '像灵动岛长进了顶栏：展开往下，左右对称。',
+      left: '和现在任务栏的左端一样，展开往右下长；插件排在她后面。' } },
+    { key: 'dock', title: 'dock 的样子', opts: [['float', '居中一块'], ['strip', '整条']], notes: {
+      float: '一块玻璃浮在 Windows 留下的那条里，两边透出壁纸。',
+      strip: '就是现在的底部任务栏，只剩开始和程序按钮。' } },
+    { key: 'size', title: 'dock 图标', opts: [['std', '标准'], ['big', '大']], notes: {
+      std: '40 px 的按钮、24 px 的图标，放得进 Windows 留下的 48 px。',
+      big: 'dock 高 64 px，比 Windows 留的那条厚：要自己登记 AppBar，Windows 的任务栏改成自动隐藏；窗口图标也得取更大的。' } },
+    { key: 'room', title: '窗口碰到 dock 时', opts: [['fixed', '占着位置'], ['auto', '自动隐藏']], notes: {
+      fixed: '最大化的窗口停在 dock 上面。点开始，Windows 的开始菜单正好从 dock 上方弹出。',
+      auto: '窗口铺到屏幕底边，dock 让开，只留一道细边；指针在屏幕底边停一下它就出来。和灵动岛的「有窗口在下面时收起」是同一套。' } },
+    { key: 'keys', title: '快速设置和时钟', opts: [['top', '在顶栏'], ['dock', '在 dock']], notes: {
+      top: '样子最像 macOS。但点开的是 Windows 自己的面板，只从右下角弹出：点右上角试试。',
+      dock: '面板和按钮在同一边。顶栏只剩她、插件、监控、托盘和输入法。' } },
+    { key: 'desk', title: '桌面上', opts: [['max', '最大化的窗口'], ['win', '普通窗口'], ['none', '空桌面']] },
+    { key: 'guides', title: '标注', opts: [['off', '不显示'], ['on', '显示']], notes: {
+      on: '虚线是工作区的边：顶栏和 dock 各占一条，最大化的窗口铺满中间。' } },
+  ]
+  const state = {
+    theme: matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark',
+    // 选定的默认（docs/design/specs/dock-topbar.md）：32 px 顶栏，dock 自动隐藏。
+    bar: 'slim', her: 'center', dock: 'float', size: 'std', room: 'auto', keys: 'top', desk: 'win', guides: 'off',
+  }
+  let revealed = false, hovering = false, asking = false, flyKind = null
+  // #bar=slim&her=left&demo=open：直接打开某一种样子（截图、发给别人看）。
+  const hash = new URLSearchParams(location.hash.slice(1))
+  for (const g of GROUPS) if (g.opts.some(([v]) => v === hash.get(g.key))) state[g.key] = hash.get(g.key)
+  const demo = hash.get('demo')
+
+  // --- 开关面板 -----------------------------------------------------------------
+  const groupsEl = $('#groups')
+  for (const g of GROUPS) {
+    const box = document.createElement('div')
+    box.className = 'grp'
+    box.innerHTML = `<div class="t">${g.title}</div><div class="segs">${g.opts.map(([v, l]) => `<button data-k="${g.key}" data-v="${v}">${l}</button>`).join('')}</div><div class="d" data-note="${g.key}"></div>`
+    groupsEl.append(box)
+  }
+  groupsEl.addEventListener('click', e => {
+    const b = e.target.closest('button[data-k]')
+    if (!b) return
+    state[b.dataset.k] = b.dataset.v
+    closeFly()
+    apply()
+  })
+
+  function apply() {
+    document.documentElement.dataset.theme = state.theme
+    const c = screen.classList
+    c.toggle('light', state.theme === 'light')
+    c.toggle('slim', state.bar === 'slim')
+    c.toggle('her-left', state.her === 'left')
+    c.toggle('strip', state.dock === 'strip')
+    c.toggle('big', state.size === 'big')
+    c.toggle('auto', state.room === 'auto')
+    c.toggle('keys-dock', state.keys === 'dock')
+    c.toggle('guides', state.guides === 'on')
+    for (const d of ['max', 'win', 'none']) c.toggle(`desk-${d}`, state.desk === d)
+    // 快速设置和时钟：顶栏右端，或 dock 末尾的分隔线后面。
+    if (state.keys === 'dock') dockKeys.append(quick, clock)
+    else right.append(quick, clock)
+    for (const b of groupsEl.querySelectorAll('button[data-k]')) b.classList.toggle('on', state[b.dataset.k] === b.dataset.v)
+    for (const g of GROUPS) groupsEl.querySelector(`[data-note="${g.key}"]`).textContent = g.notes?.[state[g.key]] || ''
+    for (const s of screen.querySelectorAll('.sb0')) s.setAttribute('stop-color', state.theme === 'light' ? '#4bcffe' : '#77f3ff')
+    for (const s of screen.querySelectorAll('.sb1')) s.setAttribute('stop-color', state.theme === 'light' ? '#0179d4' : '#0c9eff')
+    const T = state.bar === 'slim' ? 32 : 48
+    const R = state.size === 'big' ? 64 : 48
+    $('#g-top-t').textContent = `顶栏 ${T} px：她自己登记的 AppBar（上边）`
+    $('#g-bot-t').textContent = state.room === 'auto'
+      ? 'dock 不占位置：窗口铺到屏幕底边，dock 让开'
+      : R === 48 ? 'Windows 的任务栏藏起来后留下的 48 px，dock 在里面' : 'dock 64 px：她自己登记的 AppBar（下边），Windows 的任务栏自动隐藏'
+    placeHer()
+    showDock()
+    tick()
+  }
+
+  // --- 屏幕缩放 -----------------------------------------------------------------
+  function fit() {
+    const narrow = innerWidth <= 900
+    const w = stage.clientWidth - 32, h = narrow ? Infinity : stage.clientHeight - 32
+    const s = Math.max(0.1, Math.min(w / 1536, h / 864))
+    screen.style.transform = `scale(${s})`
+    frame.style.width = `${1536 * s}px`
+    frame.style.height = `${864 * s}px`
+  }
+  addEventListener('resize', fit)
+
+  // --- 她的头像和全身：精灵图的一格 ------------------------------------------------
+  // 和 island.js 一样对着脸：整格缩到头像那么宽的 0.21 / 24 倍，横着居中，往上 2 px。
+  function placeHer() {
+    for (const face of screen.querySelectorAll('.face')) {
+      const px = face.getBoundingClientRect().width / (screen.getBoundingClientRect().width / 1536) || 24
+      const s = (0.21 * px) / 24
+      face.querySelector('.sheet').style.transform = `translate(${-(192 * s - px) / 2}px, -2px) scale(${s})`
+    }
+  }
+  const CLIP = { running: { row: 7, frames: 6, ms: 140 }, waiting: { row: 6, frames: 6, ms: 200 } }
+  function frames() {
+    const clip = asking ? CLIP.waiting : CLIP.running
+    const n = still ? 0 : Math.floor(Date.now() / clip.ms) % clip.frames
+    for (const f of screen.querySelectorAll('.film')) f.style.transform = `translate3d(${-n * 192}px, ${-clip.row * 208}px, 0)`
+  }
+  setInterval(frames, 70)
+
+  // --- 时钟和会话计时 -------------------------------------------------------------
+  let secs = 134
+  const WEEK = '日一二三四五六'
+  function tick() {
+    const d = new Date()
+    const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+    // 细顶栏上的时钟一行；在 dock 里照旧两行。
+    if (state.bar === 'slim' && state.keys === 'top') {
+      $('#time').textContent = `${d.getMonth() + 1}月${d.getDate()}日 周${WEEK[d.getDay()]}`
+      $('#date').textContent = hm
+      $('#date').style.color = 'inherit'
+    } else {
+      $('#time').textContent = hm
+      $('#date').textContent = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+      $('#date').style.color = ''
+    }
+    const run = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+    for (const c of screen.querySelectorAll('.v-compact .clk, .v-open .nm .clk, #termlast .clk')) c.textContent = run
+  }
+  setInterval(() => { if (!asking) secs++; tick() }, 1000)
+
+  // --- 胶囊：悬停展开，有批准时自己展开 ----------------------------------------------
+  let openTimer = 0, shutTimer = 0
+  function islandView() {
+    island.classList.toggle('ask', asking)
+    island.classList.toggle('open', !asking && hovering)
+  }
+  island.addEventListener('pointerenter', () => {
+    clearTimeout(shutTimer)
+    openTimer = setTimeout(() => { hovering = true; islandView() }, 80)
+  })
+  island.addEventListener('pointerleave', () => {
+    clearTimeout(openTimer)
+    shutTimer = setTimeout(() => { hovering = false; islandView() }, 260)
+  })
+  function ask(on) {
+    asking = on
+    const ring = on ? 'var(--waiting)' : 'var(--working)'
+    screen.querySelector('.v-compact .face').style.setProperty('--ring', ring)
+    $('#termdot').style.setProperty('--c', ring)
+    $('#tabdot').style.background = ring
+    $('#cwords').textContent = on ? '等你批准 · cargo test' : '跑测试 · desk::tests'
+    $('#termlast').innerHTML = on
+      ? '<span class="a">?</span> 要运行 <b>cargo test -p wakuwaku fullscreen::</b> 吗？ <span class="d">(在她那里或这里答都行)</span>'
+      : '<span class="o">✻</span> 跑测试中… <span class="d">(<span class="clk"></span> · esc 打断)</span>'
+    if (!on) hovering = false
+    islandView()
+    tick()
+  }
+  island.addEventListener('click', e => { if (e.target.closest('[data-answer]')) ask(false) })
+  $('#act-ask').addEventListener('click', () => ask(true))
+
+  // --- dock 自动隐藏 ---------------------------------------------------------------
+  let showTimer = 0, hideTimer = 0
+  function showDock() {
+    screen.classList.toggle('revealed', revealed || !!flyKind)
+    const hidden = state.room === 'auto' && state.desk === 'max' && !revealed && !flyKind
+    const R = state.size === 'big' ? 64 : 48
+    screen.style.setProperty('--Rnow', `${hidden ? 0 : R}px`)
+  }
+  $('#edge').addEventListener('pointerenter', () => { showTimer = setTimeout(() => { revealed = true; showDock() }, 350) })
+  $('#edge').addEventListener('pointerleave', () => clearTimeout(showTimer))
+  dock.addEventListener('pointerenter', () => clearTimeout(hideTimer))
+  dock.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { revealed = false; showDock() }, 600) })
+
+  // --- Windows 自己的面板：开始从底部正中，快速设置、通知和日历从右下角 ---------------------
+  const APPS = [...dock.querySelectorAll('.db:not(.start) > svg')].map(s => s.outerHTML.replace(/id="gb"/, 'id="gb2"').replace(/url\(#gb\)/, 'url(#gb2)'))
+  const NAMES = ['文件', '浏览器', '终端', '编辑器', 'Claude', '邮件', '音乐', '设置', '照片', '计算器', '记事本', '商店']
+  function flyHTML(kind) {
+    if (kind === 'start') {
+      const apps = NAMES.map((n, i) => `<div class="f-app">${APPS[i] || '<span class="ph"></span>'}<span>${n}</span></div>`).join('')
+      const rec = ['fullscreen.rs', 'DEVELOPMENT.md', 'dock-topbar.html', 'recent.log'].map(n => `<div><i></i>${n}</div>`).join('')
+      return `<div class="f-search">搜索应用、设置和文档</div><div class="f-h">已固定</div><div class="f-grid">${apps}</div><div class="f-h">推荐的项目</div><div class="f-rec">${rec}</div>`
+    }
+    if (kind === 'quick') {
+      const tiles = [['Wi-Fi', 1], ['蓝牙', 1], ['飞行模式', 0], ['节能', 0], ['夜间模式', 0], ['辅助功能', 0]].map(([n, on]) => `<div class="f-tile${on ? ' on' : ''}"><span></span>${n}</div>`).join('')
+      return `<div class="f-tiles">${tiles}</div><div class="f-slide"><i></i></div><div class="f-slide"><i style="width: 40%"></i></div>`
+    }
+    const d = new Date(), first = new Date(d.getFullYear(), d.getMonth(), 1).getDay(), days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+    const cells = [...'日一二三四五六'].map(w => `<span>${w}</span>`).join('') + '<span></span>'.repeat(first) +
+      Array.from({ length: days }, (_, i) => `<b class="${i + 1 === d.getDate() ? 'now' : ''}">${i + 1}</b>`).join('')
+    return `<div class="f-h" style="margin-top: 0">${d.getMonth() + 1}月${d.getDate()}日，星期${WEEK[d.getDay()]}</div><div class="f-cal">${cells}</div>`
+  }
+  function openFly(kind, from) {
+    if (flyKind === kind) return closeFly()
+    flyKind = kind
+    fly.className = `show k-${kind}`
+    fly.innerHTML = flyHTML(kind)
+    for (const n of screen.querySelectorAll('[data-fly]')) n.classList.toggle('on', n.dataset.fly === kind)
+    showDock()
+    // 说明：按钮在哪、面板在哪。
+    const inTop = state.keys === 'top' && kind !== 'start'
+    flynote.textContent = kind === 'start'
+      ? 'Windows 自己的开始菜单：从屏幕底部正中弹出，正好在 dock 上方。'
+      : inTop
+        ? '点的是顶栏右上角，弹出来的却在右下角：这是 Windows 自己的面板，Windows 11 只让它从屏幕底部弹出。'
+        : '按钮和 Windows 的面板在同一边。'
+    flynote.style.cssText = ''
+    requestAnimationFrame(() => {
+      const sr = screen.getBoundingClientRect(), s = sr.width / 1536
+      const fr = fly.getBoundingClientRect()
+      const left = Math.min((fr.left - sr.left) / s, 1536 - 360)
+      flynote.style.left = `${Math.max(12, left)}px`
+      flynote.style.top = `${(fr.top - sr.top) / s - 52}px`
+      if (inTop && from) {
+        const br = from.getBoundingClientRect()
+        flynote.style.left = `${Math.min((br.left - sr.left) / s - 200, 1536 - 360)}px`
+        flynote.style.top = `${(br.bottom - sr.top) / s + 10}px`
+      }
+      flynote.classList.add('show')
+    })
+  }
+  function closeFly() {
+    if (!flyKind) return
+    flyKind = null
+    fly.className = ''
+    flynote.classList.remove('show')
+    for (const n of screen.querySelectorAll('[data-fly]')) n.classList.remove('on')
+    showDock()
+  }
+  screen.addEventListener('click', e => {
+    const b = e.target.closest('[data-fly]')
+    if (b) return openFly(b.dataset.fly, b)
+    if (!e.target.closest('#fly')) closeFly()
+  })
+  addEventListener('keydown', e => { if (e.key === 'Escape') closeFly() })
+  $('#act-start').addEventListener('click', e => { e.stopPropagation(); openFly('start', dock.querySelector('.start')) })
+  $('#act-quick').addEventListener('click', e => { e.stopPropagation(); openFly('quick', quick) })
+
+  apply()
+  fit()
+  frames()
+  requestAnimationFrame(placeHer)
+  if (demo === 'open') { hovering = true; islandView() }
+  if (demo === 'ask') ask(true)
+  if (demo === 'reveal') { revealed = true; showDock() }
+  if (demo === 'start' || demo === 'quick' || demo === 'cal') setTimeout(() => openFly(demo, demo === 'start' ? dock.querySelector('.start') : demo === 'quick' ? quick : clock), 50)
+})()
+</script>
+</body>
+</html>

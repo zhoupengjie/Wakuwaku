@@ -64,6 +64,8 @@ mod events_tests;
 mod dsh_bridge;
 mod fetch;
 mod focus;
+#[cfg(windows)]
+mod frameless;
 mod fullscreen;
 mod gpu;
 mod hw;
@@ -316,10 +318,15 @@ impl Shared {
         });
     }
 
+    // A window of hers, just made: known as hers, and with no frame to draw
+    // (frameless.rs), on the main thread that has it, ahead of anything that
+    // would show it (her page, not ready for a good while yet).
     pub fn own_window(&self, _win: &WebviewWindow) {
         #[cfg(windows)]
         if let Ok(hwnd) = _win.hwnd() {
-            self.own.lock().unwrap().push(hwnd.0 as isize);
+            let hwnd = hwnd.0 as isize;
+            self.own.lock().unwrap().push(hwnd);
+            let _ = _win.run_on_main_thread(move || frameless::keep(hwnd));
         }
     }
 

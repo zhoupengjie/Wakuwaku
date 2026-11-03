@@ -14,6 +14,14 @@
 // So the style goes, and stays gone: tao writes its own back at every change of
 // its flags (each click-through, each show and hide), which WM_STYLECHANGING
 // lets us correct as it is asked.
+//
+// Minimized, a window is all frame, title bar or none in its style, and the
+// same Basic one is drawn on that surface; restored at the same size, it stays
+// there (her island in the taskbar home, 2560 x 860: a bar across the screen
+// with "wakuwaku island" and a close button, 2026-11-03, minimized by Claude's
+// computer use and laid again by her look). Minimized, then, no frame is
+// drawn: no WM_NCPAINT, and WM_NCACTIVATE's own drawing waved off (lparam -1,
+// as Windows lets one).
 use std::ffi::c_void;
 
 type Hwnd = *mut c_void;
@@ -24,6 +32,8 @@ const GWL_STYLE: i32 = -16;
 const WS_CAPTION: u32 = 0x00c0_0000;
 const WM_NCDESTROY: u32 = 0x0082;
 const WM_STYLECHANGING: u32 = 0x007c;
+const WM_NCPAINT: u32 = 0x0085;
+const WM_NCACTIVATE: u32 = 0x0086;
 const SWP_NOSIZE: u32 = 0x0001;
 const SWP_NOMOVE: u32 = 0x0002;
 const SWP_NOZORDER: u32 = 0x0004;
@@ -49,6 +59,7 @@ extern "system" {
     fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
     fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
     fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
+    fn IsIconic(hwnd: Hwnd) -> i32;
 }
 
 fn without_title_bar(style: u32) -> u32 {
@@ -60,10 +71,21 @@ unsafe extern "system" fn hold_off_title_bar(hwnd: Hwnd, msg: u32, wparam: usize
         // SAFETY: for this message, lparam is Windows' STYLESTRUCT, ours to change.
         let change = &mut *(lparam as *mut StyleStruct);
         change.new = without_title_bar(change.new);
+    } else if msg == WM_NCPAINT && IsIconic(hwnd) != 0 {
+        return 0;
+    } else if msg == WM_NCACTIVATE && IsIconic(hwnd) != 0 {
+        return DefSubclassProc(hwnd, msg, wparam, -1);
     } else if msg == WM_NCDESTROY {
         RemoveWindowSubclass(hwnd, hold_off_title_bar, SUBCLASS_ID);
     }
     DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+
+// Whether a window of hers is minimized: island.rs and pet.rs leave it so,
+// never laying it again till it is given back.
+pub fn minimized(hwnd: isize) -> bool {
+    // SAFETY: a plain call about a window; a stale handle answers no.
+    unsafe { IsIconic(hwnd as Hwnd) != 0 }
 }
 
 // Before the window first shows. On its own thread, as a subclass must be.

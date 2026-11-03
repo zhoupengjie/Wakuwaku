@@ -4,7 +4,8 @@
 // Full screen: the foreground window covers its whole monitor and has no title
 // bar, or has one by its style and covers it unmaximised, or lies exactly on
 // it (fills). A maximised window has one and goes past the monitor's edges
-// or stops at the taskbar, so it is not. And only on a display she is on (on: their rects; none given, any): a
+// or stops at the taskbar, so it is not. Nor is a layer the pointer goes
+// through (click_through). And only on a display she is on (on: their rects; none given, any): a
 // video full screen on the second display hid her taskbar on the main one
 // (the user, 2026-10-13); Windows' own steps aside only on its own display.
 
@@ -78,6 +79,17 @@ mod imp {
 
     const GWL_EXSTYLE: i32 = -20;
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const WS_EX_TRANSPARENT: u32 = 0x0000_0020;
+    const WS_EX_LAYERED: u32 = 0x0008_0000;
+
+    // A window the pointer goes through (layered and transparent both: either
+    // alone takes the clicks) is a layer over the screen, not an app one uses
+    // full screen. Claude's computer use lays one over the whole display as it
+    // works (claude.exe, 0x8280028), the front window then: she stepped aside
+    // and came back each time, her taskbar flashing (2026-11-03).
+    fn click_through(ex: u32) -> bool {
+        ex & (WS_EX_LAYERED | WS_EX_TRANSPARENT) == WS_EX_LAYERED | WS_EX_TRANSPARENT
+    }
 
     // The desktop, the taskbars, and task view and Alt+Tab (they cover the screen).
     const SKIP_CLASSES: [&str; 5] = ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "XamlExplorerHostIslandWindow"];
@@ -172,6 +184,9 @@ mod imp {
             if SKIP_CLASSES.contains(&String::from_utf16_lossy(&name[..n]).as_str()) {
                 return Some(None);
             }
+            if click_through(GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32) {
+                return Some(None);
+            }
             let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
             let mut rect = Rect::default();
             if GetWindowRect(hwnd, &mut rect) == 0 {
@@ -226,7 +241,20 @@ mod imp {
 
     #[cfg(test)]
     mod tests {
-        use super::{fills, titled};
+        use super::{click_through, fills, titled};
+
+        #[test]
+        fn a_layer_the_pointer_goes_through_is_no_app() {
+            // Computer use's layer over the display (claude.exe, 2026-11-03).
+            assert!(click_through(0x0828_0028));
+            // Snipping Tool's (a tool window, topmost, no redirection
+            // bitmap), NVIDIA's overlay (layered alone), a game's: taken.
+            assert!(!click_through(0x0020_0188));
+            assert!(!click_through(0x0808_0080));
+            assert!(!click_through(0x0000_0010));
+            // Claude's own window full screen: layered, not transparent.
+            assert!(!click_through(0x0028_0000));
+        }
 
         #[test]
         fn what_fills_a_display() {

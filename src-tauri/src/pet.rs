@@ -438,6 +438,12 @@ pub fn set_panel(sh: &Shared, measured: Option<(f64, f64)>) {
     let _ = sh.app.emit_to("pet", "pet:shift", (shift as f64 / sf).round());
 }
 
+// Minimized by another program (island.rs MINIMIZED, Claude's computer use):
+// left so till it is given back, not put back on screen from (-32000, -32000)
+// at its size, minimized still, nor that place remembered.
+#[cfg(windows)]
+static MINIMIZED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 // Put the window back on screen at its own size if anything moved it off or
 // stretched it (a display unplugged, the scale changed).
 pub fn keep_on_screen(sh: &Shared) {
@@ -445,6 +451,17 @@ pub fn keep_on_screen(sh: &Shared) {
     {
         let w = sh.win.lock().unwrap();
         if !w.ready || !w.shown || w.drag.is_some() || w.walking || w.flying {
+            return;
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::sync::atomic::Ordering;
+        let minimized = win.hwnd().is_ok_and(|h| crate::frameless::minimized(h.0 as isize));
+        if MINIMIZED.swap(minimized, Ordering::SeqCst) != minimized {
+            sh.log(if minimized { "pet: minimized by another program; left so till it is given back" } else { "pet: given back after it was minimized" });
+        }
+        if minimized {
             return;
         }
     }

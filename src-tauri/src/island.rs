@@ -605,8 +605,12 @@ pub fn take_strip_again(sh: &Shared) {
 // scales' ratio over it): an external display at 125% plugged back in and
 // made the main one while it sat on the laptop's at 175%, her taskbar came
 // out 1830 x 615 for 2560 x 860, the strip floating up the screen and short
-// of its end, until she was restarted (zhoupengjie/Wakuwaku#37).
+// of its end, until she was restarted (zhoupengjie/Wakuwaku#37). Never while
+// minimized (keep_on_screen lays it once it is given back).
 fn lay(win: &WebviewWindow, (x, y): (i32, i32), (w, h): (i32, i32)) {
+    if is_minimized(win) {
+        return;
+    }
     let _ = win.set_position(PhysicalPosition::new(x, y));
     let _ = win.set_size(PhysicalSize::new(w.max(1) as u32, h.max(1) as u32));
     let _ = win.set_position(PhysicalPosition::new(x, y));
@@ -1141,10 +1145,27 @@ pub fn handoff_out(sh: &Shared) {
     sh.log(&format!("handoff: out, {}, {}", if bare { "bare" } else { "no answer in 500 ms" }, if done { "done" } else { "not waited for" }));
 }
 
+// Minimized by another program. Claude's computer use hides every window of
+// a program it was not given as it starts, hers too, and gives them back as
+// its turn ends: taken for Windows moving it, hers was laid again at its size
+// every 2 s, minimized still, for 35 min, a bar across the screen with its
+// name and a close button left on it after (2026-11-03; frameless.rs). Left
+// so now, as the other program wants it, till it is given back.
+static MINIMIZED: AtomicBool = AtomicBool::new(false);
+
+fn is_minimized(_win: &WebviewWindow) -> bool {
+    #[cfg(windows)]
+    if let Ok(h) = _win.hwnd() {
+        return crate::frameless::minimized(h.0 as isize);
+    }
+    false
+}
+
 // Kept in its place (a display gone, the scale changed, another bar). And
 // put back where it was put if Windows moved it: the taskbar's window, which
 // reaches over its own strip, was pushed up into the work area by the strip's
-// height (2026-10-10, as a game went full screen and back).
+// height (2026-10-10, as a game went full screen and back). Not while it is
+// minimized (MINIMIZED); given back, laid where it belongs at once.
 pub fn keep_on_screen(sh: &Shared) {
     // A display come or gone: her taskbar on the others too (bars.rs).
     crate::bars::sync(&crate::shared(&sh.app));
@@ -1155,15 +1176,32 @@ pub fn keep_on_screen(sh: &Shared) {
     if !is_up {
         return;
     }
+    let Some(win) = window(sh) else { return };
+    let minimized = is_minimized(&win);
+    let was = MINIMIZED.swap(minimized, Ordering::SeqCst);
+    if minimized {
+        if !was {
+            sh.log(&format!("island: minimized by another program ({} in front); left so till it is given back", crate::fullscreen::front()));
+        }
+        return;
+    }
+    let given_back = was;
     // Where it belongs now (a display come or gone moves it), then its size
     // as Windows left it: place compares only with what it asked for last,
     // the same, and would never set it again (#37).
     place(sh);
+    if given_back {
+        let (pos, size) = {
+            let isl = sh.island.lock().unwrap();
+            (isl.pos, isl.size)
+        };
+        sh.log(&format!("island: given back after it was minimized; laid at {pos:?} {size:?}"));
+        lay(&win, pos, size);
+    }
     lay_again(sh, "seen by the look");
     if sh.home() != "taskbar" {
         return;
     }
-    let Some(win) = window(sh) else { return };
     if let Ok(at) = win.outer_position() {
         if (at.x, at.y) != pos && sh.island.lock().unwrap().pos == pos {
             sh.log(&format!("island: moved by Windows to ({}, {}); put back at {pos:?}", at.x, at.y));

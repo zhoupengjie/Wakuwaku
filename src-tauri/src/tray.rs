@@ -122,7 +122,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&pets)?;
     menu.append(&sizes)?;
-    for key in ["walk", "look"] {
+    for key in ["walk", "look", "play"] {
         menu.append(&CheckMenuItem::with_id(app, key, t(&format!("menu.{key}")), true, flag(key), None::<&str>)?)?;
     }
     // Her home: the island, the taskbar, or the top bar and the dock.
@@ -176,7 +176,7 @@ pub fn part_menu(sh: &Shared, part: &str) -> Option<tauri::Result<Menu<Wry>>> {
 pub fn on_menu(sh: &Arc<Shared>, id: &str) {
     match id {
         "toggle" => sh.set_hidden(sh.is_visible()),
-        "walk" | "look" | "dnd" => sh.change(json!({ id: !sh.flag(id) })),
+        "walk" | "look" | "play" | "dnd" => sh.change(json!({ id: !sh.flag(id) })),
         "out" => crate::set_out(sh, !sh.flag("out")),
         "corner" => crate::come_home(sh),
         "settings" => crate::island::open_settings(sh, None),

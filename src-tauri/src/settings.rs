@@ -561,7 +561,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "lang" => matches!(v.as_str(), Some("auto" | "zh" | "en")),
         "pet" => v.as_str().is_some_and(|id| data::pets(&sh.dir).iter().any(|p| p.id == id)),
         "scale" => v.as_f64().is_some_and(|s| data::SCALES.iter().any(|(_, x)| (x - s).abs() < 1e-9)),
-        "details" | "walk" | "look" | "sound" | "dnd" | "hideInFullscreen" | "onboarded" | "out" | "settingsPin" | "settingsTop" | "oledShift" | "autoUpdateCheck" | "shortcutsEnabled" => is_bool,
+        "details" | "walk" | "look" | "play" | "sound" | "dnd" | "hideInFullscreen" | "onboarded" | "out" | "settingsPin" | "settingsTop" | "oledShift" | "autoUpdateCheck" | "shortcutsEnabled" => is_bool,
         "shortcutApprove" | "shortcutDeny" | "shortcutIsland" => v.as_str().is_some_and(|s| is_shortcut_spec(sh, key, s)),
         // Where an update is downloaded from first (updates.rs gitee_first).
         "updateFrom" => matches!(v.as_str(), Some("auto" | "github" | "gitee")),

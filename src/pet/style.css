@@ -398,10 +398,263 @@ body {
   flex: none;
   position: relative;
   overflow: hidden;
-  transform: translateX(var(--shift, 0px));
+  /* Her playing (play.js) leans, stretches and turns her whole box, the clicks
+     going with it; none of these is set otherwise. */
+  transform: translateX(var(--shift, 0px)) translateY(var(--her-y, 0px)) rotate(var(--her-tilt, 0deg)) scale(var(--her-sx, 1), var(--her-sy, 1));
+  transform-origin: var(--her-from, 50% 100%);
   width: calc(192px * var(--scale));
   height: calc(208px * var(--scale));
   cursor: grab;
+}
+
+/* Her playing (play.js). Clipped to her whole box to begin with, so that going
+   behind the top of a window, and coming out again, is a move. */
+#pet.her-plays {
+  clip-path: inset(0);
+  transition:
+    clip-path 0.24s linear,
+    transform 0.14s ease-out;
+}
+
+/* Hanging from the pointer: from the top of her head, each lean as it comes,
+   her box on a layer of its own so that a lean is no repaint. */
+#pet.her-held {
+  --her-from: 50% 6%;
+  cursor: grabbing;
+  clip-path: none;
+  transition: none;
+  will-change: transform;
+}
+
+/* Running up the side of a window, her feet on it. */
+#pet.her-wall-l,
+#pet.her-wall-r,
+#pet.her-lie-l,
+#pet.her-lie-r {
+  --her-from: 50% 50%;
+}
+
+#pet.her-wall-r {
+  --her-tilt: -90deg;
+}
+
+#pet.her-wall-l {
+  --her-tilt: 90deg;
+}
+
+/* Lying down: on her side, on the foot of her window. */
+#pet.her-lie-r {
+  --her-tilt: 90deg;
+  --her-y: calc(24px * var(--scale));
+}
+
+#pet.her-lie-l {
+  --her-tilt: -90deg;
+  --her-y: calc(20px * var(--scale));
+}
+
+/* Behind the top of a window, the head and shoulders over it. The cut part
+   takes no pointer: the title bar under it is still the window's. */
+#pet.her-peek {
+  clip-path: inset(0 0 46% 0);
+}
+
+/* Down on her feet. */
+#pet.her-land {
+  animation: her-land 0.26s ease-out;
+}
+
+@keyframes her-land {
+  0% {
+    transform: translateX(var(--shift, 0px)) scale(1.14, 0.78);
+  }
+  55% {
+    transform: translateX(var(--shift, 0px)) scale(0.95, 1.06);
+  }
+  100% {
+    transform: translateX(var(--shift, 0px));
+  }
+}
+
+/* What comes off her: at her feet in her window, sized with her. */
+#her-fx {
+  position: absolute;
+  left: calc(50% + var(--shift, 0px));
+  bottom: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+#her-fx span {
+  position: absolute;
+  pointer-events: none;
+}
+
+.her-dust {
+  left: -7px;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(214, 208, 198, 0.85);
+  animation: her-dust 0.46s ease-out both;
+}
+
+@keyframes her-dust {
+  from {
+    opacity: 0.9;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--to-x), var(--to-y)) scale(1.3);
+  }
+}
+
+.her-heart {
+  left: calc(var(--from-x) - 7px);
+  bottom: calc(190px * var(--scale));
+  color: #ff6f91;
+  font-size: 18px;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  animation: her-heart 0.9s ease-out both;
+}
+
+@keyframes her-heart {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(calc(var(--to-x) * 0.25), -8px) scale(1.1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--to-x), -44px) scale(0.9);
+  }
+}
+
+/* Dizzy: round her head a few times, flat as a ring seen from the side. */
+.her-stars {
+  left: 0;
+  bottom: calc(200px * var(--scale));
+  width: 0;
+  height: 0;
+  transform: scaleY(0.4);
+}
+
+.her-star {
+  left: -7px;
+  top: -7px;
+  color: #ffd54f;
+  font-size: 14px;
+  line-height: 1;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.45);
+  animation: her-star 0.74s linear 3 both;
+}
+
+@keyframes her-star {
+  from {
+    transform: rotate(var(--turn)) translateX(calc(62px * var(--scale))) rotate(calc(0deg - var(--turn)));
+  }
+  to {
+    transform: rotate(calc(var(--turn) + 360deg)) translateX(calc(62px * var(--scale))) rotate(calc(-360deg - var(--turn)));
+  }
+}
+
+.her-gasp {
+  left: calc(44px * var(--scale));
+  bottom: calc(190px * var(--scale));
+  color: #ffb340;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  animation: her-gasp 0.5s ease-out both;
+}
+
+@keyframes her-gasp {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.5);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.15);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+/* Her umbrella over her head: opens, stays while she floats, folds. */
+.her-umbrella {
+  left: calc(-52px * var(--scale));
+  bottom: calc(176px * var(--scale));
+  width: calc(104px * var(--scale));
+  transform-origin: 50% 100%;
+  animation: her-umbrella 0.2s ease-out both;
+}
+
+.her-umbrella svg {
+  display: block;
+  width: 100%;
+}
+
+.her-umbrella.going {
+  animation: her-unumbrella 0.14s ease-in both;
+}
+
+@keyframes her-umbrella {
+  from {
+    opacity: 0;
+    transform: scale(0.3, 0.1);
+  }
+}
+
+@keyframes her-unumbrella {
+  to {
+    opacity: 0;
+    transform: scale(0.3, 0.1);
+  }
+}
+
+/* Asleep: nothing moves once it is there, as nobody is about. */
+.her-zzz {
+  left: calc(36px * var(--scale));
+  bottom: calc(150px * var(--scale));
+  color: #e9edf5;
+  font-weight: 600;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  animation: her-fade 0.3s ease both;
+}
+
+.her-zzz i {
+  position: absolute;
+  font-style: normal;
+}
+
+.her-zzz i:nth-child(1) {
+  left: 0;
+  bottom: 0;
+  font-size: 11px;
+}
+
+.her-zzz i:nth-child(2) {
+  left: 9px;
+  bottom: 12px;
+  font-size: 14px;
+}
+
+.her-zzz i:nth-child(3) {
+  left: 20px;
+  bottom: 27px;
+  font-size: 18px;
 }
 
 #pet-film {

@@ -1,6 +1,7 @@
 // What the pet shows, decided whenever a frame is due, in this order:
 //   dragged   runs the way the window is dragged
 //   reaction  a one-off (wave, jump, failed) over the mood
+//   pose      her playing (play.js): a frame held, or a clip looped
 //   walking   an idle stroll along the screen
 //   looking   idle, eyes on the cursor (or a glance around): rows 9-10
 //   mood      the mood's own loop
@@ -35,6 +36,8 @@ const herList = document.getElementById('her-list') || sprite.parentElement.inse
 const panelBox = document.getElementById('panel')
 // Under her feet while she is carried out of her home: a double-click sends her back.
 const hint = document.getElementById('her-hint') || sprite.parentElement.appendChild(Object.assign(document.createElement('div'), { id: 'her-hint', hidden: true }))
+// What comes off her as she plays (play.js): at her feet, taking no pointer.
+const fx = document.getElementById('her-fx') || sprite.parentElement.appendChild(Object.assign(document.createElement('div'), { id: 'her-fx' }))
 
 let lang = 'en'
 let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
@@ -58,6 +61,8 @@ let reaction = null // { clip, times, say, start }
 let dragged = null // { dir, at }
 let walking = null // { dir }
 let looking = null // { row, frame, until }
+let pose = null // { row, frame } or { clip }: her playing's
+let play = null
 let loop = { clip: '', start: 0 }
 
 // --- Drawing ------------------------------------------------------------------
@@ -110,7 +115,7 @@ function frame() {
 
   // Nobody at the keyboard or mouse for a while: she stands still on her
   // mood's first frame (a reaction still plays; a drag still carries her).
-  if (quiet && !reaction && !dragged && !walking) {
+  if (quiet && !reaction && !dragged && !walking && !pose) {
     loop = { clip: '', start: 0 }
     drawCell(CLIPS[MOOD_CLIP[now.mood]].row, 0)
     return 60 * 60 * 1000
@@ -131,6 +136,13 @@ function frame() {
     }
     reaction = null
     render()
+  }
+
+  if (pose?.clip) return drawLoop(pose.clip, at)
+  if (pose) {
+    loop = { clip: '', start: 0 }
+    drawCell(pose.row, pose.frame)
+    return 60 * 60 * 1000
   }
 
   if (walking) return drawLoop(walking.dir > 0 ? 'running-right' : 'running-left', at)
@@ -360,7 +372,7 @@ function fillList() {
 
 function openList() {
   clearTimeout(listTimer)
-  if (!isOut() || isAsking() || dragged || listOpen) return
+  if (!isOut() || isAsking() || dragged || listOpen || play?.rubbing()) return
   listOpen = true
   fillList()
   popIn(herList)
@@ -504,7 +516,7 @@ function scheduleIdle() {
 
 // Free for a walk or a glance: at rest, someone about, and she out to be seen.
 function isFree() {
-  return now.mood === 'idle' && !quiet && !document.hidden && !reaction && !walking && !dragged && !(looking && performance.now() < looking.until)
+  return now.mood === 'idle' && !quiet && !document.hidden && !reaction && !walking && !dragged && !play?.holding() && !(looking && performance.now() < looking.until)
 }
 
 async function idleAct() {
@@ -518,6 +530,7 @@ async function idleAct() {
     await window.pet.walk(dir * distance, distance * 18)
     walking = null
     kick()
+    play?.walked()
   } else {
     glance(2 + Math.floor(Math.random() * 2))
   }
@@ -549,26 +562,45 @@ function stopIdle() {
 
 let audio
 
-function chime(mood) {
+function notes(list, { gap = 0.16, long = 0.3, loud = 0.12 } = {}) {
   if (!config.sound || config.dnd) return
   try {
     audio = audio || new AudioContext()
-    const notes = mood === 'error' ? [440, 330] : mood === 'waiting' ? [660, 880] : [523, 784]
-    notes.forEach((hz, i) => {
+    list.forEach((hz, i) => {
       const osc = audio.createOscillator()
       const gain = audio.createGain()
-      const at = audio.currentTime + i * 0.16
+      const at = audio.currentTime + i * gap
       osc.frequency.value = hz
       gain.gain.setValueAtTime(0.0001, at)
-      gain.gain.exponentialRampToValueAtTime(0.12, at + 0.02)
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.3)
+      gain.gain.exponentialRampToValueAtTime(loud, at + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + long)
       osc.connect(gain).connect(audio.destination)
       osc.start(at)
-      osc.stop(at + 0.32)
+      osc.stop(at + long + 0.02)
     })
   } catch {
     // No sound device: nothing to play on.
   }
+}
+
+function chime(mood) {
+  notes(mood === 'error' ? [440, 330] : mood === 'waiting' ? [660, 880] : [523, 784])
+}
+
+// Her playing's, smaller than what she has to tell you.
+const BLIPS = {
+  pick: { list: [587, 880], gap: 0.05, long: 0.1, loud: 0.05 },
+  hop: { list: [440, 660], gap: 0.05, long: 0.1, loud: 0.03 },
+  land: { list: [196, 131], gap: 0.05, long: 0.14, loud: 0.09 },
+  oops: { list: [784, 523], gap: 0.07, long: 0.12, loud: 0.05 },
+  dizzy: { list: [660, 587, 523, 494, 440], gap: 0.09, long: 0.12, loud: 0.04 },
+  heart: { list: [784, 1047], gap: 0.09, long: 0.2, loud: 0.05 },
+  hello: { list: [523, 659, 784], gap: 0.1, long: 0.2, loud: 0.05 },
+}
+
+function blip(name) {
+  const { list, ...how } = BLIPS[name]
+  notes(list, how)
 }
 
 // --- From main --------------------------------------------------------------------------
@@ -613,7 +645,7 @@ window.pet.onAlert(({ mood }) => chime(mood))
 
 // Eyes on the cursor while it moves near enough.
 window.pet.onCursor(({ dx, dy }) => {
-  if (!config.look || isIsland() || spriteVersion !== 2 || now.mood !== 'idle' || reaction || walking || dragged) return
+  if (!config.look || isIsland() || spriteVersion !== 2 || now.mood !== 'idle' || reaction || pose || walking || dragged) return
   const distance = Math.hypot(dx, dy)
   if (distance < LOOK_NEAR || distance > LOOK_FAR) return
   clearTimeout(glanceTimer)
@@ -684,6 +716,27 @@ window.addEventListener('mouseup', e => {
 // A double-click: back into the island if she is out of it, else the main
 // window (main decides). A single one makes her jump.
 sprite.addEventListener('dblclick', () => window.pet.doubleClick())
+
+// Her playing: its own listeners, and what it has drawn through these.
+if (!isIsland() && window.Play) {
+  play = window.Play.attach({
+    pet: window.pet,
+    sprite,
+    fx,
+    film: {
+      pose(next) {
+        pose = next
+        kick()
+      },
+      react: (name, times) => react({ react: name, times }),
+      sound: blip,
+      closeList,
+    },
+    sheet: () => spriteVersion,
+    // The drag's words are in the window's physical pixels, her page's in its own.
+    sf: () => devicePixelRatio || 1,
+  })
+}
 
 // The first pet:update (on load) brings the sprite and the first render.
 kick()

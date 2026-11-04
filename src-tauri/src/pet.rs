@@ -22,6 +22,7 @@ use crate::{island, now_ms, Shared};
 // wide enough that the bubble says something before it has to cut it short.
 const BASE_W: f64 = 360.0;
 const BASE_H: f64 = 320.0;
+const CELL_W: f64 = 192.0;
 const CELL_H: f64 = 208.0;
 // The cursor further than this (logical px) from her face does not catch her eye.
 const LOOK_FAR: f64 = 900.0;
@@ -34,6 +35,67 @@ const FLY_MS: f64 = 380.0;
 // Room under her feet (logical) for the hint while she is carried out of
 // her home: a double-click sends her back (pet.js, style.css #her-hint).
 const HINT_H: f64 = 30.0;
+// Under her umbrella she sways once in about this long.
+const SWAY_MS: f64 = 1600.0;
+// Her window going somewhere with the hand, or by itself, each step this far
+// apart: every 31 ms (main.rs says why), a display of 320 Hz showed the same
+// place ten times over and the eye saw a string of her behind the pointer.
+pub const KEEP_UP_MS: u64 = 8;
+
+// The way one of her moves goes (go; src/pet/play.js says which).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Way {
+    // At one speed: running along, up the side of a window.
+    Line,
+    // Faster and faster: dropped.
+    Fall,
+    // A jump: this high over the straight line (physical px).
+    Arc(f64),
+    // At one speed, swaying this far to each side (physical px): her umbrella.
+    Float(f64),
+}
+
+impl Way {
+    pub fn of(how: &str, bend: f64) -> Way {
+        match how {
+            "fall" => Way::Fall,
+            "arc" => Way::Arc(bend),
+            "float" => Way::Float(bend),
+            _ => Way::Line,
+        }
+    }
+
+    // Where she is at t (0 to 1) of a move of ms from a to b.
+    fn at(self, a: (i32, i32), b: (i32, i32), t: f64, ms: f64) -> (i32, i32) {
+        let lerp = |from: i32, to: i32, k: f64| from as f64 + (to - from) as f64 * k;
+        let (x, y) = match self {
+            Way::Line => (lerp(a.0, b.0, t), lerp(a.1, b.1, t)),
+            Way::Fall => (lerp(a.0, b.0, t), lerp(a.1, b.1, t * t)),
+            Way::Arc(high) => (lerp(a.0, b.0, t), lerp(a.1, b.1, t) - high * 4.0 * t * (1.0 - t)),
+            Way::Float(far) => {
+                let turns = (ms / SWAY_MS).round().max(1.0);
+                (lerp(a.0, b.0, t) + far * (t * turns * std::f64::consts::TAU).sin(), lerp(a.1, b.1, t))
+            }
+        };
+        (x.round() as i32, y.round() as i32)
+    }
+}
+
+// The window she stands on, and where it was last seen (its left, its top):
+// she goes with it (poll).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Perch {
+    on: isize,
+    at: (i32, i32),
+}
+
+// What became of her on the window she stands on, one look at it (Win::follow).
+#[derive(Debug, PartialEq)]
+enum Follow {
+    Still,
+    Moved,
+    Gone,
+}
 
 struct Drag {
     // The cursor's offset in the window.
@@ -81,6 +143,10 @@ pub struct Win {
     parked: Option<((i32, i32), (i32, i32))>,
     // Room under her feet (physical) while she is carried out: the hint.
     below: i32,
+    // Playing (src/pet/play.js): the window she stands on, if any; the one in
+    // front as last seen, the page told as it changes.
+    perch: Option<Perch>,
+    front: isize,
 }
 
 // Her window's display's scale.
@@ -164,6 +230,59 @@ impl Win {
     fn her_point(&self, scale: f64) -> (i32, i32) {
         let (x, y) = self.feet();
         (x, y - (CELL_H * scale * self.sf() / 2.0).round() as i32)
+    }
+
+    // The window's place for her feet there: feet() the other way round.
+    fn place_for(&self, (x, y): (i32, i32)) -> (i32, i32) {
+        (x - self.size.0 / 2 - self.shift, y + self.below - self.size.1)
+    }
+
+    // A place for the window kept on screen by clamp, she at least: the room
+    // over her head may lie past the work area's top, so that she can stand
+    // on a window high up, as long as she herself is seen.
+    fn kept_high(&self, p: (i32, i32), scale: f64, clamp: impl Fn((i32, i32), (i32, i32)) -> (i32, i32)) -> (i32, i32) {
+        let kept = clamp(p, self.size);
+        let room = self.size.1 - self.below - (CELL_H * scale * self.sf()).round() as i32;
+        (kept.0, if p.1 < kept.1 { p.1.max(kept.1 - room.max(0)) } else { kept.1 })
+    }
+
+    // Where the window stays where it is: on the work area, or standing on
+    // a window, kept_high.
+    fn kept(&self, p: (i32, i32), scale: f64, clamp: impl Fn((i32, i32), (i32, i32)) -> (i32, i32)) -> (i32, i32) {
+        if self.perch.is_some() {
+            self.kept_high(p, scale, clamp)
+        } else {
+            clamp(p, self.size)
+        }
+    }
+
+    // One look at the window she stands on (seen: where it is, left, top,
+    // right, bottom; none: it is no longer one to stand on). She goes where
+    // it goes; off the screen with it, or past her feet (made narrower), it
+    // has gone from under her. Her place to go back to as well (make_room).
+    fn follow(&mut self, seen: Option<(i32, i32, i32, i32)>, scale: f64, clamp: impl Fn((i32, i32), (i32, i32)) -> (i32, i32)) -> Follow {
+        let Some(perch) = self.perch else { return Follow::Still };
+        let Some((left, top, right, _)) = seen else {
+            self.perch = None;
+            return Follow::Gone;
+        };
+        let (dx, dy) = (left - perch.at.0, top - perch.at.1);
+        let p = (self.pos.0 + dx, self.pos.1 + dy);
+        let x = self.feet().0 + dx;
+        if x < left || x > right || self.kept_high(p, scale, clamp) != p {
+            self.perch = None;
+            return Follow::Gone;
+        }
+        if (dx, dy) == (0, 0) {
+            return Follow::Still;
+        }
+        self.pos = p;
+        self.perch = Some(Perch { on: perch.on, at: (left, top) });
+        if let Some((back, at)) = self.parked.as_mut() {
+            *back = (back.0 + dx, back.1 + dy);
+            *at = (at.0 + dx, at.1 + dy);
+        }
+        Follow::Moved
     }
 }
 
@@ -394,6 +513,7 @@ pub fn resize(sh: &Arc<Shared>, scale: f64) {
 
 pub fn come_home(sh: &Shared) {
     stop_walking(sh);
+    sh.win.lock().unwrap().perch = None;
     let home = home_spot(sh);
     move_to(sh, home.0, home.1, false);
     remember(sh);
@@ -406,6 +526,7 @@ pub fn return_to_spot(sh: &Shared) {
         let mut w = sh.win.lock().unwrap();
         w.panel = None;
         w.parked = None;
+        w.perch = None;
         w.shift = 0;
         w.size = w.size_for(scale);
         w.size
@@ -479,7 +600,7 @@ pub fn keep_on_screen(sh: &Shared) {
         }
         w.size = w.size_for(scale);
         let is_stretched = (size.width as i32 - w.size.0).abs() > 3 || (size.height as i32 - w.size.1).abs() > 3;
-        let p = screens.clamp((pos.x, pos.y), w.size);
+        let p = w.kept((pos.x, pos.y), scale, |p, size| screens.clamp(p, size));
         w.pos = p;
         (is_stretched || p != (pos.x, pos.y)).then_some((p, w.size, is_stretched))
     };
@@ -538,6 +659,11 @@ pub fn poll(sh: &Arc<Shared>, cursor: (i32, i32)) -> u64 {
     let look = sh.flag("look");
     let scale = scale(sh);
     let down = primary_down();
+    // Playing: the window she stands on, and the one in front, looked at as
+    // often as the mouse, with no lock held.
+    let stood = sh.win.lock().unwrap().perch.map(|p| crate::tasks::stood_on(p.on));
+    let screens = stood.is_some().then(|| sh.screens());
+    let front = sh.flag("play").then(crate::tasks::front);
 
     let mut events: Vec<(&str, Value)> = Vec::new();
     let mut moved_to = None;
@@ -582,8 +708,23 @@ pub fn poll(sh: &Arc<Shared>, cursor: (i32, i32)) -> u64 {
                     }
                 }
             }
-            16
+            KEEP_UP_MS
         } else {
+            // She goes with the window she stands on, or it goes from under her.
+            let mut carried_along = false;
+            if let (Some(stood), Some(screens)) = (stood, screens.as_ref()) {
+                match w.follow(stood, scale, |p, size| screens.clamp(p, size)) {
+                    Follow::Still => {}
+                    Follow::Moved => {
+                        moved_to = Some(w.pos);
+                        carried_along = true;
+                    }
+                    Follow::Gone => events.push(("pet:perch-gone", Value::Null)),
+                }
+            }
+            if front.is_some_and(|front| std::mem::replace(&mut w.front, front) != front) {
+                events.push(("pet:front", Value::Null));
+            }
             let (pos, size) = (w.pos, w.size);
             let seen = w.ct.look(cursor, pos, size, sf, sf, false, false, &[]);
             if w.ct.calmed() {
@@ -619,7 +760,10 @@ pub fn poll(sh: &Arc<Shared>, cursor: (i32, i32)) -> u64 {
                     is_looking = true;
                 }
             }
-            if w.ct.over { 16 } else if seen.forward { 30 } else if seen.near || is_looking { 80 } else { 200 }
+            // Her window dragged by its title bar, or just gone somewhere: she
+            // keeps up with it.
+            let keeps_up = carried_along || (w.perch.is_some() && is_down);
+            if keeps_up { KEEP_UP_MS } else if w.ct.over { 16 } else if seen.forward { 30 } else if seen.near || is_looking { 80 } else { 200 }
         }
     };
 
@@ -697,6 +841,7 @@ pub fn drag_start(sh: &Shared) {
     };
     sh.log("pet: drag start");
     set_ignore(sh, ignore);
+    let _ = sh.app.emit_to("pet", "pet:drag-start", ());
 }
 
 // Let go: back into the island if she is close enough to it, else she lands
@@ -710,6 +855,10 @@ pub fn let_go(sh: &Arc<Shared>) {
         let is_double = !drag.moved && !drag.carried && w.last_click.is_some_and(|t| t.elapsed() < Duration::from_millis(DOUBLE_MS));
         if !drag.moved && !drag.carried {
             w.last_click = if is_double { None } else { Some(Instant::now()) };
+        }
+        // Lifted off the window she stood on.
+        if drag.moved {
+            w.perch = None;
         }
         w.was_down = false;
         (drag, is_double, w.her_point(scale))
@@ -733,6 +882,8 @@ pub fn let_go(sh: &Arc<Shared>) {
     if is_double {
         return double_click(sh);
     }
+    // Let go and not taken into her home, for her playing: she lands.
+    let _ = sh.app.emit_to("pet", "pet:let-go", json!({ "moved": drag.moved, "carried": drag.carried }));
     // A click: a jump. Carried out of the island: she lands with one.
     if !drag.moved || drag.carried {
         sh.react("jump", json!(""));
@@ -790,6 +941,7 @@ fn fly_home(sh: &Arc<Shared>) {
         }
         w.flying = true;
         w.drag = None;
+        w.perch = None;
         w.walk_gen += 1;
         w.walking = false;
         let start = w.her_point(scale);
@@ -834,6 +986,7 @@ pub fn carry(sh: &Arc<Shared>, offset: &Value) {
         let x = cursor.0 + dx as i32 - w.size.0 / 2 - w.shift;
         let y = cursor.1 + dy as i32 - (w.size.1 - w.below - (CELL_H * scale * sf / 2.0) as i32);
         w.pos = (x, y);
+        w.perch = None;
         w.walk_gen += 1;
         w.walking = false;
         w.drag = Some(Drag { dx: cursor.0 - x, dy: cursor.1 - y, x, y, x0: x, y0: y, moved: true, carried: true });
@@ -842,6 +995,7 @@ pub fn carry(sh: &Arc<Shared>, offset: &Value) {
     };
     sh.log(&format!("pet: carried out of the island at {p:?}"));
     let _ = sh.app.emit_to("pet", "pet:carried", json!({ "on": true }));
+    let _ = sh.app.emit_to("pet", "pet:drag-start", ());
     if let Some(win) = window(sh) {
         let _ = win.set_size(PhysicalSize::new(size.0 as u32, size.1 as u32));
     }
@@ -873,6 +1027,7 @@ pub fn hide_now(sh: &Shared) {
     {
         let mut w = sh.win.lock().unwrap();
         w.drag = None;
+        w.perch = None;
         w.walk_gen += 1;
         w.walking = false;
         w.shown = false;
@@ -894,6 +1049,7 @@ pub fn walk(sh: &Shared, dx: f64, ms: f64) -> bool {
         return false;
     }
     let screens = sh.screens();
+    let scale = scale(sh);
     let (gen, x0, y0, target) = {
         let mut w = sh.win.lock().unwrap();
         if !w.shown || w.drag.is_some() || w.flying {
@@ -902,7 +1058,7 @@ pub fn walk(sh: &Shared, dx: f64, ms: f64) -> bool {
         w.walk_gen += 1;
         w.walking = true;
         let (x0, y0) = w.pos;
-        let target = screens.clamp((x0 + (dx * w.sf()).round() as i32, y0), w.size).0;
+        let target = w.kept((x0 + (dx * w.sf()).round() as i32, y0), scale, |p, size| screens.clamp(p, size)).0;
         (w.walk_gen, x0, y0, target)
     };
     let started = Instant::now();
@@ -915,7 +1071,7 @@ pub fn walk(sh: &Shared, dx: f64, ms: f64) -> bool {
             if w.walk_gen != gen || w.drag.is_some() || w.flying {
                 break false;
             }
-            let p = screens.clamp((x0 + ((target - x0) as f64 * t).round() as i32, y0), w.size);
+            let p = w.kept((x0 + ((target - x0) as f64 * t).round() as i32, y0), scale, |p, size| screens.clamp(p, size));
             w.pos = p;
             p
         };
@@ -940,6 +1096,93 @@ pub fn stop_walking(sh: &Shared) {
     w.walking = false;
 }
 
+// --- Her playing ------------------------------------------------------------------------
+// What src/pet/play.js decides, done here: everything in physical pixels.
+
+// One of her moves: her feet to `to` over ms the way given, and there
+// standing on the window `on`, if any (she goes with it: poll). True when she
+// got there, false when stopped on the way (a drag, her going home, another
+// move). Moved here, not by anything else: her place stays hers to know.
+pub fn go(sh: &Shared, to: (i32, i32), ms: f64, way: Way, on: Option<isize>) -> bool {
+    if !is_shown(sh) {
+        return false;
+    }
+    let screens = sh.screens();
+    let scale = scale(sh);
+    let (gen, from) = {
+        let mut w = sh.win.lock().unwrap();
+        if !w.shown || w.drag.is_some() || w.flying {
+            return false;
+        }
+        w.walk_gen += 1;
+        w.walking = true;
+        w.perch = None;
+        (w.walk_gen, w.feet())
+    };
+    let started = Instant::now();
+    let ms = ms.max(1.0);
+    let arrived = loop {
+        std::thread::sleep(Duration::from_millis(KEEP_UP_MS));
+        let t = (started.elapsed().as_secs_f64() * 1000.0 / ms).min(1.0);
+        let p = {
+            let mut w = sh.win.lock().unwrap();
+            if w.walk_gen != gen || w.drag.is_some() || w.flying {
+                break false;
+            }
+            let p = w.kept_high(w.place_for(way.at(from, to, t, ms)), scale, |p, size| screens.clamp(p, size));
+            w.pos = p;
+            p
+        };
+        place(sh, p);
+        if t >= 1.0 {
+            break true;
+        }
+    };
+    let stands = on.and_then(|on| crate::tasks::stood_on(on).map(|f| Perch { on, at: (f.0, f.1) }));
+    {
+        let mut w = sh.win.lock().unwrap();
+        if w.walk_gen == gen {
+            w.walking = false;
+            if arrived {
+                w.perch = stands;
+            }
+        }
+    }
+    if arrived {
+        remember(sh);
+    }
+    arrived
+}
+
+// What she can stand on, as she is now: her feet, her window's size and her
+// own, the work area of her display (its foot is the floor), the window she
+// stands on, and the windows reaching into that area, front to back. Their
+// places alone: nothing of what is in them.
+pub fn surfaces(sh: &Shared) -> Value {
+    let scale = scale(sh);
+    let screens = sh.screens();
+    let (feet, size, sf, on) = {
+        let w = sh.win.lock().unwrap();
+        (w.feet(), w.size, w.sf(), w.perch.map(|p| p.on))
+    };
+    let Some(a) = screens.near(feet.0, feet.1) else { return Value::Null };
+    let front = crate::tasks::front();
+    let windows: Vec<Value> = crate::tasks::windows_up()
+        .into_iter()
+        .filter(|(_, f)| f.0 < a.x + a.w && a.x < f.2 && f.1 < a.y + a.h && a.y < f.3)
+        .map(|(id, f)| json!({ "id": id, "left": f.0, "top": f.1, "right": f.2, "bottom": f.3, "front": id == front }))
+        .collect();
+    json!({
+        "at": [feet.0, feet.1],
+        "size": [size.0, size.1],
+        "cell": [(CELL_W * scale * sf).round(), (CELL_H * scale * sf).round()],
+        "sf": sf,
+        "area": [a.x, a.y, a.w, a.h],
+        "on": on,
+        "windows": windows,
+    })
+}
+
 // Where the window is, for checks.
 pub fn where_(sh: &Shared) -> Value {
     let actual = window(sh).and_then(|win| win.outer_position().ok()).map(|p| json!([p.x, p.y]));
@@ -955,6 +1198,7 @@ pub fn where_(sh: &Shared) -> Value {
         "flying": w.flying,
         "dragging": w.drag.as_ref().map(|d| if d.carried { "carried" } else { "dragged" }),
         "room": w.panel.map(|(rw, rh)| json!([rw, rh])),
+        "perch": w.perch.map(|p| p.on),
     })
 }
 
@@ -1033,5 +1277,84 @@ mod tests {
         assert_eq!(feet(&w), stood);
         w.make_room(None, 0.75, clamp);
         assert_eq!((w.pos, w.size), ((1700, 900), w.base_size(0.75)));
+    }
+
+    #[test]
+    fn her_moves_start_and_end_where_they_say() {
+        let (a, b) = ((100, 900), (500, 300));
+        for way in [Way::Line, Way::Fall, Way::Arc(200.0), Way::Float(40.0)] {
+            assert_eq!(way.at(a, b, 0.0, 3200.0), a, "{way:?}");
+            assert_eq!(way.at(a, b, 1.0, 3200.0), b, "{way:?}");
+        }
+        // Half the time, a quarter of the way down: she falls faster and faster.
+        assert_eq!(Way::Fall.at((0, 0), (0, 400), 0.5, 500.0), (0, 100));
+        // At the top of a jump, this far over the straight line.
+        assert_eq!(Way::Arc(200.0).at((0, 400), (100, 400), 0.5, 500.0), (50, 200));
+        // Under her umbrella she keeps falling at one speed and sways to the side.
+        let swayed = Way::Float(40.0).at((100, 0), (100, 400), 0.25, 1600.0);
+        assert_eq!(swayed, (140, 100));
+        assert_eq!(Way::of("fall", 0.0), Way::Fall);
+        assert_eq!(Way::of("arc", 9.0), Way::Arc(9.0));
+        assert_eq!(Way::of("float", 9.0), Way::Float(9.0));
+        assert_eq!(Way::of("anything", 9.0), Way::Line);
+    }
+
+    #[test]
+    fn standing_high_on_a_window_only_she_need_be_on_the_screen() {
+        let w = standing((1700, 900));
+        let room = w.size.1 - (CELL_H * 0.75 * w.sf()).round() as i32;
+        // The room over her head past the top of the screen, no further.
+        assert_eq!(w.kept_high((1700, -room), 0.75, clamp), (1700, -room));
+        assert_eq!(w.kept_high((1700, -room - 1), 0.75, clamp), (1700, -room));
+        // The other sides as ever.
+        assert_eq!(w.kept_high((-5, 900), 0.75, clamp), (0, 900));
+        assert_eq!(w.kept_high((1700, 5000), 0.75, clamp), (1700, 1380 - w.size.1));
+        // Not on a window, the whole window stays on it.
+        assert_eq!(w.kept((1700, -room), 0.75, clamp), (1700, 0));
+        let mut on = standing((1700, 900));
+        on.perch = Some(Perch { on: 7, at: (1500, 1100) });
+        assert_eq!(on.kept((1700, -room), 0.75, clamp), (1700, -room));
+    }
+
+    #[test]
+    fn she_goes_with_the_window_she_stands_on() {
+        let mut w = standing((1700, 800));
+        w.perch = Some(Perch { on: 7, at: (1500, 1100) });
+        let seen = |left: i32, top: i32| Some((left, top, left + 900, top + 200));
+        // Where it was: nothing.
+        assert_eq!(w.follow(seen(1500, 1100), 0.75, clamp), Follow::Still);
+        assert_eq!(w.pos, (1700, 800));
+        // Dragged by its title bar: she with it.
+        assert_eq!(w.follow(seen(1400, 1000), 0.75, clamp), Follow::Moved);
+        assert_eq!(w.pos, (1600, 700));
+        assert_eq!(w.perch, Some(Perch { on: 7, at: (1400, 1000) }));
+        // Her place to go back to from under her words goes with it too.
+        w.parked = Some(((1600, 700), (1700, 1000)));
+        assert_eq!(w.follow(seen(1390, 990), 0.75, clamp), Follow::Moved);
+        assert_eq!(w.parked, Some(((1590, 690), (1690, 990))));
+    }
+
+    #[test]
+    fn the_window_she_stands_on_can_go_from_under_her() {
+        let on = || {
+            let mut w = standing((1700, 800));
+            w.perch = Some(Perch { on: 7, at: (1500, 1100) });
+            w
+        };
+        // Closed, minimized or maximized (tasks.rs stood_on).
+        let mut w = on();
+        assert_eq!(w.follow(None, 0.75, clamp), Follow::Gone);
+        assert_eq!(w.perch, None);
+        // Made so narrow that her feet are past its side, nothing moved.
+        let mut w = on();
+        let x = w.feet().0;
+        assert_eq!(w.follow(Some((1500, 1100, x - 1, 1300)), 0.75, clamp), Follow::Gone);
+        // Taken so far up that she could not stay on the screen with it.
+        let mut w = on();
+        assert_eq!(w.follow(Some((1500, 0, 2400, 900)), 0.75, clamp), Follow::Gone);
+        assert_eq!(w.pos, (1700, 800), "she stays where she was, and falls from there");
+        // Not on one: nothing to look at.
+        let mut w = standing((1700, 800));
+        assert_eq!(w.follow(None, 0.75, clamp), Follow::Still);
     }
 }

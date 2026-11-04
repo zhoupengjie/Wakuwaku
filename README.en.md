@@ -6,7 +6,7 @@
 <p align="center">
   <a href="https://github.com/zhoupengjie/Wakuwaku/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/zhoupengjie/Wakuwaku?style=flat-square&amp;label=release&amp;color=ff7eb3"></a>
   <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-0078d4?style=flat-square">
-  <img alt="About 11 MB" src="https://img.shields.io/badge/one%20exe-about%2011%20MB-8b5cf6?style=flat-square">
+  <img alt="About 13 MB" src="https://img.shields.io/badge/one%20exe-about%2013%20MB-8b5cf6?style=flat-square">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-34d27b?style=flat-square"></a>
 </p>
 
@@ -17,6 +17,17 @@
 </p>
 
 <p align="center"><sub>The name is Anya's "waku waku" from SPY×FAMILY: excited, can't wait. AI works, and she watches, all eager.</sub></p>
+
+## New: Top bar + Dock
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/card-split-en-dark.jpg"><img src="docs/readme/card-split-en-light.jpg" alt="Top bar + Dock: a thin bar along the top with the program in front at the left, her capsule in the middle and the monitor, the tray and the clock at the right; a dock at the middle of the bottom with Start, the programs and the Recycle Bin" width="100%"></picture>
+
+**Use Windows the way you use a Mac.** New in 0.4.0, a third way to show her (Settings → Look → Display): Windows' taskbar split in two, a thin top bar along the top of the screen and a dock at the middle of the bottom.
+
+- **The top bar**: her and the session that most needs you in the middle, the island opening downwards from there; the program in front at the top left, by its icon and name; widgets, the system monitor, the tray, the input method, quick settings and the clock at the right; and a sliver in the top right corner that shows the desktop, and brings your windows back on a second click.
+- **The dock**: Start and your programs; your minimized windows move in as live thumbnails, a click bringing one back; then the Recycle Bin, a right-click to empty it. Its glass is Windows' own acrylic, blurring whatever lies behind it, a maximized window too.
+- **Smooth**: as programs open and close and windows are minimized and restored, their icons grow in and shrink away and the dock widens and narrows with them; the highlight glides from icon to icon under the pointer; a click presses an icon in and springs it back.
+- **Out of your way**: a window touching the dock sends it sliding down, and resting the pointer on the bottom edge brings it back; or have it keep its room at the bottom. Drag a program from your desktop onto the dock to pin it.
 
 ## What she does
 
@@ -55,7 +66,7 @@
 </tr>
 </table>
 
-And more: new mail shows up in the capsule first, and you can hand a letter to Claude Code, Codex or Antigravity to sum up and draft a reply (whether it goes out is up to you). Any pet from [codex-pets.net](https://codex-pets.net); pull her up and she hops onto your desktop. Mica, clear or solid, dark or light, and the capsule and the island the way you like them. About 11 MB, one exe, nothing to install, free and open source.
+And more: new mail shows up in the capsule first, and you can hand a letter to Claude Code, Codex or Antigravity to sum up and draft a reply (whether it goes out is up to you). Any pet from [codex-pets.net](https://codex-pets.net); pull her up and she hops onto your desktop. Mica, clear or solid, dark or light, and the capsule and the island the way you like them. About 13 MB, one exe, nothing to install, free and open source.
 
 <sub>The pictures are her real pages, rendered by [`tools/preview`](tools/preview/README.md); the sessions, mail and numbers are made up for the demo, and the backgrounds are the repository's own [wallpapers](wallpapers/).</sub>
 

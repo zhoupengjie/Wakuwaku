@@ -495,6 +495,9 @@
     // many as leave the clock its room).
     ['taskbar', '任务栏', { scene: 'taskbar-full', page: 'island', view: [620, above(64), 980, 64], world: F => ({ taskbarLayout: { ...F.TASKBAR.widgets, right: F.TASKBAR.widgets.right.filter(p => p.type !== 'stack') } }) }],
     ['desktop', '桌面小工具', { scene: 'desktop', page: 'screen', view: [436, 20, 704, 396], budget: 4000 }],
+    // Top bar + dock (0.4.0): the whole screen, the top bar and the dock as
+    // they come, a session at work in her capsule, the desktop clear.
+    ['split', '顶栏 + Dock', { page: 'screen', home: 'taskbar', split: true, view: WHOLE, budget: 4000, world: F => ({ ...home(F), edge: 'split', sessions: [F.session('working'), F.others()[0]], deskLayout: [], config: { splitBar: 32, splitDock: 'hide', splitKeys: 'top' } }) }],
   ]
   const readmeShots = README_CARDS.flatMap(([id, title, shot]) =>
     ['zh', 'en'].map(lang => ({ id: `readme-${id}-${lang}`, section: 'readme', title: `${title}（${lang === 'zh' ? '中文' : 'English'}）`, lang, ...shot })),
@@ -1428,6 +1431,9 @@
     view: s.view,
     window: windowOf(s),
     budget: s.budget || DEFAULT_BUDGET,
+    // Its language (the README's English cards): the browser's too, for the
+    // dates and the weekday her clock writes in the system's own format.
+    lang: s.lang || 'zh',
   })
 
   const api = {

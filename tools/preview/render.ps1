@@ -55,6 +55,8 @@ $jobs = foreach ($s in $scenes) {
         [pscustomobject]@{
             Id = $s.id; Mode = $m; Title = $s.title; Section = $s.section; Order = $order
             W = [int]$s.view[2]; H = [int]$s.view[3]; Budget = [int]$s.budget
+            # The browser's language as the shot's: her clock's date in its format.
+            Lang = if ($s.lang -eq 'en') { 'en-US' } else { 'zh-CN' }
             Url = "${shotUrl}?scene=$([Uri]::EscapeDataString($s.id))&mode=$m"
             Png = Join-Path $Out "$($s.id)-$m.png"
         }
@@ -67,7 +69,7 @@ $shoot = {
     if (Test-Path -LiteralPath $job.Png) { Remove-Item -LiteralPath $job.Png -Force }
     $a = @(
         '--headless=new', '--hide-scrollbars', '--allow-file-access-from-files', '--disable-gpu-vsync',
-        '--no-first-run', '--no-default-browser-check', "--user-data-dir=$dataDir",
+        '--no-first-run', '--no-default-browser-check', "--user-data-dir=$dataDir", "--lang=$($job.Lang)",
         "--window-size=$($job.W),$($job.H)", "--force-device-scale-factor=$scale",
         "--virtual-time-budget=$($job.Budget)", "--screenshot=$($job.Png)", "`"$($job.Url)`""
     )

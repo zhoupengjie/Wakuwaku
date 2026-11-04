@@ -6,7 +6,7 @@
 <p align="center">
   <a href="https://github.com/zhoupengjie/Wakuwaku/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/zhoupengjie/Wakuwaku?style=flat-square&amp;label=%E7%89%88%E6%9C%AC&amp;color=ff7eb3"></a>
   <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-0078d4?style=flat-square">
-  <img alt="约 11 MB" src="https://img.shields.io/badge/%E5%8D%95%E4%B8%AA%20exe-%E7%BA%A6%2011%20MB-8b5cf6?style=flat-square">
+  <img alt="约 13 MB" src="https://img.shields.io/badge/%E5%8D%95%E4%B8%AA%20exe-%E7%BA%A6%2013%20MB-8b5cf6?style=flat-square">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-34d27b?style=flat-square"></a>
 </p>
 
@@ -18,6 +18,17 @@
 </p>
 
 <p align="center"><sub>名字来自《间谍过家家》里阿尼亚的口头禅「わくわく」（哇酷哇酷，好期待）：AI 在干活，她在旁边满心期待地盯着。</sub></p>
+
+## 新：顶栏 + Dock
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/card-split-zh-dark.jpg"><img src="docs/readme/card-split-zh-light.jpg" alt="顶栏 + Dock：屏幕顶上一条细顶栏，左边是当前程序，正中是她的胶囊，右边是监控、托盘和时钟；屏幕底部正中一个 Dock，放着开始、程序和回收站" width="100%"></picture>
+
+**像 macOS 那样用 Windows。** 0.4.0 新增的第三种显示方式（设置 → 外观 → 显示方式）：Windows 的任务栏拆成两块，屏幕顶上一条细细的顶栏，底部正中一个 Dock。
+
+- **顶栏**：她和最需要你的会话在正中，点开后灵动岛从中间往下展开；左上角是当前程序的图标和名字；右边是小组件、系统监控、托盘、输入法、快速设置和时钟；右上角那条细缝，点一下显示桌面，再点一下窗口回来。
+- **Dock**：开始和你的程序；最小化的窗口变成实时缩略图住进来，点一下就还原；最后是回收站，右键能清空。背后是 Windows 真正的亚克力毛玻璃，后面的窗口也会透出来，连最大化的窗口都是。
+- **丝滑**：程序打开、关闭，窗口最小化、还原，图标会长出来、缩回去，Dock 跟着平滑伸缩；鼠标划过图标，高亮一路滑过去；点一下图标，先缩一下再弹回来。
+- **不碍事**：有窗口碰到 Dock，它就滑下去让开，鼠标停到屏幕底边又出来；也可以让它一直占着底部。把桌面上的程序拖到 Dock 上，就固定上去了。
 
 ## 她能做什么
 
@@ -56,7 +67,7 @@
 </tr>
 </table>
 
-还有：新邮件先在胶囊里冒出来，一封信可以交给 Claude Code、Codex 或 Antigravity 总结、起草回信，发不发你说了算；[codex-pets.net](https://codex-pets.net) 上的宠物随便换，按住往上拉她就跳到桌面上；云母、透明、纯色，深浅色，胶囊和灵动岛的样子都能调。约 11 MB，单个 exe，不用安装，免费开源。
+还有：新邮件先在胶囊里冒出来，一封信可以交给 Claude Code、Codex 或 Antigravity 总结、起草回信，发不发你说了算；[codex-pets.net](https://codex-pets.net) 上的宠物随便换，按住往上拉她就跳到桌面上；云母、透明、纯色，深浅色，胶囊和灵动岛的样子都能调。约 13 MB，单个 exe，不用安装，免费开源。
 
 <sub>配图是用她真实的界面代码渲染的（[`tools/preview`](tools/preview/README.md)），会话、邮件和数字都是虚构的演示内容；背景是仓库附带的[壁纸](wallpapers/)。</sub>
 

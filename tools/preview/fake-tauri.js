@@ -496,7 +496,8 @@
   // Her taskbar on another display (bars.rs bar:state): Start, the windows,
   // the clock; her capsule at its start while a prompt waits.
   // A plain Recycle Bin for the dock (Windows draws its own there).
-  const BIN_PICTURE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M9 10h14l-1.3 17H10.3z" fill="#cfd8e3"/><path d="M7 7.5h18v2.5H7z" fill="#aeb9c7"/><path d="M13 5h6v2.5h-6z" fill="#aeb9c7"/></svg>')}`
+  // Its edges a darker grey, so it reads on the light glass too.
+  const BIN_PICTURE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><g stroke="#6b7785" stroke-width="1" stroke-linejoin="round"><path d="M9 10h14l-1.3 17H10.3z" fill="#cfd8e3"/><path d="M7 7.5h18v2.5H7z" fill="#aeb9c7"/><path d="M13 5h6v2.5h-6z" fill="#aeb9c7"/></g></svg>')}`
 
   // The desktop's picture for the dock at the foot, from its window's corner (bars.rs paper_from).
   function dockPaper() {

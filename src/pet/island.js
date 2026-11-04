@@ -2236,8 +2236,14 @@
   // numbers get wider. Her island goes with it; it stayed where the slot had
   // been, over the monitor and the tray's chevron, until something drew the
   // strip anew (zhoupengjie/Wakuwaku#98).
+  // A run grown or shrunk: the middle one centred again first (alignApps),
+  // before the frame is drawn, then her slot placed. The top bar's program
+  // in front changes its width with each window (drawFront), and the middle
+  // run with her capsule in it went along with it, then slid back.
   const slotWatch = new ResizeObserver(() => {
-    if (taskbarBuilt && isOn() && home() === 'taskbar') placeSlot()
+    if (!taskbarBuilt || !isOn() || home() !== 'taskbar') return
+    alignApps()
+    placeSlot()
   })
   for (const zone of Object.values(zones)) slotWatch.observe(zone)
 
@@ -2303,6 +2309,12 @@
   // The room always kept between the middle run and the last (the empty
   // .grow): crowded, the programs give way before it does (style.css).
   const RUNS_APART = 12
+  // The middle run's own length as last centred: the same, it is only what
+  // lies before it that changed, and it stays where it is, set at once (it
+  // slid away with the left run and back on its margin's transition, her
+  // capsule in it going to and fro as the program in front changed: the
+  // user, 2026-11-04); of another length, it slides to the middle as ever.
+  let middleLength = null
 
   function alignApps() {
     if (!taskbarBuilt) return
@@ -2316,10 +2328,13 @@
     let want = 0
     // Empty, it is still a place to drop a part while the layout is edited;
     // with a flexible spacer anywhere, the spacer places it.
+    let still = false
     if ((middle.childElementCount || editLayout) && !barRest.classList.contains('tb-stretch')) {
       const now = parseFloat(getComputedStyle(middle)[margin]) || 0
       const start = middle.getBoundingClientRect()
       const length = len(start)
+      still = middleLength !== null && Math.abs(length - middleLength) < 0.5
+      middleLength = length
       const room = Math.max(0, len(growNode.getBoundingClientRect()) - RUNS_APART) + now
       // Where it lies without OLED's shift (which moves the bar after): the
       // margin taken from where it is drawn undid the shift, and the middle
@@ -2344,7 +2359,15 @@
         want = Math.round(Math.max(0, Math.min((innerHeight - natural) / 2 - (start.top - shifted - now), free)))
       }
     }
-    if (want !== Math.round(target)) middle.style[margin] = `${want}px`
+    if (want === Math.round(target)) return
+    if (!still) {
+      middle.style[margin] = `${want}px`
+      return
+    }
+    middle.style.transition = 'none'
+    middle.style[margin] = `${want}px`
+    void middle.offsetWidth
+    middle.style.transition = ''
   }
   zones.center.addEventListener('transitionend', e => {
     if (e.target !== zones.center || (e.propertyName !== 'margin-left' && e.propertyName !== 'margin-top')) return

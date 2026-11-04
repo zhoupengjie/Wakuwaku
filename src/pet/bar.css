@@ -20,6 +20,8 @@ body {
   align-items: center;
   box-sizing: border-box;
   padding: 0 0 0 4px;
+  /* Its own layer, the glide (.hdrop) under its buttons and over its ground. */
+  isolation: isolate;
   /* Clear filling in as solid, and back (bar.js ground), a short fade as hers. */
   transition:
     background-color 0.3s ease,
@@ -243,48 +245,116 @@ body {
   height: 24px;
 }
 
-/* Under the pointer and the one in front: a light wash, as on the main one. */
-.start:hover,
-.tview:hover,
-.win:hover,
-.clock:hover {
-  background: rgba(255, 255, 255, 0.11);
-}
-
+/* The one in front: a light wash, as on the main one; under the pointer,
+   the glide (.hdrop, bar.js glideTo), which slides from one button to the
+   next. */
 .win.front {
   background: rgba(255, 255, 255, 0.17);
-}
-
-.b-light .start:hover,
-.b-light .tview:hover,
-.b-light .win:hover,
-.b-light .clock:hover {
-  background: rgba(0, 0, 0, 0.06);
 }
 
 .b-light .win.front {
   background: rgba(0, 0, 0, 0.08);
 }
 
-/* Running: a mark under it; longer in the accent for the one in front. */
-.win.run::after {
+.hdrop {
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 100%;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.11);
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity 0.16s ease,
+    transform 0.3s cubic-bezier(0.3, 1.45, 0.5, 1);
+  pointer-events: none;
+}
+
+.b-light .hdrop {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.hdrop.on {
+  opacity: 1;
+  transform: none;
+}
+
+.hdrop.on.down {
+  transform: scale(0.94);
+}
+
+.hdrop.squash {
+  animation: drop-squash 0.42s ease;
+}
+
+@keyframes drop-squash {
+  30% {
+    scale: 1.03 0.82;
+  }
+  70% {
+    scale: 0.99 1.04;
+  }
+}
+
+/* Running: a dash under it, stretched into a longer pill in the accent
+   for the one in front, springing to each as Windows 11's does; grown in
+   from nothing as it starts (fresh, bar.js drawWindows), gone into nothing
+   as it ends. */
+.win::after {
   content: '';
   position: absolute;
   left: 50%;
   bottom: 2px;
-  width: 6px;
+  width: 0;
   height: 3px;
   border-radius: 2px;
   background: #8e8e93;
+  opacity: 0;
   transform: translateX(-50%);
   transition:
-    width 0.2s ease,
+    width 0.42s cubic-bezier(0.3, 1.45, 0.5, 1),
+    opacity 0.18s ease,
     background 0.2s ease;
+  pointer-events: none;
+}
+
+.win.run::after {
+  width: 6px;
+  opacity: 1;
 }
 
 .win.front::after {
   width: 18px;
   background: var(--accent, #5e9bff);
+}
+
+.win.run.fresh::after {
+  width: 0;
+  opacity: 0;
+}
+
+/* A program's button shrinking away (bar.js drawWindows): nothing to press. */
+.win.leaving {
+  pointer-events: none;
+}
+
+/* Pressed in under the pointer, springing back as it is let go
+   (presses.js pressIn), as Windows 11's buttons are. */
+.start svg,
+.tview img,
+.tview .tv-glyph,
+.win img {
+  transition: transform 0.42s cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+
+.start.pressing svg,
+.tview.pressing img,
+.tview.pressing .tv-glyph,
+.win.pressing > img {
+  transform: scale(0.8);
+  transition-duration: 0.08s;
+  transition-timing-function: ease-out;
 }
 
 /* Asking for attention: orange, as on the main one. */
@@ -573,58 +643,113 @@ body {
 }
 
 /* --- The dock (split: bar.js isDock; docs/design/specs/dock-topbar.md §4) ------------
-   Start and the programs in a piece of glass, its window (44 high, 2 px off
-   the foot, as wide as what is in it: bars.rs dock_size; in the middle of
-   it, should it be wider for a moment or in the preview). Windows' acrylic
-   on the window itself (b-acrylic, bars.rs refresh): what is behind it,
-   the windows too, blurred through a tint; without it (transparency effects
-   off) the desktop's picture as the strip's Mica (mica.js); or solid. Its
-   corners DWM's round ones (8 px); a hairline round it and a light along
-   its top. Out of the way, its window slides down but for its top (bars.rs
-   slide). No show-the-desktop sliver, no lead; the clock and quick settings
-   after a line only if set so (b-keys). */
+   Its window a band along the foot (48 high: bars.rs dock_band), never
+   moved nor sized while it is up; in its middle Start and the programs in a
+   piece of glass (#bar: 44 high, 2 px off the foot, as wide as what is in
+   it), its ground and its edge a layer of their own under them (#glass, as
+   wide as bar.js drawGlass says, over where its plate may still be).
+   Windows' acrylic on a plate under it where it settles (b-acrylic,
+   backplate.rs DOCK): what is behind it, the windows too, blurred through a
+   tint; while it grows or shrinks, the glass beyond the plate as solid as it
+   is not there (b-firm), back as it settles; without it (transparency
+   effects off) the desktop's picture as the strip's Mica (mica.js, the whole
+   band's, cut to the same: bar.js drawGlass); or solid. Its corners DWM's
+   round ones (8 px); a hairline round it and a light along its top. Out of
+   the way, it slides down but for its top 3 px (b-down). No show-the-desktop
+   sliver, no lead; the clock and quick settings after a line only if set so
+   (b-keys). */
 .b-dock #bar {
-  inset: 0 auto 0 50%;
+  inset: auto 0 2px 0;
+  margin: 0 auto;
   width: max-content;
-  transform: translateX(-50%);
+  height: 44px;
   padding: 0 6px;
+  z-index: 0;
+  background: none;
+  box-shadow: none;
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.b-dock.b-down #bar {
+  transform: translateY(43px);
+}
+
+#glass {
+  display: none;
+}
+
+.b-dock #glass {
+  display: block;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: -1;
   border-radius: 8px;
+  pointer-events: none;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.09),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-.b-dock.b-acrylic #bar {
+.b-dock.b-acrylic #glass {
   background: rgba(32, 32, 32, 0.4);
 }
 
-.b-dock.b-acrylic.b-light #bar {
+.b-dock.b-acrylic.b-light #glass {
   background: rgba(243, 243, 243, 0.5);
+}
+
+.b-dock.b-light #glass {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.b-dock.b-black #glass {
+  background: #1c1c1c;
+}
+
+.b-dock.b-light.b-black #glass {
+  background: #f3f3f3;
+}
+
+/* The ground where the plate is not (b-firm): as solid as Windows' acrylic
+   looks, but for the hole over the plate (--hole-l, --hole-r: from this
+   layer's left, bar.js drawGlass); none, solid all over (sliding, down).
+   Faded out as it settles, at once in as it moves. */
+.b-dock #glass::before {
+  --firm: rgba(36, 36, 36, 0.86);
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--firm) 0 var(--hole-l, 0px), transparent var(--hole-l, 0px) var(--hole-r, 0px), var(--firm) var(--hole-r, 0px));
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.b-dock.b-light #glass::before {
+  --firm: rgba(238, 238, 238, 0.9);
+}
+
+.b-dock.b-firm #glass::before {
+  opacity: 1;
+  transition: none;
+}
+
+.b-dock.b-black #glass::before {
+  display: none;
 }
 
 .b-dock.b-acrylic #mica {
   display: none;
 }
 
-.b-dock.b-light #bar {
-  box-shadow:
-    inset 0 0 0 1px rgba(0, 0, 0, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-.b-dock.b-black #bar {
-  background: #1c1c1c;
-}
-
-.b-dock.b-light.b-black #bar {
-  background: #f3f3f3;
-}
-
+/* The whole band's picture, cut to where the glass settles (bar.js drawGlass). */
 .b-dock #mica {
-  inset: 0 auto 0 50%;
-  width: var(--dock-w, 100%);
-  border-radius: 8px;
-  transform: translateX(-50%);
+  inset: 0;
 }
 
 .b-dock #apps {
@@ -694,14 +819,6 @@ body {
   padding: 0 10px;
   border-radius: 6px;
   cursor: pointer;
-}
-
-.quick:hover {
-  background: rgba(255, 255, 255, 0.11);
-}
-
-.b-light .quick:hover {
-  background: rgba(0, 0, 0, 0.06);
 }
 
 .quick .fi {

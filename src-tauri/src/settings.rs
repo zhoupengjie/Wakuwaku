@@ -230,7 +230,8 @@ fn is_island_look(v: &Value) -> bool {
 // The taskbar's layout: { left, center, right }, each a list of its parts
 // (island.js TB_PARTS), none twice and nothing else; one left out goes where
 // the default has it.
-const TASKBAR_PARTS: [&str; 8] = ["her", "start", "apps", "monitor", "tray", "keys", "quick", "clock"];
+// "front": the program in front, by its name (the top bar's first, split).
+const TASKBAR_PARTS: [&str; 9] = ["her", "start", "apps", "monitor", "tray", "keys", "quick", "clock", "front"];
 
 // A widget put on the taskbar (widgets.js isEntry): { id, type, of, size,
 // name, icon }, its id "w" and up to 15 of a-z 0-9; a widget's or a

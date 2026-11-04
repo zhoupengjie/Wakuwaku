@@ -691,6 +691,8 @@ mod imp {
     pub fn raise_top(hwnd: isize) {
         // SAFETY: a window handle and flags; nothing is pointed to.
         unsafe { SetWindowPos(hwnd as Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) };
+        // The live pictures' windows over it again (taskbar.rs thumbs_on_top).
+        crate::taskbar::thumbs_on_top();
     }
 
     // The desktop's window (Progman, or a WorkerW behind its icons).

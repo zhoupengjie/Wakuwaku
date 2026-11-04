@@ -389,12 +389,24 @@ fn seen_now(sh: &Shared, mon: Mon) -> bool {
     s
 }
 
+// Its window: the display but for its last row of pixels. A window the
+// display's own size, coming or going, is a program full screen to
+// Explorer: its taskbar came out again and set the work area to the whole
+// display, every maximized window laid out twice as hers set it back, the
+// whole screen flashing as a widget was dragged to a desktop with nothing
+// on it (its window made for the drag, then let go: the user, 2026-11-04).
+// Its place is the display's corner, so its page's px are the display's.
+fn window_rect(mon: Mon) -> Mon {
+    (mon.0, mon.1, mon.2, (mon.3 - 1).max(1))
+}
+
 fn create(sh: &Arc<Shared>, label: String, area: Area) {
     let sh = sh.clone();
     std::thread::spawn(move || {
+        let rect = window_rect(area.mon);
         let built = WebviewWindowBuilder::new(&sh.app, &label, WebviewUrl::App("pet/desk.html".into()))
             .title("wakuwaku desk")
-            .inner_size(area.mon.2 as f64 / area.sf, area.mon.3 as f64 / area.sf)
+            .inner_size(rect.2 as f64 / area.sf, rect.3 as f64 / area.sf)
             .additional_browser_args(crate::browser_args(&sh))
             .data_directory(crate::webview_dir(&sh))
             .transparent(true)
@@ -420,7 +432,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area) {
         sh.own_window(&win);
         // Its cards' plugin views kept to their own page (addons.rs guard_frames).
         crate::addons::guard_frames(&sh, &win, false);
-        lay(&win, area.mon);
+        lay(&win, rect);
         let _ = win.set_ignore_cursor_events(true);
         let gone = {
             let mut desks = DESKS.lock().unwrap();
@@ -2057,6 +2069,14 @@ mod imp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn its_window_is_never_the_displays_own_size() {
+        // From the display's corner, its row of pixels at the foot left out:
+        // Explorer takes no program full screen for it.
+        assert_eq!(window_rect((0, 0, 2560, 1440)), (0, 0, 2560, 1439));
+        assert_eq!(window_rect((-1920, 200, 1920, 1080)), (-1920, 200, 1920, 1079));
+    }
 
     #[test]
     fn the_pointers_look_stops_where_nothing_can_be_caught() {

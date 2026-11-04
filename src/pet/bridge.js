@@ -178,6 +178,8 @@
       // A program's button: launch (it, or another window of it), admin (run
       // as administrator), pin, unpin.
       app: (path, what, id) => invoke('taskbar_app', { path: String(path), what: String(what), id: id ? String(id) : null }).catch(() => false),
+      // Programs (or shortcuts to them) dropped on the taskbar: pinned (taskbar.rs).
+      pinFiles: paths => invoke('taskbar_pin_files', { paths: paths.map(String) }).catch(() => 0),
       // Room for windows' live pictures in the page: [[window, x, y, w, h]], or none.
       thumbs: items => send('taskbar_thumbs', { items }),
       // The handover with Windows' own taskbar (handoff.js): its picture is
@@ -423,7 +425,7 @@
             // Gone, or let go of: the mouse is the page's again.
             dragged = []
           }
-          for (const fn of fileDrags) fn(type, at)
+          for (const fn of fileDrags) fn(type, at, Array.isArray(payload?.paths) ? payload.paths : [])
         },
         { target },
       ),

@@ -267,6 +267,9 @@ mod imp {
     const WS_EX_LAYERED: u32 = 0x0008_0000;
     const WS_EX_NOACTIVATE: u32 = 0x0800_0000;
     const LWA_ALPHA: u32 = 0x2;
+    const LWA_COLORKEY: u32 = 0x1;
+    // The dock's pictures' window's ground, keyed out (COLORREF: magenta).
+    const DOCK_KEY: u32 = 0x00FF_00FF;
     const HWND_TOPMOST: isize = -1;
     const SWP_NOACTIVATE: u32 = 0x10;
     const SWP_SHOWWINDOW: u32 = 0x40;
@@ -1422,8 +1425,144 @@ mod imp {
 
     // The windows minimized into the dock, each its live picture where the
     // dock's page left room for it (bars.rs show_mins); none, taken away.
+    // On the main thread, the window's own (make_dock_host).
     pub fn dock_thumbs(items: Vec<(isize, (i32, i32, i32, i32))>) {
         place_thumbs(DOCK_HOST.load(Ordering::SeqCst) as Hwnd, &mut DOCK_THUMBS.lock().unwrap(), items);
+    }
+
+    // The window of the dock's minimized windows' pictures: owned by the
+    // dock's window, and so made on its thread (the main one, as all her
+    // Tauri windows; owned from another thread, their input would be tied
+    // together), that Windows keeps it over the dock however either is
+    // raised, at once. Raised apart (hers as a batch, it after them), the
+    // dock came over it again and again as the desktop was shown and Start
+    // opened and closed, and its pictures showed through the glass's grey
+    // tint a second each time (the user, 2026-11-04). Of a class of its own:
+    // its ground a colour keyed out, so that between its pictures the dock
+    // shows through, not a black block (2026-11-02). The pictures are DWM's,
+    // over it, whole.
+    static DOCK_CLASS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+    pub fn make_dock_host(owner: isize) {
+        let class = wide("WakuwakuDockThumbs");
+        // SAFETY: our own class and window, on this thread (the owner's).
+        unsafe {
+            let instance = GetModuleHandleW(std::ptr::null());
+            if !DOCK_CLASS.swap(true, Ordering::SeqCst) {
+                let wc = WndClassExW {
+                    size: std::mem::size_of::<WndClassExW>() as u32,
+                    style: 0,
+                    wndproc: thumbs_proc,
+                    cls_extra: 0,
+                    wnd_extra: 0,
+                    instance,
+                    icon: 0,
+                    cursor: 0,
+                    background: CreateSolidBrush(DOCK_KEY),
+                    menu_name: std::ptr::null(),
+                    class_name: class.as_ptr(),
+                    icon_sm: 0,
+                };
+                RegisterClassExW(&wc);
+            }
+            let host = CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT,
+                class.as_ptr(),
+                std::ptr::null(),
+                WS_POPUP,
+                0,
+                0,
+                0,
+                0,
+                owner as Hwnd,
+                0,
+                instance,
+                std::ptr::null_mut(),
+            );
+            if !host.is_null() {
+                SetLayeredWindowAttributes(host, DOCK_KEY, 255, LWA_COLORKEY);
+                DOCK_HOST.store(host as isize, Ordering::SeqCst);
+            }
+        }
+    }
+
+    // The dock gone: its pictures with it (the window goes with its owner).
+    pub fn drop_dock_host() {
+        place_thumbs(std::ptr::null_mut(), &mut DOCK_THUMBS.lock().unwrap(), Vec::new());
+        DOCK_HOST.store(0, Ordering::SeqCst);
+    }
+
+    // The windows of the live pictures (the lists', the dock's) back over
+    // hers, as hers were raised (raise_own, tasks::raise_top): not hers to
+    // Tauri, so left under them, the dock's minimized windows' pictures
+    // seen through its glass's grey tint once the desktop had been pressed
+    // (the user, 2026-11-04). Not waiting on their thread.
+    pub fn thumbs_on_top() {
+        const SWP_NOSIZE: u32 = 0x1;
+        const SWP_NOMOVE: u32 = 0x2;
+        const SWP_ASYNCWINDOWPOS: u32 = 0x4000;
+        for host in [THUMB_HOST.load(Ordering::SeqCst), DOCK_HOST.load(Ordering::SeqCst)] {
+            // SAFETY: our own windows; a place in the stack alone.
+            unsafe {
+                if host != 0 && IsWindowVisible(host as Hwnd) != 0 {
+                    SetWindowPos(host as Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                }
+            }
+        }
+    }
+
+    // The dock's pictures over the dock again, should anything have put the
+    // dock over them: looked at with the pointer (bars.rs poll), as raising
+    // them after each of her raises left ways round (Win+D, then Start
+    // opened and closed: grey a second more, the user, 2026-11-04). Whether
+    // the dock lies above its pictures' window, walking up from that
+    // window through the windows over it; only then raised, not waiting.
+    pub fn dock_thumbs_over(dock: isize) {
+        #[link(name = "user32")]
+        extern "system" {
+            fn GetWindow(hwnd: Hwnd, cmd: u32) -> Hwnd;
+        }
+        const GW_HWNDPREV: u32 = 3;
+        const SWP_NOSIZE: u32 = 0x1;
+        const SWP_NOMOVE: u32 = 0x2;
+        const SWP_ASYNCWINDOWPOS: u32 = 0x4000;
+        let host = DOCK_HOST.load(Ordering::SeqCst);
+        if host == 0 || dock == 0 {
+            return;
+        }
+        // SAFETY: plain queries along the z-order from our own window; a move of it.
+        unsafe {
+            if IsWindowVisible(host as Hwnd) == 0 {
+                return;
+            }
+            let mut at = host as Hwnd;
+            for _ in 0..512 {
+                at = GetWindow(at, GW_HWNDPREV);
+                if at.is_null() {
+                    return;
+                }
+                if at as isize == dock {
+                    SetWindowPos(host as Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                    // Said at most every few seconds, should something keep at it.
+                    static SAID: Mutex<Option<Instant>> = Mutex::new(None);
+                    let mut said = SAID.lock().unwrap();
+                    if said.is_none_or(|at| at.elapsed() >= Duration::from_secs(5)) {
+                        *said = Some(Instant::now());
+                        log("the dock's pictures lay under it: raised over it again");
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    // Hers raised as a batch (raise_own), each waiting its turn on the main
+    // thread: the pictures' windows after them, from there (in its queue
+    // after those raises).
+    fn raise_own_with_thumbs(sh: &Shared) {
+        let own = sh.own.lock().unwrap().clone();
+        tasks::raise_own(&own);
+        let _ = sh.app.run_on_main_thread(thumbs_on_top);
     }
 
     // Windows' live pictures of windows (DWM thumbnails) in a host window of
@@ -2166,6 +2305,20 @@ mod imp {
         if let Some(page) = page {
             return tasks::launch(page);
         }
+        // The Recycle Bin emptied, as its own menu does: Windows asks first
+        // and shows its progress; off this thread, as it waits for the answer.
+        if what == "emptyBin" {
+            std::thread::spawn(|| {
+                #[link(name = "shell32")]
+                extern "system" {
+                    fn SHEmptyRecycleBinW(hwnd: Hwnd, root: *const u16, flags: u32) -> i32;
+                }
+                // SAFETY: no window, every drive's bin, Windows' own dialogs.
+                let done = unsafe { SHEmptyRecycleBinW(std::ptr::null_mut(), std::ptr::null(), 0) };
+                log(&format!("the Recycle Bin emptied: {}", if done == 0 { "yes" } else { "no (not asked to, or none in it)" }));
+            });
+            return true;
+        }
         // Get Help's sound troubleshooter; where it cannot be opened, the
         // old one, as Windows falls back to it.
         if what == "soundFix" {
@@ -2289,25 +2442,7 @@ mod imp {
                 SetLayeredWindowAttributes(host, 0, 255, LWA_ALPHA);
                 THUMB_HOST.store(host as isize, Ordering::SeqCst);
             }
-            // Another, the same, for the windows minimized into the dock.
-            let dock_host = CreateWindowExW(
-                WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT,
-                thumbs_class.as_ptr(),
-                std::ptr::null(),
-                WS_POPUP,
-                0,
-                0,
-                0,
-                0,
-                std::ptr::null_mut(),
-                0,
-                instance,
-                std::ptr::null_mut(),
-            );
-            if !dock_host.is_null() {
-                SetLayeredWindowAttributes(dock_host, 0, 255, LWA_ALPHA);
-                DOCK_HOST.store(dock_host as isize, Ordering::SeqCst);
-            }
+            // The dock's own (its minimized windows') is the dock's: make_dock_host.
             CREATED_MSG.store(shell::taskbar_created(), Ordering::SeqCst);
             EXPLORER.store(shell::taskbars().first().copied().unwrap_or(0), Ordering::SeqCst);
             EXPLORER_PID.store(shell::explorer_pid(), Ordering::SeqCst);
@@ -2339,10 +2474,9 @@ mod imp {
             systray::stop();
             thumbs(Vec::new());
             dock_thumbs(Vec::new());
-            for host in [THUMB_HOST.swap(0, Ordering::SeqCst), DOCK_HOST.swap(0, Ordering::SeqCst)] {
-                if host != 0 {
-                    DestroyWindow(host as Hwnd);
-                }
+            let host = THUMB_HOST.swap(0, Ordering::SeqCst);
+            if host != 0 {
+                DestroyWindow(host as Hwnd);
             }
             DestroyWindow(hwnd);
             OURS.store(0, Ordering::SeqCst);
@@ -2454,8 +2588,13 @@ mod imp {
                 known.drain(..n.saturating_sub(16));
             }
         }
-        // Windows' flyout standing on the foot; a tray program's popup over the strip.
-        let wants = if flyout { b > my + mh * 2 / 3 && b - t < mh * 3 / 4 } else { p.tool && t < bar && b > strip.1 && b - t < mh / 2 && crate::systray::holders().contains(&p.pid) };
+        // Windows' flyout standing on the foot; a tray program's popup over
+        // the strip: one of a popup's size, not Explorer's (its icons are in
+        // her tray too, and a window of its 2560 x 4 along the top was moved
+        // over and over, Windows' taskbar showing itself each time: the dev
+        // build, 2026-11-04; its own popups are the flyouts).
+        let popup = p.tool && !p.program.eq_ignore_ascii_case("explorer.exe") && r - l < mw / 2 && b - t >= (24.0 * sf) as i32;
+        let wants = if flyout { b > my + mh * 2 / 3 && b - t < mh * 3 / 4 } else { popup && t < bar && b > strip.1 && b - t < mh / 2 && crate::systray::holders().contains(&p.pid) };
         if !wants || crate::pet::any_down() == Some(true) {
             return;
         }
@@ -2497,8 +2636,7 @@ mod imp {
             for wait in [0, 300, 500] {
                 std::thread::sleep(Duration::from_millis(wait));
                 if let Some(sh) = sh() {
-                    let own = sh.own.lock().unwrap().clone();
-                    tasks::raise_own(&own);
+                    raise_own_with_thumbs(&sh);
                 }
             }
             RAISING.store(false, Ordering::SeqCst);
@@ -2816,8 +2954,7 @@ mod imp {
             let me = crate::island::hwnd(&sh);
             if me != 0 && !RAISING.load(Ordering::SeqCst) && tasks::under_desktop(me) {
                 log("the desktop lay over her windows (show the desktop): raised again");
-                let own = sh.own.lock().unwrap().clone();
-                tasks::raise_own(&own);
+                raise_own_with_thumbs(&sh);
             }
         }
         // The work area reaching into the strip: Windows has not counted it.
@@ -3429,6 +3566,10 @@ mod imp {
         serde_json::Value::Null
     }
     pub fn dock_thumbs(_items: Vec<(isize, (i32, i32, i32, i32))>) {}
+    pub fn thumbs_on_top() {}
+    pub fn dock_thumbs_over(_dock: isize) {}
+    pub fn make_dock_host(_owner: isize) {}
+    pub fn drop_dock_host() {}
     pub fn take(_sh: &Shared, _strip: (i32, i32, i32, i32)) -> bool {
         true
     }
@@ -3489,7 +3630,7 @@ mod imp {
     }
 }
 
-pub use imp::{dock_thumbs, end_task_on, explorer_room, give_back, handing_back, is_up, keys_now, recycle_bin, set_edge, start_open, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
+pub use imp::{dock_thumbs, dock_thumbs_over, drop_dock_host, make_dock_host, thumbs_on_top, end_task_on, explorer_room, give_back, handing_back, is_up, keys_now, recycle_bin, set_edge, start_open, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
 
 // A number Windows keeps for a setting of its own (end_task_on, seconds_on):
 // on once set, but for 0.
@@ -3794,6 +3935,41 @@ pub async fn taskbar_app(app: tauri::AppHandle, path: String, what: String, id: 
 
 // The same from the keys: Win+digit, Win+Shift+digit (winkeys.rs).
 pub use imp::app;
+
+// Files dropped on her taskbar or the dock (a program, a shortcut to one,
+// from the desktop or File Explorer): each pinned, as Windows' own taskbar
+// pins one dropped on it (pins.rs of_file); one pinned already left where
+// it is, a document or a folder not. How many were pinned.
+#[tauri::command]
+pub async fn taskbar_pin_files(app: tauri::AppHandle, paths: Vec<String>) -> usize {
+    let sh = crate::shared(&app);
+    crate::tasks::with_com();
+    let mut pinned = 0;
+    for path in paths.iter().take(16) {
+        let pin = match crate::pins::of_file(path) {
+            Ok(pin) => pin,
+            Err(why) => {
+                sh.log(&format!("taskbar: a file dropped on it not pinned: {why}"));
+                continue;
+            }
+        };
+        let (target, id) = (pin["path"].as_str().unwrap_or(""), pin["id"].as_str().filter(|s| !s.is_empty()));
+        let kept = sh.setting("taskbarPinned");
+        let there = kept.as_array().into_iter().flatten().any(|p| match (id, p["id"].as_str()) {
+            (Some(id), Some(theirs)) => theirs.eq_ignore_ascii_case(id),
+            (None, None) => p["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(target)),
+            _ => false,
+        });
+        if there {
+            continue;
+        }
+        if imp::app(&sh, "pin", target, id) {
+            pinned += 1;
+            sh.log(&format!("taskbar: {} pinned, dropped on it", crate::crash::private(pin["name"].as_str().unwrap_or(""))));
+        }
+    }
+    pinned
+}
 
 // A tray icon kept out on the taskbar or folded away (dragged there), by
 // its name (systray.rs Shown), in the settings (trayPinned); Windows' own

@@ -1142,6 +1142,8 @@
 
   // --- What the page asks ---------------------------------------------------------------
   const later = fn => setTimeout(fn, 0)
+  // The dock brought up once (dock_glass).
+  let dockUp = false
   const ANSWERS = {
     settings_get: () => snapshot(),
     // Kept, then sent back as main does: the settings anew, the island drawn anew.
@@ -1199,6 +1201,14 @@
     taskbar_battery_font: () => null,
     // Windows' pictures are read from Windows itself: the glyph here.
     taskbar_task_view_icons: () => null,
+    // The dock's glass: up at once, as bars.rs reveal brings it once its programs are in.
+    dock_glass: ({ ready }) => {
+      if (ready && !dockUp) {
+        dockUp = true
+        later(() => emit('dock:stow', { stowed: false }))
+      }
+      return null
+    },
     taskbar_held: () => ({ shift: false, ctrl: false }),
     taskbar_window: () => true,
     taskbar_windows: () => true,

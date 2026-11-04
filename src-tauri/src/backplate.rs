@@ -26,7 +26,17 @@
 // changes size; nothing otherwise, nor while she is quiet. Made on first
 // use, on a thread of its own that waits for messages, so nothing runs
 // while it is not moving.
+//
+// A second one, the same, under her dock (split: bars.rs, bar.js glass):
+// its window stays as it is while its glass grows and shrinks in its page,
+// as the island's does, the plate under the glass where it settles.
 use crate::Shared;
+
+// Which plate: under her island, or under the dock.
+pub const ISLAND: usize = 0;
+pub const DOCK: usize = 1;
+#[cfg_attr(not(windows), allow(dead_code))]
+const PLATES: usize = 2;
 
 // Where the plate goes on the screen (physical px), Windows' mode for its tint.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -54,7 +64,7 @@ mod imp {
     use std::sync::{Mutex, OnceLock};
     use std::time::Instant;
 
-    use super::Plate;
+    use super::{Plate, ISLAND, PLATES};
 
     type Hwnd = *mut c_void;
 
@@ -167,7 +177,6 @@ mod imp {
     const DWMWA_COLOR_NONE: u32 = 0xFFFF_FFFE;
     const WCA_ACCENT_POLICY: u32 = 19;
     const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
-    const ACCENT_DISABLED: u32 = 0;
     // The accent's own tint (ABGR) over its blur, as faint as reads as
     // Windows' acrylic in each mode: its luminosity comes from it (alpha
     // 0 is not drawn at all). The island's ground does the rest.
@@ -183,11 +192,13 @@ mod imp {
         fade_ms: u32,
     }
 
-    static WANT: Mutex<Option<Want>> = Mutex::new(None);
-    static HWND: AtomicIsize = AtomicIsize::new(0);
+    // Each plate's: what is wished of it, its window once made.
+    static WANT: Mutex<[Option<Want>; PLATES]> = Mutex::new([None; PLATES]);
+    static HWND: [AtomicIsize; PLATES] = [AtomicIsize::new(0), AtomicIsize::new(0)];
     static STARTED: OnceLock<()> = OnceLock::new();
 
-    // The window's own state, on its thread.
+    // Each window's own state, on their thread.
+    #[derive(Clone, Copy)]
     struct Shown {
         plate: Option<Plate>,
         alpha: f64,
@@ -195,7 +206,13 @@ mod imp {
         tint: Option<bool>,
     }
 
-    static SHOWN: Mutex<Shown> = Mutex::new(Shown { plate: None, alpha: 0.0, fade: None, tint: None });
+    const NOT_SHOWN: Shown = Shown { plate: None, alpha: 0.0, fade: None, tint: None };
+    static SHOWN: Mutex<[Shown; PLATES]> = Mutex::new([NOT_SHOWN; PLATES]);
+
+    // Which plate a window of theirs is.
+    fn which(hwnd: Hwnd) -> Option<usize> {
+        HWND.iter().position(|h| h.load(Ordering::SeqCst) == hwnd as isize)
+    }
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(Some(0)).collect()
@@ -218,26 +235,6 @@ mod imp {
         let data = CompositionData { attribute: WCA_ACCENT_POLICY, data: &policy as *const AccentPolicy as *const c_void, size: std::mem::size_of::<AccentPolicy>() };
         // SAFETY: a window of ours and structs alive for the call.
         unsafe { f(hwnd, &data) != 0 }
-    }
-
-    // A window of ours given the acrylic itself (her dock, bars.rs): what is
-    // behind it blurred, tinted for Windows' mode, its corners DWM's round
-    // ones, no border; or taken off again (dark None). Whether it took.
-    pub fn acrylic(hwnd: isize, dark: Option<bool>) -> bool {
-        let hwnd = hwnd as Hwnd;
-        // SAFETY: a window of ours and a value alive for the call.
-        let attr = |a: u32, v: u32| unsafe { DwmSetWindowAttribute(hwnd, a, &v as *const u32 as *const c_void, 4) };
-        let Some(dark) = dark else {
-            let Some(f) = set_composition() else { return false };
-            let policy = AccentPolicy { state: ACCENT_DISABLED, flags: 0, gradient: 0, animation: 0 };
-            let data = CompositionData { attribute: WCA_ACCENT_POLICY, data: &policy as *const AccentPolicy as *const c_void, size: std::mem::size_of::<AccentPolicy>() };
-            // SAFETY: a window of ours and structs alive for the call.
-            return unsafe { f(hwnd, &data) != 0 };
-        };
-        attr(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND);
-        attr(DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE);
-        attr(DWMWA_USE_IMMERSIVE_DARK_MODE, dark as u32);
-        accent(hwnd, dark)
     }
 
     // Tried once on a hidden window of the system's own class, made and
@@ -290,20 +287,20 @@ mod imp {
     // The page's wish (kept: shown again with the window).
     pub fn wish(plate: Option<Plate>, under: isize, fade_ms: u32) {
         *LAST.lock().unwrap() = plate.map(|p| (p, under));
-        set(plate, under, fade_ms);
+        set(ISLAND, plate, under, fade_ms);
     }
 
     // The window shown again: its plate back, as the page last wished.
     pub fn again() {
         let last = *LAST.lock().unwrap();
         if let Some((plate, under)) = last {
-            set(Some(plate), under, 0);
+            set(ISLAND, Some(plate), under, 0);
         }
     }
 
-    pub fn set(plate: Option<Plate>, under: isize, fade_ms: u32) {
-        *WANT.lock().unwrap() = Some(Want { plate, under, fade_ms });
-        let hwnd = HWND.load(Ordering::SeqCst);
+    pub fn set(which: usize, plate: Option<Plate>, under: isize, fade_ms: u32) {
+        WANT.lock().unwrap()[which] = Some(Want { plate, under, fade_ms });
+        let hwnd = HWND[which].load(Ordering::SeqCst);
         if hwnd != 0 {
             // SAFETY: our own window; the message carries nothing.
             unsafe { PostMessageW(hwnd as Hwnd, WM_APP_WANT, 0, 0) };
@@ -334,17 +331,20 @@ mod imp {
             };
             RegisterClassExW(&wc);
             let ex = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT;
-            let hwnd = CreateWindowExW(ex, class.as_ptr(), std::ptr::null(), WS_POPUP, 0, 0, 0, 0, std::ptr::null_mut(), 0, instance, std::ptr::null_mut());
-            if hwnd.is_null() {
-                return;
+            // Each plate a window of its own, on this thread.
+            for slot in &HWND {
+                let hwnd = CreateWindowExW(ex, class.as_ptr(), std::ptr::null(), WS_POPUP, 0, 0, 0, 0, std::ptr::null_mut(), 0, instance, std::ptr::null_mut());
+                if hwnd.is_null() {
+                    continue;
+                }
+                SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+                let attr = |a: u32, v: u32| DwmSetWindowAttribute(hwnd, a, &v as *const u32 as *const c_void, 4);
+                attr(DWMWA_TRANSITIONS_FORCEDISABLED, 1);
+                attr(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND);
+                attr(DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE);
+                slot.store(hwnd as isize, Ordering::SeqCst);
+                PostMessageW(hwnd, WM_APP_WANT, 0, 0);
             }
-            SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
-            let attr = |a: u32, v: u32| DwmSetWindowAttribute(hwnd, a, &v as *const u32 as *const c_void, 4);
-            attr(DWMWA_TRANSITIONS_FORCEDISABLED, 1);
-            attr(DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND);
-            attr(DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE);
-            HWND.store(hwnd as isize, Ordering::SeqCst);
-            PostMessageW(hwnd, WM_APP_WANT, 0, 0);
             let mut msg: Msg = std::mem::zeroed();
             while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
                 DispatchMessageW(&msg);
@@ -354,12 +354,12 @@ mod imp {
 
     // The accent's tint for Windows' mode, set again only when it changes;
     // whether it took.
-    fn tint(hwnd: Hwnd, dark: bool) -> bool {
+    fn tint(hwnd: Hwnd, which: usize, dark: bool) -> bool {
         let mut shown = SHOWN.lock().unwrap();
-        if shown.tint == Some(dark) {
+        if shown[which].tint == Some(dark) {
             return true;
         }
-        shown.tint = Some(dark);
+        shown[which].tint = Some(dark);
         drop(shown);
         let mode = dark as u32;
         // SAFETY: our own window and value, alive for the call.
@@ -370,29 +370,29 @@ mod imp {
     // The page's latest wish: placed under the island and faded in, or
     // faded out and hidden. The accent refused: none, and the pages drawn
     // anew to deepen their ground instead (available).
-    fn apply(hwnd: Hwnd) {
-        let Some(want) = WANT.lock().unwrap().take() else { return };
-        let mut shown = SHOWN.lock().unwrap();
-        let from = shown.alpha;
+    fn apply(hwnd: Hwnd, which: usize) {
+        let Some(want) = WANT.lock().unwrap()[which].take() else { return };
+        let mut all = SHOWN.lock().unwrap();
+        let from = all[which].alpha;
         match want.plate {
-            Some(_) if REFUSED.load(Ordering::SeqCst) => fade(hwnd, &mut shown, from, 0.0, 0),
+            Some(_) if REFUSED.load(Ordering::SeqCst) => fade(hwnd, &mut all[which], from, 0.0, 0),
             Some(p) => {
-                drop(shown);
-                if !tint(hwnd, p.dark) {
+                drop(all);
+                if !tint(hwnd, which, p.dark) {
                     REFUSED.store(true, Ordering::SeqCst);
-                    shown = SHOWN.lock().unwrap();
-                    fade(hwnd, &mut shown, from, 0.0, 0);
-                    drop(shown);
+                    all = SHOWN.lock().unwrap();
+                    fade(hwnd, &mut all[which], from, 0.0, 0);
+                    drop(all);
                     super::refused();
                     return;
                 }
-                // SAFETY: our own window, placed right under the island's.
+                // SAFETY: our own window, placed right under the island's (the dock's).
                 unsafe { SetWindowPos(hwnd, want.under, p.x, p.y, p.w, p.h, SWP_NOACTIVATE | SWP_SHOWWINDOW) };
-                shown = SHOWN.lock().unwrap();
-                shown.plate = Some(p);
-                fade(hwnd, &mut shown, from, 255.0, want.fade_ms);
+                all = SHOWN.lock().unwrap();
+                all[which].plate = Some(p);
+                fade(hwnd, &mut all[which], from, 255.0, want.fade_ms);
             }
-            None if shown.plate.is_some() => fade(hwnd, &mut shown, from, 0.0, want.fade_ms),
+            None if all[which].plate.is_some() => fade(hwnd, &mut all[which], from, 0.0, want.fade_ms),
             None => {}
         }
     }
@@ -423,8 +423,9 @@ mod imp {
     }
 
     // A step of the fade, eased out as the page's own are.
-    fn tick(hwnd: Hwnd) {
-        let mut shown = SHOWN.lock().unwrap();
+    fn tick(hwnd: Hwnd, which: usize) {
+        let mut all = SHOWN.lock().unwrap();
+        let shown = &mut all[which];
         let Some((at, from, to, ms)) = shown.fade else {
             // SAFETY: our own window.
             unsafe { KillTimer(hwnd, 1) };
@@ -432,7 +433,7 @@ mod imp {
         };
         let t = (at.elapsed().as_secs_f64() * 1000.0 / ms as f64).min(1.0);
         let eased = 1.0 - (1.0 - t).powi(2);
-        set_alpha(hwnd, &mut shown, from + (to - from) * eased);
+        set_alpha(hwnd, shown, from + (to - from) * eased);
         if t >= 1.0 {
             shown.fade = None;
             // SAFETY: our own window.
@@ -441,19 +442,19 @@ mod imp {
     }
 
     extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
-        match msg {
-            WM_APP_WANT => {
-                apply(hwnd);
+        match (msg, which(hwnd)) {
+            (WM_APP_WANT, Some(n)) => {
+                apply(hwnd, n);
                 0
             }
-            WM_TIMER if wparam == 1 => {
-                tick(hwnd);
+            (WM_TIMER, Some(n)) if wparam == 1 => {
+                tick(hwnd, n);
                 0
             }
             // The pointer goes through to what is behind (it is layered and
             // transparent too), and it never takes the focus.
-            WM_NCHITTEST => HTTRANSPARENT,
-            WM_MOUSEACTIVATE => MA_NOACTIVATE,
+            (WM_NCHITTEST, _) => HTTRANSPARENT,
+            (WM_MOUSEACTIVATE, _) => MA_NOACTIVATE,
             // SAFETY: the default handling of a message sent to our window.
             _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
         }
@@ -466,15 +467,12 @@ mod imp {
     pub fn available() -> bool {
         false
     }
-    pub fn set(_plate: Option<Plate>, _under: isize, _fade_ms: u32) {}
+    pub fn set(_which: usize, _plate: Option<Plate>, _under: isize, _fade_ms: u32) {}
     pub fn wish(_plate: Option<Plate>, _under: isize, _fade_ms: u32) {}
     pub fn again() {}
-    pub fn acrylic(_hwnd: isize, _dark: Option<bool>) -> bool {
-        false
-    }
 }
 
-pub use imp::{acrylic, again, available};
+pub use imp::{again, available};
 
 // Her app, for the pages to be drawn anew should the accent be refused.
 static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
@@ -489,7 +487,14 @@ pub fn set(sh: &Shared, plate: Option<Plate>, fade_ms: u32) {
 // Gone at once with her island's window (island.rs show_or_hide), and back
 // with it (again).
 pub fn hide() {
-    imp::set(None, 0, 0);
+    imp::set(ISLAND, None, 0, 0);
+}
+
+// The dock's (bars.rs dock_glass): under its window (under), faded in over
+// fade_ms; none, faded out (fade_ms) and hidden.
+pub fn dock(sh: &Shared, plate: Option<Plate>, under: isize, fade_ms: u32) {
+    APP.get_or_init(|| sh.app.clone());
+    imp::set(DOCK, plate, under, fade_ms.min(1000));
 }
 
 // The accent refused on the plate: the pages told there is none
@@ -500,6 +505,8 @@ fn refused() {
         let sh = crate::shared(app);
         sh.log("plate: Windows refused the acrylic; the ground deepens instead");
         sh.redraw();
+        // The dock's page told too: the desktop's picture under it instead.
+        crate::bars::refresh(&sh);
     }
 }
 

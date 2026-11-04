@@ -8,11 +8,12 @@
 // (bars.rs refresh); a press asks what the main taskbar's would (taskbar.rs).
 // Split (state.dock: taskbarEdge split, docs/design/specs/dock-topbar.md),
 // the dock on her own display: Start and her strip's programs in a piece of
-// glass in the middle of the foot, as wide as it asks its window to be
-// (dock_size), Windows' acrylic on its window (state.acrylic); after the
-// programs the windows minimized into it and the Recycle Bin, as macOS has
-// them; quick settings and the clock after them if set so (state.keys). Out
-// of the way of a window touching it, its window slides down (bars.rs slide).
+// glass in the middle of the foot, its window a band along the foot that
+// never moves, the glass growing and shrinking in it (dock_glass), Windows'
+// acrylic on a plate under it (state.acrylic); after the programs the
+// windows minimized into it and the Recycle Bin, as macOS has them; quick
+// settings and the clock after them if set so (state.keys). Out of the way
+// of a window touching it, the glass slides down in it (dock:stow).
 ;(function () {
   const { invoke } = window.__TAURI__.core
   const { listen } = window.__TAURI__.event
@@ -125,25 +126,75 @@
   // than one. Its name in its tip only while it does not run: running, its
   // windows are listed when the pointer rests on it, and a tip stood over
   // the list's corner (the test session, 2026-10-13).
+  // Each program's button kept from one drawing to the next (by its key),
+  // what changed changed in it, as on the main taskbar (island.js
+  // drawWindows): its line springs between a dash and the pill of the one
+  // in front, a new one's grows in (fresh), a press plays out though the
+  // windows change under it (presses.js pressIn). In the dock a program
+  // started grows into its place and one ended shrinks away, the glass
+  // with them, as its minimized windows do (moveMin): it jumped narrower
+  // as the window brought back from it was closed (the user, 2026-11-04).
+  let buttonsDrawn = false
   function drawWindows() {
     const list = state.windows || []
-    wins.replaceChildren(
-      ...list.map(app => {
-        const windows = app.windows || []
-        const b = el('div', 'win')
+    const old = new Map([...wins.children].filter(b => b.dataset.app != null).map(b => [b.dataset.app, b]))
+    const fresh = []
+    const animate = isDock() && buttonsDrawn
+    const buttons = list.map(app => {
+      const windows = app.windows || []
+      let b = old.get(app.app)
+      old.delete(app.app)
+      if (!b) {
+        b = el('div', 'win')
         b.dataset.app = app.app
-        b.classList.toggle('run', windows.length > 0)
-        b.classList.toggle('front', windows.some(w => w.front))
-        b.classList.toggle('flash', windows.some(w => w.flash))
-        if (!windows.length) b.title = app.name || ''
         const img = el('img')
-        img.src = app.png || ''
         img.alt = ''
+        img.draggable = false
         b.append(img)
-        if (windows.length > 1) b.append(el('span', 'count', String(windows.length)))
-        return b
-      }),
-    )
+        if (buttonsDrawn) {
+          b.classList.add('fresh')
+          fresh.push(b)
+        }
+      }
+      b.classList.toggle('run', windows.length > 0)
+      b.classList.toggle('front', windows.some(w => w.front))
+      b.classList.toggle('flash', windows.some(w => w.flash))
+      if (!windows.length) b.title = app.name || ''
+      else b.removeAttribute('title')
+      const img = b.querySelector(':scope > img')
+      if (img.getAttribute('src') !== (app.png || '')) img.src = app.png || ''
+      let count = b.querySelector(':scope > .count')
+      if (windows.length > 1) {
+        if (!count) {
+          count = el('span', 'count')
+          b.append(count)
+        }
+        if (count.textContent !== String(windows.length)) count.textContent = String(windows.length)
+      } else count?.remove()
+      return b
+    })
+    for (const b of old.values()) {
+      if (!animate) {
+        b.remove()
+        continue
+      }
+      // Gone: no longer pressed or pointed at as it goes.
+      delete b.dataset.app
+      b.classList.add('leaving')
+      if (glideOn === b) glideOff()
+      moveMin(b, false).then(() => b.remove())
+    }
+    // In their order, each moved only where it is not already; those
+    // going stay where they are till gone.
+    let at = wins.firstElementChild
+    for (const b of buttons) {
+      while (at?.classList.contains('leaving')) at = at.nextElementSibling
+      if (at === b) at = at.nextElementSibling
+      else wins.insertBefore(b, at)
+    }
+    if (fresh.length) requestAnimationFrame(() => requestAnimationFrame(() => fresh.forEach(b => b.classList.remove('fresh'))))
+    if (animate) for (const b of fresh) moveMin(b, true)
+    buttonsDrawn = true
   }
 
   // Start and the programs centred on the whole strip: as much room before
@@ -238,7 +289,9 @@
     body.classList.toggle('b-dock', isDock())
     body.classList.toggle('b-keys', isDock() && state.keys === true)
     quick.hidden = !(isDock() && state.keys === true)
+    const acrylicWas = body.classList.contains('b-acrylic')
     body.classList.toggle('b-acrylic', isDock() && state.acrylic === true)
+    body.classList.toggle('b-down', isDock() && down)
     if (state.keysNow) showKeys(state.keysNow)
     const accent = state.look?.accent
     if (accent) body.style.setProperty('--accent', isLight() ? accent.dark || accent.base : accent.light || accent.base)
@@ -249,7 +302,13 @@
     drawWindows()
     drawMins()
     drawBin(state.bin)
-    if (isDock()) requestAnimationFrame(askSize)
+    // Laid out anew: where its glass goes (the acrylic come or gone, or the
+    // mode changed, its plate set again once it is still).
+    if (isDock()) {
+      if (acrylicWas !== body.classList.contains('b-acrylic') || isLight() !== wasLight) settled = null
+      wasLight = isLight()
+      glassMoves()
+    }
     tickClock()
     drawHer()
     drawMica()
@@ -431,6 +490,11 @@
     listen(
       `tauri://drag-${type}`,
       ({ payload }) => {
+        // Let go of on it: programs and shortcuts to them pinned (taskbar.rs taskbar_pin_files).
+        if (type === 'drop' && Array.isArray(payload?.paths) && payload.paths.length && payload.position) {
+          const on = document.elementFromPoint(payload.position.x / devicePixelRatio, payload.position.y / devicePixelRatio)
+          if (on && strip.contains(on)) call('taskbar_pin_files', { paths: payload.paths.map(String) })
+        }
         const p = type === 'enter' || type === 'over' ? payload?.position : null
         const node = p ? document.elementFromPoint(p.x / devicePixelRatio, p.y / devicePixelRatio) : null
         const onWins = !!node && wins.contains(node)
@@ -459,23 +523,243 @@
   }
 
   // --- The dock (split) ------------------------------------------------------------
-  // As wide as Start and its programs (and quick settings and the clock),
-  // asked of its window as they come and go (bars.rs dock_size).
-  // Ready once its programs are in: its window shows then, all at once
-  // (bars.rs reveal), not with Start alone and its programs after.
+  // Its window a band along the whole foot that stays as it is while it is
+  // up (bars.rs dock_band), as her island's does: in its middle the glass
+  // (#bar: Start and its programs, quick settings and the clock), as wide as
+  // they are, growing and shrinking here alone, with what is in it, in the
+  // same frame. The window takes the pointer only where the glass is, letting
+  // it through elsewhere (dock_glass: hit; bars.rs poll), and Windows'
+  // acrylic lies on a plate under it, where the glass settles (plate). While it changes size the plate stays under
+  // the smaller of where it was and where it goes (a frame or two behind: so
+  // the glass, #glass, does not shrink inside it before it has gone, LAG_MS),
+  // the glass beyond it as solid as the plate is not there (b-firm, the hole
+  // the plate: --hole-l, --hole-r); once still a moment (SETTLE_MS), the plate
+  // where the glass is and the ground back, over FIRM_MS (bar.css). Without
+  // the acrylic, the desktop's picture (#mica) is cut to the same. Out of the
+  // way of a window touching it (dock:stow), the glass slides down in the
+  // band but for its top (b-down), solid, its plate off meanwhile. Moved and
+  // sized a frame at a time instead, its page came a frame behind each time
+  // and shook (the user, 2026-11-04). Ready once its programs are in: its
+  // window shows then, all at once (bars.rs reveal), not with Start alone.
   const strip = document.getElementById('bar')
-  let asked = ''
-  function askSize() {
-    if (!isDock()) return
-    const w = Math.ceil(strip.offsetWidth)
-    const ready = (state.windows || []).length > 0
-    if (`${w} ${ready}` === asked) return
-    asked = `${w} ${ready}`
-    // Its Mica as wide as it (bar.css .b-dock #mica).
-    body.style.setProperty('--dock-w', `${w}px`)
-    call('dock_size', { w, dpr: devicePixelRatio || 1, ready })
+  const glassEl = document.getElementById('glass')
+  const micaEl = document.getElementById('mica')
+  const SETTLE_MS = 80
+  const LAG_MS = 60
+  const SLIDE_MS = 180
+  const PLATE_IN_MS = 150
+  // DWM's corners on the plate (8 px) inside the glass's (8): a pixel in
+  // (backplate.rs; island.js plateInset).
+  const PLATE_INSET = 1
+  // Where the glass is as it last settled (its px), where the plate goes
+  // meanwhile and where it may still be (its last but one, LAG_MS), whether
+  // the glass is down (till bars.rs says: it comes up from there).
+  let settled = null
+  let plateAt = null
+  let plateWas = null
+  let lagTimer = null
+  let settleTimer = null
+  let sliding = null
+  let down = true
+  let wasLight = false
+  let glassSent = ''
+  const boxOf = () => {
+    const r = strip.getBoundingClientRect()
+    return { x: r.left, y: strip.offsetTop, w: r.width, h: r.height }
   }
-  new ResizeObserver(askSize).observe(strip)
+  const meet = (a, b) => {
+    const x = Math.max(a.x, b.x)
+    const y = Math.max(a.y, b.y)
+    return { x, y, w: Math.max(0, Math.min(a.x + a.w, b.x + b.w) - x), h: Math.max(0, Math.min(a.y + a.h, b.y + b.h) - y) }
+  }
+  const join = (a, b) => {
+    const x = Math.min(a.x, b.x)
+    const y = Math.min(a.y, b.y)
+    return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y }
+  }
+  const within = (a, b) => a.x >= b.x - 0.5 && a.x + a.w <= b.x + b.w + 0.5
+  const same = (a, b) => (a && b ? Math.abs(a.x - b.x) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.h - b.h) < 0.5 : a === b)
+  const arr = b => [b.x, b.y, b.w, b.h].map(v => Math.round(v * 100) / 100)
+
+  // The glass drawn round what is in it (now) and over where the plate may
+  // still be; the firm ground's hole and the picture's cut where the plate goes.
+  function drawGlass(now) {
+    const g = plateWas ? join(now, plateWas) : now
+    glassEl.style.left = `${g.x - now.x}px`
+    glassEl.style.width = `${g.w}px`
+    const hole = plateAt && !down ? plateAt : null
+    // From the firm layer's own edge, a pixel in from the glass's (bar.css).
+    body.style.setProperty('--hole-l', `${hole ? hole.x - g.x - 1 : 0}px`)
+    body.style.setProperty('--hole-r', `${hole ? hole.x + hole.w - g.x - 1 : 0}px`)
+    micaEl.style.clipPath = hole ? `inset(${hole.y}px ${innerWidth - hole.x - hole.w}px ${innerHeight - hole.y - hole.h}px ${hole.x}px round 8px)` : 'inset(50%)'
+    return g
+  }
+
+  function sendGlass(g, plate, fade) {
+    const p = plate && state.acrylic === true && plate.w > 2 * PLATE_INSET && plate.h > 2 * PLATE_INSET ? { x: plate.x + PLATE_INSET, y: plate.y + PLATE_INSET, w: plate.w - 2 * PLATE_INSET, h: plate.h - 2 * PLATE_INSET } : null
+    // Pressed and drawn down to the window's foot: the gap under the glass
+    // is its own, and so is its top, all that is left of it out of the way.
+    const hit = { x: g.x, y: g.y, w: g.w, h: Math.max(g.h, innerHeight - g.y) }
+    const msg = { glass: arr(g), hit: arr(hit), plate: p && arr(p), fade, dark: !isLight(), dpr: devicePixelRatio || 1, ready: (state.windows || []).length > 0 }
+    const sent = JSON.stringify({ ...msg, fade: 0 })
+    if (sent === glassSent) return
+    glassSent = sent
+    call('dock_glass', msg)
+  }
+
+  // Its glass changed size, or is about to (to: where it goes, should it be
+  // narrower than now).
+  function glassMoves(to) {
+    if (!isDock()) return
+    const now = boxOf()
+    if (down || sliding || !settled) {
+      drawGlass(now)
+      sendGlass(now, null, 0)
+      return settleSoon()
+    }
+    const goes = to ? meet(to, now) : now
+    const next = meet(plateAt || settled, goes)
+    if (!same(next, plateAt)) {
+      // Shrinking, the glass kept over where the plate is until it has gone.
+      if (plateAt && !within(plateAt, next)) {
+        plateWas = plateWas ? join(plateWas, plateAt) : plateAt
+        clearTimeout(lagTimer)
+        lagTimer = setTimeout(() => {
+          plateWas = null
+          if (isDock()) sendGlass(drawGlass(boxOf()), plateAt, 0)
+        }, LAG_MS)
+      }
+      plateAt = next
+    }
+    body.classList.add('b-firm')
+    sendGlass(drawGlass(now), plateAt, 0)
+    settleSoon()
+  }
+
+  function settleSoon() {
+    clearTimeout(settleTimer)
+    settleTimer = setTimeout(settle, SETTLE_MS)
+  }
+
+  // Still: the plate where the glass is, the ground back (b-firm off), its
+  // minimized windows' pictures where their rooms are.
+  function settle() {
+    if (!isDock() || down || sliding || minMoving > 0) return
+    const now = boxOf()
+    settled = plateAt = now
+    plateWas = null
+    clearTimeout(lagTimer)
+    sendGlass(drawGlass(now), now, PLATE_IN_MS)
+    body.classList.remove('b-firm')
+    sendMins()
+  }
+
+  new ResizeObserver(() => {
+    glassMoves()
+    // The highlight kept on its button as the glass changes size.
+    if (glideOn?.isConnected) glideTo(glideOn, true)
+  }).observe(strip)
+
+  // --- The pointer's glide (as the main taskbar's: island.js glideTo) ---------------
+  // One highlight under the pointer for all its buttons, behind them,
+  // sliding from one to the next, its leading edge first and the trailing
+  // one after, so it stretches and gathers, a little squashed on the way
+  // (bar.css .hdrop; the user, 2026-11-04: "as on her taskbar"). It comes
+  // and goes in place, jumps rather than slides a long way, and gives a
+  // little under a press. The buttons' own hover washes give way to it.
+  const GLIDE_ON = '.start, .tview, .win, .quick, .clock'
+  const GLIDE_FAR = 360
+  const glide = el('span', 'hdrop')
+  strip.insertBefore(glide, glassEl.nextSibling)
+  let glideOn = null
+  let glideTimer
+
+  function glideTo(node, still = false) {
+    clearTimeout(glideTimer)
+    const side = isSide()
+    const bar = strip.getBoundingClientRect()
+    const r = node.getBoundingClientRect()
+    // Along the strip its two ends slide (left and right, or a side
+    // strip's top and bottom); across it, as the button is.
+    const [from, to, crossFrom, crossSize] = side ? ['top', 'bottom', 'left', 'width'] : ['left', 'right', 'top', 'height']
+    const lo = b => (side ? b.top : b.left)
+    const hi = b => (side ? b.bottom : b.right)
+    const left = lo(r) - lo(bar)
+    const right = hi(bar) - hi(r)
+    const was = glideOn && glide.classList.contains('on') && glide.dataset.axis === from ? parseFloat(glide.style[from]) : null
+    if (glide.dataset.axis !== from) {
+      for (const p of ['left', 'right', 'top', 'bottom', 'width', 'height']) glide.style[p] = ''
+      glide.dataset.axis = from
+    }
+    glide.style[crossFrom] = `${side ? r.left - bar.left : r.top - bar.top}px`
+    glide.style[crossSize] = `${side ? r.width : r.height}px`
+    if (still || was === null || Math.abs(left - was) > GLIDE_FAR) {
+      glide.style.transition = 'none'
+      glide.style[from] = `${left}px`
+      glide.style[to] = `${right}px`
+      void glide.offsetWidth
+      glide.style.transition = ''
+    } else if (left !== was) {
+      const lead = left > was ? to : from
+      const trail = lead === to ? from : to
+      glide.style.transition = `${lead} 0.22s cubic-bezier(0.3, 1.3, 0.5, 1), ${trail} 0.42s cubic-bezier(0.3, 1.45, 0.5, 1), opacity 0.16s ease, transform 0.3s cubic-bezier(0.3, 1.45, 0.5, 1)`
+      glide.style[from] = `${left}px`
+      glide.style[to] = `${right}px`
+      glide.classList.remove('squash')
+      void glide.offsetWidth
+      glide.classList.add('squash')
+    }
+    glide.classList.add('on')
+    glideOn = node
+  }
+
+  function glideOff() {
+    clearTimeout(glideTimer)
+    glideTimer = setTimeout(() => {
+      glide.classList.remove('on', 'down')
+      glideOn = null
+    }, 90)
+  }
+
+  const isGlideOn = node => node?.matches?.(GLIDE_ON) && !node.hidden
+  strip.addEventListener('mouseenter', e => isGlideOn(e.target) && glideTo(e.target), true)
+  strip.addEventListener('mouseleave', e => (e.target === strip || isGlideOn(e.target)) && glideOff(), true)
+  strip.addEventListener('pointerdown', e => {
+    if (e.button === 0 && glideOn && e.target.closest(GLIDE_ON) === glideOn) glide.classList.add('down')
+  })
+  addEventListener('pointerup', () => glide.classList.remove('down'))
+  // Its buttons pressed in and springing back (presses.js pressIn; not a
+  // minimized window's, whose picture is Windows' own over it).
+  window.Presses.pressIn(strip, '.start, .tview, .win:not(.mini)')
+  addEventListener('resize', () => {
+    settled = null
+    glassMoves()
+  })
+
+  // Out of the way, or up (bars.rs tell_stow): it slides down or up, solid
+  // and its plate off meanwhile; up, its plate under it once it is still.
+  listen(
+    'dock:stow',
+    e => {
+      const stowed = e.payload?.stowed === true
+      down = stowed
+      plateAt = plateWas = settled = null
+      clearTimeout(lagTimer)
+      clearTimeout(sliding)
+      body.classList.add('b-firm')
+      body.classList.toggle('b-down', stowed)
+      sending.mins = ''
+      call('dock_thumbs', { items: [], dpr: devicePixelRatio || 1 })
+      // Up and still: its plate under it at once.
+      sliding = setTimeout(() => {
+        sliding = null
+        if (down) glassMoves()
+        else settle()
+      }, SLIDE_MS + 20)
+      glassMoves()
+    },
+    { target },
+  )
   // Windows' Start menu open: Start lit, as the main taskbar's (island.js startButton).
   listen('dock:start', e => start.classList.toggle('open', e.payload?.open === true), { target })
 
@@ -518,11 +802,11 @@
   // The windows minimized into the dock (split), as macOS has them: each a
   // room for its live picture (Windows draws it there: bars.rs dock_thumbs),
   // its program's icon at its corner, its title in its tip; a press brings
-  // it back. One minimized grows into its place, the dock widening with it
-  // (its window as wide as it, each frame: askSize); one brought back
-  // shrinks away (the user, 2026-11-02: they came and went at once). The
-  // live pictures off meanwhile, back where the rooms are once it is still;
-  // told again as the dock's window changes.
+  // it back. One minimized grows into its place, the glass widening with it
+  // (glassMoves, each frame); one brought back shrinks away (the user,
+  // 2026-11-02: they came and went at once), the plate told at once where
+  // the glass goes. The live pictures off meanwhile, back where the rooms
+  // are once it is still (settle).
   const mins = document.getElementById('mins')
   const minSep = document.getElementById('minsep')
   const MIN_W = 60
@@ -564,28 +848,47 @@
     else if (!mins.querySelector('.mini')) minSep.hidden = true
     sendMins()
   }
-  // Grown in from nothing, or shrunk away; its live picture off meanwhile.
+  // Grown in from nothing, or shrunk away (a minimized window, or a
+  // program's button); the live pictures off meanwhile. Its own width
+  // (a program's 40, a minimized window's 60), and the gap beside it going
+  // with it, so nothing jumps as it is taken out at the end. Going, the
+  // glass as it will be without it, first (glassMoves).
   function moveMin(b, coming) {
     minMoving++
+    sending.mins = ''
     call('dock_thumbs', { items: [], dpr: devicePixelRatio || 1 })
-    const out = { width: '0px', opacity: 0, transform: 'scale(0.5)' }
-    const shown = { width: `${MIN_W}px`, opacity: 1, transform: 'none' }
+    if (!coming) {
+      const was = b.style.display
+      b.style.display = 'none'
+      const to = boxOf()
+      b.style.display = was
+      glassMoves(to)
+    }
+    const gap = parseFloat(getComputedStyle(b.parentElement).columnGap) || 0
+    const w = b.getBoundingClientRect().width || MIN_W
+    const out = { width: '0px', marginRight: `${-gap}px`, opacity: 0, transform: 'scale(0.5)' }
+    const shown = { width: `${w}px`, marginRight: '0px', opacity: 1, transform: 'none' }
     const quiet = matchMedia('(prefers-reduced-motion: reduce)').matches
     const a = b.animate(coming ? [out, shown] : [shown, out], { duration: quiet ? 1 : MIN_MS, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', fill: 'forwards' })
     return a.finished
       .catch(() => {})
       .then(() => {
         if (coming) a.cancel()
-        if (--minMoving === 0) sendMins()
+        if (--minMoving === 0) settleSoon()
       })
   }
+  // Where their rooms are, once it is up and still (settle), as they change.
+  const sending = { mins: '' }
   function sendMins() {
-    if (!isDock() || minMoving > 0) return
+    if (!isDock() || minMoving > 0 || down || sliding || !settled) return
     requestAnimationFrame(() => {
       const items = [...mins.querySelectorAll('[data-min]')].map(b => {
         const r = b.querySelector('.room').getBoundingClientRect()
         return [Number(b.dataset.min), r.left, r.top, r.width, r.height]
       })
+      const sent = JSON.stringify(items)
+      if (sent === sending.mins) return
+      sending.mins = sent
       call('dock_thumbs', { items, dpr: devicePixelRatio || 1 })
     })
   }
@@ -603,6 +906,11 @@
     bin.classList.toggle('full', b?.full === true)
     bin.title = t(state.lang, b?.full ? 'dock.binFull' : 'dock.bin')
   }
+  // A right press on it: its menu, as Windows' own (open it, empty it; tray.rs part_menu).
+  bin.addEventListener('contextmenu', e => {
+    e.preventDefault()
+    call('pet_menu', { part: 'recycleBin' })
+  })
   listen(
     'dock:bin',
     e => {
@@ -617,7 +925,6 @@
     startScale = 0
     drawStart()
     drawMica()
-    sendMins()
   })
   listen('bar:state', e => {
     state = e.payload || state

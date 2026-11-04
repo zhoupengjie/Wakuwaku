@@ -2046,6 +2046,11 @@ body.home-taskbar {
   background: rgba(255, 255, 255, 0.17);
 }
 
+/* Its line: a dash while it runs, stretched into a longer pill in the
+   accent while its window is in front, springing to each as Windows 11's
+   does (the user, 2026-11-04); grown in from nothing as it starts (a new
+   button, fresh: island.js drawWindows) and gone into nothing as it ends
+   (idle). The button is kept from one drawing to the next for it. */
 #bar-rest .win::after {
   content: '';
   position: absolute;
@@ -2057,13 +2062,29 @@ body.home-taskbar {
   background: #8e8e93;
   transform: translateX(-50%);
   transition:
-    width 0.2s ease,
+    width 0.42s cubic-bezier(0.3, 1.45, 0.5, 1),
+    height 0.42s cubic-bezier(0.3, 1.45, 0.5, 1),
+    opacity 0.18s ease,
     background 0.2s ease;
 }
 
 #bar-rest .win.front::after {
   width: 18px;
   background: var(--strip-accent, #5e9bff);
+}
+
+/* Pressed in under the pointer, springing back as it is let go
+   (presses.js pressIn), as Start's and Task View's are. */
+#bar-rest .win img,
+#bar-rest .win .letter {
+  transition: transform 0.42s cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+
+#bar-rest .win.pressing img,
+#bar-rest .win.pressing .letter {
+  transform: scale(0.8);
+  transition-duration: 0.08s;
+  transition-timing-function: ease-out;
 }
 
 #bar-rest .win.min {
@@ -2342,8 +2363,10 @@ body.home-taskbar {
   justify-content: center;
 }
 
-#bar-rest .win.idle::after {
-  display: none;
+#bar-rest .win.idle::after,
+#bar-rest .win.fresh::after {
+  width: 0;
+  opacity: 0;
 }
 
 #bar-rest .win .count {
@@ -4251,18 +4274,58 @@ html.handoff-wait body.home-taskbar #island-row {
   transform: none;
 }
 
+/* The program in front, as a menu bar names it (island.js drawFront): its
+   icon and its name, bold; its window's title in its tip. */
+#bar-rest .tfront {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  max-width: 260px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+#bar-rest .tfront img {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+#bar-rest .tfront img[hidden] {
+  display: none;
+}
+
+#bar-rest .tfront b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: #f5f5f7;
+}
+
+#bar-rest .tfront:is(.ink-light, .ink-light *) b {
+  color: #1b1b1b;
+}
+
+.tb-slim #bar-rest .tfront {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 12.5px;
+}
+
 /* --- The top bar, split in two (island.js isSplit; taskbarEdge split, tb-split) ----
    Along the top as tb-top, without Start and the programs (in the dock at
-   the foot: bars.rs, bar.js) and without the show-the-desktop sliver
-   (docs/design/specs/dock-topbar.md). Thin unless set to 48 (tb-slim,
+   the foot: bars.rs, bar.js); the show-the-desktop sliver at its right
+   end, in the screen's top right corner (Win+D, a press again bringing the
+   windows back: the user, 2026-11-04; docs/design/specs/dock-topbar.md). Thin unless set to 48 (tb-slim,
    splitBar 32, §2): its buttons 28 high, her capsule 26 and 3 off its
    edge with her portrait 20 (island.js SLIM_HEAD), the clock (its date
    first) and the monitor on one line, the widgets small; what opens from
    it 8 px under it. */
-.tb-split #bar-rest .tdesk {
-  display: none;
-}
-
 .tb-slim.home-taskbar #bar-rest {
   height: 32px;
 }
@@ -4445,9 +4508,6 @@ html.handoff-wait body.home-taskbar #island-row {
   width: 3px;
   height: 6px;
   transform: translateY(-50%);
-  transition:
-    height 0.2s ease,
-    background 0.2s ease;
 }
 
 .tb-left #bar-rest .win::after {
@@ -4463,6 +4523,12 @@ html.handoff-wait body.home-taskbar #island-row {
 .tb-side #bar-rest .win.front::after {
   width: 3px;
   height: 18px;
+}
+
+.tb-side #bar-rest .win.idle::after,
+.tb-side #bar-rest .win.fresh::after {
+  width: 3px;
+  height: 0;
 }
 
 .tb-side #bar-rest .ticon.drop-before,

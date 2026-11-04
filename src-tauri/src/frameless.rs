@@ -19,21 +19,52 @@
 // same Basic one is drawn on that surface; restored at the same size, it stays
 // there (her island in the taskbar home, 2560 x 860: a bar across the screen
 // with "wakuwaku island" and a close button, 2026-11-03, minimized by Claude's
-// computer use and laid again by her look). Minimized, then, no frame is
-// drawn: no WM_NCPAINT, and WM_NCACTIVATE's own drawing waved off (lparam -1,
-// as Windows lets one).
+// computer use and laid again by her look).
+//
+// And in 0.4.0 it was there again, along the top bar, the strip clear (the
+// user, 2026-11-04: the island active for the settings as the strip moved to
+// the top, then moved by Windows to the work area's top), though its style
+// had no title bar. So no frame is ever drawn on hers, minimized or not, by
+// any of the ways Windows has: WM_NCPAINT answered with nothing, WM_NCACTIVATE's
+// own drawing waved off (lparam -1, as Windows lets one), the theme's caption
+// and frame (WM_NCUAHDRAWCAPTION, WM_NCUAHDRAWFRAME, which a window's text or
+// icon set brings) not drawn: they have no frame to show, the client area
+// all of the window. And should one be drawn all the same, the surface is
+// wiped (wipe: drawn anew, erased, the page above it left alone), as the
+// window is given back after it was minimized, is activated or let go, and
+// as Windows moves it (island.rs keep_on_screen).
+//
+// Nor are they in Alt+Tab: tao gives every window WS_EX_APPWINDOW and keeps a
+// window off the taskbar by taking its button away (ITaskbarList DeleteTab),
+// which Windows puts back once a hidden one shows again, and the dock was
+// listed in Alt+Tab as "wakuwaku bar" (the user, 2026-11-04). Tool windows,
+// as tao writes its own style back.
 use std::ffi::c_void;
 
 type Hwnd = *mut c_void;
 type Subclass = unsafe extern "system" fn(Hwnd, u32, usize, isize, usize, usize) -> isize;
 
 const GWL_STYLE: i32 = -16;
+const GWL_EXSTYLE: i32 = -20;
 // Two bits, WS_BORDER and WS_DLGFRAME: a title bar is both.
 const WS_CAPTION: u32 = 0x00c0_0000;
+const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
+const WS_EX_APPWINDOW: u32 = 0x0004_0000;
+const WM_SIZE: u32 = 0x0005;
+const WM_ACTIVATE: u32 = 0x0006;
 const WM_NCDESTROY: u32 = 0x0082;
 const WM_STYLECHANGING: u32 = 0x007c;
 const WM_NCPAINT: u32 = 0x0085;
 const WM_NCACTIVATE: u32 = 0x0086;
+// Undocumented, sent by the theme to draw a window's caption and frame.
+const WM_NCUAHDRAWCAPTION: u32 = 0x00ae;
+const WM_NCUAHDRAWFRAME: u32 = 0x00af;
+const SIZE_MINIMIZED: usize = 1;
+const RDW_INVALIDATE: u32 = 0x0001;
+const RDW_ERASE: u32 = 0x0004;
+const RDW_NOCHILDREN: u32 = 0x0040;
+const RDW_ERASENOW: u32 = 0x0200;
+const RDW_FRAME: u32 = 0x0400;
 const SWP_NOSIZE: u32 = 0x0001;
 const SWP_NOMOVE: u32 = 0x0002;
 const SWP_NOZORDER: u32 = 0x0004;
@@ -60,25 +91,70 @@ extern "system" {
     fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
     fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
     fn IsIconic(hwnd: Hwnd) -> i32;
+    fn RedrawWindow(hwnd: Hwnd, rect: *const c_void, region: isize, flags: u32) -> i32;
 }
 
 fn without_title_bar(style: u32) -> u32 {
     style & !WS_CAPTION
 }
 
+// Out of Alt+Tab (and off the taskbar for good): a tool window, not an app's.
+fn as_tool_window(style_ex: u32) -> u32 {
+    (style_ex & !WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW
+}
+
+// Windows of hers minimized now, for their surface to be wiped once given back.
+static MINIMIZED: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec::new());
+
 unsafe extern "system" fn hold_off_title_bar(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize, _id: usize, _data: usize) -> isize {
-    if msg == WM_STYLECHANGING && wparam as i32 == GWL_STYLE {
-        // SAFETY: for this message, lparam is Windows' STYLESTRUCT, ours to change.
-        let change = &mut *(lparam as *mut StyleStruct);
-        change.new = without_title_bar(change.new);
-    } else if msg == WM_NCPAINT && IsIconic(hwnd) != 0 {
-        return 0;
-    } else if msg == WM_NCACTIVATE && IsIconic(hwnd) != 0 {
-        return DefSubclassProc(hwnd, msg, wparam, -1);
-    } else if msg == WM_NCDESTROY {
-        RemoveWindowSubclass(hwnd, hold_off_title_bar, SUBCLASS_ID);
+    match msg {
+        WM_STYLECHANGING if wparam as i32 == GWL_STYLE => {
+            // SAFETY: for this message, lparam is Windows' STYLESTRUCT, ours to change.
+            let change = &mut *(lparam as *mut StyleStruct);
+            change.new = without_title_bar(change.new);
+        }
+        WM_STYLECHANGING if wparam as i32 == GWL_EXSTYLE => {
+            // SAFETY: as above.
+            let change = &mut *(lparam as *mut StyleStruct);
+            change.new = as_tool_window(change.new);
+        }
+        WM_NCPAINT | WM_NCUAHDRAWCAPTION | WM_NCUAHDRAWFRAME => return 0,
+        WM_NCACTIVATE => return DefSubclassProc(hwnd, msg, wparam, -1),
+        WM_SIZE => {
+            let answer = DefSubclassProc(hwnd, msg, wparam, lparam);
+            let mut minimized = MINIMIZED.lock().unwrap_or_else(|e| e.into_inner());
+            if wparam == SIZE_MINIMIZED {
+                if !minimized.contains(&(hwnd as isize)) {
+                    minimized.push(hwnd as isize);
+                }
+            } else if let Some(at) = minimized.iter().position(|&h| h == hwnd as isize) {
+                minimized.remove(at);
+                drop(minimized);
+                wipe(hwnd as isize);
+            }
+            return answer;
+        }
+        WM_ACTIVATE => {
+            let answer = DefSubclassProc(hwnd, msg, wparam, lparam);
+            wipe(hwnd as isize);
+            return answer;
+        }
+        WM_NCDESTROY => {
+            RemoveWindowSubclass(hwnd, hold_off_title_bar, SUBCLASS_ID);
+            MINIMIZED.lock().unwrap_or_else(|e| e.into_inner()).retain(|&h| h != hwnd as isize);
+        }
+        _ => {}
     }
     DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+
+// Whatever was drawn on the window's own surface wiped: drawn anew and
+// erased, its page (WebView2's, a child window above it) left as it is.
+// Tried with a box painted on the island's surface from outside: it stayed,
+// and this took it away.
+pub fn wipe(hwnd: isize) {
+    // SAFETY: a plain call about a window; a stale handle only makes it fail.
+    unsafe { RedrawWindow(hwnd as Hwnd, std::ptr::null(), 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ERASENOW | RDW_NOCHILDREN) };
 }
 
 // Whether a window of hers is minimized: island.rs and pet.rs leave it so,
@@ -98,6 +174,8 @@ pub fn keep(hwnd: isize) {
         }
         let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
         SetWindowLongPtrW(hwnd, GWL_STYLE, without_title_bar(style) as isize);
+        let style_ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, as_tool_window(style_ex) as isize);
         SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 }
@@ -115,5 +193,13 @@ mod tests {
         assert_eq!(without_title_bar(WS_CAPTION), 0);
         assert_eq!(without_title_bar(0x0080_0000), 0);
         assert_eq!(without_title_bar(0x0040_0000), 0);
+    }
+
+    #[test]
+    fn a_tool_window_and_no_apps() {
+        // The dock's as tao left it (topmost, layered, click-through, an app's).
+        assert_eq!(as_tool_window(0x080c_0038), 0x0808_00b8);
+        // A tool window already stays one.
+        assert_eq!(as_tool_window(0x0000_0080), 0x0000_0080);
     }
 }

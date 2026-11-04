@@ -1197,6 +1197,11 @@ pub fn keep_on_screen(sh: &Shared) {
         };
         sh.log(&format!("island: given back after it was minimized; laid at {pos:?} {size:?}"));
         lay(&win, pos, size);
+        // Any frame drawn on it meanwhile wiped (frameless.rs).
+        #[cfg(windows)]
+        if let Ok(h) = win.hwnd() {
+            crate::frameless::wipe(h.0 as isize);
+        }
     }
     lay_again(sh, "seen by the look");
     if sh.home() != "taskbar" {
@@ -1206,6 +1211,11 @@ pub fn keep_on_screen(sh: &Shared) {
         if (at.x, at.y) != pos && sh.island.lock().unwrap().pos == pos {
             sh.log(&format!("island: moved by Windows to ({}, {}); put back at {pos:?}", at.x, at.y));
             lay(&win, pos, size);
+            // Windows took it for a window of its own: any frame it drew on it wiped (frameless.rs).
+            #[cfg(windows)]
+            if let Ok(h) = win.hwnd() {
+                crate::frameless::wipe(h.0 as isize);
+            }
         }
     }
 }

@@ -130,6 +130,7 @@ mod imp {
     #[link(name = "shell32")]
     extern "system" {
         fn SHCreateItemFromIDList(pidl: *const c_void, iid: *const Guid, out: *mut *mut c_void) -> i32;
+        fn SHCreateItemFromParsingName(path: *const u16, ctx: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> i32;
     }
 
     #[link(name = "ole32")]
@@ -177,19 +178,46 @@ mod imp {
     // app ({ path: "", id, name }). Err: why it is left out.
     fn pin_of(list: &[u8]) -> Result<Value, String> {
         // SAFETY: a list checked whole (favorites_lists), alive for the call;
-        // the item ours, released.
+        // the item ours, released (pin_of_item).
         unsafe {
             let mut item: *mut Obj = std::ptr::null_mut();
             let hr = SHCreateItemFromIDList(list.as_ptr() as *const c_void, &IID_SHELL_ITEM2, &mut item as *mut *mut Obj as *mut *mut c_void);
             if hr < 0 || item.is_null() {
                 return Err(format!("an item the shell could not read ({:#010x})", hr as u32));
             }
+            pin_of_item(item, false)
+        }
+    }
+
+    // A file dropped on her taskbar or the dock, as a pin: a program (its
+    // .exe), or a shortcut as one of Windows' pins is read (pin_of). Not a
+    // document, nor a folder. COM is the caller's.
+    pub fn of_file(path: &str) -> Result<Value, String> {
+        let wide: Vec<u16> = path.encode_utf16().chain(Some(0)).collect();
+        // SAFETY: our own string, alive for the call; the item ours, released (pin_of_item).
+        unsafe {
+            let mut item: *mut Obj = std::ptr::null_mut();
+            let hr = SHCreateItemFromParsingName(wide.as_ptr(), std::ptr::null_mut(), &IID_SHELL_ITEM2, &mut item as *mut *mut Obj as *mut *mut c_void);
+            if hr < 0 || item.is_null() {
+                return Err(format!("a file the shell could not read ({:#010x})", hr as u32));
+            }
+            pin_of_item(item, true)
+        }
+    }
+
+    // SAFETY (callers): a live item of ours, released here.
+    unsafe fn pin_of_item(item: *mut Obj, programs: bool) -> Result<Value, String> {
+        {
             let name = display(item, SIGDN_NORMALDISPLAY);
             let file = display(item, SIGDN_FILESYSPATH);
             let id = string(item, &PKEY_APP_ID);
             let target = string(item, &PKEY_LINK_TARGET);
             let release: extern "system" fn(*mut Obj) -> u32 = method(item, 2);
             release(item);
+            // A program itself (dropped there).
+            if programs && file.to_ascii_lowercase().ends_with(".exe") {
+                return Ok(json!({ "path": file, "name": name }));
+            }
             if file.to_ascii_lowercase().ends_with(".lnk") {
                 // File Explorer's leads to a place in the shell, not a file:
                 // its windows are explorer.exe's, so its button is too.
@@ -246,9 +274,13 @@ mod imp {
     pub fn read() -> (Vec<Value>, Vec<String>) {
         (Vec::new(), vec!["no Windows taskbar here".into()])
     }
+
+    pub fn of_file(_path: &str) -> Result<Value, String> {
+        Err("no Windows taskbar here".into())
+    }
 }
 
-pub use imp::read;
+pub use imp::{of_file, read};
 
 #[cfg(test)]
 mod tests {

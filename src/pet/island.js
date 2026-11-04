@@ -1749,6 +1749,18 @@
   }
   const clockBox = el('span', 'tclock')
   clockBox.dataset.bar = 'notifications'
+  // The program in front, by its icon and name, as a menu bar has it
+  // (macOS, GNOME): first on the top bar (split), its window's title in its
+  // tip (drawFront). Elsewhere a part to be put on the strip if wanted.
+  const frontBox = el('span', 'tfront')
+  const frontIcon = el('img')
+  frontIcon.alt = ''
+  frontIcon.draggable = false
+  frontIcon.hidden = true
+  // The program last in front (drawFront).
+  let frontWas = null
+  const frontName = el('b')
+  frontBox.append(frontIcon, frontName)
   // Show the desktop: a sliver at the screen's right edge, as Windows' own (Win+D).
   const deskEdge = el('span', 'tdesk')
   deskEdge.dataset.bar = 'desktop'
@@ -1765,10 +1777,10 @@
   // the island laid over it (placeSlot), growing from it the way there is
   // room (body.isl-right: from its right edge, leftwards). Edited by
   // dragging the parts about on the strip itself (editTaskbar).
-  const TB_PARTS = ['her', 'start', 'apps', 'monitor', 'tray', 'keys', 'quick', 'clock']
+  const TB_PARTS = ['her', 'start', 'apps', 'monitor', 'tray', 'keys', 'quick', 'clock', 'front']
   const TB_RIGHT = ['monitor', 'tray', 'keys', 'quick', 'clock']
   // Those that may be taken off the strip (the rest stay: the ghost says so).
-  const TB_OPTIONAL = ['monitor']
+  const TB_OPTIONAL = ['monitor', 'front']
   const TB_PRESETS = {
     win11: { left: ['her'], center: ['start', 'apps'], right: TB_RIGHT },
     left: { left: ['her', 'start', 'apps'], center: [], right: TB_RIGHT },
@@ -1779,13 +1791,15 @@
   // the clock in the dock too if set so (splitKeys dock, bar.js).
   const inDock = () => ['start', 'apps', ...(config.splitKeys === 'dock' ? ['quick', 'clock'] : [])]
   const splitParts = () => TB_PARTS.filter(p => !inDock().includes(p))
-  const splitPreset = () => ({ left: [], center: ['her'], right: TB_RIGHT.filter(p => !inDock().includes(p)) })
+  const splitPreset = () => ({ left: ['front'], center: ['her'], right: TB_RIGHT.filter(p => !inDock().includes(p)) })
+  // On the top bar the program in front is always there (it may be moved).
+  const SPLIT_OPTIONAL = TB_OPTIONAL.filter(p => p !== 'front')
   const herSlot = el('span', 'tslot')
   // The tray's icons and the marks of what uses the microphone, camera or
   // location: one part.
   const trayPart = el('span', 'tpair')
   trayPart.append(trayBox, privBox)
-  const PART_NODES = { her: herSlot, start: startPart, apps: windowsBox, monitor: facesBox, tray: trayPart, keys: keysBox, quick: quickBox, clock: clockBox }
+  const PART_NODES = { her: herSlot, start: startPart, apps: windowsBox, monitor: facesBox, tray: trayPart, keys: keysBox, quick: quickBox, clock: clockBox, front: frontBox }
   for (const [part, node] of Object.entries(PART_NODES)) node.dataset.part = part
   const zones = { left: el('span', 'tzone tz-left'), center: el('span', 'tzone tz-center'), right: el('span', 'tzone tz-right') }
   // While the layout is being edited: the one being made, not yet kept.
@@ -1804,7 +1818,7 @@
   // there as a widget is that part (widgets.js monitorAsPart).
   function tbLayout(saved = editLayout || config.taskbarLayout) {
     const base = saved && typeof saved === 'object' ? saved : config.taskbarAlign === 'left' ? TB_PRESETS.left : TB_PRESETS.win11
-    if (isSplit()) return Widgets.monitorAsPart(Widgets.layoutOf(splitOf(base), splitParts(), splitPreset(), TB_OPTIONAL))
+    if (isSplit()) return Widgets.monitorAsPart(Widgets.layoutOf(splitOf(base), splitParts(), splitPreset(), SPLIT_OPTIONAL))
     return Widgets.monitorAsPart(Widgets.layoutOf(base, TB_PARTS, TB_PRESETS.win11, TB_OPTIONAL))
   }
   // A layout for the top bar (split): Start and the programs (and quick
@@ -1818,6 +1832,8 @@
     const run = k => (Array.isArray(layout?.[k]) ? layout[k] : []).filter(p => !inDock().includes(p))
     const out = { left: run('left'), center: run('center'), right: run('right') }
     if (forEdge && out.left[0] === 'her' && !out.center.length) out.center.push(out.left.shift())
+    // The program in front first at the left, where it has not been put elsewhere.
+    if (!runs.some(k => out[k].includes('front'))) out.left.unshift('front')
     return out
   }
   // Whether the strip has the monitor's part.
@@ -2240,6 +2256,8 @@
   // The windows' buttons as last sent (taskbar.rs), and as drawn.
   let taskWindows = []
   let windowsDrawn = ''
+  // The programs' buttons drawn once already: a new one after that grows its line in.
+  let buttonsDrawn = false
   // When each window (by its handle) began flashing for attention: its
   // button is made anew with every change to the list, and the flashes
   // carry on from where they were (style.css .flash, --flash-delay)
@@ -2265,6 +2283,7 @@
     quickBox.title = t(lang, 'taskbar.quick')
     deskEdge.title = t(lang, 'taskbar.desktop')
     facesBox.replaceChildren(...widgetFaces())
+    drawFront()
     drawWindows()
     drawTray()
     tickClock()
@@ -2400,6 +2419,9 @@
   }
 
   const isGlideOn = node => node?.matches?.(GLIDE_ON) && !node.closest('.wpop, .wgpop, .tfly, .wstk, .wmenu')
+  // The programs' buttons pressed in and springing back (presses.js pressIn;
+  // Start and Task View have their own, style.css .start.down).
+  window.Presses.pressIn(windowsBox, '.win')
   barRest.addEventListener(
     'mouseenter',
     e => {
@@ -2464,37 +2486,95 @@
     const flashing = new Set(apps.flatMap(a => (a.windows || []).filter(w => w.flash).map(w => w.id)))
     for (const id of [...flashSince.keys()]) if (!flashing.has(id)) flashSince.delete(id)
     for (const id of flashing) if (!flashSince.has(id)) flashSince.set(id, now)
-    windowsBox.replaceChildren(
-      ...apps.map(app => {
-        const windows = app.windows || []
-        const button = el('span', 'win')
+    // Each program's button kept from one drawing to the next (by its key),
+    // what changed changed in it: its line stretches as its window comes to
+    // the front (style.css #bar-rest .win::after), a press on it plays out
+    // (presses.js pressIn) though the windows change under it; a new one's
+    // line grows in (fresh). Drawn anew each time, none of it could move.
+    const old = new Map([...windowsBox.children].filter(b => b.dataset.app != null).map(b => [b.dataset.app, b]))
+    const fresh = []
+    const buttons = apps.map(app => {
+      const windows = app.windows || []
+      let button = old.get(app.app)
+      old.delete(app.app)
+      if (!button) {
+        button = el('span', 'win')
         button.dataset.app = app.app
         // As Windows' own buttons say themselves to a screen reader.
         button.setAttribute('role', 'button')
-        button.setAttribute('aria-label', t(lang, !windows.length ? 'taskbar.ariaPinned' : windows.length > 1 ? 'taskbar.ariaMany' : 'taskbar.ariaOne', { name: app.name || '', n: windows.length }))
-        button.classList.toggle('front', windows.some(w => w.front))
-        button.classList.toggle('min', windows.length > 0 && windows.every(w => w.min))
-        const flashes = windows.filter(w => w.flash)
-        button.classList.toggle('flash', flashes.length > 0)
-        // From the longest-flashing window's start: a negative delay puts
-        // the animation that far along (past its end: the last frame).
-        if (flashes.length) button.style.setProperty('--flash-delay', `${-Math.max(...flashes.map(w => now - flashSince.get(w.id)))}ms`)
-        button.classList.toggle('idle', !windows.length)
-        if (!windows.length) button.title = app.name || ''
-        if (app.png) {
-          const img = el('img')
-          img.src = app.png
-          img.draggable = false
-          button.append(img)
-        } else {
-          button.append(el('span', 'letter', (app.name || '?').slice(0, 1).toUpperCase()))
+        if (buttonsDrawn) {
+          button.classList.add('fresh')
+          fresh.push(button)
         }
-        if (windows.length) button.append(el('span', 'wt', windows.length === 1 ? windows[0].title || app.name : app.name))
-        if (windows.length > 1) button.append(el('span', 'count', String(windows.length)))
-        return button
-      }),
-    )
+      }
+      button.setAttribute('aria-label', t(lang, !windows.length ? 'taskbar.ariaPinned' : windows.length > 1 ? 'taskbar.ariaMany' : 'taskbar.ariaOne', { name: app.name || '', n: windows.length }))
+      button.classList.toggle('front', windows.some(w => w.front))
+      button.classList.toggle('min', windows.length > 0 && windows.every(w => w.min))
+      const flashes = windows.filter(w => w.flash)
+      button.classList.toggle('flash', flashes.length > 0)
+      // From the longest-flashing window's start: a negative delay puts
+      // the animation that far along (past its end: the last frame).
+      if (flashes.length) button.style.setProperty('--flash-delay', `${-Math.max(...flashes.map(w => now - flashSince.get(w.id)))}ms`)
+      else button.style.removeProperty('--flash-delay')
+      button.classList.toggle('idle', !windows.length)
+      if (!windows.length) button.title = app.name || ''
+      else button.removeAttribute('title')
+      fillButton(button, app, windows)
+      return button
+    })
+    for (const b of old.values()) b.remove()
+    // In their order, each moved only where it is not already (a move
+    // starts it anew: its line, its press).
+    buttons.forEach((b, i) => {
+      if (windowsBox.children[i] !== b) windowsBox.insertBefore(b, windowsBox.children[i] || null)
+    })
+    if (fresh.length) requestAnimationFrame(() => requestAnimationFrame(() => fresh.forEach(b => b.classList.remove('fresh'))))
+    buttonsDrawn = true
     if (popFor) drawPop()
+  }
+
+  // A button's insides as its program is now: its icon (or its first
+  // letter), the title of its one window or its name, how many; each
+  // changed only as it changes, the icon kept through a press.
+  function fillButton(button, app, windows) {
+    let icon = button.firstElementChild
+    if (app.png) {
+      if (icon?.tagName !== 'IMG') {
+        const img = el('img')
+        img.draggable = false
+        if (icon) icon.replaceWith(img)
+        else button.prepend(img)
+        icon = img
+      }
+      if (icon.getAttribute('src') !== app.png) icon.src = app.png
+    } else {
+      const letter = (app.name || '?').slice(0, 1).toUpperCase()
+      if (!icon?.classList.contains('letter')) {
+        const span = el('span', 'letter')
+        if (icon) icon.replaceWith(span)
+        else button.prepend(span)
+        icon = span
+      }
+      if (icon.textContent !== letter) icon.textContent = letter
+    }
+    let title = button.querySelector(':scope > .wt')
+    const words = windows.length ? (windows.length === 1 ? windows[0].title || app.name : app.name) || '' : null
+    if (words === null) title?.remove()
+    else {
+      if (!title) {
+        title = el('span', 'wt')
+        icon.after(title)
+      }
+      if (title.textContent !== words) title.textContent = words
+    }
+    let count = button.querySelector(':scope > .count')
+    if (windows.length > 1) {
+      if (!count) {
+        count = el('span', 'count')
+        button.append(count)
+      }
+      if (count.textContent !== String(windows.length)) count.textContent = String(windows.length)
+    } else count?.remove()
   }
 
   // Above a program's button: its windows to pick from (on a press with
@@ -3738,7 +3818,13 @@
   // pointer). What it is held over: 'win:<id>', 'app:<key>', or null.
   let fileHeld = null
   let fileTimer
-  window.pet.onFileDrag((type, at) => {
+  window.pet.onFileDrag((type, at, paths) => {
+    // Let go of over the strip: programs and shortcuts to them pinned, as
+    // Windows' own taskbar pins one dropped on it (taskbar.rs taskbar_pin_files).
+    if (type === 'drop' && at && paths?.length && isOn() && home() === 'taskbar' && !editLayout) {
+      const on = document.elementFromPoint(at.x, at.y)
+      if (on && (barRest.contains(on) || island.contains(on))) window.pet.taskbar.pinFiles(paths)
+    }
     const live = at && (type === 'enter' || type === 'over') && isOn() && home() === 'taskbar' && !editLayout
     const node = live ? document.elementFromPoint(at.x, at.y) : null
     const card = node && pop.contains(node) ? node.closest('[data-win]') : null
@@ -4188,9 +4274,24 @@
   })
   window.addEventListener('resize', drawMica)
 
+  // The program in front (frontBox): the one whose window is in front; none
+  // (her own, the desktop, a window with no button), the last one while it
+  // is still there, else the desktop.
+  function drawFront() {
+    const app = taskWindows.find(a => (a.windows || []).some(w => w.front)) || taskWindows.find(a => a.app === frontWas)
+    frontWas = app?.app ?? null
+    const win = app && ((app.windows || []).find(w => w.front) || (app.windows || [])[0])
+    const name = app ? app.name || '' : t(lang, 'taskbar.frontDesktop')
+    if (frontName.textContent !== name) frontName.textContent = name
+    frontIcon.hidden = !app?.png
+    if (app?.png && frontIcon.getAttribute('src') !== app.png) frontIcon.src = app.png
+    frontBox.title = win?.title || name
+  }
+
   window.pet.onWindows(list => {
     taskWindows = Array.isArray(list) ? list : []
     if (isOn() && home() === 'taskbar') {
+      drawFront()
       drawWindows()
       alignApps()
       snapStart()

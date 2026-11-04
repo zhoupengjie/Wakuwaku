@@ -153,6 +153,8 @@ pub fn part_menu(sh: &Shared, part: &str) -> Option<tauri::Result<Menu<Wry>>> {
         "volume" => &["soundFix", "-", "mixer", "sound"],
         "network" => &["netFix", "-", "network"],
         "clock" => &["dateTime", "notifySettings"],
+        // The dock's Recycle Bin (split): open it, or empty it (Windows asks first).
+        "recycleBin" => &["recycleBin", "-", "emptyBin"],
         _ => return None,
     };
     let app = &sh.app;
@@ -257,8 +259,24 @@ pub fn create(sh: &Shared) -> tauri::Result<()> {
 
 static SHOWN_MOOD: Mutex<String> = Mutex::new(String::new());
 
-// The face and the tooltip, on every change of mood.
+// The tray icon is only ever reached on the main thread: Tauri's
+// tray_by_id hands back a clone of the icon, and the icon is counted by an
+// Rc (tray-icon's), not made for two threads. Reached from a settings
+// command on a worker thread while the main thread had it too, its count
+// went wrong, the icon was dropped from the tray (as at its last clone) and
+// the next count panicked (the dev build, 2026-11-04: "removed wakuwaku.exe",
+// then rc.rs's check, from tray_by_id in refresh). Each refresh goes there.
+fn on_main(sh: &Shared, f: fn(&Shared)) {
+    let app = sh.app.clone();
+    let _ = sh.app.run_on_main_thread(move || f(&crate::shared(&app)));
+}
+
+// The face and the tooltip, on every change of mood (on the main thread).
 pub fn refresh(sh: &Shared) {
+    on_main(sh, refresh_here);
+}
+
+fn refresh_here(sh: &Shared) {
     let Some(tray) = sh.app.tray_by_id(TRAY_ID) else { return };
     let now = sh.pet.lock().unwrap().get(now_ms());
     let mood = now["mood"].as_str().unwrap_or("idle").to_string();
@@ -290,8 +308,12 @@ pub fn refresh(sh: &Shared) {
     }
 }
 
-// The tray's menu, when the settings or her being hidden change.
+// The tray's menu, when the settings or her being hidden change (on the main thread).
 pub fn refresh_menu(sh: &Shared) {
+    on_main(sh, refresh_menu_here);
+}
+
+fn refresh_menu_here(sh: &Shared) {
     if let (Some(tray), Ok(menu)) = (sh.app.tray_by_id(TRAY_ID), menu(sh, Over::Tray)) {
         let _ = tray.set_menu(Some(menu));
     }

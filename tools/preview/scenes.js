@@ -62,10 +62,10 @@
     // Her taskbar on another display (bars.rs): the strip alone.
     bar: [0, SCREEN[1] - STRIP, SCREEN[0], STRIP],
     // Split (taskbarEdge split, a shot's split): her strip the top bar, its
-    // room under it; the dock's glass 2 px off the foot, 44 high (its page
-    // puts it in the middle, bar.css .b-dock).
+    // room under it; the dock's window the band along the foot, 48 high, its
+    // glass in its middle 2 px off the foot (bars.rs dock_band, bar.css .b-dock).
     top: [0, 0, SCREEN[0], STRIP + 640],
-    dock: [0, SCREEN[1] - 46, SCREEN[0], 44],
+    dock: [0, SCREEN[1] - 48, SCREEN[0], 48],
   }
   // The island's window at a top corner (islandPos: left, right), as
   // island.rs puts it (zhoupengjie/Wakuwaku#59; anchor.js

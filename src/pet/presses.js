@@ -43,7 +43,58 @@
   // as on Windows' own.
   const DRAG_HOLD_MS = 500
 
-  const api = { pressOf, nextWindow, CYCLED_MS, DRAG_HOLD_MS }
+  // A button pressed in under the pointer and springing back as it is let
+  // go, as Windows 11's taskbar buttons are (the user, 2026-11-04: "a click
+  // shrinks it, springy, then it grows back"): what `selector` finds in
+  // root, on any mouse button's press, marked `pressing` while held (its
+  // page's style does the rest: style.css, bar.css). Held in PRESS_MIN_MS at
+  // least, so a quick click is seen too; a press that never comes up (a
+  // menu of Windows' took the mouse) let go of after PRESS_MAX_MS. Kept on
+  // a button its page draws anew in place (island.js, bar.js drawWindows).
+  const PRESS_MIN_MS = 110
+  const PRESS_MAX_MS = 900
+  function pressIn(root, selector) {
+    const view = root.ownerDocument?.defaultView
+    if (!view) return
+    let held = null
+    let leaving = null
+    let at = 0
+    let offTimer = 0
+    let maxTimer = 0
+    const off = node => node?.classList.remove('pressing')
+    const letGo = () => {
+      clearTimeout(maxTimer)
+      if (!held) return
+      off(leaving)
+      leaving = held
+      held = null
+      offTimer = setTimeout(() => {
+        off(leaving)
+        leaving = null
+      }, Math.max(0, PRESS_MIN_MS - (view.performance.now() - at)))
+    }
+    root.addEventListener(
+      'pointerdown',
+      e => {
+        const node = e.target?.closest?.(selector)
+        if (!node || !root.contains(node) || e.button > 2) return
+        if (view.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+        clearTimeout(offTimer)
+        off(leaving)
+        off(held)
+        leaving = null
+        held = node
+        at = view.performance.now()
+        node.classList.add('pressing')
+        clearTimeout(maxTimer)
+        maxTimer = setTimeout(letGo, PRESS_MAX_MS)
+      },
+      true,
+    )
+    for (const type of ['pointerup', 'pointercancel', 'blur']) view.addEventListener(type, letGo, true)
+  }
+
+  const api = { pressOf, nextWindow, pressIn, CYCLED_MS, DRAG_HOLD_MS, PRESS_MIN_MS }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api

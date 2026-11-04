@@ -14,9 +14,9 @@
 ;(function (root) {
   const { t } = root?.I18n || (typeof require !== 'undefined' ? require('../shared/i18n') : { t: (_, k) => k })
   // The other agents a prompt may come from, named on it (Claude Code's: none).
-  const FROM = { codex: 'Codex', agy: 'Antigravity', opencode: 'OpenCode', omp: 'omp', zcode: 'ZCode', dsh: 'DeepSeek Harness' }
+  const FROM = { codex: 'Codex', agy: 'Antigravity', opencode: 'OpenCode', omp: 'omp', zcode: 'ZCode', dsh: 'DeepSeek Harness', workbuddy: 'WorkBuddy' }
   // Apps whose own dialog stays open meanwhile: a prompt is handled there.
-  const IN_APP = new Set(['zcode', 'dsh'])
+  const IN_APP = new Set(['zcode', 'dsh', 'workbuddy'])
 
   // Buttons wake up a moment after a prompt appears, so a click already on
   // its way to where the panel opens cannot answer it.

@@ -54,7 +54,7 @@ src-tauri/
     pointer.rs            两个窗口共用的点击穿透
     screen.rs             各个显示器的工作区
     asks.rs               确认请求：交还 DeepSeek Harness 自己窗口后，那个会话改成等你去 DSH 里答（handed_event，一个 AgentEvent，也发给 /v1 的订阅者）；确认请求本身（显示什么、每个选择回给各家 hook 什么、什么时候算在别处答过、排队和超时）在 agent-core 的 asks.rs，拒绝时说的话由她传进去
-    connection/           每家 agent 一个文件，装、移除、看状态：claude.rs（插件、settings.json 里的 hooks）、codex.rs（hooks.json、信任）、agy.rs（hooks.json）、opencode.rs（插件文件）、omp.rs（扩展）、zcode.rs（config.json）、dsh.rs（插件和补丁文件，插件有没有被加载；DSH 自己的 hook 桥）、reasonix.rs（全局 settings.json）；file.rs 是它们共用的读写和备份，versions.rs 是各 agent 文件里写着的版本，mod.rs 是它们共有的（连上没有、写失败的原因）
+    connection/           每家 agent 一个文件，装、移除、看状态：claude.rs（插件、settings.json 里的 hooks）、codex.rs（hooks.json、信任）、agy.rs（hooks.json）、opencode.rs（插件文件）、omp.rs（扩展）、zcode.rs（config.json）、dsh.rs（插件和补丁文件，插件有没有被加载；DSH 自己的 hook 桥）、reasonix.rs（全局 settings.json）、workbuddy.rs（桌面端 ~/.workbuddy/settings.json 里的 HTTP hooks）；file.rs 是它们共用的读写和备份，versions.rs 是各 agent 文件里写着的版本，mod.rs 是它们共有的（连上没有、写失败的原因）
     logon.rs              开机自启：Run 的值和计划任务（任务栏和岛都有，Task Scheduler 的 COM）、这次登录是什么时候
     lhm.rs, lhm_setup.rs  监控的 LibreHardwareMonitor 来源：读它的网页服务器；用户点了时下载，以管理员身份装进 Program Files、配置、启动它，它自己的开机任务
     fetch.rs              codex-pets.net：解析地址、下载宠物、图库

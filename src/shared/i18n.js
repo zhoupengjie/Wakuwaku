@@ -1684,6 +1684,18 @@
       'ag.cap.choose.reasonix': '它问你问题时岛上显示「有问题问你」，要在 Reasonix 里答',
       'ag.cap.stats.reasonix': '算进「今天」：轮数、时长，2.x 还算 token（批准不经过她）',
 
+      // WorkBuddy (Tencent's desktop app around CodeBuddy CLI): its hooks are Claude Code's, in ~/.workbuddy/settings.json
+      'wc.workbuddyLeft': '<b>WorkBuddy</b>：重开 WorkBuddy 桌面端，或新建一个会话，她就会动起来。',
+      'wc.safe.workbuddy': '只在 WorkBuddy 的 <span class="mono">settings.json</span> 里加我们的几条，别的设置不动',
+      's.workbuddyUnreadable': '读不了 settings.json',
+      'ag.how.workbuddy': '腾讯 WorkBuddy：桌面版（里面是 CodeBuddy CLI）',
+      'ag.st.set.workbuddy': '装好了，等一个新会话',
+      'ag.what.workbuddy': '跟着会话、每一步的工具、做完和出错，带上它最后说的话；要批准时岛上弹出允许 / 拒绝，WorkBuddy 自己的框同时弹出，先答的算。它问你的问题要在 WorkBuddy 里答。',
+      'ag.note.workbuddy': '钩子写在桌面端的 ~/.workbuddy/settings.json 里；改完要重开 WorkBuddy（或新建会话）才会用上。专享版的数据目录不是 .workbuddy 时，要让 WORKBUDDY_CONFIG_DIR 指向它。',
+      'ag.cap.status.workbuddy': '跟着会话、每一步的工具、做完、出错和它最后说的话',
+      'ag.cap.approve.workbuddy': '岛上答：允许 / 拒绝；WorkBuddy 自己的框同时弹出，先答的算',
+      'ag.cap.choose.workbuddy': '它问你问题时岛上答不了，要在 WorkBuddy 里答',
+
       // The program's own words: the tray's menu and its tip, Windows' menus
       // on the taskbar, her notices, dialogs and notifications (src-tauri's
       // build.rs reads them for i18n.rs, as it reads any key the program names)
@@ -3411,6 +3423,18 @@
       'ag.cap.approve.reasonix': 'Approvals stay in Reasonix; the island only shows what it waits for you to approve',
       'ag.cap.choose.reasonix': 'When it asks you, the island says it has a question for you; answer in Reasonix',
       'ag.cap.stats.reasonix': "Counted in Today: turns, time, and in 2.x its tokens (its approvals don't pass through her)",
+
+      // WorkBuddy (Tencent's desktop app around CodeBuddy CLI): its hooks are Claude Code's, in ~/.workbuddy/settings.json
+      'wc.workbuddyLeft': "<b>WorkBuddy</b>: restart the WorkBuddy desktop app, or open a new session, and she'll come alive.",
+      'wc.safe.workbuddy': 'Adds only our own entries to WorkBuddy\'s <span class="mono">settings.json</span> and leaves the rest alone',
+      's.workbuddyUnreadable': "Can't read settings.json",
+      'ag.how.workbuddy': "Tencent's WorkBuddy: the desktop app (its CodeBuddy CLI inside)",
+      'ag.st.set.workbuddy': 'Set up; waiting for a new session',
+      'ag.what.workbuddy': "Follows its sessions, each step's tool, its finish and errors, with its last words; approvals pop up on the island as allow / deny beside WorkBuddy's own dialog, and the first answer counts. Its questions are answered in WorkBuddy.",
+      'ag.note.workbuddy': "The hooks go in the desktop app's ~/.workbuddy/settings.json; restart WorkBuddy (or open a new session) to pick them up. An edition whose data folder isn't .workbuddy needs WORKBUDDY_CONFIG_DIR set to it.",
+      'ag.cap.status.workbuddy': "Follows its sessions, each step's tool, its finish, its errors and its last words",
+      'ag.cap.approve.workbuddy': "On the island: allow / deny; WorkBuddy's own dialog shows too, and the first answer counts",
+      'ag.cap.choose.workbuddy': "WorkBuddy's questions can't be answered on the island; answer in WorkBuddy",
 
       // The program's own words: the tray's menu and its tip, Windows' menus
       // on the taskbar, her notices, dialogs and notifications (src-tauri's

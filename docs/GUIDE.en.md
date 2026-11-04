@@ -4,7 +4,7 @@
 
 The [README](../README.en.md) says what she is; this is all the detail: installing her, connecting each agent, using every part of her, and how she works.
 
-- [Install](#install): the pet, then Claude Code, Codex, Antigravity, OpenCode, oh-my-pi, ZCode, DeepSeek Harness, Reasonix
+- [Install](#install): the pet, then Claude Code, Codex, Antigravity, OpenCode, oh-my-pi, ZCode, DeepSeek Harness, Reasonix, WorkBuddy
 - [Use](#use): dragging and clicking, her homes, plugins, mail, updates, crash reports, uninstalling
 - [Her animations](#her-animations), [Answer Claude on the pet](#answer-claude-on-the-pet)
 - [How it works](#how-it-works), [Tests](#tests)
@@ -111,6 +111,14 @@ What works: sessions starting, working, each step's tool, finishing (with its la
 - Stopping a turn in Studio shows a note in the conversation that a Wakuwaku hook "could not run · context canceled": Reasonix runs that step's hooks only after the cancel, when they can no longer start. Nothing else is affected.
 
 Reasonix's hooks can only be commands: each event runs `"wakuwaku.exe" --wakuwaku-reasonix-hook <event>` once through `cmd.exe`, which hands it to her and prints nothing (Reasonix would pass `SessionStart`'s output to the model). Reasonix waits for it at each step, about 0.1 s; with her not running it leaves at once and Reasonix carries on. A new session starts her when she isn't running (unless you quit her). The Node Reasonix 0.x isn't supported: its hooks have only 4 events and no session id; the Agents page shows its version and leaves its settings alone.
+
+### 10. Connect WorkBuddy (optional)
+
+Tencent's [WorkBuddy](https://www.codebuddy.cn/docs/workbuddy/Overview) desktop app is supported (tried with 2.137.1): it is an Electron shell around its bundled CodeBuddy CLI, and its hooks are Claude Code's, HTTP included. Click Connect in WorkBuddy's row of the Agents page: one HTTP hook of ours goes into each of 11 events in `~/.workbuddy/settings.json`, the user-level file the desktop actually reads (backed up first, and removing takes out only ours, leaving the rest alone).
+
+The desktop does **not** read `~/.codebuddy/settings.json`: at startup it sets `CODEBUDDY_CONFIG_DIR` / `WORKBUDDY_CONFIG_DIR` to its own data folder and starts the bundled CLI with `--setting-sources user`, so `~/.workbuddy/settings.json` is what counts; `~/.codebuddy/settings.json` only affects a `codebuddy` CLI run by hand. An edition whose `dataFolderName` in product.json is something else (say `~/.aimea`) needs Wakuwaku's `WORKBUDDY_CONFIG_DIR` pointed there before Connect.
+
+What works: sessions starting, working, each step's tool, finishing (with its last words) and errors; Today counts its turns and time. Approvals pop up on the island as **Allow** / **Deny** beside WorkBuddy's own dialog, and **whichever side answers first counts**. When it asks you a question, the island only says it is waiting; answer in WorkBuddy. Restart WorkBuddy (or open a new session) after connecting; sessions already open aren't connected. Its desktop transcripts in `~/.workbuddy/projects/` are not Claude Code's format, so Today's tokens don't count it yet.
 
 ### From source
 

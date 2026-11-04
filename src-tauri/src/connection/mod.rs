@@ -5,8 +5,9 @@
 // any time), and written only when they ask, from the settings.
 //
 // Each agent's own in a file of its own (claude.rs, codex.rs, agy.rs,
-// opencode.rs, omp.rs, zcode.rs, dsh.rs, reasonix.rs), what they share in
-// file.rs, their versions in versions.rs; here, what is of them all.
+// opencode.rs, omp.rs, zcode.rs, dsh.rs, reasonix.rs, workbuddy.rs), what
+// they share in file.rs, their versions in versions.rs; here, what is of
+// them all.
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -24,6 +25,7 @@ mod omp;
 mod opencode;
 mod reasonix;
 mod versions;
+mod workbuddy;
 mod zcode;
 
 pub use agy::*;
@@ -35,6 +37,7 @@ pub use omp::*;
 pub use opencode::*;
 pub use reasonix::*;
 pub use versions::*;
+pub use workbuddy::*;
 pub use zcode::*;
 
 // What kept a settings file from being written, for what to do about it:
@@ -107,9 +110,9 @@ pub fn seems_connected() -> bool {
 
 // The tools on this computer by name, in their order (the island names
 // them while none is connected): Claude Code by its folder, Codex,
-// Antigravity, OpenCode, omp, ZCode, DeepSeek Harness and Reasonix by
-// theirs; none found, all but omp, ZCode, DeepSeek Harness and Reasonix
-// (it can not be told).
+// Antigravity, OpenCode, omp, ZCode, DeepSeek Harness, Reasonix and
+// WorkBuddy by theirs; none found, all but omp, ZCode, DeepSeek Harness and
+// Reasonix (it can not be told).
 pub fn tools_here() -> Vec<&'static str> {
     let here: Vec<&str> = ALL.into_iter().filter(|&agent| here(agent)).map(name).collect();
     if here.is_empty() {
@@ -126,7 +129,7 @@ pub fn tools_here() -> Vec<&'static str> {
 
 // The agents she connects, in the order she names them (tools_here; the
 // Agent page has its own, agents.js).
-pub const ALL: [Agent; 8] = [Agent::Claude, Agent::Codex, Agent::Agy, Agent::Opencode, Agent::Omp, Agent::Zcode, Agent::Dsh, Agent::Reasonix];
+pub const ALL: [Agent; 9] = [Agent::Claude, Agent::Codex, Agent::Agy, Agent::Opencode, Agent::Omp, Agent::Zcode, Agent::Dsh, Agent::Reasonix, Agent::Workbuddy];
 
 // Its place in ALL: what is kept for each of them goes by it (main.rs seen).
 pub fn slot(agent: Agent) -> usize {
@@ -154,6 +157,7 @@ pub fn name(agent: Agent) -> &'static str {
         Agent::Zcode => "ZCode",
         Agent::Dsh => "DeepSeek Harness",
         Agent::Reasonix => "Reasonix",
+        Agent::Workbuddy => "WorkBuddy",
     }
 }
 
@@ -168,6 +172,7 @@ pub fn here(agent: Agent) -> bool {
         Agent::Zcode => zcode_here(),
         Agent::Dsh => dsh_here(),
         Agent::Reasonix => reasonix_here(),
+        Agent::Workbuddy => workbuddy_here(),
     }
 }
 
@@ -183,6 +188,7 @@ pub fn file(agent: Agent) -> Option<PathBuf> {
         Agent::Zcode => Some(zcode_config_file()),
         Agent::Dsh => Some(dsh_patch_file()),
         Agent::Reasonix => Some(reasonix_settings_file()),
+        Agent::Workbuddy => Some(workbuddy_settings_file()),
     }
 }
 
@@ -200,6 +206,7 @@ pub fn status(agent: Agent, port: u16) -> &'static str {
         Agent::Zcode => zcode_hooks_status(),
         Agent::Dsh => dsh_rows_status(port, &Value::Null).1,
         Agent::Reasonix => reasonix_hooks_status(),
+        Agent::Workbuddy => workbuddy_hooks_status(port),
     }
 }
 
@@ -219,7 +226,7 @@ fn counts_in(agent: Agent, status: &str) -> bool {
         Agent::Claude => !matches!(status, "missing" | "unreadable"),
         Agent::Codex => matches!(status, "ok" | "stale" | "upgradable" | "partial"),
         Agent::Agy | Agent::Opencode | Agent::Dsh => matches!(status, "ok" | "stale"),
-        Agent::Omp | Agent::Zcode | Agent::Reasonix => matches!(status, "ok" | "stale" | "partial"),
+        Agent::Omp | Agent::Zcode | Agent::Reasonix | Agent::Workbuddy => matches!(status, "ok" | "stale" | "partial"),
     }
 }
 
@@ -252,6 +259,7 @@ pub fn write(agent: Agent, action: &str, w: &mut Writing) -> Result<(), String> 
             write_dsh_hooks(action, w.dsh_way, w.port, registry, w.log)
         }
         Agent::Reasonix => write_reasonix_hooks(action),
+        Agent::Workbuddy => write_workbuddy_hooks(action, w.port),
     }
 }
 
@@ -271,7 +279,7 @@ mod tests {
     // out). A new agent goes here as into ALL.
     #[test]
     fn all_of_them_once() {
-        let every = [Agent::Claude, Agent::Codex, Agent::Agy, Agent::Opencode, Agent::Omp, Agent::Zcode, Agent::Dsh, Agent::Reasonix];
+        let every = [Agent::Claude, Agent::Codex, Agent::Agy, Agent::Opencode, Agent::Omp, Agent::Zcode, Agent::Dsh, Agent::Reasonix, Agent::Workbuddy];
         for agent in every {
             assert_eq!(ALL.iter().filter(|&&a| a == agent).count(), 1, "{agent:?} in ALL once");
         }

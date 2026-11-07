@@ -110,6 +110,27 @@ fn agent_row(sh: &Shared, agent: Agent) -> AgentRow {
     }
 }
 
+// The displays for the Look page (settings.js screenRow, #104): each one's
+// key (what homeDisplay holds), its number as Windows numbers them
+// (\\.\DISPLAY2: 2; its place in the list where the name has none), its
+// size in physical px, whether it is Windows' main display, and whether her
+// home is on it; in the order of their numbers.
+fn displays_view(sh: &Shared) -> Value {
+    let screens = sh.screens();
+    let hers = island::display(sh);
+    let mut list: Vec<(u32, Value)> = screens
+        .areas
+        .iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let n = screens.name(a.mon).and_then(crate::screen::number).unwrap_or(i as u32 + 1);
+            (n, json!({ "key": screens.key(a.mon), "n": n, "w": a.mon.2, "h": a.mon.3, "main": screens.primary.is_some_and(|p| p.mon == a.mon), "hers": hers == Some(a.mon) }))
+        })
+        .collect();
+    list.sort_by_key(|(n, _)| *n);
+    Value::Array(list.into_iter().map(|(_, d)| d).collect())
+}
+
 // Everything the settings show.
 pub fn snapshot(sh: &Shared) -> Value {
     // The packs installed (packs.rs): a pet that is one says where it came from.
@@ -148,9 +169,9 @@ pub fn snapshot(sh: &Shared) -> Value {
         // The agents' versions where a file of theirs says (connection/versions.rs
         // versions; Codex's is its block's): the Agent page shows them.
         "agentVersions": connection::versions(),
-        // How many displays there are: her taskbar on all of them is offered
-        // only with more than one (Look, taskbarDisplays).
-        "displayCount": sh.screens().areas.len(),
+        // The displays, for the Look page's 屏幕 row and 显示在 (#104):
+        // her taskbar on all of them is offered only with more than one.
+        "displays": displays_view(sh),
         "loginAtStart": logon::is_open_at_login(),
         // Windows' own mode and accent colour (settings_win_look sets them).
         "winLook": { "light": win_light, "accent": crate::theme::current_accent().or(win_accent.map(|a| a.base)) },
@@ -588,6 +609,10 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "splitDock" => matches!(v.as_str(), Some("hide" | "room")),
         "splitKeys" => matches!(v.as_str(), Some("top" | "dock")),
         "taskbarDisplays" => matches!(v.as_str(), Some("main" | "all")),
+        // The display her home is on (#104): a display's key (screen.rs,
+        // desk.rs key_for), kept while that display is unplugged so she goes
+        // back to it; "" for Windows' main display.
+        "homeDisplay" => v.as_str().is_some_and(|k| k.len() <= 64 && !k.chars().any(char::is_control)),
         // The taskbar's parts in three runs (island.js tbLayout), each once.
         "taskbarLayout" => v.is_null() || is_taskbar_layout(v),
         // The desktop's widgets (desk.rs, deskgrid.js).
@@ -702,6 +727,7 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
     let mail_way = rest.contains_key("mailProxy") || net_way;
     let crash_auto = rest.get("crashReports").and_then(Value::as_str) == Some("auto");
     let island_pos = rest.contains_key("islandPos");
+    let home_display = rest.contains_key("homeDisplay");
 
     if !rest.is_empty() {
         sh.change(Value::Object(rest));
@@ -710,8 +736,12 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
     if net_way {
         crate::proxy::set_web(&sh.setting("netProxy"));
     }
+    // Her home on another display (#104): everything of hers there now.
+    if home_display {
+        island::home_display_changed(sh);
+    }
     // The island at another side of the top of the screen: its window there now.
-    if island_pos {
+    if island_pos && !home_display {
         island::side_changed(sh);
     }
     // Crash reports turned on: those waiting sent now.

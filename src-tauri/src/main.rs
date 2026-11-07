@@ -1170,7 +1170,9 @@ fn quiet_after_ms() -> u64 {
 // with no proxy set this leaves it no way out by UDP); and rendering on the
 // graphics card that drives her display (gpu.rs, #13). WebView2 takes them
 // once, for all her windows (another set refused): worked out as the first
-// is made, her home's display then the primary one. A self-update changes
+// is made, her home's display then the one chosen (homeDisplay, #104) or
+// the primary one; chosen anew while she runs, the card stays until she is
+// next started. A self-update changes
 // them across versions safely because the new exe makes its WebView2 only
 // after the old one has ended (updates.rs wait_after_update, hand_over).
 // WAKUWAKU_BROWSER_ARGS, more of them (to try one).

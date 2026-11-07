@@ -695,7 +695,7 @@
   function pageLook() {
     const s = snap.settings
     return `${sec(T('home.display'))}<div class="modes">
-        <div class="mode${onTaskbar(s) ? '' : ' on'}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div><div class="ml">${esc(T('s.displayIslandGoing'))}</div></div>
+        <div class="mode${onTaskbar(s) ? '' : ' on'}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div><div class="ml">${esc(T('s.displayIslandKeeps'))}</div></div>
         <div class="mode${s.display === 'taskbar' ? ' on' : ''}" data-mode="taskbar"><div class="pv"><s></s></div><div class="l"><span class="rd"></span>${esc(T('s.displayTaskbar'))}</div></div>
         <div class="mode${s.display === 'split' ? ' on' : ''}" data-mode="split"><div class="pv"><u></u><b></b></div><div class="l"><span class="rd"></span>${esc(T('s.displaySplit'))}</div></div>
       </div>

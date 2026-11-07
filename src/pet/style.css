@@ -689,10 +689,9 @@ body {
   align-items: center;
 }
 
-/* Nothing drawn while something is open in the island's window (island.js
-   onCover, embed.rs cover): faded out as the island grows out of the
-   capsule (its own pill fading in over it, isl-ghost), back at once as the
-   island's window goes. */
+/* Nothing drawn while the settings stand above the taskbar in the island's
+   window (island.js onCover, embed.rs cover): faded out as they open, back
+   at once as they close. */
 .home-island.isl-capsule-win.isl-covered #island-row {
   opacity: 0;
   transition: opacity 0.16s ease;

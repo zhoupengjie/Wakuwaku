@@ -592,22 +592,23 @@ pub fn set_opened(sh: &Arc<Shared>, on: bool) {
     };
     if was != on && embedded {
         apply_visibility(sh);
-        tell_cover(sh);
     }
 }
 
 // The capsule inside Windows' taskbar covered (its page drawing nothing)
-// while something is open in this window: the settings stand off the strip
-// and left the capsule showing under them, and the open island, grown out
-// of the capsule, has rounder corners than it and left the capsule's
-// corners showing at its own (the user, 2026-11-07: two islands). Told as
-// the settings open and close and as the page says something is open or
-// nothing any more (set_opened), and as the capsule's page comes up
-// (embed.rs cover).
+// while the settings stand above the taskbar in this window: the open
+// island grows out of the capsule and covers it (its corners at the
+// capsule's edge as round as the capsule's, island.js setSize: rounder,
+// they left the capsule's corners showing), but the settings stand off the
+// strip, and the capsule showing under them looked like a second island
+// (the user, 2026-11-07). Not for the open island: covered for it, the
+// capsule came back a moment after the island's own pill had faded, a
+// blink (the user, the same day). Told as the settings open and close, and
+// as the capsule's page comes up (embed.rs cover).
 pub fn tell_cover(sh: &Shared) {
     let on = {
         let isl = sh.island.lock().unwrap();
-        isl.embedded && (isl.settings_open || isl.opened)
+        isl.embedded && isl.settings_open
     };
     crate::embed::cover(sh, on);
 }

@@ -1530,7 +1530,14 @@
         : screenTop
           ? // Hung from a Mac's screen top: square where it meets the edge.
             `0 0 ${view === 'compact' ? 12 : 30}px ${view === 'compact' ? 12 : 30}px`
-          : `${height > 60 ? 30 : height / 2}px`
+          : isEmbedded() && view !== 'compact'
+            ? // Grown out of her capsule in Windows' taskbar, which stays
+              // drawn under it: the corners at the capsule's edge as round as
+              // the capsule's (18), so none of it shows past them.
+              atBottom()
+              ? `${height > 60 ? 30 : height / 2}px ${height > 60 ? 30 : height / 2}px 18px 18px`
+              : `18px 18px ${height > 60 ? 30 : height / 2}px ${height > 60 ? 30 : height / 2}px`
+            : `${height > 60 ? 30 : height / 2}px`
   }
 
   // --- Deciding ---------------------------------------------------------------
@@ -6407,9 +6414,9 @@
   // colour goes round the island twice so the eye finds it (style.css
   // look-here; held still a moment instead with reduced motion).
   // Her capsule's own window in Windows' taskbar (isCapsuleWin): nothing
-  // drawn while something is open in the island's window (embed.rs cover):
-  // the settings stand off the strip, and the open island's corners are
-  // rounder than the capsule's; back as it closes.
+  // drawn while the settings stand above the taskbar in the island's window
+  // (embed.rs cover), which does not cover the capsule as the open island
+  // does; back as they close.
   window.pet.onCover(({ on } = {}) => {
     if (isCapsuleWin()) body.classList.toggle('isl-covered', on === true)
   })

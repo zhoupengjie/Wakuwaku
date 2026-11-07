@@ -41,7 +41,7 @@
 //
 // Editing the strip, a widget under the pointer has a popover (its size,
 // 设置, 移除); a press on her capsule opens its panel (capsule-panel.js).
-// Every widget taken off says so in a toast with 撤销 for 10 s, and is put
+// Every widget taken off says so in a toast with 撤销 for 5 s, and is put
 // back where it was. Esc: what is open first, then (editing) 完成.
 ;(function () {
   const Isle = window.Isle
@@ -82,7 +82,7 @@
   const GAP_W = { M: 112, S: 64, part: 96, flex: 40, gap: 20, sep: 14, side: 44 }
   // Dragged this far above the strip (across it), a widget from it goes.
   const BAND_PX = 90
-  const UNDO_MS = 10000
+  const UNDO_MS = 5000
   const NOTE_MS = 3200
 
   // --- What it shows ---------------------------------------------------------------------
@@ -630,7 +630,7 @@
     if (b.dataset.sm === 'rename') return renameSetCard(id)
     deleteSet(id)
   })
-  // Gone, with a way back for 10 s.
+  // Gone, with a way back for 5 s.
   function deleteSet(id) {
     const { list, record } = G.removeSet(setsNow(), id)
     if (!record) return
@@ -809,7 +809,7 @@
 
   // --- Toasts ----------------------------------------------------------------------------
   // A word for a few seconds; with a way back (undo: 撤销, or what label
-  // says) for 10 s.
+  // says) for 5 s.
   function toast(text, undo = null, label = '') {
     theme()
     const node = el('div', undo ? 'pk-toast' : 'pk-toast pk-info')

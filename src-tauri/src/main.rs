@@ -397,6 +397,12 @@ impl Shared {
             // The side of the top of the screen her island's window is at
             // (islandPos, zhoupengjie/Wakuwaku#59): the page lays it out there.
             now["islandAt"] = json!(island::side(self).name());
+            // The edge of the screen it is along (islandEdge,
+            // zhoupengjie/Wakuwaku#105): the top, or the bottom, over
+            // Windows' own taskbar shown there, whose thickness (physical
+            // px; 0 with none) the page centres the closed island in.
+            now["islandEdge"] = json!(island::edge_name(self));
+            now["islandStrip"] = json!(island::strip_under(self));
         }
         // The widgets that have something to say: those on take their turns
         // in the island while nothing needs you; any may be on the taskbar.
@@ -1170,7 +1176,9 @@ fn quiet_after_ms() -> u64 {
 // with no proxy set this leaves it no way out by UDP); and rendering on the
 // graphics card that drives her display (gpu.rs, #13). WebView2 takes them
 // once, for all her windows (another set refused): worked out as the first
-// is made, her home's display then the primary one. A self-update changes
+// is made, her home's display then the one chosen (homeDisplay, #104) or
+// the primary one; chosen anew while she runs, the card stays until she is
+// next started. A self-update changes
 // them across versions safely because the new exe makes its WebView2 only
 // after the old one has ended (updates.rs wait_after_update, hand_over).
 // WAKUWAKU_BROWSER_ARGS, more of them (to try one).

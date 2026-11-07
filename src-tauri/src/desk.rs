@@ -1239,12 +1239,18 @@ pub fn key_of(sh: &Shared, mon: Mon) -> String {
         return k.clone();
     }
     let name = sh.app.available_monitors().unwrap_or_default().into_iter().find(|m| (m.position().x, m.position().y, m.size().width as i32, m.size().height as i32) == mon).and_then(|m| m.name().cloned());
-    let id = name.as_deref().and_then(imp::device_of).or(name).unwrap_or_else(|| format!("{}x{}@{},{}", mon.2, mon.3, mon.0, mon.1));
-    let key = short_key(&id);
+    let key = key_for(name.as_deref(), mon);
     let mut keys = KEYS.lock().unwrap();
     keys.retain(|(m, _)| *m != mon);
     keys.push((mon, key.clone()));
     key
+}
+
+// The key from a display's device name and its rect (screen.rs read keeps
+// one for each display; the setting homeDisplay holds one, #104).
+pub fn key_for(name: Option<&str>, mon: Mon) -> String {
+    let id = name.and_then(imp::device_of).or_else(|| name.map(str::to_string)).unwrap_or_else(|| format!("{}x{}@{},{}", mon.2, mon.3, mon.0, mon.1));
+    short_key(&id)
 }
 
 // FNV-1a over the name, 48 bits of it.
@@ -2183,6 +2189,13 @@ mod tests {
         assert!(a.starts_with('d') && a[1..].chars().all(|c| c.is_ascii_hexdigit()));
         assert_eq!(a, short_key(r"\\?\display#dela0d3#5&2f1c3b0a&0&uid4352#{E6F07B5F-EE97-4A90-B076-33F57BF4EAA7}"));
         assert_ne!(a, short_key(r"\\.\DISPLAY2"));
+    }
+
+    // Without a device name, the rect's own key, the same as ever.
+    #[test]
+    fn a_display_without_a_name_is_keyed_by_its_rect() {
+        assert_eq!(key_for(None, (2560, 0, 1920, 1080)), short_key("1920x1080@2560,0"));
+        assert_eq!(key_for(None, (-1920, 0, 1920, 1080)), short_key("1920x1080@-1920,0"));
     }
 
     // On a desktop: each display's own name, the same twice.

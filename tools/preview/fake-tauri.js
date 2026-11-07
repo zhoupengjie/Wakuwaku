@@ -165,6 +165,7 @@
     out: false,
     islandWidth: 'normal',
     islandPos: 'center',
+    islandEdge: 'top',
     islandHideUnder: true,
     taskbarMaterial: 'mica',
     taskbarDisplays: 'main',
@@ -261,7 +262,9 @@
     // Windows' animations off (prefers-reduced-motion), as the pages read it; unset, the browser's.
     reducedMotion: undefined,
     version: '0.3.2',
-    displayCount: 1,
+    // The displays as the settings' snapshot lists them (settings.rs
+    // displays_view): one, hers and the main one.
+    displays: [{ key: 'd000000000001', n: 1, w: 2560, h: 1440, main: true, hers: true }],
   })
   const world = host ? host.fake.world : makeWorld()
 
@@ -389,6 +392,11 @@
       // (zhoupengjie/Wakuwaku#59). The playground and the gallery put the
       // island's page there (scenes.js islandWindow).
       ...(world.home !== 'taskbar' ? { islandAt: ISLAND_POS.includes(config().islandPos) ? config().islandPos : 'center' } : {}),
+      // And the edge of the screen it is along (islandEdge,
+      // zhoupengjie/Wakuwaku#105): along the foot, over a taskbar of Windows'
+      // as thick as Windows 11's (48 px, physical), not drawn here: the
+      // island centred where its strip would be.
+      ...(world.home !== 'taskbar' ? { islandEdge: config().islandEdge === 'bottom' ? 'bottom' : 'top', islandStrip: config().islandEdge === 'bottom' ? Math.round(48 * (window.devicePixelRatio || 1)) : 0 } : {}),
       widgets: widgetsNow(),
       unconnected: !world.connected,
       ...(world.connected ? {} : { tools: ['claude', 'codex'] }),
@@ -427,7 +435,7 @@
         reasonix: { hooks: on ? 'ok' : 'missing', file: 'C:\\Users\\you\\AppData\\Roaming\\reasonix\\settings.json', fileShown: '~\\AppData\\Roaming\\reasonix\\settings.json', backup: true, seen: on, line: '2.x', ...(world.reasonix || {}) },
       },
       agentVersions: { claude: '2.1.0', reasonix: world.reasonix?.version || '2.43.0', ...(world.dsh ? { dsh: world.dsh.dshVersion || '0.2.1-rc.2' } : {}) },
-      displayCount: world.displayCount,
+      displays: clone(world.displays),
       loginAtStart: true,
       winLook: { light: world.mode === 'light', accent: world.accent.base },
       winPaper: clone(world.paper),

@@ -125,6 +125,10 @@ fn defaults() -> Map<String, Value> {
         // Where it sits at the top of the screen: left, center or right
         // (anchor.js, zhoupengjie/Wakuwaku#59); the top centre as ever.
         "islandPos": "center",
+        // The edge of the screen it is along: top (as ever), or bottom, laid
+        // over Windows' own taskbar, which stays as it is (island.rs fit,
+        // zhoupengjie/Wakuwaku#105).
+        "islandEdge": "top",
         // At the top of the screen, slid up out of the way while a window
         // lies under it (island.js setStow, zhoupengjie/Wakuwaku#49).
         "islandHideUnder": true,
@@ -134,7 +138,10 @@ fn defaults() -> Map<String, Value> {
         // Mica or solid while a window is maximized or full screen on its
         // display (mica, solid), or clear always.
         "taskbarMaterial": "clear",
-        // Her taskbar on the main display alone (Windows' own on the others)
+        // The display her home is on (zhoupengjie/Wakuwaku#104): a display's
+        // key (screen.rs), or "" for Windows' main display, as ever.
+        "homeDisplay": "",
+        // Her taskbar on her display alone (no taskbar on the others)
         // or on all of them (bars.rs).
         "taskbarDisplays": "main",
         "taskbarClearWhen": "mica",

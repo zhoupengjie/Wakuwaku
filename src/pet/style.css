@@ -644,6 +644,36 @@ body {
   padding-right: 8px;
 }
 
+/* Along the foot of the screen (islandEdge bottom, island.js placeAnchor,
+   anchor.js; zhoupengjie/Wakuwaku#105): the island at its window's foot,
+   --isl-foot up from it (centred in the strip of Windows' own taskbar under
+   it; 8 px with none, as from the top), and it opens upward from there: the
+   window, as tall as the taskbar home's strip and room, never grows. The
+   settings stand --isl-set-foot up from the foot, off the strip as off the
+   taskbar's (island.js settingsFoot), and keep their size within the
+   window (settingsMax). */
+.home-island.isl-at-bottom #island-bar {
+  justify-content: flex-end;
+  padding-top: 0;
+  padding-bottom: var(--isl-foot, 8px);
+}
+
+.home-island.isl-at-bottom #island-row {
+  align-items: flex-end;
+}
+
+.home-island.isl-at-bottom #island {
+  transition:
+    width 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    height 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    border-radius 0.4s ease,
+    bottom 0.3s ease;
+}
+
+.home-island.isl-at-bottom #island[data-view='settings'] {
+  bottom: max(0px, calc(var(--isl-set-foot, 8px) - var(--isl-foot, 8px)));
+}
+
 /* On a Mac it hangs from the screen's top edge over the menu bar, as tall as
    the band there (island.js screenTop): black on the black notch, no ring. */
 .island.at-top #island-bar {

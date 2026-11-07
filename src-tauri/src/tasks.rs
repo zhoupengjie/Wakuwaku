@@ -657,9 +657,10 @@ mod imp {
         cover(hwnd, own).is_some()
     }
 
-    // The first such window over it: its class, and whether it is kept on
-    // top itself; and whether this one is (its WS_EX_TOPMOST), to log.
-    pub fn cover(hwnd: isize, own: &[isize]) -> Option<(String, bool)> {
+    // The first such window over it: its class, whether it is kept on top
+    // itself, and where it lies (physical left, top, right, bottom); and
+    // whether this one is (its WS_EX_TOPMOST), to log.
+    pub fn cover(hwnd: isize, own: &[isize]) -> Option<(String, bool, (i32, i32, i32, i32))> {
         let me = rect_of(hwnd as Hwnd);
         let mut at = hwnd as Hwnd;
         for _ in 0..2000 {
@@ -675,7 +676,7 @@ mod imp {
             }
             let r = rect_of(at);
             if r.right > r.left && r.bottom > r.top && r.left < me.right && me.left < r.right && r.top < me.bottom && me.top < r.bottom {
-                return Some((class_of(at), is_topmost(at as isize)));
+                return Some((class_of(at), is_topmost(at as isize), (r.left, r.top, r.right, r.bottom)));
             }
         }
         None
@@ -1707,7 +1708,7 @@ mod imp {
     pub fn covered(_hwnd: isize, _own: &[isize]) -> bool {
         false
     }
-    pub fn cover(_hwnd: isize, _own: &[isize]) -> Option<(String, bool)> {
+    pub fn cover(_hwnd: isize, _own: &[isize]) -> Option<(String, bool, (i32, i32, i32, i32))> {
         None
     }
     pub fn is_topmost(_hwnd: isize) -> bool {

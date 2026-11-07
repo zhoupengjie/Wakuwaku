@@ -16,6 +16,8 @@
 //   home    her home: taskbar (the default) or island
 //   islandPos  at the top of the screen, where the island sits: left,
 //           center (the default), right (config.islandPos; its window put there)
+//   islandEdge the edge of the screen it is along: top (the default), bottom
+//           (config.islandEdge, zhoupengjie/Wakuwaku#105; its window at the foot)
 //   mode    dark or light, for a scene about one (else the viewer's, or the shot's)
 //   world   F => ({...}): the rest of its world (F: fixtures.js), whole:
 //           every one of WORLD_KEYS (test/preview.test.js checks)
@@ -36,6 +38,7 @@
 //             own (the detail shots below: one state each, on a bare desktop)
 //   home      her home, over the scene's
 //   islandPos where the island sits at the top, over the scene's
+//   islandEdge the edge it is along, over the scene's
 //   view      [x, y, w, h]: the part of the 1600 x 900 screen shot
 //   play      false: the scene's play left out
 //   steps     async p => {...}: what it does after the play (p: boot.js),
@@ -71,11 +74,13 @@
   // island.rs puts it (zhoupengjie/Wakuwaku#59; anchor.js
   // windowLeft): at the screen's side; the island in it 8 px from that side.
   // Windows' own taskbar at the bottom, not drawn: the work area's top and
-  // sides are the screen's.
-  function islandWindow(pos) {
+  // sides are the screen's. Along the foot of the screen (islandEdge
+  // bottom, zhoupengjie/Wakuwaku#105; anchor.js windowTop): its foot on the
+  // screen's, over where Windows' taskbar would be, as tall as it is kept here.
+  function islandWindow(pos, edge) {
     const [, y, w, h] = WINDOWS.island
     const x = pos === 'left' ? 0 : pos === 'right' ? SCREEN[0] - w : WINDOWS.island[0]
-    return [x, y, w, h]
+    return [x, edge === 'bottom' ? SCREEN[1] - h : y, w, h]
   }
 
   const SECTIONS = [
@@ -243,6 +248,18 @@
       note: '灵动岛放在屏幕右上角（设置「外观 → 位置」），这里是展开的样子：朝屏幕中间长。流光、小点、往上收起、右键的「添加小工具…」「编辑胶囊」都跟着它。右边「环境」里能换左上、居中、右上。',
       world: F => ({ ...desktop(F), sessions: workingAndDone(F) }),
       // Opened, as the pointer resting on it opens it.
+      play: async p => {
+        await p.wait(200)
+        p.hover('#island')
+      },
+    },
+    {
+      id: 'island-bottom',
+      title: '岛在底部',
+      home: 'island',
+      islandEdge: 'bottom',
+      note: '灵动岛放在屏幕底部（设置「外观 → 边」，zhoupengjie/Wakuwaku#105）：胶囊嵌在 Windows 自己的任务栏上（任务栏照常显示，这里不画，胶囊停在它那一条的正中），鼠标停上去往上展开，拉她出来往上拉，设置立在岛上方。右边「环境」里能换顶部、底部，也能换左下、居中、右下。',
+      world: F => ({ ...desktop(F), sessions: workingAndDone(F) }),
       play: async p => {
         await p.wait(200)
         p.hover('#island')
@@ -533,6 +550,7 @@
     { id: 'scene-desktop-empty', section: 'scenes', scene: 'desktop-empty', title: '空桌面', page: 'screen', view: WHOLE, budget: 4000 },
     { id: 'scene-island-home', section: 'scenes', scene: 'island-home', title: '灵动岛模式 · 展开', page: 'island', view: [400, 0, 800, 420], steps: openIsland },
     { id: 'scene-island-right', section: 'scenes', scene: 'island-right', title: '岛在右上 · 展开，朝屏幕中间长', page: 'island', view: [800, 0, 800, 420], settle: 700 },
+    { id: 'scene-island-bottom', section: 'scenes', scene: 'island-bottom', title: '岛在底部 · 展开，往上长', page: 'island', view: [400, above(420), 800, 420], settle: 700 },
     { id: 'scene-light-clear', section: 'scenes', scene: 'light-clear', title: '浅色 + 透明任务栏', page: 'island', view: STRIP_VIEW },
     { id: 'scene-edit-layout', section: 'scenes', scene: 'edit-layout', title: '编辑任务栏布局中', page: 'island', view: [0, above(200), 1600, 200], settle: 700 },
     { id: 'scene-add-widgets', section: 'scenes', scene: 'add-widgets', title: '添加小工具 · 编辑任务栏，右边是小工具库', page: 'screen', view: WHOLE, budget: 4000, settle: 700 },
@@ -645,6 +663,11 @@
       { id: `island-${pos}`, section: 'island', title: `${name} · 收起 · 干活中`, page: 'island', home: 'island', islandPos: pos, view: closed, world: F => ({ ...inMood('working')(F), home: 'island' }) },
       { id: `island-${pos}-open`, section: 'island', title: `${name} · 展开，朝屏幕中间长`, page: 'island', home: 'island', islandPos: pos, view: open, world: F => ({ ...busy(F), home: 'island' }), steps: openIsland },
     ]),
+    // Along the foot of the screen (islandEdge, zhoupengjie/Wakuwaku#105):
+    // closed, centred in Windows' taskbar's strip (48 px, not drawn), and
+    // open, grown upward from there.
+    { id: 'island-bottom', section: 'island', title: '底部 · 收起 · 干活中，嵌在 Windows 任务栏的那一条上', page: 'island', home: 'island', islandEdge: 'bottom', view: [480, above(60), 640, 60], world: F => ({ ...inMood('working')(F), home: 'island' }) },
+    { id: 'island-bottom-open', section: 'island', title: '底部 · 展开，往上长', page: 'island', home: 'island', islandEdge: 'bottom', view: [520, above(400), 560, 400], world: F => ({ ...busy(F), home: 'island' }), steps: openIsland },
     // Five pinned at the capsule's end (the most there may be), the monitor
     // among them, a session at work: in each home.
     ...[
@@ -1106,6 +1129,28 @@
         await p.wait(1800)
       },
     },
+    // Two displays (zhoupengjie/Wakuwaku#104): the 屏幕 row with a segment a
+    // display, hers the second one (not Windows' main), and 显示在 below it.
+    {
+      id: 'settings-look-displays',
+      section: 'settings',
+      title: '设置 · 外观 · 两块屏：她的家在 2 号屏',
+      page: 'island',
+      home: 'taskbar',
+      view: [0, above(660), 560, 660],
+      world: F => ({
+        ...busy(F),
+        displays: [
+          { key: 'd000000000001', n: 1, w: 2560, h: 1440, main: true, hers: false },
+          { key: 'd000000000002', n: 2, w: 1920, h: 1080, main: false, hers: true },
+        ],
+        config: { homeDisplay: 'd000000000002' },
+      }),
+      steps: async p => {
+        p.emit('island:settings', { tab: 'look' })
+        await p.wait(600)
+      },
+    },
     // Mail, as a user with two accounts has it (fixtures.js MAIL): in two
     // panes (the screen has the room), every account's inbox as one on the
     // left, the accounts (unread, kept offline, through a proxy) and who
@@ -1388,17 +1433,19 @@
   const homeOf = s => s.home || (s.scene && sceneById(s.scene)?.home) || 'taskbar'
   // Where the island sits at the top in a shot: its own, else its scene's, else the centre.
   const posOf = s => s.islandPos || (s.scene && sceneById(s.scene)?.islandPos) || 'center'
+  // And the edge it is along: its own, else its scene's, else the top (#105).
+  const edgeOf = s => s.islandEdge || (s.scene && sceneById(s.scene)?.islandEdge) || 'top'
   // Her home's window in a shot: the taskbar's, or the island's where it sits.
-  const homeWindowOf = s => (homeOf(s) === 'island' ? islandWindow(posOf(s)) : s.split ? WINDOWS.top : WINDOWS.taskbar)
+  const homeWindowOf = s => (homeOf(s) === 'island' ? islandWindow(posOf(s), edgeOf(s)) : s.split ? WINDOWS.top : WINDOWS.taskbar)
   // Where a shot's page lies on the screen (a screen shot: the desktop's; her home's frame is put by shot.js).
   const windowOf = s => (s.page === 'bar' && s.split ? WINDOWS.dock : s.page === 'desk' || s.page === 'bar' || s.page === 'screen' ? WINDOWS[s.page === 'screen' ? 'desk' : s.page] : homeWindowOf(s))
 
-  // Where the island sits, into a world's settings (as the settings keep it).
-  const withPos = (w, pos) => (pos ? { ...w, config: { ...(w.config || {}), islandPos: pos } } : w)
+  // Where the island sits, and the edge it is along, into a world's settings (as the settings keep them).
+  const withPos = (w, pos, edge) => (pos || edge ? { ...w, config: { ...(w.config || {}), ...(pos ? { islandPos: pos } : {}), ...(edge ? { islandEdge: edge } : {}) } } : w)
 
   // A scene's world, whole: its home, where the island sits and its mode with it.
   function sceneWorld(scene, F) {
-    return withPos({ ...scene.world(F), home: scene.home || 'taskbar', ...(scene.mode ? { mode: scene.mode } : {}) }, scene.islandPos)
+    return withPos({ ...scene.world(F), home: scene.home || 'taskbar', ...(scene.mode ? { mode: scene.mode } : {}) }, scene.islandPos, scene.islandEdge)
   }
   // A shot's world: its scene's, or its own; its home and where the island sits over either.
   function worldFor(s, F) {
@@ -1408,7 +1455,7 @@
     const own = s.world ? s.world(F) : {}
     // The shot's own settings over its scene's (where the island sits kept).
     const config = base.config || own.config ? { ...(base.config || {}), ...(own.config || {}) } : undefined
-    const world = withPos({ ...base, ...own, ...(config ? { config } : {}), ...(s.home ? { home: s.home } : {}) }, s.islandPos)
+    const world = withPos({ ...base, ...own, ...(config ? { config } : {}), ...(s.home ? { home: s.home } : {}) }, s.islandPos, s.islandEdge)
     // A shot in English (the README's): her pages, and the world's own words.
     return s.lang === 'en' ? inEnglish(world) : world
   }
@@ -1450,6 +1497,7 @@
     byId,
     homeOf,
     posOf,
+    edgeOf,
     islandWindow,
     homeWindowOf,
     windowOf,

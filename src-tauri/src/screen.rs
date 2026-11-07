@@ -17,6 +17,11 @@ pub struct Area {
 pub struct Screens {
     pub areas: Vec<Area>,
     pub primary: Option<Area>,
+    // Each display's device name as Windows gives it (\\.\DISPLAY1; none on
+    // some systems) and its key (desk.rs key_for: its monitor's device, the
+    // same through replugging and renumbering), which the setting
+    // homeDisplay names her display by (zhoupengjie/Wakuwaku#104).
+    pub names: Vec<((i32, i32, i32, i32), Option<String>, String)>,
 }
 
 fn area(m: &Monitor) -> Area {
@@ -26,13 +31,44 @@ fn area(m: &Monitor) -> Area {
 }
 
 pub fn read(app: &AppHandle) -> Screens {
+    let monitors = app.available_monitors().unwrap_or_default();
     Screens {
-        areas: app.available_monitors().unwrap_or_default().iter().map(area).collect(),
+        areas: monitors.iter().map(area).collect(),
         primary: app.primary_monitor().ok().flatten().map(|m| area(&m)),
+        names: monitors
+            .iter()
+            .map(|m| {
+                let mon = area(m).mon;
+                (mon, m.name().cloned(), crate::desk::key_for(m.name().map(String::as_str), mon))
+            })
+            .collect(),
     }
 }
 
+// The number in a display's device name (\\.\DISPLAY2: 2), as Windows
+// numbers them; none in a name of another shape.
+pub fn number(name: &str) -> Option<u32> {
+    let head = name.trim_end_matches(|c: char| c.is_ascii_digit());
+    let digits = &name[head.len()..];
+    (!digits.is_empty() && head.to_ascii_uppercase().ends_with("DISPLAY")).then(|| digits.parse().ok()).flatten()
+}
+
 impl Screens {
+    // A display's device name, and its key.
+    pub fn name(&self, mon: (i32, i32, i32, i32)) -> Option<&str> {
+        self.names.iter().find(|(m, _, _)| *m == mon).and_then(|(_, name, _)| name.as_deref())
+    }
+
+    pub fn key(&self, mon: (i32, i32, i32, i32)) -> Option<&str> {
+        self.names.iter().find(|(m, _, _)| *m == mon).map(|(_, _, key)| key.as_str())
+    }
+
+    // The display with this key, while it is attached.
+    pub fn by_key(&self, key: &str) -> Option<Area> {
+        let mon = self.names.iter().find(|(_, _, k)| k == key)?.0;
+        self.areas.iter().copied().find(|a| a.mon == mon)
+    }
+
     // For the log: each display, the main one marked, with its scale and
     // work area (multi-display reports could not tell them: #4).
     pub fn describe(&self) -> String {
@@ -81,4 +117,31 @@ pub fn cursor(sh: &crate::Shared, sf: f64) -> Option<(i32, i32)> {
         (c.x, c.y)
     };
     Some((x.round() as i32, y.round() as i32))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_displays_number_is_read_from_its_device_name() {
+        assert_eq!(number(r"\\.\DISPLAY1"), Some(1));
+        assert_eq!(number(r"\\.\DISPLAY12"), Some(12));
+        assert_eq!(number(r"\\.\DISPLAY"), None);
+        assert_eq!(number("Built-in Retina Display"), None);
+        assert_eq!(number("DP-1"), None);
+        assert_eq!(number(""), None);
+    }
+
+    #[test]
+    fn a_display_is_found_by_its_key() {
+        let a = Area { x: 0, y: 0, w: 2560, h: 1392, sf: 1.25, mon: (0, 0, 2560, 1440) };
+        let b = Area { x: 2560, y: 0, w: 1920, h: 1032, sf: 1.0, mon: (2560, 0, 1920, 1080) };
+        let screens = Screens { areas: vec![a, b], primary: Some(a), names: vec![(a.mon, Some(r"\\.\DISPLAY1".into()), "d1".into()), (b.mon, None, "d2".into())] };
+        assert_eq!(screens.by_key("d2"), Some(b));
+        assert_eq!(screens.by_key("d3"), None);
+        assert_eq!(screens.name(a.mon), Some(r"\\.\DISPLAY1"));
+        assert_eq!(screens.name(b.mon), None);
+        assert_eq!(screens.key(b.mon), Some("d2"));
+    }
 }

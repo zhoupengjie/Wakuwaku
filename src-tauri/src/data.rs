@@ -134,7 +134,10 @@ fn defaults() -> Map<String, Value> {
         // Mica or solid while a window is maximized or full screen on its
         // display (mica, solid), or clear always.
         "taskbarMaterial": "clear",
-        // Her taskbar on the main display alone (Windows' own on the others)
+        // The display her home is on (zhoupengjie/Wakuwaku#104): a display's
+        // key (screen.rs), or "" for Windows' main display, as ever.
+        "homeDisplay": "",
+        // Her taskbar on her display alone (no taskbar on the others)
         // or on all of them (bars.rs).
         "taskbarDisplays": "main",
         "taskbarClearWhen": "mica",

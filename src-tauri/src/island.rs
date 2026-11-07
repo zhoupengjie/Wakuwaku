@@ -309,9 +309,28 @@ pub fn bars_edge(sh: &Shared) -> Edge {
     if is_split(sh) { Edge::Bottom } else { edge(sh) }
 }
 
-// The display it is on: where it is, else the primary one.
+// The display chosen for her home (the setting homeDisplay, a display's key
+// as screen.rs keeps it: zhoupengjie/Wakuwaku#104), while it is attached;
+// none chosen (the default), or it unplugged, none.
+fn chosen(sh: &Shared, screens: &crate::screen::Screens) -> Option<Area> {
+    let key = sh.setting("homeDisplay");
+    screens.by_key(key.as_str().filter(|k| !k.is_empty())?)
+}
+
+// Her display's scale: the chosen one's, else the primary's (taskbar.rs
+// draws its icons at it). Not where the window is: asked on the taskbar's
+// threads, which the window's own state is not read on.
+pub fn scale(sh: &Shared) -> f64 {
+    let screens = sh.screens();
+    chosen(sh, &screens).or(screens.primary).map_or(1.0, |a| a.sf)
+}
+
+// The display it is on: the one chosen (#104), else where it is, else the primary one.
 fn area(sh: &Shared) -> Option<Area> {
     let screens = sh.screens();
+    if let Some(a) = chosen(sh, &screens) {
+        return Some(a);
+    }
     let at = {
         let isl = sh.island.lock().unwrap();
         (isl.created && isl.size.0 > 0).then(|| (isl.pos.0 + isl.size.0 / 2, isl.pos.1 + isl.size.1 / 2))
@@ -370,6 +389,20 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
 // taskbar), for the page (main.rs payload islandAt).
 pub fn side(sh: &Shared) -> Side {
     sh.island.lock().unwrap().at
+}
+
+// The setting homeDisplay changed (#104): her home on that display now,
+// whatever it is: the island's window laid there (fit), the taskbar's strip
+// asked for along its edge and the old one given back (sync_bar), her
+// taskbar on the others and the dock made or taken away (bars.rs sync), the
+// page's zoom its scale's; an app full screen there looked for at once. The
+// graphics card her pages are drawn on stays the old display's until she is
+// next started (main.rs browser_args).
+pub fn home_display_changed(sh: &Shared) {
+    place(sh);
+    sh.log(&format!("island: her home on {:?} (homeDisplay {})", display(sh), sh.setting("homeDisplay")));
+    sh.redraw();
+    crate::fullscreen::ask();
 }
 
 // The setting islandPos changed: the window put at that side now, and the

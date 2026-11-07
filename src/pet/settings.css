@@ -1669,7 +1669,9 @@
   transform: translateX(-50%);
 }
 
-/* Under the island's: it is to be removed (the user, 2026-11-02). */
+/* Under the island's: it leaves Windows' taskbar alone, the home for
+   Start11, MyDockFinder and the like (it stays: the user, 2026-11-07,
+   zhoupengjie/Wakuwaku#105). */
 #island-settings .mode .ml {
   padding: 2px 4px 0 24px;
   font-size: 11px;

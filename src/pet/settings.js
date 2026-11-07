@@ -674,8 +674,23 @@
     if (onTaskbar(s)) return row(esc(T('s.islandPos')), esc(T('s.islandPosTaskbar')), `<button class="pbtn sm" data-tb-edit>${esc(T('s.islandPosEdit'))}</button>`)
     const notch = window.Island?.notched?.() === true
     const pos = !notch && ['left', 'right'].includes(s.islandPos) ? s.islandPos : 'center'
-    const places = ['left', 'center', 'right'].map(p => [p, T(`s.islandPos.${p}`), notch && p !== 'center'])
+    // Along the foot of the screen (islandEdgeRow), the corners are the lower ones.
+    const low = !notch && s.islandEdge === 'bottom'
+    const places = ['left', 'center', 'right'].map(p => [p, T(`s.islandPos${low ? 'Low' : ''}.${p}`), notch && p !== 'center'])
     return row(esc(T('s.islandPos')), esc(T(notch ? 's.islandPosNotch' : 's.islandPosNote')), seg('islandPos', places, pos))
+  }
+
+  // The edge of the screen her island is along (zhoupengjie/Wakuwaku#105):
+  // the top (as ever, the default), or the bottom, where it lies over
+  // Windows' own taskbar, which stays as it is, shown and whatever Start11
+  // and the like make of it (the island home never touches it); it opens
+  // upward there, the settings standing above it. Round a Mac's notch, the
+  // top only. On the taskbar none: the strip has its own edge row.
+  function islandEdgeRow() {
+    const notch = window.Island?.notched?.() === true
+    const edge = !notch && snap.settings.islandEdge === 'bottom' ? 'bottom' : 'top'
+    const edges = ['top', 'bottom'].map(e => [e, T(`s.edge.${e}`), notch && e !== 'top'])
+    return row(esc(T('s.islandEdge')), esc(T(notch ? 's.islandEdgeNotch' : 's.islandEdgeNote')), seg('islandEdge', edges, edge))
   }
 
   // At the top of the screen, up out of the way while a window lies under
@@ -700,7 +715,7 @@
         <div class="mode${s.display === 'split' ? ' on' : ''}" data-mode="split"><div class="pv"><u></u><b></b></div><div class="l"><span class="rd"></span>${esc(T('s.displaySplit'))}</div></div>
       </div>
       ${onTaskbar(s) ? `<div class="grp"><div class="note">${esc(T(s.display === 'split' ? 's.splitNote' : 's.taskbarNote'))}</div></div><div class="grp">${s.display === 'split' ? splitRows() : row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${screenRow()}${displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${s.display === 'split' || ['left', 'right'].includes(s.taskbarEdge) ? row(esc(T('s.taskbarButtons')), esc(T(s.display === 'split' ? 's.taskbarButtonsDock' : 's.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
-      ${part('place', '')}<div class="grp">${onTaskbar(s) ? '' : screenRow()}${islandPosRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${onTaskbar(s) || window.pet.mac ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${onTaskbar(s) ? '' : ilookRow()}</div>
+      ${part('place', '')}<div class="grp">${onTaskbar(s) ? '' : screenRow()}${islandPosRow()}${onTaskbar(s) ? '' : islandEdgeRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${onTaskbar(s) || window.pet.mac || s.islandEdge === 'bottom' ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${onTaskbar(s) ? '' : ilookRow()}</div>
       ${pageWindows()}
       ${sec(T('s.her'))}<div class="grp">
         ${row(esc(T('menu.size')), '', seg('scale', SIZES.map(([name, scale]) => [scale, T(`menu.${name}`)]), s.scale))}
@@ -3953,7 +3968,7 @@
         gallery.items = []
         return loadGallery(false)
       }
-      const value = ['lang', 'monitorSource', 'islandPos', 'islandWidth', 'taskbarMaterial', 'taskbarClearWhen', 'taskbarButtons', 'taskbarAlign', 'taskbarEdge', 'taskbarDisplays', 'homeDisplay', 'splitDock', 'splitKeys', 'mailAgent', 'mailOffline', 'updateFrom', 'endCue'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
+      const value = ['lang', 'monitorSource', 'islandPos', 'islandEdge', 'islandWidth', 'taskbarMaterial', 'taskbarClearWhen', 'taskbarButtons', 'taskbarAlign', 'taskbarEdge', 'taskbarDisplays', 'homeDisplay', 'splitDock', 'splitKeys', 'mailAgent', 'mailOffline', 'updateFrom', 'endCue'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
       return patch({ [key]: value })
     }
     const tile = at('[data-tile]')

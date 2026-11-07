@@ -197,6 +197,30 @@
   transform: none;
 }
 
+/* Her island along the foot of the screen (isl-at-bottom, island.js
+   placeAnchor; zhoupengjie/Wakuwaku#105): above it there instead, off the
+   closed island's top (--isl-foot up from the window's foot, 36 high),
+   sliding in from below. */
+.isl-at-bottom .pk[data-home='island'] {
+  top: auto;
+  bottom: calc(var(--isl-foot, 8px) + 36px + 12px);
+  transform: translate(-50%, 12px);
+}
+
+.isl-at-bottom .pk[data-home='island'].pk-open {
+  transform: translate(-50%, 0);
+}
+
+.isl-at-bottom.isl-at-left .pk[data-home='island'],
+.isl-at-bottom.isl-at-right .pk[data-home='island'] {
+  transform: translateY(12px);
+}
+
+.isl-at-bottom.isl-at-left .pk[data-home='island'].pk-open,
+.isl-at-bottom.isl-at-right .pk[data-home='island'].pk-open {
+  transform: none;
+}
+
 /* Dragging from it: it fades, out of the way of what is behind it; over it, a place to let go. */
 .pk.pk-thru {
   opacity: 0.35;
@@ -942,6 +966,12 @@ body.pk-dragging .pk-toasts {
   left: auto;
   align-items: flex-end;
   transform: none;
+}
+
+/* Along the foot of the screen, above her island there (#105). */
+.isl-at-bottom .pk-toasts[data-home='island'] {
+  top: auto;
+  bottom: calc(var(--isl-foot, 8px) + 36px + 20px);
 }
 
 .pk-toast {

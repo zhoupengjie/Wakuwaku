@@ -397,6 +397,12 @@ impl Shared {
             // The side of the top of the screen her island's window is at
             // (islandPos, zhoupengjie/Wakuwaku#59): the page lays it out there.
             now["islandAt"] = json!(island::side(self).name());
+            // The edge of the screen it is along (islandEdge,
+            // zhoupengjie/Wakuwaku#105): the top, or the bottom, over
+            // Windows' own taskbar shown there, whose thickness (physical
+            // px; 0 with none) the page centres the closed island in.
+            now["islandEdge"] = json!(island::edge_name(self));
+            now["islandStrip"] = json!(island::strip_under(self));
         }
         // The widgets that have something to say: those on take their turns
         // in the island while nothing needs you; any may be on the taskbar.

@@ -17,7 +17,7 @@ const REPO = path.join(__dirname, '..')
 
 // The playground's one-click scenes, as agreed (2026-10-17; the hold and the
 // island at a corner, zhoupengjie/Wakuwaku#59 and #65, 2026-10-18), in order.
-const WANTED = ['新用户第一次打开', '平常', '三个会话在忙', '等你批准', '做完了（流光）', '出错了', '提醒停留', '展开停留', '放满小工具的任务栏', '桌面', '空桌面', '灵动岛模式', '岛在右上', '浅色 + 透明任务栏', '编辑任务栏布局中', '添加小工具', '编辑胶囊', '组合', 'Ctrl 多选']
+const WANTED = ['新用户第一次打开', '平常', '三个会话在忙', '等你批准', '做完了（流光）', '出错了', '提醒停留', '展开停留', '放满小工具的任务栏', '桌面', '空桌面', '灵动岛模式', '岛在右上', '岛在底部', '浅色 + 透明任务栏', '编辑任务栏布局中', '添加小工具', '编辑胶囊', '组合', 'Ctrl 多选']
 
 test('the playground has each agreed scene, in order, with a note on what to try', () => {
   assert.deepEqual(
@@ -86,6 +86,10 @@ test('the scenes say what they are about', () => {
   // The island at the top right, opened.
   assert.deepEqual([w('island-right').home, w('island-right').config.islandPos], ['island', 'right'])
   assert.ok(Scenes.sceneById('island-right').play, 'island-right opens it')
+  // The island along the foot of the screen (zhoupengjie/Wakuwaku#105), opened.
+  assert.deepEqual([w('island-bottom').home, w('island-bottom').config.islandEdge], ['island', 'bottom'])
+  assert.equal(w('island-right').config.islandEdge, undefined, 'the others at the top, as ever')
+  assert.ok(Scenes.sceneById('island-bottom').play, 'island-bottom opens it')
 })
 
 test('the sample mail: two accounts on the example domains, each as its widget says it', () => {
@@ -133,6 +137,21 @@ test("the island's window where it sits, as island.rs will put it (anchor.js win
   }
   assert.deepEqual(Scenes.islandWindow('center'), Scenes.WINDOWS.island)
   assert.deepEqual(Scenes.islandWindow(undefined), Scenes.WINDOWS.island)
+  // Along the foot of the screen (#105): its foot on the screen's bottom edge
+  // (anchor.js windowTop, no taskbar drawn), at the side it sits.
+  for (const pos of ['left', 'center', 'right']) {
+    const [x, y, w, h] = Scenes.islandWindow(pos, 'bottom')
+    assert.equal(x, A.windowLeft(pos, area, w), pos)
+    assert.equal(y, A.windowTop('bottom', area, h), pos)
+    assert.deepEqual([y, w, h], [180, 760, 720], pos)
+  }
+  assert.deepEqual(Scenes.islandWindow('center', 'top'), Scenes.WINDOWS.island)
+  assert.deepEqual(Scenes.windowOf(Scenes.byId('island-bottom')), Scenes.islandWindow('center', 'bottom'))
+  assert.deepEqual(Scenes.windowOf(Scenes.byId('island-bottom-open')), Scenes.islandWindow('center', 'bottom'))
+  assert.deepEqual(Scenes.windowOf(Scenes.byId('scene-island-bottom')), Scenes.islandWindow('center', 'bottom'))
+  assert.equal(Scenes.edgeOf(Scenes.byId('scene-island-bottom')), 'bottom')
+  assert.equal(Scenes.edgeOf(Scenes.byId('scene-island-right')), 'top')
+  assert.equal(Scenes.worldFor(Scenes.byId('island-bottom-open'), F).config.islandEdge, 'bottom')
   // A shot's: its own place, else its scene's; its world says it too.
   assert.deepEqual(Scenes.windowOf(Scenes.byId('island-right-open')), Scenes.islandWindow('right'))
   assert.deepEqual(Scenes.windowOf(Scenes.byId('island-left')), Scenes.islandWindow('left'))

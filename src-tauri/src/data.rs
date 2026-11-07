@@ -125,6 +125,10 @@ fn defaults() -> Map<String, Value> {
         // Where it sits at the top of the screen: left, center or right
         // (anchor.js, zhoupengjie/Wakuwaku#59); the top centre as ever.
         "islandPos": "center",
+        // The edge of the screen it is along: top (as ever), or bottom, laid
+        // over Windows' own taskbar, which stays as it is (island.rs fit,
+        // zhoupengjie/Wakuwaku#105).
+        "islandEdge": "top",
         // At the top of the screen, slid up out of the way while a window
         // lies under it (island.js setStow, zhoupengjie/Wakuwaku#49).
         "islandHideUnder": true,

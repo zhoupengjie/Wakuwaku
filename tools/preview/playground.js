@@ -254,11 +254,11 @@
   const byLabel = label => (label === 'island' ? frames.island : label.startsWith('desk') ? frames.desk : null)
 
   // Her home's window: the island's at the top where it sits (islandPos: a
-  // top corner, or the middle), or along the foot (islandEdge bottom, #105),
+  // top corner, or the middle), or along the foot (islandEdge taskbar, #105),
   // as island.rs puts it (scenes.js islandWindow, zhoupengjie/Wakuwaku#59);
   // the taskbar's along its edge.
   function homeRect() {
-    if (world.home === 'island') return Scenes.islandWindow(Fake.config().islandPos, Fake.config().islandEdge)
+    if (world.home === 'island') return Scenes.islandWindow(Fake.config().islandPos, Fake.config().islandEdge === 'taskbar' ? 'bottom' : 'top')
     return { top: [0, 0, W, STRIP + ROOM], left: [0, 0, STRIP + SIDE_ROOM, H], right: [W - STRIP - SIDE_ROOM, 0, STRIP + SIDE_ROOM, H] }[world.edge] || [0, H - STRIP - ROOM, W, STRIP + ROOM]
   }
 
@@ -935,7 +935,7 @@
     // The edge it is along (islandEdge, zhoupengjie/Wakuwaku#105).
     islandEdge: [
       ['top', '顶部'],
-      ['bottom', '底部'],
+      ['taskbar', '任务栏里'],
     ],
     endCue: [
       ['open', '展开胶囊'],

@@ -39,6 +39,10 @@
 // which Windows puts back once a hidden one shows again, and the dock was
 // listed in Alt+Tab as "wakuwaku bar" (the user, 2026-11-04). Tool windows,
 // as tao writes its own style back.
+//
+// And her capsule's window inside Windows' taskbar (embed.rs) is layered
+// (WS_EX_LAYERED), or the taskbar's XAML takes every pointer meant for it:
+// kept so the same way (keep_layered), as tao writes its style back.
 use std::ffi::c_void;
 
 type Hwnd = *mut c_void;
@@ -49,6 +53,7 @@ const GWL_EXSTYLE: i32 = -20;
 // Two bits, WS_BORDER and WS_DLGFRAME: a title bar is both.
 const WS_CAPTION: u32 = 0x00c0_0000;
 const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
+const WS_EX_LAYERED: u32 = 0x0008_0000;
 const WS_EX_APPWINDOW: u32 = 0x0004_0000;
 const WM_SIZE: u32 = 0x0005;
 const WM_ACTIVATE: u32 = 0x0006;
@@ -105,6 +110,21 @@ fn as_tool_window(style_ex: u32) -> u32 {
 
 // Windows of hers minimized now, for their surface to be wiped once given back.
 static MINIMIZED: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec::new());
+// Windows of hers kept layered (embed.rs): the bit put back as tao writes
+// its own extended style.
+static LAYERED: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec::new());
+
+fn kept_layered(hwnd: isize) -> bool {
+    LAYERED.lock().unwrap_or_else(|e| e.into_inner()).contains(&hwnd)
+}
+
+// Her capsule's window in Windows' taskbar stays layered whatever tao writes back.
+pub fn keep_layered(hwnd: isize) {
+    let mut kept = LAYERED.lock().unwrap_or_else(|e| e.into_inner());
+    if !kept.contains(&hwnd) {
+        kept.push(hwnd);
+    }
+}
 
 unsafe extern "system" fn hold_off_title_bar(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize, _id: usize, _data: usize) -> isize {
     match msg {
@@ -117,6 +137,9 @@ unsafe extern "system" fn hold_off_title_bar(hwnd: Hwnd, msg: u32, wparam: usize
             // SAFETY: as above.
             let change = &mut *(lparam as *mut StyleStruct);
             change.new = as_tool_window(change.new);
+            if kept_layered(hwnd as isize) {
+                change.new |= WS_EX_LAYERED;
+            }
         }
         WM_NCPAINT | WM_NCUAHDRAWCAPTION | WM_NCUAHDRAWFRAME => return 0,
         WM_NCACTIVATE => return DefSubclassProc(hwnd, msg, wparam, -1),
@@ -142,6 +165,7 @@ unsafe extern "system" fn hold_off_title_bar(hwnd: Hwnd, msg: u32, wparam: usize
         WM_NCDESTROY => {
             RemoveWindowSubclass(hwnd, hold_off_title_bar, SUBCLASS_ID);
             MINIMIZED.lock().unwrap_or_else(|e| e.into_inner()).retain(|&h| h != hwnd as isize);
+            LAYERED.lock().unwrap_or_else(|e| e.into_inner()).retain(|&h| h != hwnd as isize);
         }
         _ => {}
     }

@@ -125,10 +125,13 @@ fn defaults() -> Map<String, Value> {
         // Where it sits at the top of the screen: left, center or right
         // (anchor.js, zhoupengjie/Wakuwaku#59); the top centre as ever.
         "islandPos": "center",
-        // The edge of the screen it is along: top (as ever), or bottom, laid
-        // over Windows' own taskbar, which stays as it is (island.rs fit,
-        // zhoupengjie/Wakuwaku#105).
+        // Where it is: top (the top of the screen, as ever), or taskbar, in
+        // Windows' own taskbar along whichever edge that is, which stays as
+        // it is (island.rs fit, zhoupengjie/Wakuwaku#105).
         "islandEdge": "top",
+        // In the taskbar, her capsule inside it, taking one end of it
+        // (embed.rs), unless turned off: laid over it then.
+        "islandEmbed": true,
         // At the top of the screen, slid up out of the way while a window
         // lies under it (island.js setStow, zhoupengjie/Wakuwaku#49).
         "islandHideUnder": true,
@@ -223,6 +226,7 @@ pub fn load(dir: &Path) -> Map<String, Value> {
     if let Ok(Value::Object(mut saved)) = fs::read_to_string(dir.join("config.json")).map_err(|_| ()).and_then(|t| serde_json::from_str(&t).map_err(|_| ())) {
         keep_old_look(&mut saved);
         adopt_end_cue(&mut saved);
+        adopt_island_edge(&mut saved);
         settings.extend(saved);
     }
     // The homes of earlier versions are the island now: the capsule, the
@@ -302,6 +306,15 @@ fn adopt_end_cue(saved: &mut Map<String, Value>) {
     let Some(old) = saved.remove("openOnEnd") else { return };
     if !saved.contains_key("endCue") && old == false {
         saved.insert("endCue".into(), json!("none"));
+    }
+}
+
+// The island along the bottom of the screen, over Windows' taskbar, was
+// islandEdge "bottom" for a day (2026-11-07, #105's first cut): it is in
+// Windows' taskbar now, along whichever edge that is ("taskbar").
+fn adopt_island_edge(saved: &mut Map<String, Value>) {
+    if saved.get("islandEdge").and_then(Value::as_str) == Some("bottom") {
+        saved.insert("islandEdge".into(), json!("taskbar"));
     }
 }
 
@@ -508,6 +521,18 @@ mod tests {
         assert!(!s.contains_key("taskbarMaterial"));
         // A new user: the new defaults.
         assert_eq!(defaults()["taskbarMaterial"], "clear");
+    }
+
+    #[test]
+    fn the_island_along_the_bottom_is_in_the_taskbar_now() {
+        let mut s = settings(json!({ "islandEdge": "bottom" }));
+        adopt_island_edge(&mut s);
+        assert_eq!(s, settings(json!({ "islandEdge": "taskbar" })));
+        for same in [json!({ "islandEdge": "top" }), json!({ "islandEdge": "taskbar" }), json!({})] {
+            let mut s = settings(same.clone());
+            adopt_island_edge(&mut s);
+            assert_eq!(s, settings(same));
+        }
     }
 
     #[test]

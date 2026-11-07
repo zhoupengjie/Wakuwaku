@@ -87,6 +87,24 @@ test("at the foot: centred in Windows' taskbar's strip under it, or 8 px up from
   assert.deepEqual(A.grown(closed, 420, 140, 'center'), { x: 170, y: 644, width: 420, height: 140 })
 })
 
+// Her capsule inside Windows' taskbar (embed.rs): its width within the room it has there.
+test('the capsule as wide as set while its stretch of the taskbar has room, else narrow, else her alone', () => {
+  const widths = { narrow: 240, normal: 300, wide: 380 }
+  // No room said (not in the taskbar): as set.
+  for (const room of [0, -1, undefined, null, NaN]) assert.equal(A.capsuleWidth(300, room, widths), 300, String(room))
+  assert.equal(A.capsuleWidth(380, 400, widths), 380)
+  assert.equal(A.capsuleWidth(380, 380, widths), 380)
+  // Short of the set width: narrow; short of that: 0, her portrait alone.
+  assert.equal(A.capsuleWidth(380, 379, widths), 240)
+  assert.equal(A.capsuleWidth(300, 250, widths), 240)
+  assert.equal(A.capsuleWidth(300, 239, widths), 0)
+  assert.equal(A.capsuleWidth(240, 100, widths), 0)
+  // Set narrow already: narrow or her alone.
+  assert.equal(A.capsuleWidth(240, 240, widths), 240)
+  // No widths told: the set width, or her alone.
+  assert.equal(A.capsuleWidth(300, 250), 0)
+})
+
 test("its window at the foot, as island.rs will put it: its foot on the screen's bottom edge, or the work area's", () => {
   const area = [0, 0, 1600, 852]
   // Windows' taskbar 48 px along the foot: the window's foot on the screen's (900).

@@ -32,7 +32,7 @@ mod imp {
 
     use serde_json::{json, Value};
 
-    use crate::appbar;
+    use crate::appbar::{self, Edge};
 
     type Hwnd = *mut c_void;
     type Handle = isize;
@@ -355,13 +355,37 @@ mod imp {
     // The room of a taskbar of Explorer's along the bottom of a display while
     // it shows there (not hidden, not slid away): what the handover pictures.
     pub fn shown_room(mon: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
-        let (bottom, right) = (mon.1 + mon.3, mon.0 + mon.2);
+        shown_bar(mon).filter(|(_, _, edge)| *edge == Edge::Bottom).map(|(_, r, _)| r)
+    }
+
+    // A taskbar of Explorer's shown along an edge of a display (the work
+    // area stopping at it): its window (Shell_TrayWnd, or a second
+    // display's Shell_SecondaryTrayWnd), its strip (physical, the display's
+    // whole length) and the edge it is along, for her capsule to go into
+    // it (embed.rs) and her island to lie over it (island.rs fit); none
+    // while none shows along any edge (hidden, slid away).
+    pub fn shown_bar(mon: (i32, i32, i32, i32)) -> Option<(isize, (i32, i32, i32, i32), Edge)> {
+        let (left, top, right, bottom) = (mon.0, mon.1, mon.0 + mon.2, mon.1 + mon.3);
         taskbars().into_iter().find_map(|h| {
             let mut r = Rect::default();
             // SAFETY: our own struct; a gone window fails both calls.
             let ok = unsafe { GetWindowRect(h as Hwnd, &mut r) } != 0 && unsafe { IsWindowVisible(h as Hwnd) } != 0;
-            let there = ok && r.bottom == bottom && r.left <= mon.0 && r.right >= right && r.top > mon.1 + mon.3 / 2;
-            there.then_some((mon.0, r.top, mon.2, r.bottom - r.top))
+            if !ok {
+                return None;
+            }
+            let across = r.left <= left && r.right >= right;
+            let along = r.top <= top && r.bottom >= bottom;
+            if across && r.bottom == bottom && r.top > top + mon.3 / 2 {
+                Some((h, (left, r.top, mon.2, r.bottom - r.top), Edge::Bottom))
+            } else if across && r.top == top && r.bottom < top + mon.3 / 2 {
+                Some((h, (left, top, mon.2, r.bottom - top), Edge::Top))
+            } else if along && r.left == left && r.right < left + mon.2 / 2 {
+                Some((h, (left, top, r.right - left, mon.3), Edge::Left))
+            } else if along && r.right == right && r.left > left + mon.2 / 2 {
+                Some((h, (r.left, top, right - r.left, mon.3), Edge::Right))
+            } else {
+                None
+            }
         })
     }
 
@@ -498,6 +522,9 @@ mod imp {
     pub fn shown_room(_mon: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
         None
     }
+    pub fn shown_bar(_mon: (i32, i32, i32, i32)) -> Option<(isize, (i32, i32, i32, i32), crate::appbar::Edge)> {
+        None
+    }
     pub fn show_bars() {}
     pub fn restore(_file: &Path) -> bool {
         false
@@ -523,7 +550,7 @@ mod imp {
     }
 }
 
-pub use imp::{desktop_up, explorer_pid, explorer_tray, guard, hide, keep_room, kept_room, lone_win, recover, rehide, restore, room, running_for, show_bars, shown_room, spawn_guard, started, taskbar_created, taskbars, visible};
+pub use imp::{desktop_up, explorer_pid, explorer_tray, guard, hide, keep_room, kept_room, lone_win, recover, rehide, restore, room, running_for, show_bars, shown_bar, shown_room, spawn_guard, started, taskbar_created, taskbars, visible};
 
 // The shell's windows Win pressed alone may go by, none of them hers
 // (zhoupengjie/Wakuwaku#54, where it opened no Start after she was quit,

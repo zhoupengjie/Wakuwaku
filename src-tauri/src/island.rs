@@ -2,7 +2,9 @@
 //   island  a black pill at the top centre, or at a top corner (islandPos,
 //           zhoupengjie/Wakuwaku#59, see fit); or along the foot of the
 //           screen, laid over Windows' own taskbar, which stays as it is
-//           (islandEdge bottom, zhoupengjie/Wakuwaku#105)
+//           (islandEdge taskbar, zhoupengjie/Wakuwaku#105), or, there, its
+//           capsule inside the taskbar itself (islandEmbed, embed.rs), this
+//           window only for what opens from it
 //   taskbar a strip along the bottom in place of Windows' own, which is put
 //           away while it is up, its tray taken over (taskbar.rs); what
 //           opens grows up from it, into room kept above it (appbar.rs)
@@ -31,7 +33,7 @@ use crate::{appbar, taskbar, Shared};
 // so these never move it. The page asks for more (pet:panel) when a shape
 // needs it.
 const ISLAND: (f64, f64) = (760.0, 132.0);
-// Along the foot of the screen (islandEdge bottom, zhoupengjie/Wakuwaku#105):
+// Along the foot of the screen (islandEdge taskbar, zhoupengjie/Wakuwaku#105):
 // the island at the window's foot, what opens from it growing up into the
 // room above it, as the taskbar's does. So the window is as tall as the
 // taskbar's strip and room together and never grows (growing up would move
@@ -139,13 +141,26 @@ pub struct Island {
     // zhoupengjie/Wakuwaku#59), as fit put it there: the page is told it
     // (pet:update islandAt) and lays the island out at that side.
     at: Side,
-    // Along the foot of the screen instead (islandEdge bottom,
+    // Along the foot of the screen instead (islandEdge taskbar,
     // zhoupengjie/Wakuwaku#105), as fit put it there; and the thickness
     // (physical) of Windows' own taskbar shown along the foot under it, the
     // island laid over it, centred in it (foot). The page is told both
     // (pet:update islandEdge, islandStrip).
     bottom: bool,
     strip: Option<i32>,
+    // Her capsule inside Windows' taskbar (embed.rs; islandEmbed): where it
+    // lies (physical), the room it has there (physical px; 0 none: the page
+    // keeps its width within it, anchor.js capsuleWidth), and whether it is
+    // in. Then this window shows only as the capsule is used (is_shown), its
+    // own closed island laid over the capsule and unseen (island.js
+    // isl-ghost), about mx (physical px from the window's left; pet:update
+    // islandMx), and the page says whether it has something open in it
+    // (island_opened: opened), which keeps the window up.
+    cap: Option<(i32, i32, i32, i32)>,
+    cap_room: i32,
+    embedded: bool,
+    mx: Option<i32>,
+    opened: bool,
 }
 
 // Where the island's window sits at the top of the screen.
@@ -195,6 +210,17 @@ impl Side {
     }
 }
 
+// The window's left (physical) about her capsule inside Windows' taskbar
+// (embed.rs): its middle on the capsule's, kept on its display (a capsule
+// near the strip's end would have it off the screen); and where the
+// capsule's middle lies in it then (mx, physical px from its left), for the
+// page to lay the island about (island.js placeMid).
+fn about(area: &Area, cap: (i32, i32, i32, i32), width: i32) -> (i32, i32) {
+    let mid = cap.0 + cap.2 / 2;
+    let x = (mid - width / 2).clamp(area.x, (area.x + area.w - width).max(area.x));
+    (x, mid - x)
+}
+
 // Her island at the top of the screen, up out of the way of the window
 // under it (look_under, call_look; island.js setStow).
 #[derive(Default)]
@@ -226,14 +252,15 @@ impl Island {
         valid_scale(Some(self.page_sf)).unwrap_or_else(|| self.sf())
     }
 
-    // Along the foot of the screen (#105), how far up from the window's foot
-    // the closed island lies (the page's px; island.js placeAnchor, anchor.js
-    // foot): centred in Windows' own taskbar's strip under it (6 px in
-    // Windows 11's 48), or TOP with none there, as down from the top.
+    // Over Windows' taskbar (#105), how far in from the window's edge along
+    // it (its foot along the bottom, its top along the top) the closed
+    // island lies (the page's px; island.js placeAnchor, anchor.js foot):
+    // centred in the taskbar's strip (6 px in Windows 11's 48), or TOP with
+    // none there, as down from the top of the screen.
     fn foot(&self) -> f64 {
         match self.strip {
-            Some(thick) if self.bottom => ((thick as f64 / self.page_sf()) - COMPACT_H).max(0.0) / 2.0,
-            _ => TOP,
+            Some(thick) => ((thick as f64 / self.page_sf()) - COMPACT_H).max(0.0) / 2.0,
+            None => TOP,
         }
     }
 
@@ -280,6 +307,14 @@ pub fn is_shown(sh: &Shared) -> bool {
     // Nor while another copy of her holds the taskbar (taskbar.rs waiting).
     let up = if sh.home() == "taskbar" { !sh.is_fullscreen() && !taskbar::waiting() } else { sh.is_visible() };
     let isl = sh.island.lock().unwrap();
+    // With her capsule inside Windows' taskbar (embed.rs) this window is up
+    // only while it is used: the pointer on the capsule (or just gone from
+    // it, this window taking it over) or on this one, the button held on
+    // her, reaching for her or taking her in, something open in it (a
+    // prompt, the settings, opened by itself; the page says: opened).
+    if up && isl.embedded {
+        return isl.temp || isl.settings_open || isl.for_asks || isl.holding || isl.reaching || isl.absorbing || isl.opened || isl.ct.over || crate::embed::in_use();
+    }
     up || isl.temp || isl.settings_open || isl.for_asks
 }
 
@@ -390,8 +425,12 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
     let edge = edge(sh);
     let area = area(sh)?;
     let wanted = Side::of(sh.setting("islandPos").as_str().unwrap_or("center"));
-    // Along the foot of the screen instead of the top (islandEdge, #105).
-    let low = home != "taskbar" && sh.setting("islandEdge").as_str() == Some("bottom");
+    // In Windows' own taskbar instead of at the top of the screen (islandEdge
+    // taskbar, #105): along its edge, the bottom or the top, while Explorer's
+    // taskbar is shown there; along the foot of the work area with none.
+    let in_bar = home != "taskbar" && sh.setting("islandEdge").as_str() == Some("taskbar");
+    let bar = in_bar.then(|| crate::shell::shown_bar(area.mon)).flatten().filter(|(_, _, e)| matches!(e, Edge::Top | Edge::Bottom));
+    let low = in_bar && !matches!(bar, Some((_, _, Edge::Top)));
     let thick = strip_h(sh);
     let mut isl = sh.island.lock().unwrap();
     isl.sf = area.sf;
@@ -406,36 +445,55 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
         // corner. The page is told the side (pet:update islandAt) and lays
         // the island out at that side of its window by it, never by the
         // setting itself; the closed island (closed_rect) and her seat
-        // follow it too. Along the foot of the screen (islandEdge bottom,
+        // follow it too. In Windows' taskbar (islandEdge taskbar,
         // zhoupengjie/Wakuwaku#105), the same, told the edge as well
         // (islandEdge, islandStrip): over Windows' own taskbar shown along
-        // the foot of her display, the work area stopping at it (not one
-        // hidden, nor one slid away: shell.rs shown_room), the window's foot
-        // on the screen's and the closed island centred in the strip
-        // (foot); with none there (Windows' taskbar along another edge, or
-        // hiding itself), on the work area's foot, the island TOP up from
-        // it as from the top. Windows' taskbar is left as it is, shown, and
-        // whatever Start11 and the like make of it: the island home never
-        // touches it.
+        // the bottom or the top of her display, the work area stopping at
+        // it (not one hidden, nor one slid away: shell.rs shown_bar), the
+        // window's foot on the screen's (its top on the screen's top, for a
+        // taskbar there) and the closed island centred in the strip (foot);
+        // her capsule inside the taskbar (embed.rs), the window about it.
+        // With no such taskbar (along a side, or hiding itself), on the work
+        // area's foot, the island TOP up from it as from the top. Windows'
+        // taskbar is left as it is, shown, and whatever Start11 and the like
+        // make of it: the island home never puts it away.
         _ => match crate::notch::at_top(area.mon, size.0) {
             Some(pos) => {
                 isl.at = Side::Center;
                 isl.bottom = false;
                 isl.strip = None;
+                isl.mx = None;
                 size = isl.size_for(home, &area, edge, thick, false);
                 pos
             }
-            None if low => {
-                let strip = crate::shell::shown_room(area.mon).filter(|s| s.1 >= area.y + area.h - 2);
+            None if in_bar => {
+                let strip = bar.map(|(_, s, _)| s);
                 isl.at = wanted;
-                isl.bottom = true;
+                isl.bottom = low;
                 isl.strip = strip.map(|s| s.3);
-                wanted.place_above(&area, size, strip.map_or(area.y + area.h, |s| s.1 + s.3))
+                // Along the bottom its foot on the strip's foot (the work
+                // area's with no strip), along the top its top on the strip's.
+                let foot = strip.map_or(area.y + area.h, |s| s.1 + s.3);
+                let y = if low { foot - size.1 } else { strip.map_or(area.y, |s| s.1) };
+                // Her capsule inside Windows' taskbar (embed.rs): the window
+                // about it, the page told where its middle lies in it (mx).
+                match isl.cap.filter(|_| isl.embedded) {
+                    Some(cap) => {
+                        let (x, mx) = about(&area, cap, size.0);
+                        isl.mx = Some(mx);
+                        (x, y)
+                    }
+                    None => {
+                        isl.mx = None;
+                        if low { wanted.place_above(&area, size, foot) } else { (wanted.place(&area, size.0).0, y) }
+                    }
+                }
             }
             None => {
                 isl.at = wanted;
                 isl.bottom = false;
                 isl.strip = None;
+                isl.mx = None;
                 wanted.place(&area, size.0)
             }
         },
@@ -455,20 +513,94 @@ pub fn side(sh: &Shared) -> Side {
 }
 
 // The edge of the screen its window is along, for the page (payload
-// islandEdge): the bottom (islandEdge, zhoupengjie/Wakuwaku#105), or the
-// top (on the taskbar too).
+// islandEdge): the bottom (islandEdge taskbar, zhoupengjie/Wakuwaku#105,
+// with Windows' taskbar along the bottom or none shown), or the top (as
+// ever, or with Windows' taskbar along the top; on the taskbar home too).
 pub fn edge_name(sh: &Shared) -> &'static str {
     if sh.island.lock().unwrap().bottom { "bottom" } else { "top" }
 }
 
-// Windows' own taskbar's thickness (physical) under the island along the
-// foot of the screen, for the page (payload islandStrip); 0 with none.
+// Windows' own taskbar's thickness (physical) along the edge the island
+// is along, for the page (payload islandStrip); 0 with none there.
 pub fn strip_under(sh: &Shared) -> i32 {
     sh.island.lock().unwrap().strip.unwrap_or(0)
 }
 
 fn at_bottom(sh: &Shared) -> bool {
     sh.island.lock().unwrap().bottom
+}
+
+// --- Her capsule inside Windows' taskbar (embed.rs) ----------------------------------
+
+// Wanted while her home is the island in Windows' taskbar (islandEdge
+// taskbar) and the setting (islandEmbed, on unless turned off) says so:
+// embed.rs then looks for Explorer's taskbar along the bottom or the top
+// of her display every second.
+pub fn embedding_wanted(sh: &Shared) -> bool {
+    sh.home() != "taskbar" && sh.setting("islandEdge").as_str() == Some("taskbar") && sh.setting("islandEmbed").as_bool() != Some(false)
+}
+
+// The display her home is on, for the capsule to go into its taskbar.
+pub fn home_area(sh: &Shared) -> Option<Area> {
+    area(sh)
+}
+
+// Where the island is set to sit (islandPos), for the stretch of the taskbar the capsule goes in.
+pub fn side_wanted(sh: &Shared) -> Side {
+    Side::of(sh.setting("islandPos").as_str().unwrap_or("center"))
+}
+
+// The closed capsule as its page has it (logical width and height; the
+// capsule's page and the island's lay it out the same) and the page's
+// scale; none before a page has said its size (set_stow).
+pub fn closed_size(sh: &Shared) -> Option<(f64, f64, f64)> {
+    let isl = sh.island.lock().unwrap();
+    let (w, h) = isl.stow.closed;
+    (w > 0.0 && h > 0.0).then(|| (w, h, isl.page_sf()))
+}
+
+// Where her capsule lies in Windows' taskbar now, with the room it has
+// there, or none (out of the taskbar, hidden): the window laid about it,
+// shown or hidden by the new rule (is_shown), and the pages told
+// (islandEmbed, islandMx, islandRoom).
+pub fn set_capsule(sh: &Arc<Shared>, laid: crate::embed::Laid) {
+    let changed = {
+        let mut isl = sh.island.lock().unwrap();
+        let before = (isl.cap, isl.cap_room, isl.embedded);
+        isl.cap = laid.cap;
+        isl.cap_room = laid.room;
+        isl.embedded = laid.embedded;
+        before != (laid.cap, laid.room, laid.embedded)
+    };
+    if !changed {
+        return;
+    }
+    place(sh);
+    apply_visibility(sh);
+    sh.redraw();
+    crate::fullscreen::ask();
+}
+
+// The island's page has something open in it (hovered open, a prompt, the
+// settings, opened by itself), or nothing now, its island shrunk back
+// (island_opened): with her capsule inside Windows' taskbar, the window goes
+// once nothing is open and the pointer has gone (is_shown).
+pub fn set_opened(sh: &Arc<Shared>, on: bool) {
+    let (was, embedded) = {
+        let mut isl = sh.island.lock().unwrap();
+        (std::mem::replace(&mut isl.opened, on), isl.embedded)
+    };
+    if was != on && embedded {
+        apply_visibility(sh);
+    }
+}
+
+// For the pages (main.rs payload): whether her capsule is inside Windows'
+// taskbar, where its middle lies in the island's window then (physical px
+// from its left), and the room it has there (physical px; 0 none).
+pub fn embedding(sh: &Shared) -> (bool, Option<i32>, i32) {
+    let isl = sh.island.lock().unwrap();
+    (isl.embedded, isl.mx.filter(|_| isl.embedded), isl.cap_room)
 }
 
 // The setting homeDisplay changed (#104): her home on that display now,
@@ -485,22 +617,29 @@ pub fn home_display_changed(sh: &Shared) {
     crate::fullscreen::ask();
 }
 
-// The setting islandPos changed, or islandEdge (#105): the window put at
-// that side of that edge now, and the page told where it is (islandAt,
-// islandEdge) to lay the island out there; a window under it at its new
-// place looked for at once (look_under). The line says what it lies over.
+// The setting islandPos changed, or islandEdge (#105), or islandEmbed: the
+// window put at that side of that edge now, and the page told where it is
+// (islandAt, islandEdge) to lay the island out there; a window under it at
+// its new place looked for at once (look_under); the capsule's place in
+// Windows' taskbar looked at now (embed.rs, which lays the window again
+// about it). The line says what it lies over.
 pub fn side_changed(sh: &Shared) {
     if sh.home() == "taskbar" {
         return;
     }
     place(sh);
-    let over = match sh.island.lock().unwrap().strip {
-        Some(thick) => format!(", over Windows' taskbar ({thick} px)"),
-        None => String::new(),
+    let over = {
+        let isl = sh.island.lock().unwrap();
+        match (isl.embedded, isl.strip) {
+            (true, _) => ", its capsule inside Windows' taskbar".to_string(),
+            (false, Some(thick)) => format!(", over Windows' taskbar ({thick} px)"),
+            (false, None) => String::new(),
+        }
     };
     sh.log(&format!("island: at the {} of the {} of the screen{over}", side(sh).name(), edge_name(sh)));
     sh.redraw();
     crate::fullscreen::ask();
+    crate::embed::look_soon();
 }
 
 // The taskbar's window (physical) for its strip along an edge: its outer
@@ -919,6 +1058,10 @@ const LEAVE_MS: u128 = 600;
 // (call_look) follow from this. None before the page said its size, or in
 // another home.
 fn closed_rect(isl: &Island) -> Option<(i32, i32, i32, i32)> {
+    // Inside Windows' taskbar (embed.rs): the capsule itself, wherever this window is.
+    if isl.embedded {
+        return isl.cap;
+    }
     let (w, h) = isl.stow.closed;
     if !isl.created || w <= 0.0 || h <= 0.0 {
         return None;
@@ -932,7 +1075,9 @@ fn closed_rect(isl: &Island) -> Option<(i32, i32, i32, i32)> {
         Side::Right => isl.pos.0 + isl.size.0 - w - top,
         Side::Center => isl.pos.0 + (isl.size.0 - w) / 2,
     };
-    let y = if isl.bottom { isl.pos.1 + isl.size.1 - (isl.foot() * sf).round() as i32 - h } else { isl.pos.1 + top };
+    // Along the bottom foot up from the window's foot; else foot down from
+    // its top (TOP with no taskbar's strip there, centred in one along the top).
+    let y = if isl.bottom { isl.pos.1 + isl.size.1 - (isl.foot() * sf).round() as i32 - h } else { isl.pos.1 + (isl.foot() * sf).round() as i32 };
     Some((x, y, w, h))
 }
 
@@ -944,7 +1089,7 @@ pub fn look_under(sh: &Arc<Shared>) {
     // area's foot, no window's top lies under the closed island.
     let (rect, wanted) = {
         let isl = sh.island.lock().unwrap();
-        let wanted = sh.home() == "island" && sh.flag("islandHideUnder") && !isl.bottom;
+        let wanted = sh.home() == "island" && sh.flag("islandHideUnder") && !isl.bottom && isl.strip.is_none();
         if wanted && (!isl.shown || sh.is_quiet()) {
             return;
         }
@@ -984,6 +1129,8 @@ pub fn set_stow(sh: &Shared, stowed: bool, width: f64, height: f64) {
     };
     if resized {
         crate::fullscreen::ask();
+        // The capsule in Windows' taskbar laid again at its new size (embed.rs).
+        crate::embed::look_soon();
     }
 }
 
@@ -1150,8 +1297,15 @@ fn show_or_hide(sh: &Arc<Shared>) {
             isl.reaching = false;
         }
     }
+    let embedded = sh.island.lock().unwrap().embedded;
     if let Some(win) = window(sh) {
         let _ = if want { win.show() } else { win.hide() };
+        // Shown over Windows' taskbar for the capsule in it (embed.rs): over
+        // the taskbar, which Explorer brings to the top of the windows kept on
+        // top as it is pressed.
+        if want && embedded {
+            crate::tasks::raise_top(hwnd(sh));
+        }
     }
     // The blur under the island goes with it, and comes back with it (backplate.rs).
     if want {
@@ -1349,13 +1503,14 @@ pub fn keep_on_screen(sh: &Shared) {
 pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
     // She is being dragged past: the home is not being hovered.
     let passive = crate::pet::is_dragged(sh);
-    let (ignore, pointer, wait, called, came) = {
+    let (ignore, pointer, wait, called, came, embedded) = {
         let mut isl = sh.island.lock().unwrap();
         if !isl.ready {
             return 500;
         }
+        let embedded = isl.embedded && isl.shown;
         if !isl.shown {
-            (isl.ct.force(Mode::Pass), None, 500, None, false)
+            (isl.ct.force(Mode::Pass), None, 500, None, false, embedded)
         } else {
             let (pos, size, sf, page_sf, held) = (isl.pos, isl.size, isl.sf(), isl.page_sf(), isl.holding);
             let solid = std::mem::take(&mut isl.solid);
@@ -1375,7 +1530,7 @@ pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
             let called = call_look(&mut isl, cursor, passive, std::time::Instant::now(), || crate::pet::any_down().unwrap_or(false));
             let was_near = std::mem::replace(&mut isl.stow.near, seen.near);
             let came = seen.near && !was_near && isl.stow.closed.0 > 0.0;
-            (seen.ignore, seen.pointer, wait, called, came)
+            (seen.ignore, seen.pointer, wait, called, came, embedded)
         }
     };
     set_ignore(sh, ignore);
@@ -1393,6 +1548,11 @@ pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
     // taskbar before a press reaches it (#105).
     if came {
         uncover(sh);
+    }
+    // Up for her capsule inside Windows' taskbar (embed.rs), and no longer
+    // used (the pointer gone, nothing open in it): it goes (is_shown).
+    if embedded && !is_shown(sh) {
+        apply_visibility(&crate::shared(&sh.app));
     }
     wait
 }
@@ -1546,12 +1706,12 @@ pub fn seat(sh: &Shared) -> Option<(i32, i32)> {
     let edge = edge(sh);
     let area = area(sh)?;
     let thick = strip_h(sh);
-    let (bar, seat_at, closed, at, low) = {
+    let (bar, seat_at, closed, at, low, cap) = {
         let isl = sh.island.lock().unwrap();
         // Along the foot of the screen, where the closed island's upper edge
         // lies: up from the window's foot by foot and its height (closed_rect).
         let low = isl.bottom.then(|| isl.pos.1 + isl.size.1 - ((isl.foot() + COMPACT_H) * isl.page_sf()).round() as i32);
-        (isl.bar, isl.seat_at, closed_rect(&isl), isl.at, low)
+        (isl.bar, isl.seat_at, closed_rect(&isl), isl.at, low, isl.cap.filter(|_| isl.embedded))
     };
     let px = |v: f64| (v * area.sf).round() as i32;
     Some(match home {
@@ -1565,16 +1725,21 @@ pub fn seat(sh: &Shared) -> Option<(i32, i32)> {
                 Edge::Right => (x, y + at),
             }
         }
+        // Her capsule inside Windows' taskbar (embed.rs): the middle of its upper edge.
+        _ if cap.is_some() => {
+            let c = cap.unwrap_or_default();
+            (c.0 + c.2 / 2, c.1)
+        }
         // At a top corner (zhoupengjie/Wakuwaku#59), the middle of the closed
         // island there (closed_rect), or before the page has said its size,
         // as far in from the side as half a capsule. Along the foot of the
         // screen (low: the closed island's upper edge, #105), the middle of
         // that edge instead.
         _ => match (at, closed, low) {
-            (Side::Center, _, None) => (area.x + area.w / 2, area.y + px(TOP + COMPACT_H)),
-            (Side::Center, _, Some(y)) => (area.x + area.w / 2, y),
             (_, Some((x, y, w, h)), None) => (x + w / 2, y + h),
             (_, Some((x, y, w, _)), Some(_)) => (x + w / 2, y),
+            (Side::Center, None, None) => (area.x + area.w / 2, area.y + px(TOP + COMPACT_H)),
+            (Side::Center, None, Some(y)) => (area.x + area.w / 2, y),
             (Side::Left, None, low) => (area.x + px(TOP + CAPSULE_HALF), low.unwrap_or(area.y + px(TOP + COMPACT_H))),
             (Side::Right, None, low) => (area.x + area.w - px(TOP + CAPSULE_HALF), low.unwrap_or(area.y + px(TOP + COMPACT_H))),
         },
@@ -1758,11 +1923,11 @@ pub fn show_asks(sh: &Arc<Shared>) {
 // the foot of the screen (#105), laid over Windows' own taskbar, the same.
 pub fn raise(sh: &Arc<Shared>) {
     let hwnd = hwnd(sh);
-    let (shown, low) = {
+    let (shown, over) = {
         let isl = sh.island.lock().unwrap();
-        (isl.shown, isl.bottom)
+        (isl.shown, isl.bottom || isl.strip.is_some())
     };
-    if hwnd == 0 || !shown || !(sh.home() == "taskbar" || low) || !TOPMOST.load(Ordering::SeqCst) {
+    if hwnd == 0 || !shown || !(sh.home() == "taskbar" || over) || !TOPMOST.load(Ordering::SeqCst) {
         return;
     }
     let own = sh.own.lock().unwrap().clone();
@@ -1777,7 +1942,7 @@ pub fn raise(sh: &Arc<Shared>) {
 }
 
 // Her island along the foot of the screen, laid over Windows' own taskbar
-// (islandEdge bottom, zhoupengjie/Wakuwaku#105): Explorer brings its
+// (islandEdge taskbar, the embedding off, zhoupengjie/Wakuwaku#105): Explorer brings its
 // taskbar to the top of the windows kept on top as it is pressed (Start, a
 // button, the tray), over hers, which is then hidden under it, the pointer
 // never reaching it. Hers is raised over it again once seen under it: every
@@ -1790,16 +1955,19 @@ pub fn raise(sh: &Arc<Shared>) {
 static UNDER_TASKBAR: AtomicBool = AtomicBool::new(false);
 
 pub fn uncover(sh: &Shared) {
+    // The strip's band: from the window's foot up along the bottom, from
+    // its top down along the top (a taskbar there). Not with her capsule
+    // inside the taskbar: the window shows only as it is used, raised then.
     let (hwnd, band) = {
         let isl = sh.island.lock().unwrap();
-        (isl.hwnd, (isl.shown && isl.bottom).then_some(isl.strip).flatten().map(|thick| isl.pos.1 + isl.size.1 - thick))
+        (isl.hwnd, (isl.shown && !isl.embedded).then_some(isl.strip).flatten().map(|thick| if isl.bottom { (true, isl.pos.1 + isl.size.1 - thick) } else { (false, isl.pos.1 + thick) }))
     };
-    let Some(band) = band else { return };
+    let Some((low, band)) = band else { return };
     if hwnd == 0 || !TOPMOST.load(Ordering::SeqCst) {
         return;
     }
     let own = sh.own.lock().unwrap().clone();
-    let taskbar = crate::tasks::cover(hwnd, &own).filter(|(class, on_top, r)| matches!(class.as_str(), "Shell_TrayWnd" | "Shell_SecondaryTrayWnd") || (*on_top && r.1 >= band - 2));
+    let taskbar = crate::tasks::cover(hwnd, &own).filter(|(class, on_top, r)| matches!(class.as_str(), "Shell_TrayWnd" | "Shell_SecondaryTrayWnd") || (*on_top && if low { r.1 >= band - 2 } else { r.3 <= band + 2 }));
     let Some((class, _, _)) = taskbar else {
         UNDER_TASKBAR.store(false, Ordering::SeqCst);
         return;
@@ -1884,6 +2052,12 @@ pub fn where_(sh: &Shared) -> Value {
         "at": isl.at.name(),
         "edge": if isl.bottom { "bottom" } else { "top" },
         "strip": isl.strip,
+        "embedded": isl.embedded,
+        "cap": isl.cap.map(|c| json!([c.0, c.1, c.2, c.3])),
+        "capRoom": isl.cap_room,
+        "mx": isl.mx,
+        "opened": isl.opened,
+        "capsule": crate::embed::where_(),
         "stow": {
             "closed": closed_rect(&isl).map(|r| json!([r.0, r.1, r.2, r.3])),
             "under": isl.stow.under,
@@ -1916,7 +2090,7 @@ mod zoom_tests {
 
 #[cfg(test)]
 mod stow_tests {
-    use super::{call_look, closed_rect, Island, Side, Stow, EDGE_MS, LEAVE_MS, TOP};
+    use super::{about, call_look, closed_rect, Island, Side, Stow, EDGE_MS, LEAVE_MS, TOP};
     use crate::screen::Area;
     use std::time::{Duration, Instant};
 
@@ -1976,7 +2150,7 @@ mod stow_tests {
         assert_eq!([Side::Left.name(), Side::Center.name(), Side::Right.name()], ["left", "center", "right"]);
     }
 
-    // Along the foot of the screen (islandEdge bottom, zhoupengjie/Wakuwaku#105)
+    // Along the foot of the screen (islandEdge taskbar, zhoupengjie/Wakuwaku#105)
     // at 125 %: the window as tall as the taskbar's strip and room (688, 860
     // px), its foot on the screen's bottom edge over Windows' taskbar (48,
     // 60 px), the closed island centred in the strip, 6 px (7.5, rounded to
@@ -2000,15 +2174,43 @@ mod stow_tests {
         // Windows 10's 40 px taskbar: 2 px up; one thinner than the island: on the foot.
         assert_eq!(Island { bottom: true, strip: Some(50), ..stowed() }.foot(), 2.0);
         assert_eq!(Island { bottom: true, strip: Some(30), ..stowed() }.foot(), 0.0);
-        // No taskbar under it: TOP up from the work area's foot. At the top, TOP whatever was seen.
+        // No taskbar under it: TOP up from the work area's foot.
         let mut isl = Island { pos: (805, 520), size, bottom: true, ..stowed() };
         assert_eq!(isl.foot(), TOP);
         assert_eq!(closed_rect(&isl), Some((1092, 1325, 375, 45)));
+        // Windows' taskbar along the top (the window's top on the screen's):
+        // centred in its strip, 6 px down; with none there, TOP as ever.
         isl.bottom = false;
         isl.strip = Some(60);
         isl.pos = (805, 0);
+        assert_eq!(isl.foot(), 6.0);
+        assert_eq!(closed_rect(&isl), Some((1092, 8, 375, 45)));
+        isl.strip = None;
         assert_eq!(isl.foot(), TOP);
         assert_eq!(closed_rect(&isl), Some((1092, 10, 375, 45)));
+    }
+
+    // Her capsule inside Windows' taskbar (embed.rs): the window about it,
+    // kept on the screen, and the closed island is the capsule itself.
+    #[test]
+    fn about_the_capsule_in_the_taskbar() {
+        let area = Area { x: 0, y: 0, w: 2560, h: 1380, sf: 1.25, mon: (0, 0, 2560, 1440) };
+        // In the middle of the strip: the window's middle on the capsule's
+        // (1279, its half rounded down), 475 in from its left.
+        assert_eq!(about(&area, (1092, 1387, 375, 45), 950), (804, 475));
+        // At the strip's left end: the window at the screen's left, the capsule's middle 192 in.
+        assert_eq!(about(&area, (5, 1387, 375, 45), 950), (0, 192));
+        // Before the tray at the right: the window stops at the screen's right edge.
+        assert_eq!(about(&area, (2180, 1387, 375, 45), 950), (1610, 757));
+        // Well within the screen: the window's middle on the capsule's.
+        assert_eq!(about(&area, (1518, 1387, 375, 45), 950), (1230, 475));
+        // On a second display to the right the same, from its own left.
+        let right = Area { x: 2560, y: 0, w: 1920, h: 1032, sf: 1.0, mon: (2560, 0, 1920, 1080) };
+        assert_eq!(about(&right, (2570, 1046, 300, 36), 760), (2560, 160));
+        // The closed island is the capsule, wherever the window is; out of the taskbar, as laid.
+        let isl = Island { pos: (0, 580), size: (950, 860), bottom: true, strip: Some(60), embedded: true, cap: Some((5, 1387, 375, 45)), mx: Some(192), ..stowed() };
+        assert_eq!(closed_rect(&isl), Some((5, 1387, 375, 45)));
+        assert_eq!(closed_rect(&Island { embedded: false, ..isl }), Some((287, 1387, 375, 45)));
     }
 
     // Resting at the screen's edge over it calls it down; a moment there

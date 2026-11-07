@@ -87,7 +87,7 @@ test('the scenes say what they are about', () => {
   assert.deepEqual([w('island-right').home, w('island-right').config.islandPos], ['island', 'right'])
   assert.ok(Scenes.sceneById('island-right').play, 'island-right opens it')
   // The island along the foot of the screen (zhoupengjie/Wakuwaku#105), opened.
-  assert.deepEqual([w('island-bottom').home, w('island-bottom').config.islandEdge], ['island', 'bottom'])
+  assert.deepEqual([w('island-bottom').home, w('island-bottom').config.islandEdge], ['island', 'taskbar'])
   assert.equal(w('island-right').config.islandEdge, undefined, 'the others at the top, as ever')
   assert.ok(Scenes.sceneById('island-bottom').play, 'island-bottom opens it')
 })
@@ -150,8 +150,15 @@ test("the island's window where it sits, as island.rs will put it (anchor.js win
   assert.deepEqual(Scenes.windowOf(Scenes.byId('island-bottom-open')), Scenes.islandWindow('center', 'bottom'))
   assert.deepEqual(Scenes.windowOf(Scenes.byId('scene-island-bottom')), Scenes.islandWindow('center', 'bottom'))
   assert.equal(Scenes.edgeOf(Scenes.byId('scene-island-bottom')), 'bottom')
+  // Her capsule's own window inside Windows' taskbar (embed.rs): as big as
+  // the capsule and its margin, centred in the 48 px strip along the foot.
+  const capsule = Scenes.byId('island-capsule')
+  assert.equal(capsule.part, 'capsule')
+  assert.deepEqual(Scenes.windowOf(capsule), [992, 854, 308, 44])
+  assert.equal(Scenes.edgeOf(capsule), 'bottom')
+  assert.equal(Scenes.worldFor(capsule, F).config.islandEdge, 'taskbar')
   assert.equal(Scenes.edgeOf(Scenes.byId('scene-island-right')), 'top')
-  assert.equal(Scenes.worldFor(Scenes.byId('island-bottom-open'), F).config.islandEdge, 'bottom')
+  assert.equal(Scenes.worldFor(Scenes.byId('island-bottom-open'), F).config.islandEdge, 'taskbar')
   // A shot's: its own place, else its scene's; its world says it too.
   assert.deepEqual(Scenes.windowOf(Scenes.byId('island-right-open')), Scenes.islandWindow('right'))
   assert.deepEqual(Scenes.windowOf(Scenes.byId('island-left')), Scenes.islandWindow('left'))

@@ -12,7 +12,10 @@
 // zhoupengjie/Wakuwaku#105): laid over Windows' own taskbar, which stays as
 // it is, the closed island centred in its strip (foot), and it opens upward;
 // what hung under it stands above it. With no taskbar along the foot, SIDE
-// up from the work area's foot, as from the top.
+// up from the work area's foot, as from the top. Or, there, the closed
+// capsule inside the taskbar itself, in a window of its own taking one end
+// of it (embed.rs, islandEmbed): as wide as set while its room (a quarter
+// of the strip) allows, else narrow, else her portrait alone (capsuleWidth).
 //
 // The page lays the island out in its window by the anchor island.rs placed
 // that window at (pet:update's islandAt, islandEdge): the window at the
@@ -97,7 +100,19 @@
     return edge === 'bottom' ? y + h + strip - winHeight : y
   }
 
-  const api = { POSITIONS, EDGES, SIDE, CAPSULE, posOf, edgeOf, anchorOf, edgeAt, foot, grown, under, windowLeft, windowTop }
+  // The closed capsule's width (logical) within the room it has in Windows'
+  // taskbar (island.rs islandRoom, embed.rs room_of: a quarter of the strip;
+  // 0 or less: no limit). As set (set: island.js WIDTHS narrow, normal or
+  // wide) while that fits; else the narrowest of widths; else 0, her
+  // portrait alone in a round capsule (island.js TIGHT_W). Whether even
+  // that fits is embed.rs's call (the capsule hidden else).
+  function capsuleWidth(set, room, widths = {}) {
+    if (!(room > 0) || set <= room) return set
+    const narrow = Math.min(set, ...Object.values(widths).filter(w => w > 0))
+    return narrow <= room ? narrow : 0
+  }
+
+  const api = { POSITIONS, EDGES, SIDE, CAPSULE, posOf, edgeOf, anchorOf, edgeAt, foot, grown, under, windowLeft, windowTop, capsuleWidth }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api

@@ -221,6 +221,29 @@
   transform: none;
 }
 
+/* Over her capsule inside Windows' taskbar (isl-embed, island.js
+   placeAnchor): about the capsule's middle (--isl-cx), kept in the window;
+   above it along the bottom, under it along the top (isl-in-top). */
+.isl-at-bottom.isl-embed .pk[data-home='island'],
+.isl-in-top.isl-embed .pk[data-home='island'] {
+  left: clamp(188px, var(--isl-cx, 50%), calc(100% - 188px));
+  right: auto;
+}
+
+.isl-at-bottom.isl-embed .pk[data-home='island'] {
+  transform: translate(-50%, 12px);
+}
+
+.isl-in-top.isl-embed .pk[data-home='island'] {
+  top: calc(var(--isl-foot, 8px) + 36px + 20px);
+  transform: translate(-50%, -12px);
+}
+
+.isl-at-bottom.isl-embed .pk[data-home='island'].pk-open,
+.isl-in-top.isl-embed .pk[data-home='island'].pk-open {
+  transform: translate(-50%, 0);
+}
+
 /* Dragging from it: it fades, out of the way of what is behind it; over it, a place to let go. */
 .pk.pk-thru {
   opacity: 0.35;
@@ -972,6 +995,15 @@ body.pk-dragging .pk-toasts {
 .isl-at-bottom .pk-toasts[data-home='island'] {
   top: auto;
   bottom: calc(var(--isl-foot, 8px) + 36px + 20px);
+}
+
+/* Over her capsule inside Windows' taskbar: about its middle. */
+.isl-at-bottom.isl-embed .pk-toasts[data-home='island'],
+.isl-in-top.isl-embed .pk-toasts[data-home='island'] {
+  left: clamp(188px, var(--isl-cx, 50%), calc(100% - 188px));
+  right: auto;
+  align-items: center;
+  transform: translateX(-50%);
 }
 
 .pk-toast {

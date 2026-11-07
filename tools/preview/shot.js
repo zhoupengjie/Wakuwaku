@@ -29,7 +29,8 @@
   const frames = pages.map(([role, [wx, wy, ww, wh]]) => {
     const frame = document.createElement('iframe')
     Object.assign(frame.style, { left: `${wx - vx}px`, top: `${wy - vy}px`, width: `${ww}px`, height: `${wh}px` })
-    frame.src = `page.html?role=${role}&scene=${encodeURIComponent(shot.id)}&mode=${mode}`
+    // Her capsule's own page in Windows' taskbar (island.js part=capsule).
+    frame.src = `page.html?role=${role}&scene=${encodeURIComponent(shot.id)}&mode=${mode}${shot.part ? `&part=${shot.part}` : ''}`
     screenEl.append(frame)
     return { frame, at: [wx, wy], frozen: false, errors: [] }
   })

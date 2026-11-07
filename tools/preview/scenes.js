@@ -82,6 +82,11 @@
     const x = pos === 'left' ? 0 : pos === 'right' ? SCREEN[0] - w : WINDOWS.island[0]
     return [x, edge === 'bottom' ? SCREEN[1] - h : y, w, h]
   }
+  // Her capsule's own window inside Windows' taskbar (embed.rs, a shot's
+  // part 'capsule'): as big as the closed capsule (300 x 36) and its 4 px
+  // margin, centred in the strip (not drawn), just left of where the tray
+  // would be (300 px of it).
+  const CAPSULE_WINDOW = [SCREEN[0] - 300 - 308, SCREEN[1] - STRIP + (STRIP - 36) / 2 - 4, 308, 44]
 
   const SECTIONS = [
     ['scenes', '一键场景（试玩页的「场景」）'],
@@ -258,7 +263,7 @@
       title: '岛在底部',
       home: 'island',
       islandEdge: 'bottom',
-      note: '灵动岛放在屏幕底部（设置「外观 → 边」，zhoupengjie/Wakuwaku#105）：胶囊嵌在 Windows 自己的任务栏上（任务栏照常显示，这里不画，胶囊停在它那一条的正中），鼠标停上去往上展开，拉她出来往上拉，设置立在岛上方。右边「环境」里能换顶部、底部，也能换左下、居中、右下。',
+      note: '灵动岛放进 Windows 自己的任务栏里（设置「外观 → 放在」，zhoupengjie/Wakuwaku#105；真机上胶囊是任务栏里她自己的小窗口，贴着托盘左边或任务栏左端；这里任务栏不画，岛的页面按盖在任务栏上的样子画：胶囊停在那一条的正中），鼠标停上去往上展开，拉她出来往上拉，设置立在岛上方。右边「环境」里能换屏幕顶部、任务栏里，也能换左、居中、右。',
       world: F => ({ ...desktop(F), sessions: workingAndDone(F) }),
       play: async p => {
         await p.wait(200)
@@ -668,6 +673,10 @@
     // open, grown upward from there.
     { id: 'island-bottom', section: 'island', title: '底部 · 收起 · 干活中，嵌在 Windows 任务栏的那一条上', page: 'island', home: 'island', islandEdge: 'bottom', view: [480, above(60), 640, 60], world: F => ({ ...inMood('working')(F), home: 'island' }) },
     { id: 'island-bottom-open', section: 'island', title: '底部 · 展开，往上长', page: 'island', home: 'island', islandEdge: 'bottom', view: [520, above(400), 560, 400], world: F => ({ ...busy(F), home: 'island' }), steps: openIsland },
+    // Her capsule's own window inside Windows' taskbar (embed.rs; the page
+    // as the capsule alone, part=capsule): the window as big as the capsule
+    // and its margin, in the strip (not drawn).
+    { id: 'island-capsule', section: 'island', title: '任务栏里 · 嵌进去：胶囊自己的小窗口，贴着托盘左边（任务栏不画）· 干活中', page: 'island', part: 'capsule', home: 'island', islandEdge: 'bottom', view: [SCREEN[0] - 940, above(60), 640, 60], world: F => ({ ...inMood('working')(F), home: 'island' }) },
     // Five pinned at the capsule's end (the most there may be), the monitor
     // among them, a session at work: in each home.
     ...[
@@ -1435,13 +1444,16 @@
   const posOf = s => s.islandPos || (s.scene && sceneById(s.scene)?.islandPos) || 'center'
   // And the edge it is along: its own, else its scene's, else the top (#105).
   const edgeOf = s => s.islandEdge || (s.scene && sceneById(s.scene)?.islandEdge) || 'top'
-  // Her home's window in a shot: the taskbar's, or the island's where it sits.
-  const homeWindowOf = s => (homeOf(s) === 'island' ? islandWindow(posOf(s), edgeOf(s)) : s.split ? WINDOWS.top : WINDOWS.taskbar)
+  // Her home's window in a shot: the taskbar's, or the island's where it
+  // sits; or her capsule's own in Windows' taskbar (part 'capsule').
+  const homeWindowOf = s => (s.part === 'capsule' ? CAPSULE_WINDOW : homeOf(s) === 'island' ? islandWindow(posOf(s), edgeOf(s)) : s.split ? WINDOWS.top : WINDOWS.taskbar)
   // Where a shot's page lies on the screen (a screen shot: the desktop's; her home's frame is put by shot.js).
   const windowOf = s => (s.page === 'bar' && s.split ? WINDOWS.dock : s.page === 'desk' || s.page === 'bar' || s.page === 'screen' ? WINDOWS[s.page === 'screen' ? 'desk' : s.page] : homeWindowOf(s))
 
-  // Where the island sits, and the edge it is along, into a world's settings (as the settings keep them).
-  const withPos = (w, pos, edge) => (pos || edge ? { ...w, config: { ...(w.config || {}), ...(pos ? { islandPos: pos } : {}), ...(edge ? { islandEdge: edge } : {}) } } : w)
+  // Where the island sits, and the edge it is along, into a world's settings
+  // (as the settings keep them: along the bottom is "taskbar", in Windows'
+  // taskbar, which the preview takes to lie along the bottom).
+  const withPos = (w, pos, edge) => (pos || edge ? { ...w, config: { ...(w.config || {}), ...(pos ? { islandPos: pos } : {}), ...(edge ? { islandEdge: edge === 'bottom' ? 'taskbar' : edge } : {}) } } : w)
 
   // A scene's world, whole: its home, where the island sits and its mode with it.
   function sceneWorld(scene, F) {

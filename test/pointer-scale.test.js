@@ -17,6 +17,8 @@ test('a DPR-only resize resends unchanged settings hit regions, once per scale',
     stripThick: 48,
     editLayout: null,
     isOn: () => true,
+    // Not her capsule's own window in the taskbar (island.js isCapsuleWin), which sends none.
+    isCapsuleWin: () => false,
     fitPage: () => {},
     document: { documentElement: { style: { setProperty: () => {} } } },
     window: {

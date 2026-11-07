@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Her page, the island's, her bars' (and the dock's) and the desktop widgets': events from the Rust side",
-  "windows": ["pet", "island", "bar-*", "dock-*", "barpop", "desk-*"],
+  "description": "Her page, the island's, her capsule's in Windows' taskbar (embed.rs), her bars' (and the dock's) and the desktop widgets': events from the Rust side",
+  "windows": ["pet", "island", "capsule", "capsule-*", "bar-*", "dock-*", "barpop", "desk-*"],
   "permissions": ["core:default"]
 }

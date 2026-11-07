@@ -676,9 +676,9 @@ body {
 
 /* Her capsule's own window inside Windows' taskbar (embed.rs; island.js
    isCapsuleWin, part=capsule): the closed island alone, centred in the
-   window (the capsule and its margin each side, embed.rs MARGIN: the ring's
-   room round it), on the taskbar's own ground, never opening; the window is
-   sized by embed.rs. */
+   window (the capsule and its margin each side, embed.rs MARGIN 8: the
+   ring's room, and the island's own inset, so the two line up), on the
+   taskbar's own ground, never opening; the window is sized by embed.rs. */
 .home-island.isl-capsule-win #island-bar {
   align-items: center;
   justify-content: center;
@@ -748,8 +748,28 @@ body {
 .home-island.isl-embed.isl-ghost #island-row {
   opacity: 0;
   transition:
-    left 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
-    opacity 0.2s ease 0.45s;
+    left 0.42s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.16s ease 0.42s;
+}
+
+/* Grown out of her capsule in the taskbar, which stays drawn under it: the
+   spring that overshoots elsewhere would shrink the island smaller than the
+   capsule for a moment as it closes, the capsule showing round it (the
+   user, 2026-11-07); so it eases without overshooting, and its left (the
+   row's) goes on the same curve, then the row fades out over the capsule. */
+.home-island.isl-embed #island {
+  transition:
+    width 0.42s cubic-bezier(0.25, 1, 0.5, 1),
+    height 0.42s cubic-bezier(0.25, 1, 0.5, 1),
+    border-radius 0.3s ease,
+    bottom 0.3s ease,
+    top 0.3s ease;
+}
+
+.home-island.isl-embed #island-row {
+  transition:
+    left 0.42s cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 0.16s ease;
 }
 
 /* On a Mac it hangs from the screen's top edge over the menu bar, as tall as

@@ -55,8 +55,11 @@ pub type Span = (i32, i32);
 pub type Rect = (i32, i32, i32, i32);
 
 // The window's margin round the capsule (logical px): the flow light's ring
-// runs 3 px outside it (style.css #flow).
-pub const MARGIN: f64 = 4.0;
+// runs 3 px outside it (style.css #flow), and the island's own window keeps
+// its island 8 px off its edge (island.js TOP, midLeft): laid at the
+// strip's start, the capsule and the island over it then line up exactly
+// (a capsule 4 px in showed 4 px past the open island's left, 2026-11-07).
+pub const MARGIN: f64 = 8.0;
 // The closed capsule before its page has said its size (island.js WIDTHS normal, 36 high).
 pub const CAPSULE: (f64, f64) = (300.0, 36.0);
 

@@ -254,10 +254,11 @@
   const byLabel = label => (label === 'island' ? frames.island : label.startsWith('desk') ? frames.desk : null)
 
   // Her home's window: the island's at the top where it sits (islandPos: a
-  // top corner, or the middle), as island.rs puts it (scenes.js
-  // islandWindow, zhoupengjie/Wakuwaku#59); the taskbar's along its edge.
+  // top corner, or the middle), or along the foot (islandEdge taskbar, #105),
+  // as island.rs puts it (scenes.js islandWindow, zhoupengjie/Wakuwaku#59);
+  // the taskbar's along its edge.
   function homeRect() {
-    if (world.home === 'island') return Scenes.islandWindow(Fake.config().islandPos)
+    if (world.home === 'island') return Scenes.islandWindow(Fake.config().islandPos, Fake.config().islandEdge === 'taskbar' ? 'bottom' : 'top')
     return { top: [0, 0, W, STRIP + ROOM], left: [0, 0, STRIP + SIDE_ROOM, H], right: [W - STRIP - SIDE_ROOM, 0, STRIP + SIDE_ROOM, H] }[world.edge] || [0, H - STRIP - ROOM, W, STRIP + ROOM]
   }
 
@@ -531,7 +532,7 @@
       // The desktop's layout is the desktop's (desk.rs keeps it, its pages hear it).
       if (Array.isArray(p.deskLayout)) world.deskLayout = p.deskLayout
       delete p.deskLayout
-      const moves = 'islandPos' in p && p.islandPos !== Fake.config().islandPos
+      const moves = ('islandPos' in p && p.islandPos !== Fake.config().islandPos) || ('islandEdge' in p && p.islandEdge !== Fake.config().islandEdge)
       Object.assign(world.config, p)
       setTimeout(() => {
         // Where the island sits: its window there (island.rs side_changed).
@@ -931,6 +932,11 @@
       ['center', '居中'],
       ['right', '右上'],
     ],
+    // The edge it is along (islandEdge, zhoupengjie/Wakuwaku#105).
+    islandEdge: [
+      ['top', '顶部'],
+      ['taskbar', '叠在任务栏上'],
+    ],
     endCue: [
       ['open', '展开胶囊'],
       ['ring', '流光'],
@@ -967,6 +973,7 @@
     material: () => world.material,
     edge: () => world.edge,
     islandPos: () => Fake.config().islandPos || 'center',
+    islandEdge: () => Fake.config().islandEdge || 'top',
     endCue: () => world.config.endCue || 'ring',
     hold: holdChoice,
     addonPick: () => world.addonPick || '',
@@ -1002,6 +1009,7 @@
     panel.querySelector('[data-row="material"]').hidden = world.home !== 'taskbar'
     panel.querySelector('[data-row="edge"]').hidden = world.home !== 'taskbar'
     panel.querySelector('[data-row="islandPos"]').hidden = world.home !== 'island'
+    panel.querySelector('[data-row="islandEdge"]').hidden = world.home !== 'island'
     // Custom's seconds: the box, unless being typed in.
     const custom = holdChoice() === 'custom'
     panel.querySelector('[data-row="holdSecs"]').hidden = !custom
@@ -1038,8 +1046,8 @@
       } else if (seg === 'edge') setEdge(v)
       else if (seg === 'endCue') setConfig({ endCue: v })
       else if (seg === 'addonPick') world.addonPick = v || undefined
-      else if (seg === 'islandPos') {
-        world.config.islandPos = v
+      else if (seg === 'islandPos' || seg === 'islandEdge') {
+        world.config[seg] = v
         moveHome()
         setConfig({})
       } else if (seg === 'hold') {

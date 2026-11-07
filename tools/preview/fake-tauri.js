@@ -165,6 +165,7 @@
     out: false,
     islandWidth: 'normal',
     islandPos: 'center',
+    islandEdge: 'top',
     islandHideUnder: true,
     taskbarMaterial: 'mica',
     taskbarDisplays: 'main',
@@ -391,6 +392,16 @@
       // (zhoupengjie/Wakuwaku#59). The playground and the gallery put the
       // island's page there (scenes.js islandWindow).
       ...(world.home !== 'taskbar' ? { islandAt: ISLAND_POS.includes(config().islandPos) ? config().islandPos : 'center' } : {}),
+      // And the edge of the screen it is along (islandEdge,
+      // zhoupengjie/Wakuwaku#105): along the foot, over a taskbar of Windows'
+      // as thick as Windows 11's (48 px, physical), not drawn here: the
+      // island centred where its strip would be.
+      // In Windows' taskbar (the setting's "taskbar"): taken as one along
+      // the bottom here, as thick as Windows 11's (48 px, physical).
+      ...(world.home !== 'taskbar' ? { islandEdge: config().islandEdge === 'taskbar' ? 'bottom' : 'top', islandStrip: config().islandEdge === 'taskbar' ? Math.round(48 * (window.devicePixelRatio || 1)) : 0 } : {}),
+      // The island inside Windows' taskbar (embed.rs): never here, where
+      // there is no taskbar to go into; the page lays the island as over one.
+      ...(world.home !== 'taskbar' ? { islandEmbed: false, islandMx: null, islandRoom: 0 } : {}),
       widgets: widgetsNow(),
       unconnected: !world.connected,
       ...(world.connected ? {} : { tools: ['claude', 'codex'] }),

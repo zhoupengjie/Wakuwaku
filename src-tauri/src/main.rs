@@ -62,6 +62,7 @@ mod events_dsh;
 #[cfg(test)]
 mod events_tests;
 mod dsh_bridge;
+mod embed;
 mod fetch;
 mod focus;
 #[cfg(windows)]
@@ -397,6 +398,21 @@ impl Shared {
             // The side of the top of the screen her island's window is at
             // (islandPos, zhoupengjie/Wakuwaku#59): the page lays it out there.
             now["islandAt"] = json!(island::side(self).name());
+            // The edge of the screen it is along (islandEdge,
+            // zhoupengjie/Wakuwaku#105): the top, or the bottom, over
+            // Windows' own taskbar shown there, whose thickness (physical
+            // px; 0 with none) the page centres the closed island in.
+            now["islandEdge"] = json!(island::edge_name(self));
+            now["islandStrip"] = json!(island::strip_under(self));
+            // The island inside Windows' taskbar (embed.rs): the page lays
+            // the island about islandMx (physical px from the window's left,
+            // where its capsule lies in the strip), and keeps the capsule's
+            // width within the room it has there (islandRoom, physical px; 0
+            // none; anchor.js capsuleWidth).
+            let (embedded, mx, room) = island::embedding(self);
+            now["islandEmbed"] = json!(embedded);
+            now["islandMx"] = json!(mx);
+            now["islandRoom"] = json!(room);
         }
         // The widgets that have something to say: those on take their turns
         // in the island while nothing needs you; any may be on the taskbar.
@@ -1027,6 +1043,16 @@ async fn island_holding(app: AppHandle, is_holding: bool) {
 #[tauri::command]
 async fn island_editing(app: AppHandle, on: bool, rects: Vec<[f64; 4]>, page_sf: Option<f64>) {
     island::set_editing(&shared(&app), on, rects, page_sf);
+}
+
+// The island's page has something open in it (hovered open, a prompt, the
+// settings, opened by itself), or nothing now: inside Windows' taskbar its
+// window goes back in once nothing is (island.rs set_opened).
+#[tauri::command]
+async fn island_opened(app: AppHandle, window: WebviewWindow, on: bool) {
+    if window.label() == "island" {
+        island::set_opened(&shared(&app), on);
+    }
 }
 
 // The handover with Windows' taskbar: the page's answers (covered, bare, done).
@@ -1700,6 +1726,7 @@ fn main() {
             pet_walk_stop,
             island_holding,
             island_editing,
+            island_opened,
             island_seat,
             island_stow,
             island_raise,
@@ -2056,6 +2083,10 @@ fn main() {
                 }
             });
 
+            // Her island inside Windows' taskbar, looked after every second
+            // while it is set to be there (embed.rs).
+            embed::start(&sh);
+
             // Another app full screen, looked at on this thread alone
             // (Shared::look_fullscreen); with it, a window maximized on her
             // island's display, and one under it.
@@ -2177,6 +2208,8 @@ fn main() {
             if let tauri::RunEvent::Exit = event {
                 let sh = shared(app);
                 sh.log("quitting: the bar given back, the mail stopped");
+                // Her island out of Explorer's taskbar before it goes with her.
+                embed::stop();
                 island::release_bar(&sh);
                 mail::stop_all(&sh);
                 sh.log("quitting: done");

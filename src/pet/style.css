@@ -644,6 +644,81 @@ body {
   padding-right: 8px;
 }
 
+/* Along the foot of the screen (islandEdge taskbar, Windows' taskbar along the bottom; island.js placeAnchor,
+   anchor.js; zhoupengjie/Wakuwaku#105): the island at its window's foot,
+   --isl-foot up from it (centred in the strip of Windows' own taskbar under
+   it; 8 px with none, as from the top), and it opens upward from there: the
+   window, as tall as the taskbar home's strip and room, never grows. The
+   settings stand --isl-set-foot up from the foot, off the strip as off the
+   taskbar's (island.js settingsFoot), and keep their size within the
+   window (settingsMax). */
+.home-island.isl-at-bottom #island-bar {
+  justify-content: flex-end;
+  padding-top: 0;
+  padding-bottom: var(--isl-foot, 8px);
+}
+
+.home-island.isl-at-bottom #island-row {
+  align-items: flex-end;
+}
+
+.home-island.isl-at-bottom #island {
+  transition:
+    width 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    height 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    border-radius 0.4s ease,
+    bottom 0.3s ease;
+}
+
+.home-island.isl-at-bottom #island[data-view='settings'] {
+  bottom: max(0px, calc(var(--isl-set-foot, 8px) - var(--isl-foot, 8px)));
+}
+
+/* Over Windows' taskbar along the top of the screen (isl-in-top, island.js
+   placeAnchor): the closed island centred in its strip, --isl-foot down
+   from the window's top (the screen's); the settings stand --isl-set-foot
+   down, off the strip. */
+.home-island.isl-in-top #island-bar {
+  padding-top: var(--isl-foot, 8px);
+}
+
+.home-island.isl-in-top #island {
+  transition:
+    width 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    height 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
+    border-radius 0.4s ease,
+    top 0.3s ease;
+}
+
+.home-island.isl-in-top #island[data-view='settings'] {
+  top: max(0px, calc(var(--isl-set-foot, 8px) - var(--isl-foot, 8px)));
+}
+
+/* The room too narrow for words (island.js isTight): her portrait alone,
+   in a round capsule as wide as it is tall. */
+#island-compact.tight {
+  padding: 0;
+}
+
+/* The island inside Windows' taskbar (isl-embed, island.js isEmbedded):
+   its window a child of the taskbar's while it is closed, clipped to the
+   strip, so the closed island is the capsule there; laid about the
+   capsule's middle (--isl-mx: its left edge for its width, set as the width
+   is and moved on the width's spring, as the taskbar's isl-mid: placeMid),
+   its foot where the capsule's is. */
+.home-island.isl-embed #island-row {
+  position: absolute;
+  left: var(--isl-mx, 0px);
+  bottom: var(--isl-foot, 8px);
+  transition: left 0.56s cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+
+/* In a taskbar along the top: from the top instead. */
+.home-island.isl-embed.isl-in-top #island-row {
+  bottom: auto;
+  top: var(--isl-foot, 8px);
+}
+
 /* On a Mac it hangs from the screen's top edge over the menu bar, as tall as
    the band there (island.js screenTop): black on the black notch, no ring. */
 .island.at-top #island-bar {

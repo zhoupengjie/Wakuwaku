@@ -13,7 +13,15 @@ fn main() {
         println!("cargo:rustc-env=WAKUWAKU_SOURCE_TREE={tree}");
     }
     words();
-    tauri_build::build()
+    tauri_build::build();
+    // The examples that make Tauri windows (examples/embed_spike.rs) linked
+    // with her exe's resource too: tauri-build gives it to the bins alone,
+    // and without its manifest (Common Controls 6) Windows will not start
+    // one (0xC0000139, an entry point of comctl32's not found).
+    let resource = PathBuf::from(std::env::var("OUT_DIR").expect("cargo sets OUT_DIR")).join("resource.lib");
+    if resource.exists() {
+        println!("cargo:rustc-link-arg-examples={}", resource.display());
+    }
 }
 
 // The words the program says itself are written where the pages' are, in

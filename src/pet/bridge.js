@@ -119,6 +119,11 @@
     // Something opened up from her taskbar's strip: its window over any
     // other that has come over it (island.rs raise, zhoupengjie/Wakuwaku#55).
     raise: () => send('island_raise'),
+    // Something open in the island (hovered open, a prompt, the settings,
+    // opened by itself), or nothing now, shrunk back: inside Windows'
+    // taskbar its window is out of the taskbar while something is
+    // (island.rs set_opened, embed.rs).
+    opened: on => send('island_opened', { on: on === true }),
     // The settings in the island (settings.js): open them here or from
     // anywhere else (the tray, her double-click), what they show, what they change.
     onSettings: on('island:settings'),

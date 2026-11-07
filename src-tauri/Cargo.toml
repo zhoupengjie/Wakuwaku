@@ -85,6 +85,10 @@ winreg = "0.56.0"
 # already in the tree, under Tauri.
 webview2-com = "0.39"
 windows-core = "0.62"
+# UI Automation (embed.rs): where Windows' own taskbar's buttons lie, for
+# her capsule to sit in a free stretch of it; already in the tree, under
+# Tauri, with COM (Win32_System_Com) on.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Accessibility"] }
 
 [target."cfg(target_os = \"macos\")".dependencies]
 # The island over the menu bar, round the notch (notch.rs): the window's level

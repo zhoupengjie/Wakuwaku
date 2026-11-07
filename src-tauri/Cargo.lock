@@ -4278,6 +4278,7 @@ dependencies = [
  "tokio",
  "ureq",
  "webview2-com",
+ "windows",
  "windows-core",
  "winreg",
 ]

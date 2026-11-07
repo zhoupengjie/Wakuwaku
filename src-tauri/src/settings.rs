@@ -552,6 +552,16 @@ fn is_island_pos(v: &Value) -> bool {
     matches!(v.as_str(), Some("left" | "center" | "right"))
 }
 
+// Where her island is (zhoupengjie/Wakuwaku#105): at the top of the screen
+// (the default), or in Windows' own taskbar, along whichever edge that is,
+// left as it is (its capsule inside it, embed.rs; "bottom" until 2026-11-07,
+// data.rs adopt_island_edge). Placing the window by it is island.rs's (fit)
+// too, and the page lays the island out along the edge of the screen it is
+// told (anchor.js, pet:update islandEdge).
+fn is_island_edge(v: &Value) -> bool {
+    matches!(v.as_str(), Some("top" | "taskbar"))
+}
+
 const SHORTCUT_KEYS: [&str; 3] = ["shortcutApprove", "shortcutDeny", "shortcutIsland"];
 
 fn is_shortcut_spec(sh: &Shared, key: &str, s: &str) -> bool {
@@ -594,6 +604,10 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "islandWidth" => matches!(v.as_str(), Some("narrow" | "normal" | "wide")),
         // Where her island sits at the top of the screen (anchor.js, #59).
         "islandPos" => is_island_pos(v),
+        // Where it is: at the top of the screen, or in Windows' taskbar (#105).
+        "islandEdge" => is_island_edge(v),
+        // In the taskbar, the capsule inside it, taking its end (embed.rs), or laid over it.
+        "islandEmbed" => is_bool,
         // At the top of the screen, up out of the way of a window under it (island.rs look_under).
         "islandHideUnder" => is_bool,
         "taskbarMaterial" => matches!(v.as_str(), Some("mica" | "black" | "clear")),
@@ -726,7 +740,7 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
     let net_way = rest.contains_key("netProxy");
     let mail_way = rest.contains_key("mailProxy") || net_way;
     let crash_auto = rest.get("crashReports").and_then(Value::as_str) == Some("auto");
-    let island_pos = rest.contains_key("islandPos");
+    let island_pos = rest.contains_key("islandPos") || rest.contains_key("islandEdge") || rest.contains_key("islandEmbed");
     let home_display = rest.contains_key("homeDisplay");
 
     if !rest.is_empty() {
@@ -740,7 +754,9 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
     if home_display {
         island::home_display_changed(sh);
     }
-    // The island at another side of the top of the screen: its window there now.
+    // The island at another side of the top of the screen, or along the
+    // bottom of it instead (islandEdge, #105), or its capsule into Windows'
+    // taskbar or out of it (islandEmbed): its window there now.
     if island_pos && !home_display {
         island::side_changed(sh);
     }
@@ -1211,6 +1227,18 @@ mod tests {
         }
         for bad in [json!("centre"), json!("top-left"), json!("bottom-left"), json!("Left"), json!(""), json!(0), json!(null), json!(true)] {
             assert!(!super::is_island_pos(&bad), "{bad}");
+        }
+    }
+
+    // The edge it is along: the top or the bottom, no other (#105).
+    #[test]
+    fn island_edges() {
+        for ok in ["top", "taskbar"] {
+            assert!(super::is_island_edge(&json!(ok)), "{ok}");
+        }
+        // "bottom" was the word until 2026-11-07: taken as the taskbar on reading the file (data.rs).
+        for bad in [json!("left"), json!("right"), json!("bottom"), json!("Taskbar"), json!(""), json!(0), json!(null), json!(true)] {
+            assert!(!super::is_island_edge(&bad), "{bad}");
         }
     }
 }

@@ -115,6 +115,39 @@
   // centre, where it is.
   let islandAt = 'center'
   const anchor = () => Anchor.anchorOf({ home: home(), at: islandAt, notch: !!screenTop?.notch })
+  // And the edge of the screen it placed the window along (pet:update
+  // islandEdge; zhoupengjie/Wakuwaku#105): the top, or the bottom, laid over
+  // Windows' own taskbar, whose thickness it says too (islandStrip, physical
+  // px; 0 with none there). Along the foot the island lies at the window's
+  // foot (isl-at-bottom, --isl-foot) and opens upward; the window, as tall
+  // as the taskbar home's (BOTTOM), never grows.
+  let islandEdge = 'top'
+  let islandStrip = 0
+  const atBottom = () => Anchor.edgeAt({ home: home(), edge: islandEdge, notch: !!screenTop?.notch }) === 'bottom'
+  // The strip under it, and how far up from the window's foot the closed
+  // island lies, in the page's px (anchor.js foot).
+  const stripUnder = () => (islandStrip > 0 ? islandStrip / (devicePixelRatio || 1) : 0)
+  const footAt = () => Anchor.foot(stripUnder())
+  // Where the settings' foot stands above it: off the strip as off the
+  // taskbar's (TASKBAR_GAP), or the island's own foot with no strip.
+  const settingsFoot = () => Math.max(stripUnder() + TASKBAR_GAP, footAt())
+  // The island inside Windows' taskbar (pet:update islandEmbed; embed.rs,
+  // zhoupengjie/Wakuwaku#105): its window a child of the taskbar's while it
+  // is closed, clipped to the strip, so the closed island is the capsule in
+  // the taskbar; laid about islandMx (the capsule's middle, physical px
+  // from the window's left) as the taskbar's middle run is (isl-embed,
+  // placeMid). islandRoom is the room the capsule has in the taskbar
+  // (physical px; 0 none), its width kept within it (slotWidth).
+  let islandEmbed = false
+  let islandMx = null
+  let islandRoom = 0
+  // Windows' taskbar along the top of the screen, the island over it there
+  // (the window's top on the screen's): the closed island centred in its
+  // strip (--isl-foot down from the top, isl-in-top), as it is centred in
+  // one along the bottom.
+  const inTopStrip = () => isOn() && home() === 'island' && !screenTop && !atBottom() && islandStrip > 0
+  const isEmbedded = () => isOn() && islandEmbed && (atBottom() || inTopStrip())
+  const roomPx = () => (islandRoom > 0 ? islandRoom / (devicePixelRatio || 1) : 0)
   // Dropped open from the notch by her tray icon (setPeek), for PEEK_MS at
   // most if the pointer never comes.
   let peek = false
@@ -138,7 +171,12 @@
       true,
     )
   }
-  const slotWidth = () => (screenTop?.notch ? screenTop.notch + 2 * EAR : WIDTHS[config.islandWidth] || WIDTHS.normal)
+  // Within the room the capsule has in Windows' taskbar (roomPx; 0: no
+  // limit): as set, else narrow, else 0, her portrait alone (anchor.js
+  // capsuleWidth; isTight, TIGHT_W: a round capsule).
+  const slotWidth = () => (screenTop?.notch ? screenTop.notch + 2 * EAR : Anchor.capsuleWidth(WIDTHS[config.islandWidth] || WIDTHS.normal, roomPx(), WIDTHS))
+  const TIGHT_W = 36
+  const isTight = () => !screenTop?.notch && slotWidth() === 0
   // The window without extra room (main's ISLAND), and the island's distance
   // from the top of it. As wide as a pull needs (PULL_ROOM), so the window
   // only ever grows down: a window whose top-left corner moves shows its old
@@ -146,6 +184,9 @@
   // sideways as she was pulled out or taken back.
   const BASE = { width: 760, height: 132 }
   const TOP = 8
+  // Along the foot of the screen (island.rs ISLAND_BOTTOM): as tall as the
+  // taskbar's strip and its room, fixed, what opens growing up into it.
+  const BOTTOM = { width: 760, height: 48 + 640 }
   // Her two sizes: the round portrait in the compact island, and her whole
   // self (one sheet cell, halved) standing in the open one.
   const HEAD = 24
@@ -641,10 +682,14 @@
     const isBare = !words.textContent && !value.textContent && !more
     // picker.js: the members pinned at its end (five at most, capsule.js): the
     // monitor's readings as they were, another its glyph and value.
-    const pinned = pinsNow.length ? el('span', 'pinned') : null
+    // The room too narrow for words (isTight: a short stretch of Windows'
+    // taskbar): her portrait alone, nothing pinned.
+    const tight = isTight()
+    const pinned = pinsNow.length && !tight ? el('span', 'pinned') : null
     if (pinned) pinned.innerHTML = pinsNow.map(pinHTML).join('')
-    compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), ...(isBare && pinned ? [] : [turning]), ...(pinned ? [pinned] : []))
-    compact.classList.toggle('bare', isBare)
+    compact.replaceChildren(...(isHome() ? [] : [stillHer(24)]), ...(tight || (isBare && pinned) ? [] : [turning]), ...(pinned ? [pinned] : []))
+    compact.classList.toggle('bare', isBare || tight)
+    compact.classList.toggle('tight', tight)
     // As many as there is room for (fitPins), what it says in the middle as wide as set.
     if (pinned && !screenTop?.notch) {
       if (isBare) compact.style.width = ''
@@ -660,9 +705,18 @@
     body.classList.toggle('tucked', tucked)
     compact.style.width = tucked
       ? `${screenTop.notch}px`
-      : isBare && !screenTop?.notch
-        ? ''
-        : `${slotWidth() + (pinned?.offsetWidth ? pinned.offsetWidth + 12 : 0)}px`
+      : tight
+        ? `${TIGHT_W}px`
+        : isBare && !screenTop?.notch
+          ? ''
+          : `${slotWidth() + (pinned?.offsetWidth ? pinned.offsetWidth + 12 : 0)}px`
+    // Inside Windows' taskbar (roomPx, embed.rs): the pinned members go
+    // first when they and the words together are more than the room; the
+    // words narrow after them (slotWidth), then her portrait alone (tight).
+    if (pinned && !tucked && roomPx() > 0 && parseFloat(compact.style.width) > roomPx()) {
+      pinned.remove()
+      compact.style.width = isBare ? '' : `${slotWidth()}px`
+    }
     compactWidth = compact.style.width ? parseFloat(compact.style.width) : Math.max(MIN_W, compact.offsetWidth)
     if (key !== shownKey) {
       if (shownKey && view === 'compact') turnedAt = Date.now()
@@ -1069,7 +1123,7 @@
 
   // The window with no extra room, by home: the taskbar is as wide as the
   // screen, with its room above.
-  const baseRoom = () => (home() === 'taskbar' ? { width: innerWidth, height: stripH() + TASKBAR_ROOM } : BASE)
+  const baseRoom = () => (home() === 'taskbar' ? { width: innerWidth, height: stripH() + TASKBAR_ROOM } : atBottom() ? BOTTOM : BASE)
 
   function roomFor(want) {
     // The taskbar: what grows up from it, or the settings standing above it,
@@ -1082,6 +1136,9 @@
       return { width: innerWidth, height }
     }
     const width = want.width + 48
+    // Along the foot of the screen the window's height is its room, never
+    // grown (openMaxH, settingsMax keep within it); only its width may.
+    if (atBottom()) return width <= BOTTOM.width ? null : { width, height: BOTTOM.height }
     const height = TOP + want.height + 24
     return width <= BASE.width && height <= BASE.height ? null : { width, height }
   }
@@ -1093,9 +1150,10 @@
   // room), and within its screen should that be shorter (1080 px at 175%
   // are 617 for the 688 of strip and room); beside a side bar, from where
   // it stands to the window's far end, as the settings are. Its lines
-  // scroll inside it past that (fillExpanded).
+  // scroll inside it past that (fillExpanded). Along the foot of the screen
+  // (the island home, #105) the same: within the window, which never grows.
   function openMaxH() {
-    if (home() !== 'taskbar') return Infinity
+    if (home() !== 'taskbar') return atBottom() ? innerHeight - footAt() - TASKBAR_SHADE : Infinity
     if (isSide()) {
       const at = parseFloat(document.documentElement.style.getPropertyValue('--isl-y')) || 0
       return innerHeight - at - TASKBAR_GAP - TASKBAR_SHADE
@@ -1109,7 +1167,20 @@
   function openedUp(part, on) {
     const was = openUp.island || openUp.pops
     openUp[part] = on
-    if (on && !was && isOn() && home() === 'taskbar') window.pet.raise()
+    const open = openUp.island || openUp.pops
+    // On the taskbar, and along the foot of the screen over Windows' own (#105).
+    if (on && !was && isOn() && (home() === 'taskbar' || atBottom())) window.pet.raise()
+    // Inside Windows' taskbar (embed.rs): the window is out of the taskbar
+    // while something is open in it (or the pointer is on it): told as
+    // something opens, and, nothing open any more, once the island has
+    // shrunk back (the spring), so it goes back in with nothing moving in it.
+    if (open !== was) tellOpened(open)
+  }
+  let openedTimer = 0
+  function tellOpened(on) {
+    clearTimeout(openedTimer)
+    if (on) return window.pet.opened(true)
+    openedTimer = setTimeout(() => window.pet.opened(false), SPRING_MS + 100)
   }
 
   // Returns true when the window has to grow first.
@@ -1249,10 +1320,14 @@
 
   // Where the island will lie at its new size, from where it lies: at the
   // top of the screen from its top, about its middle (at a corner, from its
-  // side there: anchor.js); on the taskbar from the strip's edge it grows
-  // from, at her end's side (isl-right, isl-low).
+  // side there: anchor.js; along the foot of the screen from its foot); on
+  // the taskbar from the strip's edge it grows from, at her end's side
+  // (isl-right, isl-low).
   function rectAt(r, width, height) {
-    if (home() !== 'taskbar') return Anchor.grown(r, width, height, anchor())
+    // About her capsule's middle in Windows' taskbar (isEmbedded, placeMid):
+    // grown upward from a taskbar along the bottom, downward from one along the top.
+    if (isEmbedded() && slotMiddle != null) return { x: midLeft(width), y: atBottom() ? r.top + r.height - height : r.top, width, height }
+    if (home() !== 'taskbar') return Anchor.grown(r, width, height, anchor(), atBottom() ? 'bottom' : 'top')
     const fromRight = tbEdge() === 'right' || (!isSide() && body.classList.contains('isl-right'))
     const fromFoot = tbEdge() === 'bottom' || (isSide() && body.classList.contains('isl-low'))
     const fromMid = !isSide() && slotMiddle != null && body.classList.contains('isl-mid')
@@ -1380,7 +1455,8 @@
   let stowSent = ''
 
   function stowWanted() {
-    if (home() !== 'island' || screenTop || config.islandHideUnder === false || !underTop || calledDown) return false
+    // Never over Windows' taskbar (#105): nothing's top lies under it there.
+    if (home() !== 'island' || screenTop || atBottom() || inTopStrip() || config.islandHideUnder === false || !underTop || calledDown) return false
     if (view !== 'compact' || isHover || now.mood === 'waiting') return false
     // Down for a flow light's ring, as it came down when it opened by itself.
     return !pull && !isReaching && !isAbsorbing && !isComingHome && !isRinging()
@@ -1416,7 +1492,7 @@
   function setSize({ width, height }) {
     island.style.width = `${width}px`
     island.style.height = `${height}px`
-    if (home() === 'taskbar' && !isSide()) placeMid(width)
+    if ((home() === 'taskbar' && !isSide()) || isEmbedded()) placeMid(width)
     // The taskbar's left end is square, and what grows up from it is rounded
     // above (on its Mica, her capsule and all it grows into round).
     // What grows from her end is flat where it meets the strip: the strip's
@@ -5779,8 +5855,9 @@
   function stretch(x, y) {
     const r = island.getBoundingClientRect()
     // From the top of the screen (her island, a top bar) she can only come
-    // down, from a bottom bar only up, from a side bar only into the screen.
-    const edge = home() === 'taskbar' ? tbEdge() : 'top'
+    // down, from a bottom bar (or her island along the foot, #105) only up,
+    // from a side bar only into the screen.
+    const edge = home() === 'taskbar' ? tbEdge() : atBottom() ? 'bottom' : 'top'
     const cx = edge === 'left' ? Math.max(x, r.right - 10) : edge === 'right' ? Math.min(x, r.left + 10) : x
     const cy = edge === 'bottom' ? Math.min(y + 30, r.top + 10) : edge === 'top' ? Math.max(y + 30, r.bottom - 10) : y
     const [ax, ay] = edgeNear(r, cx, cy)
@@ -5965,11 +6042,35 @@
 
   // At a top corner (anchor.js): the island at that side of its window
   // (style.css isl-at-left, isl-at-right), growing toward the screen's
-  // middle; the picker and its toasts under it there too (picker.css).
+  // middle; the picker and its toasts under it there too (picker.css). Along
+  // the foot of the screen (isl-at-bottom, zhoupengjie/Wakuwaku#105): at the
+  // window's foot, --isl-foot up from it (centred in Windows' taskbar's
+  // strip under it, --isl-strip thick; 8 px with none), growing upward; the
+  // settings standing --isl-set-foot up from the foot (off the strip), the
+  // picker, its toasts and the capsule's panel above the island.
   function placeAnchor() {
     const at = isOn() ? anchor() : 'center'
     body.classList.toggle('isl-at-left', at === 'left')
     body.classList.toggle('isl-at-right', at === 'right')
+    const low = isOn() && atBottom()
+    body.classList.toggle('isl-at-bottom', low)
+    // Over Windows' taskbar along the top: centred in its strip too (isl-in-top).
+    const high = inTopStrip()
+    body.classList.toggle('isl-in-top', high)
+    const root = document.documentElement.style
+    root.setProperty('--isl-foot', `${low || high ? footAt() : TOP}px`)
+    root.setProperty('--isl-strip', `${low || high ? stripUnder() : 0}px`)
+    root.setProperty('--isl-set-foot', `${low || high ? settingsFoot() : TOP}px`)
+    // Inside Windows' taskbar: the island about its capsule's middle there
+    // (islandMx), as the taskbar's middle run has it (isl-mid, placeMid);
+    // the picker and its toasts about it too (picker.css --isl-cx).
+    body.classList.toggle('isl-embed', isEmbedded())
+    if (home() !== 'taskbar') {
+      slotMiddle = isEmbedded() && Number.isFinite(islandMx) ? islandMx / (devicePixelRatio || 1) : null
+      if (slotMiddle != null) root.setProperty('--isl-cx', `${onPixels(slotMiddle)}px`)
+      else root.removeProperty('--isl-cx')
+      placeMid()
+    }
   }
 
   // The prompt panel lives in the island while it is on (a banner in the
@@ -6018,8 +6119,16 @@
     herUp = data.herUp === true
     spriteUrl = data.sprite
     second = data.second || null
-    // Where island.rs put her window at the top of the screen (anchor.js).
+    // Where island.rs put her window at the top of the screen (anchor.js),
+    // or along its foot, over Windows' taskbar so thick (#105).
     islandAt = Anchor.posOf(data.islandAt)
+    islandEdge = Anchor.edgeOf(data.islandEdge)
+    islandStrip = Number.isFinite(data.islandStrip) && data.islandStrip > 0 ? data.islandStrip : 0
+    // Her capsule inside Windows' taskbar (embed.rs): the island's window
+    // about its middle, the capsule's width within its room.
+    islandEmbed = data.islandEmbed === true
+    islandMx = Number.isFinite(data.islandMx) ? data.islandMx : null
+    islandRoom = Number.isFinite(data.islandRoom) && data.islandRoom > 0 ? data.islandRoom : 0
     quiet = data.quiet === true
     islandViews?.set({ on: !quiet })
     fullScreen = data.fullScreen === true
@@ -6269,14 +6378,16 @@
 
   // panel.js tells the island when its prompt changes.
   // The most the settings may be high: above the taskbar, its room (the
-  // window never moves for them); elsewhere, none said (the screen's).
+  // window never moves for them); along the foot of the screen (the island
+  // home, #105), the window's height over where they stand (settingsFoot)
+  // and their shadow, in the page's own px; elsewhere, none said (the screen's).
   // TASKBAR_ROOM is in the native monitor's logical px. WebView CSS px use
   // devicePixelRatio, which can differ from that monitor scale (Windows text
   // scaling): convert the room before sizing the settings page or its head
   // and tabs can land above the native window and be clipped. Until the
   // scale is told (before the first taskbar:strip; the preview never sends
   // one), the two are taken as the same.
-  const settingsMax = () => (home() === 'taskbar' ? (isSide() ? innerHeight - 2 * TASKBAR_GAP - TASKBAR_SHADE : (TASKBAR_ROOM - TASKBAR_GAP - TASKBAR_SHADE) * (stripScale ? stripScale / (devicePixelRatio || 1) : 1)) : null)
+  const settingsMax = () => (home() === 'taskbar' ? (isSide() ? innerHeight - 2 * TASKBAR_GAP - TASKBAR_SHADE : (TASKBAR_ROOM - TASKBAR_GAP - TASKBAR_SHADE) * (stripScale ? stripScale / (devicePixelRatio || 1) : 1)) : atBottom() ? innerHeight - settingsFoot() - TASKBAR_SHADE : null)
 
   // The taskbar's layout, for the settings: its presets, which one it is, editing it on the strip.
   // From her menu: editing it (添加小工具…: with the picker open, { picker }),
@@ -6315,8 +6426,12 @@
     },
     isOn,
     home,
-    // At the top of the screen, the side the island is at (anchor.js).
+    // At the top of the screen, the side the island is at (anchor.js), and
+    // the edge of the screen it is along: the top, or the bottom (#105);
+    // and, there, whether the island is inside Windows' taskbar (embed.rs).
     anchor,
+    islandEdge: () => (atBottom() ? 'bottom' : 'top'),
+    isEmbedded,
     tbEdge,
     isSide,
     isLight,

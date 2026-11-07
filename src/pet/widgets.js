@@ -321,6 +321,42 @@
     return out
   }
 
+  // A layout for the top bar (island.js split) from the one kept: Start and
+  // the programs (and quick settings and the clock, if set so) left out,
+  // they are in the dock (dock: those parts). One kept for the strip along
+  // an edge (with them in it) that has her at its start and nothing else in
+  // the middle, as Windows 11's (the default), has her in the middle; one
+  // edited on the top bar is as it was left. The program in front, the top
+  // bar's own part, first at the left where it has not been put elsewhere.
+  function splitOf(layout, dock) {
+    const runs = ['left', 'center', 'right']
+    const forEdge = runs.some(k => Array.isArray(layout?.[k]) && layout[k].some(p => p === 'start' || p === 'apps'))
+    const run = k => (Array.isArray(layout?.[k]) ? layout[k] : []).filter(p => !dock.includes(p))
+    const out = { left: run('left'), center: run('center'), right: run('right') }
+    if (forEdge && out.left[0] === 'her' && !out.center.length) out.center.push(out.left.shift())
+    if (!runs.some(k => out[k].includes('front'))) out.left.unshift('front')
+    return out
+  }
+  // The other way: a layout for the strip along an edge from one kept on
+  // the top bar (with neither Start nor the programs in it: they were in
+  // the dock). The program in front is the top bar's (put there by splitOf,
+  // moved about there): taken out, the strip was never given it; her alone
+  // in the middle, where splitOf moved her from the left's start, is there
+  // again; Start and the programs come back where the default has them
+  // (layoutOf). One kept for the strip itself is as it was, the program in
+  // front where it was put, if it was.
+  function edgeOf(layout) {
+    const kept = ['left', 'center', 'right'].filter(k => Array.isArray(layout?.[k]))
+    if (!kept.length || kept.some(k => layout[k].some(p => p === 'start' || p === 'apps'))) return layout
+    const out = { ...layout }
+    for (const k of kept) out[k] = layout[k].filter(p => p !== 'front')
+    if (out.center?.length === 1 && out.center[0] === 'her') {
+      out.center = []
+      out.left = ['her', ...(out.left || [])]
+    }
+    return out
+  }
+
   // --- Several in one place: made, changed, taken apart -----------------------------
   // Each takes a layout and gives a new one (the one given left as it was);
   // newId makes an entry's id (island.js: "w" and a-z 0-9).
@@ -527,6 +563,8 @@
     keyOf,
     layoutOf,
     monitorAsPart,
+    splitOf,
+    edgeOf,
     partsAlone,
     withParts,
     findEntry,

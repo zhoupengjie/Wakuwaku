@@ -49,7 +49,7 @@ const KINDS = Object.keys(LIMITS)
 
 // Her built-in plugins' and widgets' ids, and anything of mail's (mail-imap,
 // mail-thunderbird…).
-const RESERVED = ['weather', 'stock', 'pomodoro', 'countdown', 'stretch', 'ci', 'devserver', 'monitor', 'today', 'tokens', 'waku']
+const RESERVED = ['weather', 'stock', 'pomodoro', 'countdown', 'stretch', 'ci', 'devserver', 'calendar', 'media', 'monitor', 'today', 'tokens', 'waku']
 const isReserved = id => RESERVED.includes(id) || id.startsWith('mail')
 // Her icons (src-tauri/src/widgets.rs ICONS). One not in the list is drawn as
 // the name's first letter, so it is only a warning.

@@ -52,7 +52,7 @@ rain-alert/
 
 | Field | Rule |
 |---|---|
-| `id` | `^[a-z][a-z0-9-]{1,39}$`, unique in the market. Built-in ids (`weather`, `stock`, `pomodoro`, `countdown`, `stretch`, `ci`, `devserver`, `monitor`, `today`, `tokens`, `waku`) are refused, and so is any id beginning with `mail` or as her own widgets' do (`stock-`, `ci-`, `prs-`, `inbox-`). |
+| `id` | `^[a-z][a-z0-9-]{1,39}$`, unique in the market. Built-in ids (`weather`, `stock`, `pomodoro`, `countdown`, `stretch`, `ci`, `devserver`, `calendar`, `media`, `monitor`, `today`, `tokens`, `waku`) are refused, and so is any id beginning with `mail` or as her own widgets' do (`stock-`, `ci-`, `prs-`, `inbox-`). |
 | `kind` | `plugin`. Packs use `pet` or `wallpaper` (see Packs). |
 | `name`, `description` | A string, or `{ "en": …, "zh": … }`. English is the fallback. Name ≤ 24 characters. A description of ≤ 60 characters is shown in full; a longer one is cut with "…" where it is shown (the market's check warns about it), and one over 500 is refused. |
 | `version` | `x.y.z`. |

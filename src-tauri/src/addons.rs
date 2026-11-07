@@ -81,7 +81,7 @@ fn is_litter(name: &str) -> bool {
 // Her own plugins' and widgets' ids, and the beginnings of her widgets'
 // (plugins.rs owner_of: stock-…, ci-…, prs-…; mail.rs: inbox-…; mail…):
 // none of them a third-party plugin's.
-const RESERVED: [&str; 11] = ["weather", "stock", "pomodoro", "countdown", "stretch", "ci", "devserver", "monitor", "today", "tokens", "waku"];
+const RESERVED: [&str; 13] = ["weather", "stock", "pomodoro", "countdown", "stretch", "ci", "devserver", "calendar", "media", "monitor", "today", "tokens", "waku"];
 const RESERVED_STARTS: [&str; 5] = ["mail", "stock-", "ci-", "prs-", "inbox-"];
 
 // Names that are this computer's or the network's at home: never a host a

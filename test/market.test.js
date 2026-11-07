@@ -163,7 +163,7 @@ test('ids: their shape, and her own refused', () => {
   for (const id of ['Rain', 'rain_alert', '1rain', 'r', 'rain alert', 'a'.repeat(41), 12]) {
     assert.deepEqual(codes(readZip(files({}, { id })).errors), ['id'], String(id))
   }
-  for (const id of ['weather', 'stock', 'pomodoro', 'countdown', 'stretch', 'ci', 'devserver', 'monitor', 'today', 'tokens', 'waku', 'mail', 'mail-imap', 'mail-gmail']) {
+  for (const id of ['weather', 'stock', 'pomodoro', 'countdown', 'stretch', 'ci', 'devserver', 'calendar', 'media', 'monitor', 'today', 'tokens', 'waku', 'mail', 'mail-imap', 'mail-gmail']) {
     assert.deepEqual(codes(readZip(files({}, { id })).errors), ['id-reserved'], id)
   }
   assert.deepEqual(codes(readZip(files({}, { id: 'my-weather' })).errors), [])

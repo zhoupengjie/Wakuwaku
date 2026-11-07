@@ -226,6 +226,65 @@
     return `${head(w, titleOf(w, ctx), ctx)}<div class="grow"></div>${days ? big(days.value, days.unit || '') : big(said.value)}<div class="sub ell" style="margin-top:4px">${esc(said.label)}</div><div class="ter">${esc(detailOf(w).extra || '')}</div>`
   }
 
+  // --- The calendar (s, m, l) --------------------------------------------------------------------
+  // Small: the day of the month large, the month and weekday, the lunar
+  // date (or the week). Medium: those on the left, the month's grid on the
+  // right (wcards.js monthGrid: today lit, a dot on a day with something
+  // on). Large: and what is coming under them, a line each.
+  function calendar(w, size, ctx) {
+    const d = detailOf(w)
+    const date = row(w, 'date') || {}
+    const day = date.value || String(new Date(ctx.now || Date.now()).getDate())
+    const color = colorOf(w, ctx)
+    const name = titleOf(w, ctx)
+    const monthWeekday = esc([date.name, date.unit].filter(Boolean).join(' · '))
+    const events = rowsOf(w).filter(r => r.kind === 'event')
+    if (size === 's') return `${head(w, name, ctx)}<div class="grow"></div>${big(day)}<div class="sub" style="margin-top:4px">${monthWeekday}</div><div class="ter ell">${esc(d.extra || '')}</div>`
+    // The year, the lunar date and the day's marks a line each (one long
+    // line would wrap mid-word).
+    const notes = String(date.text || d.extra || '')
+      .split(' · ')
+      .filter(Boolean)
+      .map(part => `<div class="ter ell">${esc(part)}</div>`)
+      .join('')
+    const block = `<div class="lines cal-date">${big(day, '', 'md')}<div class="sub">${monthWeekday}</div>${notes}</div>`
+    const pair = `<div class="row cal-m">${block}${WCards.monthGrid(w, ctx, color)}</div>`
+    if (size === 'm') return `${head(w, name, ctx)}${pair}`
+    const when = e => (e.unit ? `${e.when}–${e.unit}` : e.when || '')
+    const list = events
+      .slice(0, 4)
+      .map(e => `<div class="row evrow"><span class="ter n">${esc(e.name || '')}</span><span class="sub ell">${esc([e.subject, e.text].filter(Boolean).join(' · '))}</span><span class="ter num">${esc(when(e))}</span></div>`)
+      .join('')
+    const coming = events.length ? `<div class="ter" style="margin-top:10px">${esc(t(ctx, 'cal.coming'))}</div><div class="lines evlist">${list}</div>` : ''
+    return `${head(w, name, ctx)}${pair}${coming}<div class="grow"></div>`
+  }
+
+  // --- What is playing (s, m, l) ------------------------------------------------------------------
+  // The title and artist (the album after), the app at the head's right,
+  // how far along as a bar with the times (paused said), and its buttons
+  // (wcards.js actionsHTML: previous, play or pause, next, pressed back to
+  // its plugin). Nothing playing: said so, no buttons.
+  function media(w, size, ctx) {
+    const said = Widgets.words(ctx.lang, w, true)
+    const state = row(w, 'state')?.value || ''
+    const name = titleOf(w, ctx)
+    const color = colorOf(w, ctx)
+    if (state === 'none' || !rowsOf(w).length) return `${head(w, name, ctx)}<div class="grow"></div><div class="sub">${esc(said.label)}</div><div class="grow"></div>`
+    const track = row(w, 'track') || {}
+    const title = track.subject || said.label
+    const artist = track.text || ''
+    const album = row(w, 'album')?.text || ''
+    const app = row(w, 'app')?.name || ''
+    const s = detailOf(w).series
+    const share = s && s.points?.length === 1 && Number.isFinite(s.hi) && s.hi > 0 ? Math.round(Math.max(0, Math.min(100, (s.points[0] / s.hi) * 100)) * 10) / 10 : null
+    const paused = state === 'paused' ? `${esc(t(ctx, 'act.pause'))} · ` : ''
+    const times = share == null ? (detailOf(w).extra ? `<div class="ter num">${esc(detailOf(w).extra)}</div>` : '') : `<div class="row ter num" style="justify-content:space-between"><span>${esc(WCards.clockOf(s.points[0]))}</span><span>${paused}${esc(WCards.clockOf(s.hi))}</span></div>`
+    const prog = share == null ? '' : meter(share, color)
+    if (size === 's') return `${head(w, name, ctx)}<div class="grow"></div><div class="mtitle two">${esc(title)}</div><div class="ter ell">${esc(artist)}</div><div class="grow"></div>${WCards.actionsHTML(w, ctx, 'sm')}`
+    if (size === 'm') return `${head(w, name, ctx, esc(app))}<div class="mtitle">${esc(title)}</div><div class="sub ell">${esc([artist, album].filter(Boolean).join(' · '))}</div><div class="grow"></div>${prog}${times}${WCards.actionsHTML(w, ctx)}`
+    return `${head(w, name, ctx, esc(app))}<div class="grow"></div><div class="mtitle big two">${esc(title)}</div><div class="sub ell" style="margin-top:4px">${esc(artist)}</div><div class="ter ell">${esc(album)}</div><div class="grow"></div>${prog}${times}<div class="grow"></div>${WCards.actionsHTML(w, ctx, 'lg')}`
+  }
+
   // --- Anyone else's (s, m; l when it says so) ---------------------------------------------------
   // A script that gives only a label and a value (the spec's §1): medium in
   // two lines, its value over its name, left, in the middle; no empty block.
@@ -248,7 +307,7 @@
   // The plugin a widget comes from: its own say, else its id's first part
   // as plugins name theirs ("stock-aapl").
   const pluginOf = id => (/^([a-z]+)-/.exec(String(id || '')) || [])[1] || ''
-  const BUILT_IN = { monitor: 'card.monitor', today: 'card.today', tokens: 'widget.tokens', weather: 'card.weather', pomodoro: 'card.pomodoro', countdown: 'card.countdown' }
+  const BUILT_IN = { monitor: 'card.monitor', today: 'card.today', tokens: 'widget.tokens', weather: 'card.weather', pomodoro: 'card.pomodoro', countdown: 'card.countdown', calendar: 'card.calendar', media: 'card.media' }
   // A widget's name: its own label; with none (or private, the specifics
   // hidden), its plugin's name and its number among that plugin's ("天气
   // 2"); else "小工具" and its number.
@@ -280,7 +339,7 @@
     return t(ctx, 'desk.widget')
   }
 
-  const BY_KIND = { weather, monitor, stock, mail, today, tokens, pomodoro, countdown }
+  const BY_KIND = { weather, monitor, stock, mail, today, tokens, pomodoro, countdown, calendar, media }
   // A widget's face at a size (one it has: desk.js keeps to them).
   function faceHTML(w, size, ctx) {
     const draw = BY_KIND[kindOf(w)] || generic

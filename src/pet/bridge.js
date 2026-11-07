@@ -129,6 +129,9 @@
     settingsClosed: () => send('settings_closed'),
     // To a session's window; true when there was one to go to.
     jump: id => invoke('session_jump', { id: String(id || '') }).catch(() => false),
+    // A button on a widget's card (what is playing: previous, play or
+    // pause, next), to the plugin it belongs to (plugins.rs act).
+    widgets: { act: (id, action) => invoke('widget_act', { id: String(id || ''), action: String(action || '') }).catch(() => false) },
     // The taskbar (taskbar.rs): what its own buttons open (start, search,
     // tasks, widgets, desktop, quick, notifications), a press on a tray icon
     // (leftDown, leftUp, rightDown, rightUp, double, move, in, out; in order,

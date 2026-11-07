@@ -1,6 +1,7 @@
 // The plugins she runs for you: the weather, stocks, a pomodoro, a deadline,
-// a stretch reminder, CI and dev servers, each running while its switch is
-// on (placed is on: the picker writes plugins[id].on). They were PowerShell
+// a stretch reminder, CI and dev servers, the calendar and what is playing,
+// each running while its switch is on (placed is on: the picker writes
+// plugins[id].on). The first seven were PowerShell
 // scripts she started hidden (examples/widgets, since taken out of the
 // repository); they are done here now, inside her, each widget as its
 // script made it (the same words, numbers, colours, sizes and nudges, and
@@ -25,14 +26,25 @@
 // 15), its widget still outlasting the wait; the ends of things (a pomodoro's
 // stretch, a deadline, a reminder) come on time all the same.
 //
-// What each shows goes through Shared::put_widget, as a script's POST
-// /widget did. What went wrong in its last turn (a city not found, the web
-// down) is said on the Plugins page (view: said), as a script's last
-// warning was.
+// What each shows goes through Shared::put_plugin_widget, as a script's
+// POST /widget did (and, unlike a script's, with buttons where it has
+// them). What went wrong in its last turn (a city not found, the web down)
+// is said on the Plugins page (view: said), as a script's last warning
+// was.
+//
+// Buttons. A widget of theirs may carry actions (widgets.rs: detail.actions,
+// up to four, each an id and an icon: play, pause, previous, next), drawn
+// on its cards; a press on one comes back here (act, from the pages'
+// widget_act), is queued for the plugin and delivered on its own thread
+// (Job::act) just before a turn taken at once, so what it did shows
+// straight away. A plugin that hears of a change on its own (what is
+// playing changed: media.rs) asks for a turn at once the same way (poke).
+mod calendar;
 mod ci;
 pub mod countdown;
 mod devserver;
 pub mod fmt;
+mod media;
 mod pomodoro;
 mod stock;
 mod stretch;
@@ -87,9 +99,12 @@ pub trait Out {
     fn say(&mut self, line: String);
 }
 
-// A plugin running: one turn now, and how long until the next.
+// A plugin running: one turn now, and how long until the next; and a
+// button of its pressed (act, one with none hears nothing), a turn
+// following at once.
 pub trait Job: Send {
     fn turn(&mut self, now: Now, out: &mut dyn Out) -> Wait;
+    fn act(&mut self, _action: &str, _now: Now, _out: &mut dyn Out) {}
 }
 
 // A GET on the web (web::get; a test's recorded answers).
@@ -158,8 +173,9 @@ impl Conf<'_> {
     }
 }
 
-// The scripts' own parameters (the old <id>.ps1's) and periods.
-pub static PLUGINS: [Plugin; 7] = [
+// The scripts' own parameters (the old <id>.ps1's) and periods; the
+// calendar's and the player's their own.
+pub static PLUGINS: [Plugin; 9] = [
     Plugin { id: "weather", icon: "weather", params: &[p("City", Kind::Text, false)], by_lang: true, on_web: true, make: |c| Box::new(weather::Weather::new(c.text("City"), c.lang, web_fetch())) },
     Plugin {
         id: "stock",
@@ -184,6 +200,19 @@ pub static PLUGINS: [Plugin; 7] = [
         on_web: true,
         make: |c| Box::new(devserver::Devserver::new(c.text("Url"), c.lang, Box::new(|u: &str| web::answers(u, devserver::ANSWER_IN)))),
     },
+    Plugin {
+        id: "calendar",
+        icon: "calendar",
+        // Its second line: the lunar date (农历) or the week of the year;
+        // none chosen, by her language.
+        params: &[p("Url", Kind::Text, false), p("Second", Kind::Choice { options: &["Lunar", "Week"], zh: "Lunar", other: "Week" }, false)],
+        by_lang: true,
+        on_web: true,
+        make: |c| Box::new(calendar::Calendar::new(c.text("Url"), c.choice("Second") == "Lunar", c.lang, web_fetch())),
+    },
+    // Its turns ask Windows, not the web; on a thread of their own all the
+    // same, so a player slow to answer holds up no timer of hers.
+    Plugin { id: "media", icon: "music", params: &[], by_lang: true, on_web: true, make: |c| Box::new(media::Media::new(c.lang)) },
 ];
 
 fn plugin(id: &str) -> Option<&'static Plugin> {
@@ -291,7 +320,7 @@ pub fn owner_of(widget: &str) -> Option<String> {
 
 fn built_in_owner(widget: &str) -> Option<&'static str> {
     match widget {
-        "weather" | "pomodoro" | "countdown" | "stretch" | "devserver" => plugin(widget).map(|s| s.id),
+        "weather" | "pomodoro" | "countdown" | "stretch" | "devserver" | "calendar" | "media" => plugin(widget).map(|s| s.id),
         w if w.starts_with("stock-") => Some("stock"),
         w if w.starts_with("ci-") || w.starts_with("prs-") => Some("ci"),
         _ => None,
@@ -313,6 +342,8 @@ struct Slot {
     wait: Wait,
     // What went wrong in its last turn.
     said: Option<String>,
+    // Its buttons pressed since its last turn (act), in order.
+    pending: Vec<String>,
 }
 
 #[derive(Default)]
@@ -325,17 +356,69 @@ pub struct Runner {
     cleaned: bool,
 }
 
+impl Runner {
+    // A button of a widget's pressed: queued for its plugin, due at once,
+    // eight at most waiting. False when there is nothing to queue it for
+    // (act says which).
+    fn press(&mut self, widget: &str, action: &str) -> bool {
+        let Some(owner) = built_in_owner(widget).filter(|_| is_action(action)) else { return false };
+        let Some(slot) = self.slots.get_mut(owner) else { return false };
+        if slot.pending.len() >= 8 {
+            return false;
+        }
+        slot.pending.push(action.to_string());
+        slot.last = None;
+        true
+    }
+}
+
 // Taken while a widget of theirs is posted and while sync stops one, so a
 // turn ending after its plugin stopped never shows what it found. Taken
 // before any of Shared's locks, and never while one is held.
 static POSTING: Mutex<()> = Mutex::new(());
 static WAKE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+// The plugins that asked for a turn at once (poke), taken up by the thread
+// that keeps their turns.
+static POKED: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
 
 // The turns looked at again now: a plugin changed, someone back, her back in sight.
 pub fn wake() {
     let (woken, cv) = &WAKE;
     *woken.lock().unwrap_or_else(|e| e.into_inner()) = true;
     cv.notify_all();
+}
+
+// A plugin asks for a turn at once (what it shows changed under it: the
+// song changed), from any thread, with no lock of Shared's taken.
+pub fn poke(id: &'static str) {
+    let mut poked = POKED.lock().unwrap_or_else(|e| e.into_inner());
+    if !poked.contains(&id) {
+        poked.push(id);
+    }
+    drop(poked);
+    wake();
+}
+
+// An action as a button names it: a-z 0-9 -, 16 at most, a letter first
+// (widgets.rs actions_of takes the same).
+fn is_action(action: &str) -> bool {
+    !action.is_empty() && action.len() <= 16 && action.starts_with(|c: char| c.is_ascii_lowercase()) && action.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+// A button of a widget's pressed on a page (main.rs widget_act): queued
+// for the plugin the widget belongs to, which takes a turn at once (its
+// job is on another thread, or in a turn: never called from here). False
+// for a widget of no plugin of hers, one not running, or an action that
+// is none.
+pub fn act(sh: &Shared, widget: &str, action: &str) -> bool {
+    let queued = {
+        let mut r = sh.plugins.lock().unwrap();
+        r.press(widget, action)
+    };
+    if queued {
+        wake();
+    }
+    queued
 }
 
 fn wait_for(d: Option<Duration>) {
@@ -375,7 +458,7 @@ impl Out for Posting<'_> {
         if !current {
             return;
         }
-        if let Err(why) = self.sh.put_widget(&widget) {
+        if let Err(why) = self.sh.put_plugin_widget(&widget) {
             self.said = Some(tidy(why));
         }
     }
@@ -385,9 +468,13 @@ impl Out for Posting<'_> {
     }
 }
 
-fn one_turn(sh: &Shared, id: &'static str, gen: u64, mut job: Box<dyn Job>, on_web: bool) {
+fn one_turn(sh: &Shared, id: &'static str, gen: u64, mut job: Box<dyn Job>, on_web: bool, pending: Vec<String>) {
     let now = Now { ms: crate::now_ms(), local: countdown::local_ms() };
     let mut out = Posting { sh, id, gen, said: None };
+    // Its buttons pressed first, then the turn that shows what they did.
+    for action in &pending {
+        job.act(action, now, &mut out);
+    }
     let wait = job.turn(now, &mut out);
     let said = out.said;
     let mut r = sh.plugins.lock().unwrap();
@@ -409,16 +496,22 @@ fn keep_turns(sh: Arc<Shared>) {
         let now = crate::now_ms();
         let mut due = Vec::new();
         let mut next: Option<u64> = None;
+        let poked = std::mem::take(&mut *POKED.lock().unwrap_or_else(|e| e.into_inner()));
         {
             let mut r = sh.plugins.lock().unwrap();
             for (id, slot) in r.slots.iter_mut() {
+                // Asked for a turn at once: due now (one in a turn already
+                // is due as soon as it is back).
+                if poked.contains(id) {
+                    slot.last = None;
+                }
                 if slot.job.is_none() {
                     continue;
                 }
                 let at = due_at(slot.last, slot.wait, slow);
                 if at <= now {
                     if let Some(job) = slot.job.take() {
-                        due.push((*id, slot.gen, job));
+                        due.push((*id, slot.gen, job, std::mem::take(&mut slot.pending)));
                     }
                 } else {
                     next = Some(next.map_or(at, |n| n.min(at)));
@@ -429,15 +522,15 @@ fn keep_turns(sh: Arc<Shared>) {
             wait_for(next.map(|at| Duration::from_millis(at.saturating_sub(crate::now_ms()))));
             continue;
         }
-        for (id, gen, job) in due {
+        for (id, gen, job, pending) in due {
             if !plugin(id).is_some_and(|p| p.on_web) {
-                one_turn(&sh, id, gen, job, false);
+                one_turn(&sh, id, gen, job, false, pending);
                 continue;
             }
             let on_its_own = sh.clone();
             let started = std::thread::Builder::new().name(format!("plugin-{id}")).spawn(move || {
                 crate::power::thread_eco();
-                one_turn(&on_its_own, id, gen, job, true);
+                one_turn(&on_its_own, id, gen, job, true, pending);
                 wake();
             });
             // No thread to be had: it goes (its turn with it), and sync
@@ -494,7 +587,7 @@ pub fn sync(sh: &Shared) -> bool {
                 r.gens += 1;
                 let gen = r.gens;
                 let job = (p.make)(&Conf { plugin: p, v: c, lang });
-                r.slots.insert(p.id, Slot { key, gen, job: Some(job), last: None, wait: Wait::every(Duration::ZERO), said: None });
+                r.slots.insert(p.id, Slot { key, gen, job: Some(job), last: None, wait: Wait::every(Duration::ZERO), said: None, pending: Vec::new() });
                 woken = true;
             }
             changed = true;
@@ -609,9 +702,9 @@ pub(crate) mod tests {
     }
 
     #[derive(Default)]
-    struct Record {
-        posts: Vec<Value>,
-        said: Option<String>,
+    pub struct Record {
+        pub posts: Vec<Value>,
+        pub said: Option<String>,
     }
 
     impl Out for Record {
@@ -714,10 +807,11 @@ pub(crate) mod tests {
 
     // Settings made for the scripts keep working: every parameter keeps the
     // name it had when she ran them (the scripts' own, but for the stock's
-    // Colors, whose options were two of its script's switches).
+    // Colors, whose options were two of its script's switches). The
+    // calendar's and the player's came after the scripts.
     #[test]
     fn the_parameters_are_the_scripts_own() {
-        let scripts: [(&str, &[&str]); 7] = [
+        let scripts: [(&str, &[&str]); 9] = [
             ("weather", &["City"]),
             ("stock", &["Symbol", "Name", "Colors"]),
             ("pomodoro", &["Work", "Break"]),
@@ -725,6 +819,8 @@ pub(crate) mod tests {
             ("stretch", &["Minutes"]),
             ("ci", &["Repo", "Prs"]),
             ("devserver", &["Url"]),
+            ("calendar", &["Url", "Second"]),
+            ("media", &[]),
         ];
         for (p, (id, names)) in PLUGINS.iter().zip(scripts) {
             assert_eq!(p.id, id);
@@ -772,8 +868,41 @@ pub(crate) mod tests {
         assert_eq!(owner_of("weather").as_deref(), Some("weather"));
         assert_eq!(owner_of("stock-600519-ss").as_deref(), Some("stock"));
         assert_eq!(owner_of("prs-a-b").as_deref(), Some("ci"));
+        assert_eq!(owner_of("calendar").as_deref(), Some("calendar"));
+        assert_eq!(owner_of("media").as_deref(), Some("media"));
         assert_eq!(owner_of("mail-thunderbird"), None);
         assert_eq!(owner_of("today"), None);
+    }
+
+    // A button pressed is queued for its plugin, which is due at once;
+    // taken up with its turn, in order, eight at most; a press on a widget
+    // of no plugin of hers, one not running, or an action that is none, is
+    // nothing. A poke makes a plugin due at once too, once however often.
+    #[test]
+    fn a_button_pressed_queues_for_its_plugin_and_a_poke_makes_it_due() {
+        let mut r = Runner::default();
+        let slot = || Slot { key: json!({}), gen: 1, job: None, last: Some(5_000), wait: Wait::every(Duration::from_secs(60)), said: None, pending: Vec::new() };
+        r.slots.insert("media", slot());
+        assert!(r.press("media", "toggle"));
+        assert!(r.press("media", "next"));
+        assert!(!r.press("media", "Next"));
+        assert!(!r.press("media", "-x"));
+        assert!(!r.press("media", ""));
+        assert!(!r.press("media", &"a".repeat(17)));
+        assert!(!r.press("today", "next"), "no plugin of hers");
+        assert!(!r.press("weather", "next"), "not running");
+        assert_eq!(r.slots["media"].pending, ["toggle", "next"]);
+        assert_eq!(r.slots["media"].last, None, "due at once");
+        for _ in 0..6 {
+            assert!(r.press("media", "next"));
+        }
+        assert!(!r.press("media", "next"), "eight at most");
+        assert!(is_action("play-pause") && !is_action("1a"));
+        POKED.lock().unwrap().clear();
+        poke("media");
+        poke("media");
+        let poked = std::mem::take(&mut *POKED.lock().unwrap());
+        assert_eq!(poked, ["media"]);
     }
 
     // --- Their turns ---

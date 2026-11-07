@@ -62,7 +62,7 @@
 <tr>
 <td colspan="2" valign="top">
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/card-desktop-zh-dark.jpg"><img src="docs/readme/card-desktop-zh-light.jpg" alt="桌面上的工作台：Claude 今天、邮件、股票、系统监控、番茄钟、倒计时" width="100%"></picture>
-<p><b>插件和桌面小工具</b><br>今天的用量和 token、天气、股票、番茄钟、倒计时、邮件……放在任务栏、胶囊里或桌面上，几个拼成一块工作台。一行 PowerShell 就能写自己的插件。</p>
+<p><b>插件和桌面小工具</b><br>今天的用量和 token、天气、股票、番茄钟、倒计时、日历、正在播放的歌、邮件……放在任务栏、胶囊里或桌面上，几个拼成一块工作台。一行 PowerShell 就能写自己的插件。</p>
 </td>
 </tr>
 </table>

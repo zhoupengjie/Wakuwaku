@@ -1106,6 +1106,28 @@
         await p.wait(1800)
       },
     },
+    // Two displays (zhoupengjie/Wakuwaku#104): the 屏幕 row with a segment a
+    // display, hers the second one (not Windows' main), and 显示在 below it.
+    {
+      id: 'settings-look-displays',
+      section: 'settings',
+      title: '设置 · 外观 · 两块屏：她的家在 2 号屏',
+      page: 'island',
+      home: 'taskbar',
+      view: [0, above(660), 560, 660],
+      world: F => ({
+        ...busy(F),
+        displays: [
+          { key: 'd000000000001', n: 1, w: 2560, h: 1440, main: true, hers: false },
+          { key: 'd000000000002', n: 2, w: 1920, h: 1080, main: false, hers: true },
+        ],
+        config: { homeDisplay: 'd000000000002' },
+      }),
+      steps: async p => {
+        p.emit('island:settings', { tab: 'look' })
+        await p.wait(600)
+      },
+    },
     // Mail, as a user with two accounts has it (fixtures.js MAIL): in two
     // panes (the screen has the room), every account's inbox as one on the
     // left, the accounts (unread, kept offline, through a proxy) and who

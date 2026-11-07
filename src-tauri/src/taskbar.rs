@@ -869,9 +869,9 @@ mod imp {
         true
     }
 
-    // A small icon's size on the main display (physical px), as Windows' taskbar draws its tray's.
+    // A small icon's size on her display (physical px), as Windows' taskbar draws its tray's.
     fn icon_px(sh: &Shared) -> i32 {
-        (16.0 * sh.screens().primary.map_or(1.0, |a| a.sf)).round() as i32
+        (16.0 * crate::island::scale(sh)).round() as i32
     }
 
     // The keyboard (tasks::keys) and the volume (audio.rs) looked at four
@@ -1263,7 +1263,7 @@ mod imp {
         };
         // As big as the buttons show them alone (island.js, 24px); smaller
         // with their titles, and in the lists above them.
-        let size = (24.0 * sh.screens().primary.map_or(1.0, |a| a.sf)).round() as i32;
+        let size = (24.0 * crate::island::scale(sh)).round() as i32;
         let marks = MARKS.lock().unwrap().clone().unwrap_or_default();
         // Kept on the taskbar: its path, and the app id of one Windows only
         // starts by it (a store app: Settings, Calculator).

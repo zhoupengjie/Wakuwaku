@@ -261,7 +261,9 @@
     // Windows' animations off (prefers-reduced-motion), as the pages read it; unset, the browser's.
     reducedMotion: undefined,
     version: '0.3.2',
-    displayCount: 1,
+    // The displays as the settings' snapshot lists them (settings.rs
+    // displays_view): one, hers and the main one.
+    displays: [{ key: 'd000000000001', n: 1, w: 2560, h: 1440, main: true, hers: true }],
   })
   const world = host ? host.fake.world : makeWorld()
 
@@ -427,7 +429,7 @@
         reasonix: { hooks: on ? 'ok' : 'missing', file: 'C:\\Users\\you\\AppData\\Roaming\\reasonix\\settings.json', fileShown: '~\\AppData\\Roaming\\reasonix\\settings.json', backup: true, seen: on, line: '2.x', ...(world.reasonix || {}) },
       },
       agentVersions: { claude: '2.1.0', reasonix: world.reasonix?.version || '2.43.0', ...(world.dsh ? { dsh: world.dsh.dshVersion || '0.2.1-rc.2' } : {}) },
-      displayCount: world.displayCount,
+      displays: clone(world.displays),
       loginAtStart: true,
       winLook: { light: world.mode === 'light', accent: world.accent.base },
       winPaper: clone(world.paper),

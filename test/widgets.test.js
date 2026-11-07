@@ -223,6 +223,60 @@ test("the monitor's part may be taken off, and stays off; a monitor put there as
   assert.equal(Widgets.monitorAsPart(plain), plain)
 })
 
+test('the top bar (split) and the strip along an edge share the layout kept: each made from the other, and back', () => {
+  const DOCK = ['start', 'apps']
+  const RIGHT = ['monitor', 'tray', 'keys', 'quick', 'clock']
+  const SPLIT_PARTS = ['her', 'monitor', 'tray', 'keys', 'quick', 'clock', 'front']
+  const SPLIT = { left: ['front'], center: ['her'], right: RIGHT }
+  const today = { id: 'wt', type: 'widget', of: 'today', size: 'S' }
+  const top = layout => Widgets.layoutOf(Widgets.splitOf(layout, DOCK), SPLIT_PARTS, SPLIT, [])
+  const edge = layout => Widgets.layoutOf(Widgets.edgeOf(layout), [...PARTS, 'front'], WIN11, ['monitor', 'front'])
+  // Windows 11's (the default) for the top bar: her in the middle, the program in front first at the left.
+  assert.deepEqual(top(WIN11), SPLIT)
+  assert.deepEqual(top(null), SPLIT)
+  // Kept there (no Start, no programs: they are in the dock), for the strip
+  // along an edge: the program in front is the top bar's, taken out; her
+  // at the left's start again; Start and the programs back where Windows
+  // has them. Back and forth, the same.
+  assert.deepEqual(edge(SPLIT), WIN11)
+  assert.deepEqual(top(edge(SPLIT)), SPLIT)
+  // The program in front moved on the top bar, a widget put there: as it
+  // was left there; for the strip the program in front out all the same,
+  // the widget where it was.
+  const edited = { left: [today], center: ['her'], right: ['front', ...RIGHT] }
+  assert.deepEqual(top(edited), edited)
+  assert.deepEqual(edge(edited), { left: ['her', today], center: ['start', 'apps'], right: RIGHT })
+  // Her moved on the top bar to the right, with the program in front: she stays.
+  assert.deepEqual(edge({ left: [], center: [], right: ['front', 'her', ...RIGHT] }), { left: [], center: ['start', 'apps'], right: ['her', ...RIGHT] })
+  // Quick settings and the clock in the dock too: left out for the top bar
+  // (the parts in the top bar's list all the same: layoutOf puts them back,
+  // island.js leaves them out of it), back for the strip.
+  const tight = ['start', 'apps', 'quick', 'clock']
+  assert.deepEqual(Widgets.splitOf({ ...WIN11, right: ['monitor', 'tray', 'keys', today, 'quick', 'clock'] }, tight), { left: ['front'], center: ['her'], right: ['monitor', 'tray', 'keys', today] })
+  assert.deepEqual(edge({ left: ['front'], center: ['her'], right: ['monitor', 'tray', 'keys', today] }), { ...WIN11, right: ['monitor', 'tray', 'keys', today, 'quick', 'clock'] })
+  // One kept for the strip itself (Start in it): as it was, the program in
+  // front where it was put there, if it was (an optional part elsewhere).
+  const own = { left: ['her', 'front'], center: ['start', 'apps'], right: RIGHT }
+  assert.equal(Widgets.edgeOf(own), own)
+  assert.deepEqual(edge(own), own)
+  // For the top bar: Start and the programs out, her to the middle (at the
+  // left's start, nothing else in the middle), the program in front where
+  // it was. Kept from there, the strip has her first and no program in
+  // front: the top bar's layout says nothing of what the strip had.
+  assert.deepEqual(top(own), { left: ['front'], center: ['her'], right: RIGHT })
+  assert.deepEqual(edge(top(own)), WIN11)
+  // Her first at the left with others after her, nothing in the middle: she
+  // moves to the middle for the top bar; back, alone there, to the left's
+  // start, before them.
+  assert.deepEqual(top({ left: ['her', today], center: ['start', 'apps'], right: RIGHT }), { left: ['front', today], center: ['her'], right: RIGHT })
+  assert.deepEqual(edge({ left: ['front', today], center: ['her'], right: RIGHT }), { left: ['her', today], center: ['start', 'apps'], right: RIGHT })
+  // Nothing kept, or none of the runs: as it was (the defaults, layoutOf).
+  assert.equal(Widgets.edgeOf(null), null)
+  const bare = {}
+  assert.equal(Widgets.edgeOf(bare), bare)
+  assert.deepEqual(edge(bare), WIN11)
+})
+
 test("one without an icon: its name's first character on its colour, or grey, wherever its icon would be", () => {
   // Its colour (a tint under it, the letter in it; one step deeper on a light ground).
   assert.equal(Widgets.markHTML('部署', '#36cfc9'), `<span class="wmark" style="--mark:#36cfc9;--mark-deep:${Widgets.deepen('#36cfc9')}" aria-hidden="true">部</span>`)

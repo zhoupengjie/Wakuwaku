@@ -1892,25 +1892,18 @@
   // The monitor's part may be taken off (#53): dragged off the strip it is
   // gone from the layout, not put back as a part new since; a monitor put
   // there as a widget is that part (widgets.js monitorAsPart).
+  // The one kept is the strip's and the top bar's both: for the top bar
+  // (split) Start and the programs left out and the program in front put
+  // first (widgets.js splitOf); kept from there, with neither Start nor the
+  // programs in it, for the strip along an edge the program in front taken
+  // out again, the top bar's own, and her back at the left's start from the
+  // middle (edgeOf). Else, on a return to the taskbar, the program in front
+  // stayed at the strip's left end, before her, moved to the middle, with
+  // Start and the programs after her (the user, 2026-11-07).
   function tbLayout(saved = editLayout || config.taskbarLayout) {
     const base = saved && typeof saved === 'object' ? saved : config.taskbarAlign === 'left' ? TB_PRESETS.left : TB_PRESETS.win11
-    if (isSplit()) return Widgets.monitorAsPart(Widgets.layoutOf(splitOf(base), splitParts(), splitPreset(), SPLIT_OPTIONAL))
-    return Widgets.monitorAsPart(Widgets.layoutOf(base, TB_PARTS, TB_PRESETS.win11, TB_OPTIONAL))
-  }
-  // A layout for the top bar (split): Start and the programs (and quick
-  // settings and the clock, in the dock) left out. One
-  // kept for a strip along an edge (with them in it) that has her at its
-  // start and nothing else in the middle, as Windows 11's (the default),
-  // has her in the middle; one edited on the top bar is as it was left.
-  function splitOf(layout) {
-    const runs = ['left', 'center', 'right']
-    const forEdge = runs.some(k => Array.isArray(layout?.[k]) && layout[k].some(p => p === 'start' || p === 'apps'))
-    const run = k => (Array.isArray(layout?.[k]) ? layout[k] : []).filter(p => !inDock().includes(p))
-    const out = { left: run('left'), center: run('center'), right: run('right') }
-    if (forEdge && out.left[0] === 'her' && !out.center.length) out.center.push(out.left.shift())
-    // The program in front first at the left, where it has not been put elsewhere.
-    if (!runs.some(k => out[k].includes('front'))) out.left.unshift('front')
-    return out
+    if (isSplit()) return Widgets.monitorAsPart(Widgets.layoutOf(Widgets.splitOf(base, inDock()), splitParts(), splitPreset(), SPLIT_OPTIONAL))
+    return Widgets.monitorAsPart(Widgets.layoutOf(Widgets.edgeOf(base), TB_PARTS, TB_PRESETS.win11, TB_OPTIONAL))
   }
   // Whether the strip has the monitor's part.
   const hasMonitorPart = (layout = tbLayout()) => Object.values(layout).some(run => run.includes('monitor'))

@@ -687,6 +687,13 @@ body {
 
 .home-island.isl-capsule-win #island-row {
   align-items: center;
+  transition: opacity 0.16s ease;
+}
+
+/* Nothing drawn while the settings stand above the taskbar in the island's
+   window (island.js onCover, embed.rs cover). */
+.home-island.isl-capsule-win.isl-covered #island-row {
+  opacity: 0;
 }
 
 /* Over Windows' taskbar along the top of the screen (isl-in-top, island.js

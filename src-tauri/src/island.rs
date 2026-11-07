@@ -595,6 +595,20 @@ pub fn set_opened(sh: &Arc<Shared>, on: bool) {
     }
 }
 
+// The capsule inside Windows' taskbar covered (its page drawing nothing)
+// while the settings stand above the taskbar in this window: the open
+// island grows out of the capsule and covers it, but the settings stand
+// off the strip, and the capsule showing under them looked like a second
+// island (the user, 2026-11-07). Told as the settings open and close, and as
+// the capsule's page comes up (embed.rs cover).
+pub fn tell_cover(sh: &Shared) {
+    let on = {
+        let isl = sh.island.lock().unwrap();
+        isl.embedded && isl.settings_open
+    };
+    crate::embed::cover(sh, on);
+}
+
 // For the pages (main.rs payload): whether her capsule is inside Windows'
 // taskbar, where its middle lies in the island's window then (physical px
 // from its left), and the room it has there (physical px; 0 none).
@@ -1842,6 +1856,7 @@ pub fn open_settings(sh: &Arc<Shared>, tab: Option<&str>) {
     };
     sh.log(&format!("island: settings open on {:?}{}", tab, if is_up { "" } else { " (risen for them)" }));
     apply_visibility(sh);
+    tell_cover(sh);
     keep_on_top(sh);
     // Mail's agents looked for again while they are open; the monitor's
     // sensors read whole for their list.
@@ -1860,6 +1875,7 @@ pub fn settings_closed(sh: &Arc<Shared>) {
     sh.island.lock().unwrap().settings_open = false;
     sh.log("island: settings closed");
     keep_on_top(sh);
+    tell_cover(sh);
     // Set up once Claude Code or Codex is connected, not as the settings
     // close (a click outside closed them, and a new user, nothing
     // connected, was never asked again: the test session, 2026-10-12).

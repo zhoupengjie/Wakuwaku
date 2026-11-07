@@ -6406,6 +6406,14 @@
   // taskbar (bars.rs): it is open here already; a ring in the waiting
   // colour goes round the island twice so the eye finds it (style.css
   // look-here; held still a moment instead with reduced motion).
+  // Her capsule's own window in Windows' taskbar (isCapsuleWin): nothing
+  // drawn while the settings stand above the taskbar in the island's window
+  // (embed.rs cover), which does not cover the capsule as the open island
+  // does; back as they close.
+  window.pet.onCover(({ on } = {}) => {
+    if (isCapsuleWin()) body.classList.toggle('isl-covered', on === true)
+  })
+
   window.pet.onLookHere(() => {
     if (!isAsking()) return
     island.style.setProperty('--look', hue().waiting)

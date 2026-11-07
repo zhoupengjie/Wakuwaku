@@ -102,6 +102,9 @@
     onLanded: on('island:landed'),
     // The prompt waiting asked for from her taskbar on another display (bars.rs).
     onLookHere: on('island:look-here'),
+    // Her capsule's own window in Windows' taskbar (embed.rs): draw nothing
+    // while the settings stand above the taskbar in the island's window.
+    onCover: on('capsule:cover'),
     // Up over an app full screen for the prompts alone ({ on }, island.rs over_full): her island only.
     onOverFull: on('island:over-full'),
     // A maximized window on her display, at the top of the screen ({ on }, island.rs look_over_max).

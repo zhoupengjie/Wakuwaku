@@ -127,7 +127,7 @@ mod imp {
 
     use serde_json::{json, Value};
     use tauri::utils::config::BackgroundThrottlingPolicy;
-    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
     use super::{fits, gaps, pick, place_in, Laid, Rect, Span, CAPSULE, MARGIN};
     use crate::appbar::Edge;
@@ -222,9 +222,13 @@ mod imp {
         // The pointer on the capsule (its page said), and when it was last.
         over: bool,
         over_at: Option<Instant>,
+        // Its page told to draw nothing (the settings standing above the
+        // taskbar in the island's window, the capsule left showing under
+        // them: two islands, the user, 2026-11-07).
+        covered: bool,
     }
 
-    static EMBED: Mutex<Embed> = Mutex::new(Embed { created: false, hwnd: 0, tray: 0, rect: None, shown: false, laid: Laid { cap: None, room: 0, embedded: false }, said: String::new(), over: false, over_at: None });
+    static EMBED: Mutex<Embed> = Mutex::new(Embed { created: false, hwnd: 0, tray: 0, rect: None, shown: false, laid: Laid { cap: None, room: 0, embedded: false }, said: String::new(), over: false, over_at: None, covered: false });
     static WAKE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
     static STARTED: AtomicBool = AtomicBool::new(false);
     static QUITTING: AtomicBool = AtomicBool::new(false);
@@ -316,8 +320,25 @@ mod imp {
     // Its page is up: drawn, and looked at again (its size is to come).
     pub fn ready(sh: &Arc<Shared>) {
         sh.log("capsule: page ready");
+        EMBED.lock().unwrap().covered = false;
         sh.redraw();
+        island::tell_cover(sh);
         look_soon();
+    }
+
+    // The capsule's page told to draw nothing, or to draw again
+    // (capsule:cover): while the settings stand above the taskbar in the
+    // island's window, which does not cover the capsule as the open island
+    // does. Told as it changes.
+    pub fn cover(sh: &Shared, on: bool) {
+        {
+            let mut e = EMBED.lock().unwrap();
+            if e.covered == on || !e.created {
+                return;
+            }
+            e.covered = on;
+        }
+        let _ = sh.app.emit_to(label().as_str(), "capsule:cover", json!({ "on": on }));
     }
 
     pub fn is_created() -> bool {
@@ -338,6 +359,7 @@ mod imp {
             "room": e.laid.room,
             "embedded": e.laid.embedded,
             "over": e.over,
+            "covered": e.covered,
             "gaps": e.said,
         })
     }
@@ -624,6 +646,7 @@ mod imp {
     pub fn look_soon() {}
     pub fn stop() {}
     pub fn capsule_hover(_sh: &Arc<Shared>, _over: bool) {}
+    pub fn cover(_sh: &Shared, _on: bool) {}
     pub fn in_use() -> bool {
         false
     }
@@ -636,7 +659,7 @@ mod imp {
     }
 }
 
-pub use imp::{capsule_hover, in_use, is_created, label, look_soon, ready, start, stop, where_, LABEL};
+pub use imp::{capsule_hover, cover, in_use, is_created, label, look_soon, ready, start, stop, where_, LABEL};
 
 // The windows told of the island's state: the island's own, and the capsule's in the taskbar once made.
 pub fn labels() -> impl Iterator<Item = String> {

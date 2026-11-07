@@ -203,6 +203,19 @@ impl Island {
         valid_scale(Some(self.page_sf)).unwrap_or_else(|| self.sf())
     }
 
+    // The strip as Windows granted it (bar), if it was asked for this edge
+    // of this display (bar_for); none granted for another edge or display.
+    // The edge changed, the strip is asked anew (sync_bar_now), which first
+    // waits on the desktop's icons (up to 1.5 s); another thread laying the
+    // window meanwhile (the page asking for room, the look) went by the
+    // old edge's strip: set to the right, the window was laid as a side
+    // bar's, 1285 x 60, at the bottom strip's right end, and the page told
+    // of a strip 2560 px thick (2026-11-07). The edge's own strip stands in
+    // till the new one is granted (fit, size_for, seat).
+    fn strip_now(&self, edge: Edge, mon: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> {
+        self.bar.filter(|_| self.bar_for.is_some_and(|f| f.0 == mon && f.3 == edge))
+    }
+
     // Physical. The taskbar is as long as its strip (its display, or what
     // Windows granted of it), with its room beside it: above a bottom bar,
     // below a top one, inside a side one's.
@@ -211,7 +224,7 @@ impl Island {
         let sf = self.sf();
         let side = home == "taskbar" && edge.is_side();
         let base = match home {
-            "taskbar" if side => (strip_h + SIDE_ROOM, self.bar.map_or(area.mon.3, |b| b.3) as f64 / sf),
+            "taskbar" if side => (strip_h + SIDE_ROOM, self.strip_now(edge, area.mon).map_or(area.mon.3, |b| b.3) as f64 / sf),
             "taskbar" => (area.mon.2 as f64 / sf, strip_h + TASKBAR_ROOM),
             _ => ISLAND,
         };
@@ -339,7 +352,7 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
     let size = isl.size_for(home, &area, edge, thick);
     let pos = match home {
         // The window's edge on the strip's outer one, the room inside it.
-        "taskbar" => window_at(edge, isl.bar.unwrap_or_else(|| edge.strip(area.mon, (thick * area.sf).round() as i32)), size),
+        "taskbar" => window_at(edge, isl.strip_now(edge, area.mon).unwrap_or_else(|| edge.strip(area.mon, (thick * area.sf).round() as i32)), size),
         // On a Mac the notch's place, over the menu bar (notch.rs), the
         // centre whatever the setting; elsewhere at the top of the work area
         // (below a taskbar that sits at the top), at the side islandPos says
@@ -411,9 +424,10 @@ pub fn tell_strip(sh: &Shared, again: bool) {
         return;
     }
     let edge = edge(sh);
+    let Some(area) = area(sh) else { return };
     let (bar, pos, size, sf, told) = {
         let isl = sh.island.lock().unwrap();
-        (isl.bar, isl.pos, isl.size, isl.sf(), isl.strip_told)
+        (isl.strip_now(edge, area.mon), isl.pos, isl.size, isl.sf(), isl.strip_told)
     };
     let Some(b) = bar else { return };
     let thick = thickness(edge, b);
@@ -422,7 +436,7 @@ pub fn tell_strip(sh: &Shared, again: bool) {
         return;
     }
     sh.island.lock().unwrap().strip_told = now;
-    let room = (edge == Edge::Bottom).then(|| area(sh).and_then(|a| crate::shell::room(a.mon))).flatten();
+    let room = (edge == Edge::Bottom).then(|| crate::shell::room(area.mon)).flatten();
     sh.log(&format!(
         "taskbar: strip {b:?} along the {edge:?}, {thick} px ({} at {sf}); Windows' room {room:?}; work area {:?}; window at {pos:?} {size:?}",
         thick as f64 / sf,
@@ -599,21 +613,76 @@ pub fn take_strip_again(sh: &Shared) {
     place(sh);
 }
 
-// The window laid on its rect (physical): its place first, then its size,
-// then its place again, as bars.rs lay does. Sized first and then moved to
-// a display of another scale, Windows gave it the size for that one (the
-// scales' ratio over it): an external display at 125% plugged back in and
-// made the main one while it sat on the laptop's at 175%, her taskbar came
-// out 1830 x 615 for 2560 x 860, the strip floating up the screen and short
-// of its end, until she was restarted (zhoupengjie/Wakuwaku#37). Never while
-// minimized (keep_on_screen lays it once it is given back).
+// The window laid on its rect (physical), in steps (lay_steps): sized down
+// first where it is wider or taller than it is going to be (so sized it
+// lies within its old rect still, and within its new one once moved: at
+// no step does it reach past the two), then its place, its size, and its
+// place again, as bars.rs lay does. Moved first, at its old size, the
+// taskbar's window reached past its display: from along the bottom to
+// along the right, still as wide as the display, its right end lay over
+// the display to the right by the display's width less the side bar's,
+// and on a display wider than twice the side bar (2560 px at 100 %, 4K at
+// 150 %, an ultrawide) more of it lay there than here, so Windows took it
+// for that display's and, that display at another scale, told it so: tao
+// then put it on that display at the size Windows suggested, till the look
+// (keep_on_screen) put it back (the user's report, 2026-11-07: set to the
+// right, her taskbar flew over to the other display; on this machine, at
+// 125 %, the window laid by the old strip meanwhile, 1285 x 60 at the
+// bottom right, went to the display at 150 % for a moment: sized by
+// Windows to 1071 x 50, the page's scale 1.5 and back). Sized first and then
+// moved to a display of another scale, Windows gave it the size for that
+// one (the scales' ratio over it): an external display at 125% plugged back
+// in and made the main one while it sat on the laptop's at 175%, her taskbar
+// came out 1830 x 615 for 2560 x 860, the strip floating up the screen and
+// short of its end, until she was restarted (zhoupengjie/Wakuwaku#37); so
+// its size is set again after the move. Never while minimized
+// (keep_on_screen lays it once it is given back).
 fn lay(win: &WebviewWindow, (x, y): (i32, i32), (w, h): (i32, i32)) {
     if is_minimized(win) {
         return;
     }
-    let _ = win.set_position(PhysicalPosition::new(x, y));
-    let _ = win.set_size(PhysicalSize::new(w.max(1) as u32, h.max(1) as u32));
-    let _ = win.set_position(PhysicalPosition::new(x, y));
+    for step in lay_steps(current_size(win), (w, h)) {
+        match step {
+            Step::Pos => {
+                let _ = win.set_position(PhysicalPosition::new(x, y));
+            }
+            Step::Size(sw, sh) => {
+                let _ = win.set_size(PhysicalSize::new(sw.max(1) as u32, sh.max(1) as u32));
+            }
+        }
+    }
+}
+
+// A step of lay: the window's place, or a size (physical).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Step {
+    Pos,
+    Size(i32, i32),
+}
+
+// The steps that lay a window at a size, from its size now (None: not
+// known): down to no more than the new size either way first, where it is
+// more, then its place, the new size, and its place again.
+fn lay_steps(now: Option<(i32, i32)>, (w, h): (i32, i32)) -> Vec<Step> {
+    let mut steps = Vec::new();
+    if let Some((nw, nh)) = now {
+        let within = (nw.min(w), nh.min(h));
+        if within != (nw, nh) {
+            steps.push(Step::Size(within.0, within.1));
+        }
+    }
+    steps.extend([Step::Pos, Step::Size(w, h), Step::Pos]);
+    steps
+}
+
+// The window's size now (physical), asked of Windows directly (frameless.rs
+// rect, on any thread); None where it cannot be asked.
+fn current_size(_win: &WebviewWindow) -> Option<(i32, i32)> {
+    #[cfg(windows)]
+    if let Ok(h) = _win.hwnd() {
+        return crate::frameless::rect(h.0 as isize).map(|r| (r.2, r.3));
+    }
+    None
 }
 
 // Laid again where it is meant to be (a change of scale under it).
@@ -1417,7 +1486,7 @@ pub fn seat(sh: &Shared) -> Option<(i32, i32)> {
     let thick = strip_h(sh);
     let (bar, seat_at, closed, at) = {
         let isl = sh.island.lock().unwrap();
-        (isl.bar, isl.seat_at, closed_rect(&isl), isl.at)
+        (isl.strip_now(edge, area.mon), isl.seat_at, closed_rect(&isl), isl.at)
     };
     let px = |v: f64| (v * area.sf).round() as i32;
     Some(match home {
@@ -1731,6 +1800,75 @@ mod zoom_tests {
         assert_eq!(zoom_for(false, 1.5, 1.65, 1.0), None);
         // The text at 225% on a display at 100%.
         assert!((zoom_for(true, 1.0, 2.25, 1.0).unwrap() - 1.0 / 2.25).abs() < 1e-9);
+    }
+}
+
+#[cfg(test)]
+mod lay_tests {
+    use super::{lay_steps, Island, Step};
+    use crate::appbar::Edge;
+    use crate::screen::Area;
+
+    // The rect (x, y, w, h) after each step, from where the window is.
+    fn rects(from: (i32, i32, i32, i32), to: (i32, i32), steps: &[Step]) -> Vec<(i32, i32, i32, i32)> {
+        let mut r = from;
+        steps
+            .iter()
+            .map(|s| {
+                match s {
+                    Step::Pos => (r.0, r.1) = to,
+                    Step::Size(w, h) => (r.2, r.3) = (*w, *h),
+                }
+                r
+            })
+            .collect()
+    }
+
+    fn within(r: (i32, i32, i32, i32), of: (i32, i32, i32, i32)) -> bool {
+        r.0 >= of.0 && r.1 >= of.1 && r.0 + r.2 <= of.0 + of.2 && r.1 + r.3 <= of.1 + of.3
+    }
+
+    // From along the bottom of a 2560-wide display at 125 % to along its
+    // right, and back: at no step does the window reach past its old rect
+    // and its new one (moved first at its old width, it lay over the
+    // display to the right, 2026-11-07).
+    #[test]
+    fn the_window_keeps_within_its_old_rect_and_its_new_one() {
+        let (bottom, right) = ((0, 580, 2560, 860), (1275, 0, 1285, 1440));
+        let steps = lay_steps(Some((bottom.2, bottom.3)), (right.2, right.3));
+        assert_eq!(steps, vec![Step::Size(1285, 860), Step::Pos, Step::Size(1285, 1440), Step::Pos]);
+        for r in rects(bottom, (right.0, right.1), &steps) {
+            assert!(within(r, bottom) || within(r, right), "{r:?}");
+        }
+        let steps = lay_steps(Some((right.2, right.3)), (bottom.2, bottom.3));
+        assert_eq!(steps, vec![Step::Size(1285, 860), Step::Pos, Step::Size(2560, 860), Step::Pos]);
+        for r in rects(right, (bottom.0, bottom.1), &steps) {
+            assert!(within(r, bottom) || within(r, right), "{r:?}");
+        }
+        // Grown only (room asked for): its place first, as before.
+        assert_eq!(lay_steps(Some((950, 165)), (950, 400)), vec![Step::Pos, Step::Size(950, 400), Step::Pos]);
+        // Its size not known: as before.
+        assert_eq!(lay_steps(None, (2560, 860)), vec![Step::Pos, Step::Size(2560, 860), Step::Pos]);
+    }
+
+    // The strip granted for another edge (the edge changed, the new one not
+    // yet asked) is not used: the side bar as tall as its display, not as
+    // thick as the bottom strip was.
+    #[test]
+    fn a_strip_granted_for_another_edge_is_not_used() {
+        let mon = (0, 0, 2560, 1440);
+        let area = Area { x: 0, y: 0, w: 2560, h: 1380, sf: 1.25, mon };
+        let isl = Island { created: true, sf: 1.25, bar: Some((0, 1380, 2560, 60)), bar_for: Some((mon, 60, "taskbar", Edge::Bottom, true)), ..Island::default() };
+        assert_eq!(isl.strip_now(Edge::Bottom, mon), Some((0, 1380, 2560, 60)));
+        assert_eq!(isl.strip_now(Edge::Right, mon), None);
+        assert_eq!(isl.strip_now(Edge::Bottom, (2560, -149, 2560, 1600)), None, "another display's");
+        assert_eq!(isl.size_for("taskbar", &area, Edge::Right, 48.0), (1285, 1440));
+        assert_eq!(isl.size_for("taskbar", &area, Edge::Bottom, 48.0), (2560, 860));
+        // Granted for the right, shortened by another bar: as long as granted.
+        let isl = Island { bar: Some((2500, 0, 60, 1380)), bar_for: Some((mon, 60, "taskbar", Edge::Right, false)), ..isl };
+        assert_eq!(isl.size_for("taskbar", &area, Edge::Right, 48.0), (1285, 1380));
+        // Asked anew (take_strip_again): none till it is granted.
+        assert_eq!(Island { bar_for: None, ..isl }.strip_now(Edge::Right, mon), None);
     }
 }
 

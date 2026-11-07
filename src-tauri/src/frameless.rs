@@ -91,6 +91,7 @@ extern "system" {
     fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
     fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
     fn IsIconic(hwnd: Hwnd) -> i32;
+    fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
     fn RedrawWindow(hwnd: Hwnd, rect: *const c_void, region: isize, flags: u32) -> i32;
 }
 
@@ -162,6 +163,28 @@ pub fn wipe(hwnd: isize) {
 pub fn minimized(hwnd: isize) -> bool {
     // SAFETY: a plain call about a window; a stale handle answers no.
     unsafe { IsIconic(hwnd as Hwnd) != 0 }
+}
+
+#[repr(C)]
+#[derive(Default)]
+struct Rect {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+}
+
+// Where a window of hers is and how big (physical: x, y, w, h), asked of
+// Windows directly, on any thread (no wait on the main thread, as a window
+// getter's): island.rs lay sizes it down before it moves it. None for a
+// window gone.
+pub fn rect(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
+    let mut r = Rect::default();
+    // SAFETY: a plain query into our own struct; a stale handle fails it.
+    if unsafe { GetWindowRect(hwnd as Hwnd, &mut r) } == 0 {
+        return None;
+    }
+    Some((r.left, r.top, r.right - r.left, r.bottom - r.top))
 }
 
 // Before the window first shows. On its own thread, as a subclass must be.

@@ -2267,11 +2267,11 @@ mod lay_tests {
         assert_eq!(isl.strip_now(Edge::Bottom, mon), Some((0, 1380, 2560, 60)));
         assert_eq!(isl.strip_now(Edge::Right, mon), None);
         assert_eq!(isl.strip_now(Edge::Bottom, (2560, -149, 2560, 1600)), None, "another display's");
-        assert_eq!(isl.size_for("taskbar", &area, Edge::Right, 48.0), (1285, 1440));
-        assert_eq!(isl.size_for("taskbar", &area, Edge::Bottom, 48.0), (2560, 860));
+        assert_eq!(isl.size_for("taskbar", &area, Edge::Right, 48.0, false), (1285, 1440));
+        assert_eq!(isl.size_for("taskbar", &area, Edge::Bottom, 48.0, false), (2560, 860));
         // Granted for the right, shortened by another bar: as long as granted.
         let isl = Island { bar: Some((2500, 0, 60, 1380)), bar_for: Some((mon, 60, "taskbar", Edge::Right, false)), ..isl };
-        assert_eq!(isl.size_for("taskbar", &area, Edge::Right, 48.0), (1285, 1380));
+        assert_eq!(isl.size_for("taskbar", &area, Edge::Right, 48.0, false), (1285, 1380));
         // Asked anew (take_strip_again): none till it is granted.
         assert_eq!(Island { bar_for: None, ..isl }.strip_now(Edge::Right, mon), None);
     }

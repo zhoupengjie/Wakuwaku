@@ -170,6 +170,8 @@ mod imp {
     }
 
     const GWL_EXSTYLE: i32 = -20;
+    // A top-level window's owner (set this way, as WPF sets a window's Owner).
+    const GWLP_HWNDPARENT: i32 = -8;
     // The first of a window's children (the top of their order).
     const GW_CHILD: u32 = 5;
     const WS_EX_LAYERED: isize = 0x0008_0000;
@@ -193,6 +195,8 @@ mod imp {
         hwnd: isize,
         tray: isize,
         parented: bool,
+        // Out of the taskbar and owned by it (release), kept above it by Windows.
+        owned: bool,
         // Where it was laid in the taskbar last (physical), to lay again only on a change.
         child: Option<Rect>,
         // Made layered (once; frameless.rs keeps the bit after).
@@ -205,8 +209,11 @@ mod imp {
         restarting: bool,
     }
 
-    static EMBED: Mutex<Embed> = Mutex::new(Embed { hwnd: 0, tray: 0, parented: false, child: None, layered: false, laid: Laid { cap: None, room: 0, embedded: false }, said: String::new(), restarting: false });
+    static EMBED: Mutex<Embed> = Mutex::new(Embed { hwnd: 0, tray: 0, parented: false, owned: false, child: None, layered: false, laid: Laid { cap: None, room: 0, embedded: false }, said: String::new(), restarting: false });
     static WAKE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+    // One apply at a time (the pointer's thread and the page's command both
+    // call it): two at once both saw the window out and both put it in.
+    static APPLYING: Mutex<()> = Mutex::new(());
     static STARTED: AtomicBool = AtomicBool::new(false);
     static QUITTING: AtomicBool = AtomicBool::new(false);
 
@@ -259,10 +266,16 @@ mod imp {
         QUITTING.store(true, Ordering::SeqCst);
         look_soon();
         let mut e = EMBED.lock().unwrap();
-        if e.parented && e.hwnd != 0 {
-            // SAFETY: a plain call on our own window; a stale handle only makes it fail.
-            unsafe { SetParent(e.hwnd as Hwnd, std::ptr::null_mut()) };
+        if e.hwnd != 0 && (e.parented || e.owned) {
+            // SAFETY: plain calls on our own window; a stale handle only makes them fail.
+            unsafe {
+                if e.parented {
+                    SetParent(e.hwnd as Hwnd, std::ptr::null_mut());
+                }
+                SetWindowLongPtrW(e.hwnd as Hwnd, GWLP_HWNDPARENT, 0);
+            }
             e.parented = false;
+            e.owned = false;
         }
         e.tray = 0;
     }
@@ -271,6 +284,16 @@ mod imp {
     // lay_child then (island.rs lay), and never raised (island.rs raise, uncover).
     pub fn is_parented() -> bool {
         EMBED.lock().unwrap().parented
+    }
+
+    // Whether a window of hers still exists: Explorer's taskbar destroyed
+    // (Explorer killed) takes its children with it, the island's window
+    // among them, and tao's set_size on a window that is no more panics
+    // (adjust_window_rect failed; the release build aborts on a panic:
+    // seen in the test VM, 2026-11-07, she died with Explorer).
+    pub fn is_window(hwnd: isize) -> bool {
+        // SAFETY: a plain query; a stale handle answers no.
+        hwnd != 0 && unsafe { IsWindow(hwnd as Hwnd) } != 0
     }
 
     // The island's window laid in the taskbar (its rect physical, on the
@@ -324,6 +347,7 @@ mod imp {
             "hwnd": e.hwnd,
             "tray": e.tray,
             "parented": e.parented,
+            "owned": e.owned,
             "child": e.child.map(|r| [r.0, r.1, r.2, r.3]),
             "cap": e.laid.cap.map(|r| [r.0, r.1, r.2, r.3]),
             "room": e.laid.room,
@@ -337,11 +361,17 @@ mod imp {
     // on it, out as the pointer comes or anything opens. Cheap when
     // nothing changes; called from the island's every look at the pointer.
     pub fn apply(sh: &Shared) {
+        let Ok(_one) = APPLYING.try_lock() else { return };
         let Some((hwnd, pos, size, shown, want_child)) = island::parenting(sh) else { return };
         let (tray, parented, layered) = {
             let e = EMBED.lock().unwrap();
             (e.tray, e.parented, e.layered)
         };
+        if parented && !is_window(hwnd) {
+            // Gone with Explorer's taskbar: looked at now (look), which starts her anew.
+            look_soon();
+            return;
+        }
         if want_child && tray != 0 && !QUITTING.load(Ordering::SeqCst) {
             if parented {
                 // Explorer's own children made after ours (its XAML, as it
@@ -360,6 +390,7 @@ mod imp {
                 let mut e = EMBED.lock().unwrap();
                 e.hwnd = hwnd;
                 e.parented = true;
+                e.owned = false;
                 e.layered = true;
                 e.child = None;
             }
@@ -370,13 +401,14 @@ mod imp {
             }
             sh.log(&format!("island: into Explorer's taskbar {tray:#x}, the capsule in the strip"));
         } else if parented {
-            release(hwnd as Hwnd, pos, size, shown);
+            release(hwnd as Hwnd, pos, size, shown, tray as Hwnd);
             {
                 let mut e = EMBED.lock().unwrap();
                 e.parented = false;
+                e.owned = tray != 0;
                 e.child = None;
             }
-            sh.log("island: out of the taskbar, whole over it");
+            sh.log("island: out of the taskbar, whole over it, owned by it");
         }
     }
 
@@ -385,25 +417,24 @@ mod imp {
     // told where its capsule lies (set_capsule lays its window about it);
     // then the window into the taskbar or out of it (apply).
     fn look(sh: &Arc<Shared>) {
-        let wanted = island::embedding_wanted(sh);
-        let bar = wanted.then(|| island::home_area(sh)).flatten().and_then(|a| shell::shown_bar(a.mon)).filter(|(_, _, edge)| matches!(edge, Edge::Top | Edge::Bottom));
-        let Some((tray, strip, edge)) = bar else {
-            return detach(sh, if wanted { "no taskbar of Explorer's shown along the bottom or the top of her display" } else { "not wanted" });
+        // First of all: the window in the taskbar gone with it (Explorer
+        // killed takes its taskbar's children: the island's window, her
+        // home, with the settings and all). Tauri keeps its label, so she
+        // starts herself anew (as after WebView2's browser going,
+        // crash.rs), once; nothing else is done to the window that is no
+        // more (tao's set_size on it panics, and the release build aborts;
+        // the test VM, 2026-11-07: she died with Explorer).
+        let dead = {
+            let e = EMBED.lock().unwrap();
+            e.hwnd != 0 && (e.parented || e.owned || e.restarting) && !is_window(e.hwnd)
         };
-        let hwnd = island::hwnd(sh);
-        if hwnd == 0 {
-            return;
-        }
-        // SAFETY: a plain query about a window; a stale handle answers no.
-        if unsafe { IsWindow(hwnd as Hwnd) } == 0 {
-            // Gone with Explorer's taskbar (its children go with it): the
-            // island's window, her home, with the settings and all; Tauri
-            // keeps its label, so she starts herself anew (as after
-            // WebView2's browser going, crash.rs), once.
+        if dead {
             let first = {
                 let mut e = EMBED.lock().unwrap();
                 e.parented = false;
+                e.owned = false;
                 e.tray = 0;
+                e.child = None;
                 !std::mem::replace(&mut e.restarting, true)
             };
             if first {
@@ -414,6 +445,15 @@ mod imp {
                     Err(e) => sh.log(&format!("island: could not start anew: {e}")),
                 });
             }
+            return;
+        }
+        let wanted = island::embedding_wanted(sh);
+        let bar = wanted.then(|| island::home_area(sh)).flatten().and_then(|a| shell::shown_bar(a.mon)).filter(|(_, _, edge)| matches!(edge, Edge::Top | Edge::Bottom));
+        let Some((tray, strip, edge)) = bar else {
+            return detach(sh, if wanted { "no taskbar of Explorer's shown along the bottom or the top of her display" } else { "not wanted" });
+        };
+        let hwnd = island::hwnd(sh);
+        if !is_window(hwnd) {
             return;
         }
         // SAFETY: a plain query about a window that exists.
@@ -457,19 +497,26 @@ mod imp {
     // the taskbar (island.rs fit).
     fn detach(sh: &Arc<Shared>, why: &str) {
         let parenting = island::parenting(sh);
-        let (was, hwnd, parented) = {
+        let (was, hwnd, parented, owned) = {
             let mut e = EMBED.lock().unwrap();
             let was = std::mem::take(&mut e.laid);
             let parented = std::mem::take(&mut e.parented);
+            let owned = std::mem::take(&mut e.owned);
             e.tray = 0;
             e.child = None;
             e.said.clear();
-            (was, e.hwnd, parented)
+            (was, e.hwnd, parented, owned)
         };
-        if parented && hwnd != 0 {
-            let (pos, size, shown) = parenting.map_or(((0, 0), (1, 1), false), |p| (p.1, p.2, p.3));
-            release(hwnd as Hwnd, pos, size, shown);
-            sh.log(&format!("island: out of the taskbar ({why})"));
+        if hwnd != 0 && is_window(hwnd) {
+            if parented {
+                let (pos, size, shown) = parenting.map_or(((0, 0), (1, 1), false), |p| (p.1, p.2, p.3));
+                release(hwnd as Hwnd, pos, size, shown, std::ptr::null_mut());
+                sh.log(&format!("island: out of the taskbar ({why})"));
+            } else if owned {
+                // A window of its own again, nobody's: the taskbar it was owned by is not hers to follow.
+                // SAFETY: a plain call on our own window.
+                unsafe { SetWindowLongPtrW(hwnd as Hwnd, GWLP_HWNDPARENT, 0) };
+            }
         }
         if was != Laid::default() {
             island::set_capsule(sh, Laid::default());
@@ -490,19 +537,30 @@ mod imp {
                 SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
                 SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
             }
+            // Owned by the taskbar while it was out (release): nobody's, then its child.
+            SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, 0);
             SetParent(hwnd, tray);
         }
     }
 
     // Out of the taskbar: a window of its own again, kept on top, where
-    // the island has it (physical), shown if it is to be.
-    fn release(hwnd: Hwnd, (x, y): (i32, i32), (w, h): (i32, i32), shown: bool) {
+    // the island has it (physical), shown if it is to be; and owned by
+    // the taskbar's window (`owner`, none to own nobody): Windows keeps an
+    // owned window above its owner, so the island stays over the taskbar
+    // however Explorer raises it. Explorer brings its taskbar to the top
+    // of the windows kept on top as it is pressed, and keeps it there
+    // while it is the active window: raised over it again at every look at
+    // the pointer (the first try) the two fought at 60 times a second, and
+    // the whole machine lagged (the user, 2026-11-07: 点一下任务栏，再放光标到胶囊上，
+    // 整个电脑直接变得很卡). Owned, nothing is raised at all.
+    fn release(hwnd: Hwnd, (x, y): (i32, i32), (w, h): (i32, i32), shown: bool, owner: Hwnd) {
         // SAFETY: plain calls on our own window; a stale handle only makes them fail.
         unsafe {
             if IsWindow(hwnd) == 0 {
                 return;
             }
             SetParent(hwnd, std::ptr::null_mut());
+            SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, owner as isize);
             SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_FRAMECHANGED | if shown { SWP_SHOWWINDOW } else { 0 });
         }
         settle_webview(hwnd);
@@ -579,6 +637,9 @@ mod imp {
     pub fn is_parented() -> bool {
         false
     }
+    pub fn is_window(hwnd: isize) -> bool {
+        hwnd != 0
+    }
     pub fn lay_child(_pos: (i32, i32), _size: (i32, i32)) {}
     pub fn apply(_sh: &Shared) {}
     pub fn where_() -> serde_json::Value {
@@ -586,7 +647,7 @@ mod imp {
     }
 }
 
-pub use imp::{apply, is_parented, lay_child, look_soon, start, stop, where_};
+pub use imp::{apply, is_parented, is_window, lay_child, look_soon, start, stop, where_};
 
 #[cfg(test)]
 mod tests {

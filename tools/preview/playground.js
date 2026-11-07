@@ -935,7 +935,7 @@
     // The edge it is along (islandEdge, zhoupengjie/Wakuwaku#105).
     islandEdge: [
       ['top', '顶部'],
-      ['taskbar', '任务栏里'],
+      ['taskbar', '叠在任务栏上'],
     ],
     endCue: [
       ['open', '展开胶囊'],

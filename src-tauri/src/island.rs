@@ -296,7 +296,28 @@ impl Island {
 }
 
 fn window(sh: &Shared) -> Option<WebviewWindow> {
-    sh.app.get_webview_window("island")
+    // None once the window is no more: gone with Explorer's taskbar (its
+    // child, embed.rs, which starts her anew). Tauri still has it, and
+    // tao's calls about its place and size (outer_size, outer_position,
+    // set_size) panic on a window that is no more ("Unexpected
+    // GetWindowRect failure", "adjust_window_rect failed"), and the
+    // release build aborts on a panic: she died with Explorer in the test
+    // VM (2026-11-07), and her quitting process left a panic record after
+    // the first fix (lay alone looked).
+    sh.app.get_webview_window("island").filter(alive)
+}
+
+// Whether the window still exists (see window).
+fn alive(win: &WebviewWindow) -> bool {
+    #[cfg(windows)]
+    {
+        crate::embed::is_window(win.hwnd().map(|h| h.0 as isize).unwrap_or(0))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = win;
+        true
+    }
 }
 
 // Up whenever she is in sight, home or out; or risen for the settings; or
@@ -875,6 +896,11 @@ pub fn take_strip_again(sh: &Shared) {
 // of its end, until she was restarted (zhoupengjie/Wakuwaku#37). Never while
 // minimized (keep_on_screen lays it once it is given back).
 fn lay(win: &WebviewWindow, (x, y): (i32, i32), (w, h): (i32, i32)) {
+    // Gone with Explorer's taskbar (embed.rs, which starts her anew): tao's
+    // set_size on a window that is no more panics (see window).
+    if !alive(win) {
+        return;
+    }
     if is_minimized(win) {
         return;
     }

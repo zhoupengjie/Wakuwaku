@@ -684,25 +684,19 @@
   }
 
   // Where her island is (zhoupengjie/Wakuwaku#105): at the top of the
-  // screen (as ever, the default), or in Windows' own taskbar, along the
-  // bottom or the top, which stays as it is, shown and whatever Start11
-  // and the like make of it (the island home never puts it away): her
-  // capsule inside it (embed.rs), the island opening from it. Round a Mac's
-  // notch, the top only. On the taskbar none: the strip has its own edge row.
+  // screen (as ever, the default); laid over Windows' taskbar, along the
+  // bottom or the top; or inside it, its window a child of the taskbar's
+  // while closed, as TrafficMonitor's (embed.rs). Three choices side by
+  // side for two settings (islandEdge top | taskbar, islandEmbed), with
+  // no words under them (the user, 2026-11-07: 嵌入开关取消，直接并行; 放在不需要小字解释).
+  // Round a Mac's notch, the top only; on a Mac no taskbar to go into.
+  // On the taskbar home none: the strip has its own edge row.
   function islandEdgeRow() {
+    const s = snap.settings
     const notch = window.Island?.notched?.() === true
-    const where = !notch && snap.settings.islandEdge === 'taskbar' ? 'taskbar' : 'top'
-    const places = ['top', 'taskbar'].map(e => [e, T(`s.islandWhere.${e}`), notch && e !== 'top'])
-    return row(esc(T('s.islandEdge')), esc(T(notch ? 's.islandEdgeNotch' : 's.islandEdgeNote')), seg('islandEdge', places, where))
-  }
-
-  // In Windows' taskbar, her capsule inside it (embed.rs; on unless turned
-  // off): a window of hers made a child of the taskbar's, as
-  // TrafficMonitor's is, taking one end of the strip, the taskbar's own
-  // content moved over for it; off, the island is laid over the taskbar
-  // instead, nothing moved. Not on a Mac (no taskbar), nor on the taskbar home.
-  function islandEmbedRow() {
-    return row(esc(T('s.islandEmbed')), esc(T('s.islandEmbedNote')), sw('islandEmbed', snap.settings.islandEmbed !== false))
+    const where = notch || s.islandEdge !== 'taskbar' ? 'top' : s.islandEmbed === false ? 'over' : 'taskbar'
+    const places = ['top', 'over', 'taskbar'].map(e => [e, T(`s.islandWhere.${e}`), (notch && e !== 'top') || (window.pet.mac && e === 'taskbar')])
+    return row(esc(T('s.islandEdge')), notch ? esc(T('s.islandEdgeNotch')) : '', seg('islandWhere', places, where))
   }
 
   // At the top of the screen, up out of the way while a window lies under
@@ -727,7 +721,7 @@
         <div class="mode${s.display === 'split' ? ' on' : ''}" data-mode="split"><div class="pv"><u></u><b></b></div><div class="l"><span class="rd"></span>${esc(T('s.displaySplit'))}</div></div>
       </div>
       ${onTaskbar(s) ? `<div class="grp"><div class="note">${esc(T(s.display === 'split' ? 's.splitNote' : 's.taskbarNote'))}</div></div><div class="grp">${s.display === 'split' ? splitRows() : row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${screenRow()}${displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${s.display === 'split' || ['left', 'right'].includes(s.taskbarEdge) ? row(esc(T('s.taskbarButtons')), esc(T(s.display === 'split' ? 's.taskbarButtonsDock' : 's.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
-      ${part('place', '')}<div class="grp">${onTaskbar(s) ? '' : screenRow()}${islandPosRow()}${onTaskbar(s) ? '' : islandEdgeRow()}${!onTaskbar(s) && !window.pet.mac && s.islandEdge === 'taskbar' ? islandEmbedRow() : ''}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${onTaskbar(s) || window.pet.mac || s.islandEdge === 'taskbar' ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${onTaskbar(s) ? '' : ilookRow()}</div>
+      ${part('place', '')}<div class="grp">${onTaskbar(s) ? '' : screenRow()}${islandPosRow()}${onTaskbar(s) ? '' : islandEdgeRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${onTaskbar(s) || window.pet.mac || s.islandEdge === 'taskbar' ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${onTaskbar(s) ? '' : ilookRow()}</div>
       ${pageWindows()}
       ${sec(T('s.her'))}<div class="grp">
         ${row(esc(T('menu.size')), '', seg('scale', SIZES.map(([name, scale]) => [scale, T(`menu.${name}`)]), s.scale))}
@@ -3782,8 +3776,6 @@
       if (key === 'ilookBare') return ilookSave(ilookFor(), { ...ilookOf(ilookFor()), bare: !ilookOf(ilookFor()).bare })
       if (key.startsWith('notify.')) return patch({ notify: { ...s.notify, [key.slice(7)]: !s.notify?.[key.slice(7)] } })
       if (key === 'widgetNudge') return patch({ widgetNudge: s.widgetNudge === false })
-      // Her capsule inside Windows' taskbar: on unless turned off (embed.rs).
-      if (key === 'islandEmbed') return patch({ islandEmbed: s.islandEmbed === false })
       // On unless turned off (market.rs).
       if (key === 'pluginAutoUpdate') return patch({ pluginAutoUpdate: s.pluginAutoUpdate === false })
       // One of the monitor's parts on or off.
@@ -3982,6 +3974,8 @@
         gallery.items = []
         return loadGallery(false)
       }
+      // Where her island is (islandEdgeRow): one choice for two settings.
+      if (key === 'islandWhere') return patch(raw === 'top' ? { islandEdge: 'top' } : { islandEdge: 'taskbar', islandEmbed: raw === 'taskbar' })
       const value = ['lang', 'monitorSource', 'islandPos', 'islandEdge', 'islandWidth', 'taskbarMaterial', 'taskbarClearWhen', 'taskbarButtons', 'taskbarAlign', 'taskbarEdge', 'taskbarDisplays', 'homeDisplay', 'splitDock', 'splitKeys', 'mailAgent', 'mailOffline', 'updateFrom', 'endCue'].includes(key) ? raw : raw === 'seen' ? 'seen' : Number(raw)
       return patch({ [key]: value })
     }

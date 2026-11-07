@@ -6407,9 +6407,9 @@
   // colour goes round the island twice so the eye finds it (style.css
   // look-here; held still a moment instead with reduced motion).
   // Her capsule's own window in Windows' taskbar (isCapsuleWin): nothing
-  // drawn while the settings stand above the taskbar in the island's window
-  // (embed.rs cover), which does not cover the capsule as the open island
-  // does; back as they close.
+  // drawn while something is open in the island's window (embed.rs cover):
+  // the settings stand off the strip, and the open island's corners are
+  // rounder than the capsule's; back as it closes.
   window.pet.onCover(({ on } = {}) => {
     if (isCapsuleWin()) body.classList.toggle('isl-covered', on === true)
   })

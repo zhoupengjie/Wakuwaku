@@ -687,13 +687,15 @@ body {
 
 .home-island.isl-capsule-win #island-row {
   align-items: center;
-  transition: opacity 0.16s ease;
 }
 
-/* Nothing drawn while the settings stand above the taskbar in the island's
-   window (island.js onCover, embed.rs cover). */
+/* Nothing drawn while something is open in the island's window (island.js
+   onCover, embed.rs cover): faded out as the island grows out of the
+   capsule (its own pill fading in over it, isl-ghost), back at once as the
+   island's window goes. */
 .home-island.isl-capsule-win.isl-covered #island-row {
   opacity: 0;
+  transition: opacity 0.16s ease;
 }
 
 /* Over Windows' taskbar along the top of the screen (isl-in-top, island.js
@@ -748,7 +750,7 @@ body {
   opacity: 0;
   transition:
     left 0.56s cubic-bezier(0.3, 1.45, 0.5, 1),
-    opacity 0.2s ease 0.4s;
+    opacity 0.2s ease 0.45s;
 }
 
 /* On a Mac it hangs from the screen's top edge over the menu bar, as tall as

@@ -217,3 +217,95 @@ test("a stock's rise takes the colour its script sent, red up or green up, on ev
   assert.match(WCards.stackRowHTML(stock, '苹果', dark), /<small style="color:#34d27b">/)
   assert.match(WCards.cardHTML(stock, dark), /<span class="cchip" style="--c:#34d27b">\+0\.80%<\/span>/)
 })
+
+// The calendar (plugins/calendar.rs) and what is playing (plugins/media.rs),
+// as their plugins post them.
+const calendar = {
+  id: 'calendar',
+  plugin: 'calendar',
+  label: '11月7日 周六',
+  value: '7',
+  color: '#9d8cff',
+  detail: {
+    sizes: ['s', 'm', 'l'],
+    extra: '农历九月廿九 · 立冬',
+    rows: [
+      { kind: 'date', value: '7', name: '11月', unit: '周六', text: '丙午马年 · 农历九月廿九 · 立冬' },
+      { kind: 'event', when: '10:00', unit: '11:00', name: '今天', subject: '周会', text: '会议室 A', at: new Date(2026, 10, 7, 10).getTime() },
+      { kind: 'event', when: '全天', unit: '', name: '明天', subject: 'Offsite', text: '', at: new Date(2026, 10, 8).getTime() },
+    ],
+  },
+}
+const media = {
+  id: 'media',
+  plugin: 'media',
+  label: 'Yellow',
+  value: 'Coldplay',
+  color: '#ff7ab6',
+  detail: {
+    sizes: ['s', 'm', 'l'],
+    extra: '1:02 / 4:29',
+    series: { points: [62], hi: 269, lo: 0, unit: 's' },
+    rows: [{ kind: 'track', subject: 'Yellow', text: 'Coldplay' }, { kind: 'album', text: 'Parachutes' }, { kind: 'app', name: 'Spotify' }, { kind: 'state', value: 'playing' }],
+    actions: [{ id: 'prev', icon: 'prev' }, { id: 'toggle', icon: 'pause' }, { id: 'next', icon: 'next', off: true }],
+  },
+}
+const nov = { ...dark, now: new Date(2026, 10, 7, 9, 30).getTime() }
+
+test('the calendar: the date on the taskbar with the next event under it, the lunar date where none; its card the month, today lit, a dot on a day with something on', () => {
+  assert.equal(WCards.kindOf(calendar), 'calendar')
+  assert.equal(WCards.glyphOf(calendar), 'E8BF')
+  assert.equal(WCards.titleOf(calendar, nov), '日历')
+  const b = WCards.briefOf(calendar, nov)
+  assert.deepEqual([b.value, b.top, b.line, b.big, b.unit], ['11月7日', '11月7日', '10:00 周会', '7', '11月'])
+  assert.equal(WCards.briefOf({ ...calendar, detail: { ...calendar.detail, rows: calendar.detail.rows.slice(0, 1) } }, nov).line, '农历九月廿九 · 立冬')
+  assert.equal(WCards.briefOf(calendar, { ...nov, lang: 'en' }).value, '11月 7', 'the words as the plugin sent them (its language)')
+  assert.match(WCards.faceHTML(calendar, 'M', nov), /<b class="twv">11月7日<\/b><i>10:00 周会<\/i>/)
+  // The open island's row: the date, the lunar date under, the next event as its value.
+  const row = WCards.rowHTML(calendar, 'M', nov)
+  assert.match(row, /<span class="wl">11月7日 周六<\/span><span class="wsec">农历九月廿九 · 立冬<\/span>/)
+  assert.match(row, /<span class="wv" style="color:#9d8cff">10:00 周会<\/span>/)
+  const card = WCards.cardHTML(calendar, nov)
+  assert.match(card, /<span class="cbig">7<\/span><span class="cwords"><b>11月 · 周六<\/b><span>丙午马年 · 农历九月廿九 · 立冬<\/span>/)
+  // November 2026 begins on a Sunday: six blanks after the Monday-first heads, then the 1st.
+  assert.match(card, /<span class="cwd">一<\/span>.*<span class="cwd">日<\/span>(<span><\/span>){6}<span class="cday">1<\/span>/)
+  assert.match(card, /<span class="cday on ev">7<\/span><span class="cday ev">8<\/span><span class="cday">9<\/span>/)
+  assert.match(card, /<span class="cday">30<\/span><\/div>/)
+  assert.match(card, /接下来.*<span class="cn">今天<\/span><span class="cd">周会 · 会议室 A<\/span><span class="cv">10:00–11:00<\/span>/)
+  assert.match(card, /<span class="cn">明天<\/span><span class="cd">Offsite<\/span><span class="cv">全天<\/span>/)
+  // In English, Sunday first: no blank before the 1st.
+  assert.match(WCards.monthGrid(calendar, { ...nov, lang: 'en' }, '#000'), /<span class="cwd">S<\/span><span class="cwd">M<\/span>.*<span class="cwd">S<\/span><span class="cday">1<\/span>/)
+  assert.ok(WCards.hasCard(calendar))
+})
+
+test('what is playing: the song over its artist on the taskbar; a ring of how far along in its row; its card the times, the app and its buttons, one the player has not greyed', () => {
+  assert.equal(WCards.kindOf(media), 'media')
+  assert.equal(WCards.titleOf(media, dark), '正在播放')
+  const b = WCards.briefOf(media, dark)
+  assert.deepEqual([b.value, b.top, b.line, b.big, b.say], ['Yellow', 'Yellow', 'Coldplay', '', 'Coldplay · 1:02 / 4:29'])
+  // A long title cut for the taskbar's room; without rows, the label is the song.
+  assert.equal(WCards.briefOf({ ...media, detail: { ...media.detail, rows: [{ kind: 'track', subject: 'B'.repeat(30), text: 'x' }] } }, dark).value, `${'B'.repeat(23)}…`)
+  assert.equal(WCards.briefOf({ ...media, detail: { sizes: ['s', 'm'] } }, dark).value, 'Yellow')
+  assert.match(WCards.faceHTML(media, 'M', dark), /<b class="twv">Yellow<\/b><i>Coldplay<\/i>/)
+  const row = WCards.rowHTML(media, 'M', dark)
+  assert.match(row, /<span class="wl">Yellow<\/span><span class="wsec">1:02 \/ 4:29<\/span>/)
+  assert.match(row, /<svg class="wring" width="16"/)
+  assert.match(row, /<span class="wv" style="color:#ff7ab6">Coldplay<\/span>/)
+  const card = WCards.cardHTML(media, dark)
+  assert.match(card, /<b>Yellow<\/b><span>Coldplay · Parachutes<\/span><\/span><span class="cright"><span>Spotify<\/span>/)
+  assert.match(card, /<span class="wmeter"><i style="width:23%;background:#ff7ab6">/)
+  assert.match(card, /<div class="cfoot"><span>1:02<\/span><span>4:29<\/span><\/div>/)
+  assert.match(card, /<button type="button" class="wact" data-wact="prev" data-widget="media" title="上一首">&#xE892;<\/button>/)
+  assert.match(card, /<button type="button" class="wact main" data-wact="toggle" data-widget="media" title="暂停">&#xE769;<\/button>/)
+  assert.match(card, /<button type="button" class="wact off" data-wact="next" data-widget="media" title="下一首" aria-disabled="true">&#xE893;<\/button>/)
+  // Paused: said with the length; play in the middle.
+  const paused = { ...media, detail: { ...media.detail, extra: '暂停 · 1:02 / 4:29', rows: media.detail.rows.map(r => (r.kind === 'state' ? { ...r, value: 'paused' } : r)), actions: [{ id: 'toggle', icon: 'play' }] } }
+  assert.match(WCards.cardHTML(paused, { ...dark, lang: 'en' }), /<span>1:02<\/span><span>Pause · 4:29<\/span>/)
+  assert.match(WCards.cardHTML(paused, dark), /class="wact main" data-wact="toggle" data-widget="media" title="播放">&#xE768;/)
+  // Nothing playing: said so, no buttons; a widget without actions draws none.
+  const none = { id: 'media', plugin: 'media', label: '没有在播放', value: '—', detail: { sizes: ['s', 'm', 'l'], rows: [{ kind: 'state', value: 'none' }] } }
+  assert.equal(WCards.cardHTML(none, dark), '<div class="crow"><span class="cwords"><b>没有在播放</b></span></div>')
+  assert.equal(WCards.briefOf(none, dark).line, '')
+  assert.equal(WCards.actionsHTML(weather, dark), '')
+  assert.equal(WCards.clockOf(3725), '1:02:05')
+})

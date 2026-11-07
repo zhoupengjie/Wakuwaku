@@ -378,6 +378,8 @@
     { id: 'ci', icon: 'check', on: false, state: 'off', params: [{ name: 'Repo', kind: 'text', required: true, value: '' }] },
     { id: 'devserver', icon: 'server', on: false, state: 'off', params: [{ name: 'Url', kind: 'text', required: true, value: '' }] },
     { id: 'stretch', icon: 'timer', on: false, state: 'off', params: [{ name: 'Minutes', kind: 'number', required: false, value: '50' }] },
+    { id: 'calendar', icon: 'calendar', on: false, state: 'off', params: [{ name: 'Url', kind: 'text', required: false, value: '' }, { name: 'Second', kind: 'choice', required: false, options: ['Lunar', 'Week'], value: 'Lunar', chosen: false }] },
+    { id: 'media', icon: 'music', on: false, state: 'off', params: [] },
   ]
 
   // What the plugins off above (PLUGINS) say once they are turned on (put
@@ -386,6 +388,46 @@
     ci: { id: 'ci-main', plugin: 'ci', from: 'script', on: true, icon: 'check', color: '#34d27b', label: 'wakuwaku · main', value: '通过', detail: { sizes: ['s', 'm'], extra: '3 分钟前' } },
     devserver: { id: 'devserver', plugin: 'devserver', from: 'script', on: true, icon: 'server', color: '#36cfc9', label: 'localhost:5173', value: '运行中' },
     stretch: { id: 'stretch', plugin: 'stretch', from: 'script', on: true, icon: 'timer', color: '#b18cff', label: '久坐提醒', value: '32 分钟后' },
+    // The calendar (plugins/calendar.rs): the date in parts, the lunar
+    // date, what is coming; what is playing (plugins/media.rs): the song,
+    // how far along, and its buttons.
+    calendar: {
+      id: 'calendar',
+      plugin: 'calendar',
+      from: 'script',
+      on: true,
+      icon: 'calendar',
+      color: '#9d8cff',
+      label: '10月17日 周六',
+      value: '17',
+      detail: {
+        sizes: ['s', 'm', 'l'],
+        extra: '农历九月初七',
+        rows: [
+          { kind: 'date', value: '17', name: '10月', unit: '周六', text: '丙午马年 · 农历九月初七' },
+          { kind: 'event', when: '16:00', unit: '16:30', name: '今天', subject: '周会', text: '会议室 A', at: Date.UTC(2026, 9, 17, 8) },
+          { kind: 'event', when: '全天', unit: '', name: '明天', subject: '团建', text: '', at: Date.UTC(2026, 9, 17, 16) },
+          { kind: 'event', when: '10:00', unit: '11:00', name: '周三', subject: '评审', text: '', at: Date.UTC(2026, 9, 21, 2) },
+        ],
+      },
+    },
+    media: {
+      id: 'media',
+      plugin: 'media',
+      from: 'script',
+      on: true,
+      icon: 'music',
+      color: '#ff7ab6',
+      label: 'Yellow',
+      value: 'Coldplay',
+      detail: {
+        sizes: ['s', 'm', 'l'],
+        extra: '1:02 / 4:29',
+        series: { points: [62], hi: 269, lo: 0, unit: 's' },
+        rows: [{ kind: 'track', subject: 'Yellow', text: 'Coldplay' }, { kind: 'album', text: 'Parachutes' }, { kind: 'app', name: 'Spotify' }, { kind: 'state', value: 'playing' }],
+        actions: [{ id: 'prev', icon: 'prev' }, { id: 'toggle', icon: 'pause' }, { id: 'next', icon: 'next' }],
+      },
+    },
   }
 
   // --- Other people's plugins (addons.rs view; the Plugins page, the picker) -------------
@@ -674,6 +716,16 @@
       { id: 'wd1', type: 'widget', of: 'deploy', size: 'm', ...at(12, 0) },
       { id: 'wd2', type: 'widget', of: 'deploy', size: 's', ...at(12, 2) },
       { id: 'wd3', type: 'widget', of: 'build', size: 's', ...at(14, 2) },
+    ],
+    // The calendar and what is playing (plugins/calendar.rs, media.rs), each
+    // size: a column each, large over medium over small.
+    calendarMedia: [
+      { id: 'wc1', type: 'plugin', of: 'calendar', size: 'l', ...at(0, 0) },
+      { id: 'wc2', type: 'plugin', of: 'calendar', size: 'm', ...at(0, 4) },
+      { id: 'wc3', type: 'plugin', of: 'calendar', size: 's', ...at(0, 6) },
+      { id: 'wp1', type: 'plugin', of: 'media', size: 'l', ...at(4, 0) },
+      { id: 'wp2', type: 'plugin', of: 'media', size: 'm', ...at(4, 4) },
+      { id: 'wp3', type: 'plugin', of: 'media', size: 's', ...at(4, 6) },
     ],
     // One alone, a stack, a board open and one folded.
     scene: [

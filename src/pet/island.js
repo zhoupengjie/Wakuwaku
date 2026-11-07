@@ -6286,6 +6286,13 @@
         if (!wmenu.contains(e.target)) closeMenu()
         return
       }
+      // A button of a widget's own in its card (what is playing: previous,
+      // play or pause, next; wcards.js actionsHTML): to its plugin.
+      const wa = view === 'expanded' && e.target.closest('[data-wact]')
+      if (wa) {
+        if (!wa.classList.contains('off')) window.pet.widgets?.act(wa.dataset.widget, wa.dataset.wact)
+        return
+      }
       // In a card unfolded: nothing more (it is read there).
       if (view === 'expanded' && e.target.closest('.icard')) return
       // The press, if the clocks redrew the session between it and the release.

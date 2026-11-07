@@ -17,7 +17,7 @@ const REPO = path.join(__dirname, '..')
 
 // The playground's one-click scenes, as agreed (2026-10-17; the hold and the
 // island at a corner, zhoupengjie/Wakuwaku#59 and #65, 2026-10-18), in order.
-const WANTED = ['新用户第一次打开', '平常', '三个会话在忙', '等你批准', '做完了（流光）', '出错了', '提醒停留', '展开停留', '放满小工具的任务栏', '桌面', '空桌面', '灵动岛模式', '岛在右上', '岛在底部', '浅色 + 透明任务栏', '编辑任务栏布局中', '添加小工具', '编辑胶囊', '组合', 'Ctrl 多选']
+const WANTED = ['新用户第一次打开', '平常', '三个会话在忙', '等你批准', '做完了（流光）', '出错了', '提醒停留', '展开停留', '放满小工具的任务栏', '桌面', '日历和正在播放', '空桌面', '灵动岛模式', '岛在右上', '岛在底部', '浅色 + 透明任务栏', '编辑任务栏布局中', '添加小工具', '编辑胶囊', '组合', 'Ctrl 多选']
 
 test('the playground has each agreed scene, in order, with a note on what to try', () => {
   assert.deepEqual(

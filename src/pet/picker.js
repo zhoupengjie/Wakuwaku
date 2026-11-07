@@ -68,7 +68,7 @@
   // Its kinds, and which a plugin she runs is (plugins.rs PLUGINS); 组合:
   // the boards kept as combos (settings boardSets, a board's 存为组合…).
   const CATS = ['all', 'system', 'work', 'info', 'mail', 'script', 'sets']
-  const PLUGIN_CAT = { weather: 'info', stock: 'info', pomodoro: 'work', countdown: 'work', stretch: 'work', ci: 'script', devserver: 'script' }
+  const PLUGIN_CAT = { weather: 'info', stock: 'info', pomodoro: 'work', countdown: 'work', stretch: 'work', calendar: 'work', media: 'system', ci: 'script', devserver: 'script' }
   const BUILT_IN_CAT = { monitor: 'system', today: 'work', tokens: 'work' }
   // The spacers' marks (the layout's own parts, on the strip alone).
   const SPACER_MARK = {

@@ -18,6 +18,11 @@
 //            like "3 封未读", still shows
 //   POST /widget { id, remove: true }
 //
+// A plugin of hers (plugins.rs) posts the same, and may add buttons to its
+// detail (actions: what is playing has previous, play or pause, next),
+// drawn on its cards and pressed back to it (plugins::act); a script's
+// (nobody to press them back to) are dropped.
+//
 // Built in (texts as { key, vars } for the page to say in her language):
 //   monitor  the machine: CPU, memory, the network's pace, the battery, each
 //            on or off ("monitor" setting), read every 1 to 10 seconds, and
@@ -117,6 +122,12 @@ const SUBJECT: usize = 60;
 const EXTRA: usize = 24;
 const ROW_NAMES: [&str; 10] = ["from", "code", "name", "when", "price", "change", "value", "unit", "kind", "icon"];
 const ROW_SUBJECTS: [&str; 2] = ["subject", "text"];
+// A widget's buttons (a plugin of hers alone): ACTIONS at most, each an id
+// (as plugins::act takes it: a-z 0-9 -, 16 at most, a letter first), its
+// icon (one of ACTION_ICONS, drawn by the pages as Windows draws them), and
+// off (true: greyed, nothing to press: a player with no previous).
+const ACTIONS: usize = 4;
+const ACTION_ICONS: [&str; 5] = ["play", "pause", "prev", "next", "stop"];
 
 // Words cut to max characters, the last of them "…" when cut.
 fn cut(s: &str, max: usize) -> String {
@@ -137,6 +148,31 @@ fn words_of(v: &Value, max: usize) -> Option<String> {
         _ => return None,
     };
     (!s.is_empty()).then_some(s)
+}
+
+// The buttons of a plugin's widget, checked: those that will do, ACTIONS
+// at most, in their order; none, null.
+pub fn actions_of(v: Option<&Value>) -> Value {
+    let Some(list) = v.and_then(Value::as_array) else { return Value::Null };
+    let is_action = |id: &str| !id.is_empty() && id.len() <= 16 && id.starts_with(|c: char| c.is_ascii_lowercase()) && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    let kept: Vec<Value> = list
+        .iter()
+        .filter_map(|a| {
+            let id = a.get("id")?.as_str().filter(|id| is_action(id))?;
+            let icon = a.get("icon")?.as_str().filter(|i| ACTION_ICONS.contains(i))?;
+            let mut out = json!({ "id": id, "icon": icon });
+            if a.get("off") == Some(&Value::Bool(true)) {
+                out["off"] = json!(true);
+            }
+            Some(out)
+        })
+        .take(ACTIONS)
+        .collect();
+    if kept.is_empty() {
+        Value::Null
+    } else {
+        Value::Array(kept)
+    }
 }
 
 // Numbers alone, finite, the last POINTS of them.
@@ -226,6 +262,12 @@ pub struct Put {
 impl Widgets {
     // A widget from a script: Err with why, when it will not do.
     pub fn put(&mut self, v: &Value, now: u64) -> Result<Put, &'static str> {
+        self.put_from(v, now, false)
+    }
+
+    // The same from a plugin of hers (plugins.rs), whose buttons are kept
+    // (may_act); a script's are not.
+    pub fn put_from(&mut self, v: &Value, now: u64, may_act: bool) -> Result<Put, &'static str> {
         let s = |key: &str| v.get(key).and_then(Value::as_str).unwrap_or("");
         let id = s("id");
         if !is_id(id) {
@@ -243,7 +285,7 @@ impl Widgets {
             return Err("label: some words, up to 40");
         }
         let ttl = v.get("ttl").and_then(Value::as_u64).unwrap_or(DEFAULT_TTL).clamp(10, 86_400);
-        let widget = made(v, id, label, Some(now + ttl * 1000), now);
+        let widget = made(v, id, label, Some(now + ttl * 1000), now, may_act);
         let scripted = self.list.iter().filter(|w| w.until.is_some()).count();
         match self.list.iter_mut().find(|w| w.id == id) {
             Some(old) => *old = widget,
@@ -288,7 +330,7 @@ impl Widgets {
         if view.to_string().len() > VIEW {
             return Err("view: up to 32 KB of JSON");
         }
-        let made = made(v, id, label, None, now);
+        let made = made(v, id, label, None, now, false);
         let picture = picture.filter(|_| made.icon == "dot");
         let before = self.list.iter().find(|w| w.id == id && w.addon).map(|w| (&w.view, w.view_rev));
         let view_rev = match before {
@@ -487,14 +529,23 @@ fn built_in(id: &str) -> Widget {
 }
 
 // A widget as sent (a script's, a plugin's), its label given: its value,
-// detail, icon, colour and privacy checked and cut.
-fn made(v: &Value, id: &str, label: String, until: Option<u64>, now: u64) -> Widget {
+// detail, icon, colour and privacy checked and cut; its buttons kept in its
+// detail where it may have them (may_act: a plugin of hers).
+fn made(v: &Value, id: &str, label: String, until: Option<u64>, now: u64, may_act: bool) -> Widget {
     let s = |key: &str| v.get(key).and_then(Value::as_str).unwrap_or("");
+    let mut detail = detail_of(v.get("detail"));
+    let actions = if may_act { actions_of(v.get("detail").and_then(|d| d.get("actions"))) } else { Value::Null };
+    if !actions.is_null() {
+        if detail.is_null() {
+            detail = json!({});
+        }
+        detail["actions"] = actions;
+    }
     Widget {
         id: id.into(),
         label: json!(label),
         value: json!(clip(s("value"), 24)),
-        detail: detail_of(v.get("detail")),
+        detail,
         icon: if ICONS.contains(&s("icon")) { s("icon").into() } else { "dot".into() },
         color: if is_color(s("color")) { s("color").into() } else { String::new() },
         until,
@@ -1894,6 +1945,26 @@ mod tests {
     // A detail as the spec has it: the sizes in their order, a series, rows,
     // a few words more; anything else dropped, long words cut with "…", so a
     // script cannot swell the island.
+    // A plugin's buttons are kept, checked: those that will do, four at
+    // most, off kept; a script's are dropped, its detail otherwise as it
+    // was (and a detail of nothing but dropped buttons is none).
+    #[test]
+    fn buttons_are_a_plugins_alone() {
+        let sent = json!({ "id": "media", "label": "Yellow", "detail": { "extra": "1:02 / 4:29", "actions": [{ "id": "prev", "icon": "prev", "off": true }, { "id": "toggle", "icon": "pause" }, { "id": "next", "icon": "next", "off": false }, { "id": "Bad", "icon": "next" }, { "id": "noicon" }, { "id": "x", "icon": "heart" }, { "id": "a", "icon": "play" }, { "id": "b", "icon": "play" }, { "id": "c", "icon": "play" }] } });
+        let mut w = Widgets::default();
+        assert!(w.put_from(&sent, 0, true).is_ok());
+        let detail = w.view(0, &[], &[], &|_| None).as_array().unwrap().iter().find(|x| x["id"] == "media").unwrap()["detail"].clone();
+        assert_eq!(detail["extra"], "1:02 / 4:29");
+        assert_eq!(detail["actions"], json!([{ "id": "prev", "icon": "prev", "off": true }, { "id": "toggle", "icon": "pause" }, { "id": "next", "icon": "next" }, { "id": "a", "icon": "play" }]));
+        let mut w = Widgets::default();
+        assert!(w.put(&json!({ "id": "mine", "label": "x", "detail": { "actions": [{ "id": "play", "icon": "play" }] } }), 0).is_ok());
+        let all = w.view(0, &[], &[], &|_| None);
+        let mine = all.as_array().unwrap().iter().find(|x| x["id"] == "mine").unwrap();
+        assert_eq!(mine["detail"], Value::Null, "a script's buttons dropped, nothing else of a detail: none");
+        assert_eq!(actions_of(Some(&json!("play"))), Value::Null);
+        assert_eq!(actions_of(Some(&json!([{ "id": "play", "icon": "play", "label": "Play" }]))), json!([{ "id": "play", "icon": "play" }]), "nothing but id, icon and off");
+    }
+
     #[test]
     fn a_detail_is_checked_and_cut() {
         assert_eq!(detail_of(None), Value::Null);

@@ -574,10 +574,20 @@ impl Shared {
     // up now (not any id merely beginning like a plugin's: finding 11), so a
     // plugin cannot claim the person's `cpu_temp` next to a `cpu` plugin.
     pub fn put_widget(&self, v: &Value) -> Result<(), &'static str> {
+        self.put_widget_from(v, false)
+    }
+
+    // The same from a plugin of hers (plugins.rs), whose buttons are kept
+    // (widgets.rs actions).
+    pub fn put_plugin_widget(&self, v: &Value) -> Result<(), &'static str> {
+        self.put_widget_from(v, true)
+    }
+
+    fn put_widget_from(&self, v: &Value, may_act: bool) -> Result<(), &'static str> {
         if v.get("id").and_then(Value::as_str).is_some_and(|id| self.widgets.lock().unwrap().is_addon(id)) {
             return Err("id: taken by a plugin");
         }
-        let put = self.widgets.lock().unwrap().put(v, now_ms())?;
+        let put = self.widgets.lock().unwrap().put_from(v, now_ms(), may_act)?;
         self.redraw();
         if let Some(words) = put.nudge {
             self.nudge_widget(&put.id, &words);
@@ -1239,6 +1249,14 @@ async fn pet_log(app: AppHandle, window: WebviewWindow, line: String) {
     shared(&app).log(&format!("{} page: {line}", window.label()));
 }
 
+// A button on a widget's card pressed (what is playing: previous, play or
+// pause, next): to the plugin the widget belongs to (plugins.rs act), which
+// shows what it did at once. False for one of no plugin of hers.
+#[tauri::command]
+async fn widget_act(app: AppHandle, id: String, action: String) -> bool {
+    plugins::act(&shared(&app), &id, &action)
+}
+
 // --- Started by the SessionStart hook ----------------------------------------------------
 
 // The event a hook gives on stdin, if it comes soon.
@@ -1711,6 +1729,7 @@ fn main() {
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            widget_act,
             pet_ready,
             pet_hover,
             pet_drag_start,

@@ -6228,6 +6228,93 @@ body.has-news #island[data-view='compact'] .news-dot {
   border-radius: 2px;
 }
 
+/* The calendar's month (wcards.js monthGrid): seven columns, the weekdays'
+   letters over the days, today on the widget's colour, a dot under a day
+   with something on. */
+:is(.icard, .wgcard) .cgrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  row-gap: 1px;
+  text-align: center;
+  font: 500 11px/16px var(--wg-num);
+  font-variant-numeric: tabular-nums;
+}
+
+:is(.icard, .wgcard) .cgrid .cwd {
+  color: var(--wc-3);
+  font-size: 10px;
+}
+
+:is(.icard, .wgcard) .cgrid .cday {
+  position: relative;
+  border-radius: 4px;
+}
+
+:is(.icard, .wgcard) .cgrid .cday.on {
+  background: var(--c);
+  color: #fff;
+  font-weight: 700;
+}
+
+:is(.icard, .wgcard) .cgrid .cday.ev::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  border-radius: 50%;
+  background: var(--c);
+}
+
+:is(.icard, .wgcard) .cgrid .cday.on.ev::after {
+  background: #fff;
+}
+
+/* A widget's own buttons (wcards.js actionsHTML): round, Windows' glyphs,
+   play or pause larger in the widget's colour; one it has not, greyed. */
+:is(.icard, .wgcard) .cacts {
+  justify-content: center;
+}
+
+.wacts {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--wg-track);
+  color: var(--wg-fg);
+  font: normal 11px/1 var(--wg-icon);
+  cursor: default;
+}
+
+.wact.main {
+  width: 34px;
+  height: 34px;
+  background: var(--c);
+  color: #fff;
+  font-size: 13px;
+}
+
+.wact:hover {
+  filter: brightness(1.15);
+}
+
+.wact.off {
+  opacity: 0.35;
+}
+
 /* An up or a down: 18 high, round 9, its colour at 16%. */
 :is(.icard, .wgcard) .cchip {
   display: inline-flex;

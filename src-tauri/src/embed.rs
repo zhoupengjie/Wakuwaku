@@ -167,13 +167,24 @@ mod imp {
         fn SetLayeredWindowAttributes(hwnd: Hwnd, key: u32, alpha: u8, flags: u32) -> i32;
         fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
         fn GetWindow(hwnd: Hwnd, cmd: u32) -> Hwnd;
+        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
+        fn GetAncestor(hwnd: Hwnd, flags: u32) -> Hwnd;
+        fn GetDesktopWindow() -> Hwnd;
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetLastError() -> u32;
     }
 
     const GWL_EXSTYLE: i32 = -20;
     // A top-level window's owner (set this way, as WPF sets a window's Owner).
     const GWLP_HWNDPARENT: i32 = -8;
-    // The first of a window's children (the top of their order).
+    // The first of a window's children (the top of their order), and the next.
     const GW_CHILD: u32 = 5;
+    const GW_HWNDNEXT: u32 = 2;
+    const GW_OWNER: u32 = 4;
+    const GA_PARENT: u32 = 1;
     const WS_EX_LAYERED: isize = 0x0008_0000;
     const LWA_ALPHA: u32 = 0x2;
     const HWND_TOP: isize = 0;
@@ -215,6 +226,8 @@ mod imp {
     // call it): two at once both saw the window out and both put it in.
     static APPLYING: Mutex<()> = Mutex::new(());
     static STARTED: AtomicBool = AtomicBool::new(false);
+    // The last move into the taskbar or out of it failed (logged once till one works).
+    static FAILED: AtomicBool = AtomicBool::new(false);
     static QUITTING: AtomicBool = AtomicBool::new(false);
 
     fn wide(s: &str) -> Vec<u16> {
@@ -298,13 +311,18 @@ mod imp {
 
     // The island's window laid in the taskbar (its rect physical, on the
     // screen): in the taskbar's client coordinates, first among its children.
+    // Laid again whenever it is not where it is meant to be, not only when
+    // that changes: tao's set_position is posted to the window's thread
+    // (SWP_ASYNCWINDOWPOS) and, asked for just before the window went in, it
+    // came after, its place on the screen taken as one in the taskbar's
+    // client area (1380 px down here, off the strip, the capsule gone).
     pub fn lay_child((x, y): (i32, i32), (w, h): (i32, i32)) {
         let (hwnd, tray) = {
             let mut e = EMBED.lock().unwrap();
             if !e.parented || e.hwnd == 0 || e.tray == 0 {
                 return;
             }
-            if e.child == Some((x, y, w, h)) {
+            if rect_of(e.hwnd as Hwnd) == Some((x, y, w, h)) {
                 return;
             }
             e.child = Some((x, y, w, h));
@@ -382,33 +400,59 @@ mod imp {
                         SetWindowPos(hwnd as Hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                     }
                 }
+                // Where it is meant to be, should a late move have put it elsewhere (lay_child).
+                lay_child(pos, size);
                 settle_webview(hwnd as Hwnd);
                 return;
             }
-            adopt(hwnd as Hwnd, tray as Hwnd, layered);
+            let (ok, said) = adopt(hwnd as Hwnd, tray as Hwnd, layered);
             {
                 let mut e = EMBED.lock().unwrap();
                 e.hwnd = hwnd;
-                e.parented = true;
-                e.owned = false;
                 e.layered = true;
                 e.child = None;
+                if ok {
+                    e.parented = true;
+                    e.owned = false;
+                }
             }
+            if !ok {
+                // Not taken in: tried again at the next look at the pointer.
+                if !FAILED.swap(true, Ordering::SeqCst) {
+                    sh.log(&format!("island: could not go into Explorer's taskbar {tray:#x} ({said}); trying again"));
+                }
+                return;
+            }
+            FAILED.store(false, Ordering::SeqCst);
             lay_child(pos, size);
             if shown {
                 // SAFETY: a plain call on our own window.
                 unsafe { SetWindowPos(hwnd as Hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW) };
             }
-            sh.log(&format!("island: into Explorer's taskbar {tray:#x}, the capsule in the strip"));
+            sh.log(&format!("island: into Explorer's taskbar {tray:#x}, the capsule in the strip ({said})"));
+            // A change to the capsule's place held while it was in use (look): laid now.
+            look_soon();
         } else if parented {
-            release(hwnd as Hwnd, pos, size, shown, tray as Hwnd);
+            let (ok, said) = release(hwnd as Hwnd, pos, size, shown, tray as Hwnd);
+            if !ok {
+                // Still the taskbar's child, clipped to its strip: the island
+                // opening in it showed only the strip's height of it (the
+                // user, 2026-11-07: 展开会被任务栏自己截断; seen once in the test
+                // VM, SetParent having left it where it was). Left counted as
+                // in, so the next look at the pointer (50 ms on) tries again.
+                if !FAILED.swap(true, Ordering::SeqCst) {
+                    sh.log(&format!("island: could not come out of the taskbar ({said}); trying again"));
+                }
+                return;
+            }
+            FAILED.store(false, Ordering::SeqCst);
             {
                 let mut e = EMBED.lock().unwrap();
                 e.parented = false;
                 e.owned = tray != 0;
                 e.child = None;
             }
-            sh.log("island: out of the taskbar, whole over it, owned by it");
+            sh.log(&format!("island: out of the taskbar, whole over it, owned by it ({said})"));
         }
     }
 
@@ -472,6 +516,12 @@ mod imp {
         let cap = gap.filter(|_| fit).map(|g| (place_in(g, side, w, margin), strip.1 + (strip.3 - h) / 2, w, h));
         let said = format!("{free:?} of {taken:?} on {strip:?} along the {edge:?}; {} {:?}", side.name(), gap);
         let laid = Laid { cap, room, embedded: true };
+        // In use (the pointer on it, something open in it), its window out
+        // of the taskbar: the capsule's place and room held as they were, so
+        // the open island is never moved, narrowed or hidden under the
+        // pointer (a program's button come or gone meanwhile); laid anew as
+        // it goes back in (apply looks again then).
+        let held = island::in_use(sh) && !EMBED.lock().unwrap().parented;
         let before = {
             let mut e = EMBED.lock().unwrap();
             e.hwnd = hwnd;
@@ -483,11 +533,12 @@ mod imp {
             }
             if e.said != said {
                 e.said = said.clone();
-                sh.log(&format!("island: free {said}; the capsule {w}x{h} {}", if fit { "fits" } else { "does not fit: the island hidden" }));
+                let how = if held { "held while it is in use" } else if fit { "fits" } else { "does not fit: the island hidden" };
+                sh.log(&format!("island: free {said}; the capsule {w}x{h} {how}"));
             }
-            std::mem::replace(&mut e.laid, laid)
+            if held { e.laid } else { std::mem::replace(&mut e.laid, laid) }
         };
-        if laid != before {
+        if !held && laid != before {
             island::set_capsule(sh, laid);
         }
         apply(sh);
@@ -510,8 +561,14 @@ mod imp {
         if hwnd != 0 && is_window(hwnd) {
             if parented {
                 let (pos, size, shown) = parenting.map_or(((0, 0), (1, 1), false), |p| (p.1, p.2, p.3));
-                release(hwnd as Hwnd, pos, size, shown, std::ptr::null_mut());
-                sh.log(&format!("island: out of the taskbar ({why})"));
+                let (ok, said) = release(hwnd as Hwnd, pos, size, shown, std::ptr::null_mut());
+                if ok {
+                    sh.log(&format!("island: out of the taskbar ({why})"));
+                } else {
+                    // Tried again at the next look.
+                    EMBED.lock().unwrap().parented = true;
+                    sh.log(&format!("island: could not come out of the taskbar ({why}; {said}); trying again"));
+                }
             } else if owned {
                 // A window of its own again, nobody's: the taskbar it was owned by is not hers to follow.
                 // SAFETY: a plain call on our own window.
@@ -527,7 +584,8 @@ mod imp {
     // --layered --popup): no longer kept on top, made layered and wholly
     // opaque (once; frameless.rs keeps the bit as tao writes its style),
     // then a child of the taskbar's window.
-    fn adopt(hwnd: Hwnd, tray: Hwnd, layered: bool) {
+    // Whether it went in (its parent the taskbar's window now), and what was seen, for the log.
+    fn adopt(hwnd: Hwnd, tray: Hwnd, layered: bool) -> (bool, String) {
         // SAFETY: plain calls on our own window; the parent a window that exists.
         unsafe {
             SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -539,7 +597,10 @@ mod imp {
             }
             // Owned by the taskbar while it was out (release): nobody's, then its child.
             SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, 0);
-            SetParent(hwnd, tray);
+            let was = SetParent(hwnd, tray);
+            let err = if was.is_null() { GetLastError() } else { 0 };
+            let now = GetAncestor(hwnd, GA_PARENT);
+            (now == tray, format!("SetParent gave {was:?}, error {err}, its parent now {now:?}"))
         }
     }
 
@@ -553,24 +614,45 @@ mod imp {
     // the pointer (the first try) the two fought at 60 times a second, and
     // the whole machine lagged (the user, 2026-11-07: 点一下任务栏，再放光标到胶囊上，
     // 整个电脑直接变得很卡). Owned, nothing is raised at all.
-    fn release(hwnd: Hwnd, (x, y): (i32, i32), (w, h): (i32, i32), shown: bool, owner: Hwnd) {
+    //
+    // SetParent keeps a window's coordinates as they are, read in its new
+    // parent's: the child at (1589, -800) in the taskbar's client area (on
+    // the screen at 580) stood at (1589, -800) on the screen once out, till
+    // laid again, its foot (the capsule) over the top of the screen for a
+    // moment (seen in the test VM, 2026-11-08). So, still a child, it is laid
+    // first where its place on the screen is in the taskbar's coordinates (off
+    // the strip and unseen, along the bottom), and comes out right there.
+    //
+    // Whether it came out (its parent the desktop now), and what was seen.
+    fn release(hwnd: Hwnd, (x, y): (i32, i32), (w, h): (i32, i32), shown: bool, owner: Hwnd) -> (bool, String) {
         // SAFETY: plain calls on our own window; a stale handle only makes them fail.
-        unsafe {
+        let (ok, said) = unsafe {
             if IsWindow(hwnd) == 0 {
-                return;
+                return (true, "gone".into());
             }
-            SetParent(hwnd, std::ptr::null_mut());
+            let desktop = GetDesktopWindow();
+            if GetAncestor(hwnd, GA_PARENT) != desktop {
+                SetWindowPos(hwnd, 0, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            let was = SetParent(hwnd, std::ptr::null_mut());
+            let err = if was.is_null() { GetLastError() } else { 0 };
+            let now = GetAncestor(hwnd, GA_PARENT);
+            if now != desktop {
+                return (false, format!("SetParent gave {was:?}, error {err}, its parent still {now:?}"));
+            }
             SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, owner as isize);
             SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_FRAMECHANGED | if shown { SWP_SHOWWINDOW } else { 0 });
-        }
+            (true, format!("owner {:?}", GetWindow(hwnd, GW_OWNER)))
+        };
         settle_webview(hwnd);
+        (ok, said)
     }
 
     // What lies on the taskbar (x, w each, physical): the tray's window
     // (its icons, the clock, the show-the-desktop sliver), Start's where it
     // is a window, and every button UI Automation knows on it (Start,
     // search, task view, the widgets, the programs'); nothing of ours (the
-    // island's own window, a child of it).
+    // island's own window, a child of it or owned by it).
     fn taken_on(tray: Hwnd, ours: Hwnd) -> Vec<Span> {
         let mut out = Vec::new();
         for class in ["TrayNotifyWnd", "Start"] {
@@ -589,35 +671,60 @@ mod imp {
     }
 
     // The buttons on the taskbar by UI Automation: each shown one's stretch.
+    // Looked for only in Explorer's own windows in the taskbar (its XAML's
+    // Windows.UI.Composition.DesktopWindowContentBridge holds them all: Start,
+    // search, the widgets, the programs', the tray's icons), never from the
+    // taskbar's own element: UI Automation counts a window owned by the
+    // taskbar among its children, and a child of it too, so the island's
+    // window, out of the taskbar and owned by it (release) or in it, had its
+    // page's buttons taken for the taskbar's, the open island's among them
+    // as it grew. The stretch left for the capsule shrank under the pointer,
+    // the capsule did not fit and was hidden, the page lost the pointer, and
+    // so on, out and back in every couple of seconds (the user, 2026-11-07:
+    // 光标移动到灵动岛上面，灵动岛一直在到处乱动). Its page's elements walked
+    // every second, closed too (136 of the taskbar's 160 in the test VM),
+    // also kept WebView2's accessibility tree up for nothing; the bridge
+    // alone: the same 16 buttons in 41 ms, not 215.
     fn buttons_on(tray: Hwnd, ours: Hwnd) -> Option<Vec<Span>> {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
         use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation, TreeScope_Descendants, UIA_ButtonControlTypeId, UIA_MenuItemControlTypeId, UIA_SplitButtonControlTypeId};
         let mut out = Vec::new();
+        let me = std::process::id();
         // SAFETY: COM calls on this thread, which has COM up (with_com); the
         // handles are windows that exist (or not: the calls then fail).
         unsafe {
             let uia: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
-            let root = uia.ElementFromHandle(HWND(tray)).ok()?;
             let all = uia.CreateTrueCondition().ok()?;
-            let found = root.FindAll(TreeScope_Descendants, &all).ok()?;
-            let n = found.Length().ok()?;
-            for i in 0..n {
-                let Ok(el) = found.GetElement(i) else { continue };
-                let Ok(kind) = el.CurrentControlType() else { continue };
-                if kind != UIA_ButtonControlTypeId && kind != UIA_SplitButtonControlTypeId && kind != UIA_MenuItemControlTypeId {
+            let mut kid = GetWindow(tray, GW_CHILD);
+            while !kid.is_null() {
+                let this = kid;
+                kid = GetWindow(kid, GW_HWNDNEXT);
+                let mut pid = 0u32;
+                GetWindowThreadProcessId(this, &mut pid);
+                if this == ours || pid == me || IsWindowVisible(this) == 0 {
                     continue;
                 }
-                if el.CurrentIsOffscreen().map(|b| b.as_bool()).unwrap_or(false) {
-                    continue;
-                }
-                let h = el.CurrentNativeWindowHandle().map(|h| h.0).unwrap_or(std::ptr::null_mut());
-                if !h.is_null() && (h == ours || IsChild(ours, h) != 0) {
-                    continue;
-                }
-                let Ok(r) = el.CurrentBoundingRectangle() else { continue };
-                if r.right > r.left && r.bottom > r.top {
-                    out.push((r.left, r.right - r.left));
+                let Ok(root) = uia.ElementFromHandle(HWND(this)) else { continue };
+                let Ok(found) = root.FindAll(TreeScope_Descendants, &all) else { continue };
+                let n = found.Length().unwrap_or(0);
+                for i in 0..n {
+                    let Ok(el) = found.GetElement(i) else { continue };
+                    let Ok(kind) = el.CurrentControlType() else { continue };
+                    if kind != UIA_ButtonControlTypeId && kind != UIA_SplitButtonControlTypeId && kind != UIA_MenuItemControlTypeId {
+                        continue;
+                    }
+                    if el.CurrentIsOffscreen().map(|b| b.as_bool()).unwrap_or(false) {
+                        continue;
+                    }
+                    let h = el.CurrentNativeWindowHandle().map(|h| h.0).unwrap_or(std::ptr::null_mut());
+                    if !h.is_null() && (h == ours || IsChild(ours, h) != 0) {
+                        continue;
+                    }
+                    let Ok(r) = el.CurrentBoundingRectangle() else { continue };
+                    if r.right > r.left && r.bottom > r.top {
+                        out.push((r.left, r.right - r.left));
+                    }
                 }
             }
         }

@@ -622,8 +622,19 @@ pub fn parenting(sh: &Shared) -> Option<(isize, (i32, i32), (i32, i32), bool, bo
     if isl.hwnd == 0 {
         return None;
     }
-    let in_use = isl.ct.over || isl.opened || isl.settings_open || isl.holding || isl.reaching || isl.absorbing || isl.for_asks || isl.temp;
-    Some((isl.hwnd, isl.pos, isl.size, isl.shown, isl.embedded && isl.cap.is_some() && !in_use))
+    Some((isl.hwnd, isl.pos, isl.size, isl.shown, isl.embedded && isl.cap.is_some() && !used(&isl)))
+}
+
+// In use: the pointer on it, the button held on her, reaching for her or
+// taking her in, something open in it, the settings, the prompts, risen.
+fn used(isl: &Island) -> bool {
+    isl.ct.over || isl.opened || isl.settings_open || isl.holding || isl.reaching || isl.absorbing || isl.for_asks || isl.temp
+}
+
+// For embed.rs: whether the island is in use now (used), its window out of
+// Windows' taskbar for it: the capsule's place there is held meanwhile.
+pub fn in_use(sh: &Shared) -> bool {
+    used(&sh.island.lock().unwrap())
 }
 
 // For the pages (main.rs payload): whether her capsule is inside Windows'

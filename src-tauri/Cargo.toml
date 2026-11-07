@@ -85,6 +85,10 @@ winreg = "0.56.0"
 # already in the tree, under Tauri.
 webview2-com = "0.39"
 windows-core = "0.62"
+# What is playing, and its play, pause, next and previous (plugins/media.rs):
+# Windows' media sessions (Windows.Media.Control, the volume flyout's);
+# already in the tree, under Tauri, these namespaces added to it.
+windows = { version = "0.62", features = ["Media_Control", "Foundation", "Foundation_Collections"] }
 
 [target."cfg(target_os = \"macos\")".dependencies]
 # The island over the menu bar, round the notch (notch.rs): the window's level

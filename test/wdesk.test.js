@@ -217,3 +217,70 @@ test('the monitor medium without a graphics card: greyed "no data", as the large
   assert.doesNotMatch(text(m), /—/)
   assert.match(text(WDesk.faceHTML(noGpu, 'l', ctx(dark))), /GPU 暂无数据/)
 })
+
+// The calendar and what is playing (plugins/calendar.rs, plugins/media.rs).
+const calendar = {
+  id: 'calendar',
+  plugin: 'calendar',
+  label: '11月7日 周六',
+  value: '7',
+  color: '#9d8cff',
+  detail: {
+    sizes: ['s', 'm', 'l'],
+    extra: '农历九月廿九 · 立冬',
+    rows: [
+      { kind: 'date', value: '7', name: '11月', unit: '周六', text: '丙午马年 · 农历九月廿九 · 立冬' },
+      { kind: 'event', when: '10:00', unit: '11:00', name: '今天', subject: '周会', text: '会议室 A', at: new Date(2026, 10, 7, 10).getTime() },
+    ],
+  },
+}
+const media = {
+  id: 'media',
+  plugin: 'media',
+  label: 'Yellow',
+  value: 'Coldplay',
+  color: '#ff7ab6',
+  detail: {
+    sizes: ['s', 'm', 'l'],
+    extra: '1:02 / 4:29',
+    series: { points: [62], hi: 269, lo: 0, unit: 's' },
+    rows: [{ kind: 'track', subject: 'Yellow', text: 'Coldplay' }, { kind: 'album', text: 'Parachutes' }, { kind: 'app', name: 'Spotify' }, { kind: 'state', value: 'playing' }],
+    actions: [{ id: 'prev', icon: 'prev' }, { id: 'toggle', icon: 'pause' }, { id: 'next', icon: 'next' }],
+  },
+}
+const nov = { ...dark, now: new Date(2026, 10, 7, 9, 30).getTime() }
+
+test('the calendar: the day large small; beside the month medium, today lit; what is coming large', () => {
+  for (const size of ['s', 'm', 'l']) for (const c of [nov, { ...nov, light: true }]) assert.ok(!/undefined|NaN/.test(WDesk.faceHTML(calendar, size, ctx(c))))
+  const s = WDesk.faceHTML(calendar, 's', ctx(nov))
+  assert.match(s, /<div class="big">7<\/div><div class="sub" style="margin-top:4px">11月 · 周六<\/div><div class="ter ell">农历九月廿九 · 立冬<\/div>/)
+  const m = WDesk.faceHTML(calendar, 'm', ctx(nov))
+  assert.match(m, /<div class="big md">7<\/div><div class="sub">11月 · 周六<\/div><div class="ter ell">丙午马年<\/div><div class="ter ell">农历九月廿九<\/div><div class="ter ell">立冬<\/div>/)
+  assert.match(m, /<div class="cgrid" style="--c:#9d8cff">/)
+  assert.match(m, /<span class="cday on ev">7<\/span>/)
+  assert.doesNotMatch(m, /接下来/)
+  const l = WDesk.faceHTML(calendar, 'l', ctx(nov))
+  assert.match(text(l), /接下来 今天 周会 · 会议室 A 10:00–11:00/)
+  assert.equal(WDesk.memberName({ type: 'plugin', of: 'calendar' }, ctx(dark)), '日历')
+})
+
+test('what is playing: the song and its buttons small; the bar and the times medium; everything large; nothing playing said so', () => {
+  for (const size of ['s', 'm', 'l']) for (const c of [dark, light]) assert.ok(!/undefined|NaN/.test(WDesk.faceHTML(media, size, ctx(c))))
+  const s = WDesk.faceHTML(media, 's', ctx(dark))
+  assert.match(s, /<div class="mtitle two">Yellow<\/div><div class="ter ell">Coldplay<\/div>/)
+  assert.match(s, /<span class="wacts sm" style="--c:#ff7ab6">/)
+  const m = WDesk.faceHTML(media, 'm', ctx(dark))
+  assert.match(m, /<span class="r">Spotify<\/span>/)
+  assert.match(m, /<div class="meter"><i style="width:23%;background:#ff7ab6">/)
+  assert.match(text(m), /1:02 4:29/)
+  assert.match(m, /<button type="button" class="wact main" data-wact="toggle" data-widget="media" title="暂停">&#xE769;<\/button>/)
+  const l = WDesk.faceHTML(media, 'l', ctx(dark))
+  assert.match(l, /<div class="mtitle big two">Yellow<\/div>/)
+  assert.match(l, /Parachutes/)
+  assert.match(l, /<span class="wacts lg"/)
+  const none = { id: 'media', plugin: 'media', label: 'Nothing playing', value: '—', detail: { sizes: ['s', 'm', 'l'], rows: [{ kind: 'state', value: 'none' }] } }
+  const n = WDesk.faceHTML(none, 'm', ctx({ ...dark, lang: 'en' }))
+  assert.match(text(n), /Now playing Nothing playing/)
+  assert.doesNotMatch(n, /wact/)
+  assert.equal(WDesk.memberName({ type: 'plugin', of: 'media' }, ctx(dark)), '正在播放')
+})

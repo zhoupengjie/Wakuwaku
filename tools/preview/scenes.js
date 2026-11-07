@@ -223,6 +223,18 @@
       world: F => ({ ...desktop(F), sessions: [F.session('working')], widgets: F.WIDGETS, deskLayout: F.DESK.full }),
     },
     {
+      id: 'calendar-media',
+      title: '日历和正在播放',
+      note: '她替你跑的两个插件：日历（日期、农历和节气、订阅的日历里接下来的安排、月历）和正在播放（电脑上在放的歌、进度，卡片上的上一首、暂停、下一首）。桌面上各三档；胶囊里各一行，点 › 展开成卡片。',
+      world: F => ({
+        ...desktop(F),
+        sessions: [F.session('working')],
+        widgets: [...F.widgets('monitor', 'today', 'tokens'), F.SLEEPING.calendar, F.SLEEPING.media],
+        plugins: F.PLUGINS.map(p => (p.id === 'calendar' || p.id === 'media' ? { ...p, on: true, state: 'running' } : p)),
+        deskLayout: F.DESK.calendarMedia,
+      }),
+    },
+    {
       id: 'desktop-empty',
       title: '空桌面',
       note: '桌面上一个小工具都没有。右键胶囊里或任务栏上的小工具，选「桌面」就放上来。',
@@ -531,6 +543,7 @@
     { id: 'scene-taskbar-full', section: 'scenes', scene: 'taskbar-full', title: '放满小工具的任务栏', page: 'island', view: STRIP_VIEW },
     { id: 'scene-desktop', section: 'scenes', scene: 'desktop', title: '桌面 · 单个、叠放、两个工作台', page: 'screen', view: WHOLE, budget: 4000 },
     { id: 'scene-desktop-empty', section: 'scenes', scene: 'desktop-empty', title: '空桌面', page: 'screen', view: WHOLE, budget: 4000 },
+    { id: 'scene-calendar-media', section: 'scenes', scene: 'calendar-media', title: '日历和正在播放 · 桌面上各三档', page: 'screen', view: WHOLE, budget: 4000 },
     { id: 'scene-island-home', section: 'scenes', scene: 'island-home', title: '灵动岛模式 · 展开', page: 'island', view: [400, 0, 800, 420], steps: openIsland },
     { id: 'scene-island-right', section: 'scenes', scene: 'island-right', title: '岛在右上 · 展开，朝屏幕中间长', page: 'island', view: [800, 0, 800, 420], settle: 700 },
     { id: 'scene-light-clear', section: 'scenes', scene: 'light-clear', title: '浅色 + 透明任务栏', page: 'island', view: STRIP_VIEW },
@@ -636,6 +649,32 @@
       world: F => ({ ...home(F), sessions: [F.dsh({ key: 'detail.asksQuestion' })], asks: [F.DSH_QUESTION] }),
       settle: 900,
     },
+    // The calendar and what is playing in her capsule (plugins/calendar.rs,
+    // media.rs): their rows (the date with the next event under it; the song,
+    // a ring of how far along), and the song's card unfolded with its buttons.
+    ...[
+      ['capsule-calendar-media', '日历和正在播放 · 展开的胶囊里各一行', [0, above(330), 520, 330], openIsland],
+      [
+        'capsule-media-card',
+        '正在播放 · 点 › 展开的卡片：进度、程序、上一首 / 暂停 / 下一首',
+        [0, above(460), 520, 460],
+        async p => {
+          await openIsland(p)
+          p.click('#island-expanded [data-widget="media"]')
+          await p.wait(900)
+        },
+      ],
+    ].map(([id, title, view, steps]) => ({
+      id,
+      section: 'capsule',
+      title,
+      page: 'island',
+      home: 'taskbar',
+      view,
+      settle: 900,
+      world: F => ({ ...home(F), widgets: [...F.widgets('today', 'tokens'), F.SLEEPING.calendar, F.SLEEPING.media], plugins: F.PLUGINS.map(p => (p.id === 'calendar' || p.id === 'media' ? { ...p, on: true, state: 'running' } : p)), sessions: [F.session('working')] }),
+      steps,
+    })),
     // At a top corner (islandPos, zhoupengjie/Wakuwaku#59): closed 8 px in
     // from the screen's side, and open, grown toward the middle.
     ...[

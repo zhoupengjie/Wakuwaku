@@ -61,7 +61,7 @@
 <tr>
 <td colspan="2" valign="top">
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/readme/card-desktop-en-dark.jpg"><img src="docs/readme/card-desktop-en-light.jpg" alt="A board on the desktop: Claude today, mail, stocks, the system monitor, a pomodoro, a countdown" width="100%"></picture>
-<p><b>Plugins, and widgets on your desktop</b><br>Today's usage and tokens, the weather, stocks, a pomodoro, a countdown, your mail: on the taskbar, in the capsule or on the desktop, a few of them together on a board. One line of PowerShell makes a plugin of your own.</p>
+<p><b>Plugins, and widgets on your desktop</b><br>Today's usage and tokens, the weather, stocks, a pomodoro, a countdown, the calendar, what is playing, your mail: on the taskbar, in the capsule or on the desktop, a few of them together on a board. One line of PowerShell makes a plugin of your own.</p>
 </td>
 </tr>
 </table>

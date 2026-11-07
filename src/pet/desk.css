@@ -675,6 +675,171 @@ body {
   opacity: 0.45;
 }
 
+/* The calendar's cards (wdesk.js calendar): the date block beside the
+   month's grid (wcards.js monthGrid), what is coming under them. */
+.cal-m {
+  align-items: flex-start;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+.cal-date {
+  flex: none;
+  width: 118px;
+  gap: 2px;
+}
+
+.cal-date .ter {
+  line-height: 1.3;
+}
+
+.cgrid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(7, 1fr);
+  align-content: start;
+  text-align: center;
+  color: var(--w-fg);
+  font: 500 10.5px/14px var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.l .cgrid {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cgrid .cwd {
+  color: var(--w-3);
+  font-size: 10px;
+}
+
+.cgrid .cday {
+  position: relative;
+  border-radius: 4px;
+}
+
+.cgrid .cday.on {
+  background: var(--c);
+  color: #fff;
+  font-weight: 700;
+}
+
+.cgrid .cday.ev::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  border-radius: 50%;
+  background: var(--c);
+}
+
+.cgrid .cday.on.ev::after {
+  background: #fff;
+}
+
+.evlist {
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.evrow {
+  gap: 8px;
+}
+
+.evrow .n {
+  flex: none;
+  min-width: 56px;
+}
+
+/* What is playing (wdesk.js media): its title, and the widget's own
+   buttons (wcards.js actionsHTML), play or pause larger in its colour. */
+.mtitle {
+  overflow: hidden;
+  color: var(--w-fg);
+  font: 600 14px/1.25 var(--font-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mtitle.two {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+}
+
+.mtitle.big {
+  font-size: 20px;
+}
+
+.wacts {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.wact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--w-track);
+  color: var(--w-fg);
+  font: normal 12px/1 var(--font-icon);
+  cursor: default;
+}
+
+.wact.main {
+  width: 36px;
+  height: 36px;
+  background: var(--c);
+  color: #fff;
+  font-size: 14px;
+}
+
+.wact:hover {
+  filter: brightness(1.15);
+}
+
+.wact.off {
+  opacity: 0.35;
+}
+
+.wacts.sm .wact {
+  width: 26px;
+  height: 26px;
+  font-size: 11px;
+}
+
+.wacts.sm .wact.main {
+  width: 30px;
+  height: 30px;
+  font-size: 12px;
+}
+
+.wacts.lg .wact {
+  width: 38px;
+  height: 38px;
+  font-size: 14px;
+}
+
+.wacts.lg .wact.main {
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
+}
+
 .tabs {
   display: inline-flex;
   gap: 2px;

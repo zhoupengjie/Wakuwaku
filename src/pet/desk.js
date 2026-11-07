@@ -549,6 +549,14 @@
       openMenu(n.entry.id, isBoard(n) && tile < 0 ? 'board' : 'full', { x: ev.clientX, y: ev.clientY }, tile)
     })
     el.addEventListener('click', ev => {
+      // A button of the widget's own (what is playing: previous, play or
+      // pause, next; wcards.js actionsHTML): to its plugin, nothing else.
+      const wa = ev.target.closest('[data-wact]')
+      if (wa) {
+        ev.stopPropagation()
+        if (!wa.classList.contains('off')) window.pet.widgets?.act(wa.dataset.widget, wa.dataset.wact)
+        return
+      }
       const b = ev.target.closest('.tools button')
       if (b) {
         ev.stopPropagation()
@@ -601,7 +609,7 @@
   // it moves there. A stack turns by the wheel (a touchpad's scroll too) or
   // a press on its dots; one comes out of it by the menu.
   function press(ev, n) {
-    if (ev.button !== 0 || ev.target.closest('.tools, .sdots, .bbtns, input')) return
+    if (ev.button !== 0 || ev.target.closest('.tools, .sdots, .bbtns, .wacts, input')) return
     closeMenu()
     closeLib()
     endAsk(false)

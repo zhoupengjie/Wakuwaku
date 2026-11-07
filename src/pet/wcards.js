@@ -17,10 +17,10 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
   // --- Who it is: its kind, colour and glyph ----------------------------------------
-  const KINDS = ['weather', 'monitor', 'stock', 'mail', 'today', 'tokens', 'pomodoro', 'countdown']
+  const KINDS = ['weather', 'monitor', 'stock', 'mail', 'today', 'tokens', 'pomodoro', 'countdown', 'calendar', 'media']
   function kindOf(w) {
     if (!w) return 'generic'
-    if (w.id === 'monitor' || w.id === 'today' || w.id === 'tokens' || w.id === 'weather' || w.id === 'pomodoro' || w.id === 'countdown') return w.id
+    if (w.id === 'monitor' || w.id === 'today' || w.id === 'tokens' || w.id === 'weather' || w.id === 'pomodoro' || w.id === 'countdown' || w.id === 'calendar' || w.id === 'media') return w.id
     if (w.plugin === 'stock' || /^stock-/.test(w.id)) return 'stock'
     if (w.from === 'mail') return 'mail'
     return 'generic'
@@ -37,6 +37,8 @@
     tokens: ['#f08a62', '#c45a2c'],
     pomodoro: ['#ff7a6b', '#c4362b'],
     countdown: ['#b99bff', '#6b45c7'],
+    calendar: ['#9d8cff', '#5a4bc9'],
+    media: ['#ff7ab6', '#c2317a'],
   }
   const UP = ['#34d27b', '#0f7b3f']
   const DOWN = ['#ff6b6b', '#c42b3c']
@@ -69,7 +71,7 @@
   // Windows' own glyphs (Segoe Fluent Icons): the weather's by the sky, the
   // rest by kind; a script's own drawn icon (widgets.js), her face for today.
   const SKY = { sun: 'E706', moon: 'E708', partly: 'E753', cloud: 'E753', fog: 'E753', rain: 'EB42', snow: 'EA38', storm: 'E945' }
-  const GLYPH = { monitor: 'E950', stock: 'E9D9', mail: 'E715', pomodoro: 'E916', countdown: 'E787', tokens: 'E943' }
+  const GLYPH = { monitor: 'E950', stock: 'E9D9', mail: 'E715', pomodoro: 'E916', countdown: 'E787', tokens: 'E943', calendar: 'E8BF', media: 'EC4F' }
   const rowsOf = w => (Array.isArray(Widgets.detailOf(w).rows) ? Widgets.detailOf(w).rows : [])
   const skyNow = w => rowsOf(w).find(r => r.kind === 'hour')?.icon
   function glyphOf(w) {
@@ -100,7 +102,7 @@
   // Its name as a stack's line and its card say it: the kind's (天气, 系统
   // 监控, Claude 今天, 邮件, 番茄钟, 倒计时), else its label (a stock's
   // name).
-  const TITLES = { weather: 'card.weather', monitor: 'card.monitor', today: 'card.today', mail: 'card.mail', pomodoro: 'card.pomodoro', countdown: 'card.countdown' }
+  const TITLES = { weather: 'card.weather', monitor: 'card.monitor', today: 'card.today', mail: 'card.mail', pomodoro: 'card.pomodoro', countdown: 'card.countdown', calendar: 'card.calendar', media: 'card.media' }
   function titleOf(w, ctx) {
     const kind = kindOf(w)
     if (TITLES[kind]) return t(ctx, TITLES[kind])
@@ -171,8 +173,30 @@
         const short = days.unit ? `${days.value} ${days.unit}` : days.value
         Object.assign(out, { value: short, top: short, big: days.value, unit: days.unit || '', say: [said.label, extra].filter(Boolean).join(' · '), second: extra || said.label })
       }
+    } else if (kind === 'calendar') {
+      // The date (11月7日; Nov 7) with the next event under it, or the
+      // lunar date (the week) where none is coming; the day of the month
+      // as its number, the month what it counts.
+      const date = rowsOf(w).find(r => r.kind === 'date') || {}
+      const next = rowsOf(w).find(r => r.kind === 'event')
+      const day = date.value || said.value
+      const words = date.name ? (ctx.lang === 'zh' ? `${date.name}${day}日` : `${date.name} ${day}`) : said.label
+      const coming = next ? [next.when, next.subject].filter(Boolean).join(' ') : ''
+      Object.assign(out, { value: words, top: words, line: coming || extra, big: String(day), unit: date.name || '', say: [extra, coming].filter(Boolean).join(' · '), second: coming || extra })
+    } else if (kind === 'media') {
+      // The song (short, as the taskbar has room) over its artist; a stack's
+      // line says both, no number to count.
+      const track = rowsOf(w).find(r => r.kind === 'track') || {}
+      const title = shorten(track.subject || said.label, 24)
+      const artist = track.text || (said.value === '—' ? '' : said.value)
+      Object.assign(out, { value: title, top: title, line: artist, big: '', unit: '', say: [artist, extra].filter(Boolean).join(' · '), second: [artist, extra].filter(Boolean).join(' · ') })
     }
     return out
+  }
+  // Words cut to so many characters, "…" the last when cut (as widgets.rs cuts).
+  function shorten(s, max) {
+    const chars = Array.from(String(s ?? ''))
+    return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : chars.join('')
   }
 
   // --- Drawing: a curve, a ring, bars, each to its own scale ----------------------------
@@ -310,6 +334,20 @@
       out.second = [row.code !== out.name ? row.code : '', b.unit].filter(Boolean).join(' · ')
     } else if (kind === 'pomodoro') {
       out.second = [said.label, Widgets.detailOf(w).extra].filter(Boolean).join(' · ')
+    } else if (kind === 'calendar') {
+      // The date as its name; the next event its value (medium, nothing
+      // where none is coming: the second line has the lunar date), small
+      // the lunar date (the week) where none is coming.
+      const next = rowsOf(w).find(r => r.kind === 'event')
+      const coming = next ? [next.when, next.subject].filter(Boolean).join(' ') : ''
+      out.value = coming || (size === 'M' ? '' : Widgets.detailOf(w).extra || '')
+      out.second = Widgets.detailOf(w).extra || ''
+    } else if (kind === 'media') {
+      // The song as its name, its artist the value, how far along under
+      // (medium: a small ring of it, from its series).
+      out.name = b.top
+      out.value = b.line
+      out.second = Widgets.detailOf(w).extra || ''
     }
     return out
   }
@@ -458,6 +496,102 @@
     return top + curve + (rows ? `<div class="clines">${rows}</div>` : '')
   }
 
+  // --- Buttons of a widget's own (widgets.rs actions) ---------------------------------------
+  // What is playing has previous, play or pause, next: round buttons with
+  // Windows' glyphs, each pressed back to its plugin (island.js, desk.js:
+  // data-wact, data-widget; plugins.rs act); play or pause larger, in the
+  // widget's colour; one the player has not, greyed. Any widget with
+  // actions gets them, drawn the same wherever its card is.
+  const ACTION_GLYPH = { play: 'E768', pause: 'E769', prev: 'E892', next: 'E893', stop: 'E71A' }
+  const actionsOf = w => (Array.isArray(Widgets.detailOf(w).actions) ? Widgets.detailOf(w).actions.filter(a => a && typeof a.id === 'string' && a.icon in ACTION_GLYPH) : [])
+  function actionsHTML(w, ctx, cls = '') {
+    const acts = actionsOf(w)
+    if (!acts.length) return ''
+    const button = a =>
+      `<button type="button" class="wact${a.off ? ' off' : ''}${a.icon === 'play' || a.icon === 'pause' ? ' main' : ''}" data-wact="${esc(a.id)}" data-widget="${esc(w.id)}" title="${esc(t(ctx, `act.${a.icon}`))}"${a.off ? ' aria-disabled="true"' : ''}>&#x${ACTION_GLYPH[a.icon]};</button>`
+    return `<span class="wacts${cls ? ` ${cls}` : ''}" style="--c:${colorOf(w, ctx)}">${acts.map(button).join('')}</span>`
+  }
+
+  // --- The month's grid (the calendar's cards) -----------------------------------------------
+  // The month it is (ctx.now): a row of the weekdays' letters (Monday first
+  // in Chinese, Sunday first in English), then its days, today lit in the
+  // widget's colour, a day with something on (the event rows' at) marked
+  // with a dot; the other months' days left blank.
+  function monthGrid(w, ctx, color) {
+    const now = new Date(ctx.now || Date.now())
+    const [y, m, today] = [now.getFullYear(), now.getMonth(), now.getDate()]
+    const mondayFirst = ctx.lang === 'zh'
+    const heads = mondayFirst ? ['一', '二', '三', '四', '五', '六', '日'] : ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+    const first = new Date(y, m, 1).getDay()
+    const lead = mondayFirst ? (first + 6) % 7 : first
+    const days = new Date(y, m + 1, 0).getDate()
+    const marked = new Set(
+      rowsOf(w)
+        .filter(r => r.kind === 'event' && Number.isFinite(r.at))
+        .map(r => new Date(r.at))
+        .filter(d => d.getFullYear() === y && d.getMonth() === m)
+        .map(d => d.getDate()),
+    )
+    const cells = [
+      ...heads.map(h => `<span class="cwd">${h}</span>`),
+      ...Array.from({ length: lead }, () => '<span></span>'),
+      ...Array.from({ length: days }, (_, i) => {
+        const d = i + 1
+        const cls = ['cday', d === today ? 'on' : '', marked.has(d) ? 'ev' : ''].filter(Boolean).join(' ')
+        return `<span class="${cls}">${d}</span>`
+      }),
+    ]
+    return `<div class="cgrid" style="--c:${color}">${cells.join('')}</div>`
+  }
+
+  // The calendar: the day of the month large, the month and weekday, the
+  // lunar date (or the week) and the day's marks; the month's grid; what is
+  // coming, a line each (its day, what, when).
+  function calendarCard(w, ctx) {
+    const d = Widgets.detailOf(w)
+    const date = rowsOf(w).find(r => r.kind === 'date') || {}
+    const events = rowsOf(w).filter(r => r.kind === 'event').slice(0, 4)
+    const color = colorOf(w, ctx)
+    const top = `<div class="crow"><span class="cbig">${esc(date.value || new Date(ctx.now || Date.now()).getDate())}</span><span class="cwords"><b>${esc([date.name, date.unit].filter(Boolean).join(' · '))}</b><span>${esc(date.text || d.extra || '')}</span></span></div>`
+    const when = e => (e.unit ? `${e.when}–${e.unit}` : e.when || '')
+    const lines = events.length
+      ? `<div class="ccap">${esc(t(ctx, 'cal.coming'))}</div><div class="clines">${events.map(e => `<div class="cline st"><span class="cn">${esc(e.name || '')}</span><span class="cd">${esc([e.subject, e.text].filter(Boolean).join(' · '))}</span><span class="cv">${esc(when(e))}</span></div>`).join('')}</div>`
+      : ''
+    return top + monthGrid(w, ctx, color) + lines
+  }
+
+  // What is playing: its title and artist (the album after), the app on the
+  // right, how far along as a bar with the times (paused said), and its
+  // buttons. Nothing playing: said so.
+  function mediaCard(w, ctx) {
+    const rows = rowsOf(w)
+    const said = Widgets.words(ctx.lang, w, true)
+    const state = rows.find(r => r.kind === 'state')?.value || ''
+    if (state === 'none' || !rows.length) return `<div class="crow"><span class="cwords"><b>${esc(said.label)}</b></span></div>`
+    const track = rows.find(r => r.kind === 'track') || {}
+    const album = rows.find(r => r.kind === 'album')?.text || ''
+    const app = rows.find(r => r.kind === 'app')?.name || ''
+    const title = track.subject || said.label
+    const artist = track.text || ''
+    const color = colorOf(w, ctx)
+    const s = seriesOf(w)
+    const top = `<div class="crow"><span class="cwords"><b>${esc(title)}</b><span>${esc([artist, album].filter(Boolean).join(' · '))}</span></span>${app ? `<span class="cright"><span>${esc(app)}</span></span>` : ''}</div>`
+    const paused = state === 'paused' ? `${esc(t(ctx, 'act.pause'))} · ` : ''
+    const bar =
+      s && s.points.length === 1 && Number.isFinite(s.hi) && s.hi > 0
+        ? `<span class="wmeter"><i style="width:${num(Math.max(0, Math.min(100, (s.points[0] / s.hi) * 100)))}%;background:${color}"></i></span><div class="cfoot"><span>${esc(clockOf(s.points[0]))}</span><span>${paused}${esc(clockOf(s.hi))}</span></div>`
+        : Widgets.detailOf(w).extra
+          ? `<div class="cfoot"><span>${esc(Widgets.detailOf(w).extra)}</span></div>`
+          : ''
+    return top + bar + `<div class="crow cacts">${actionsHTML(w, ctx)}</div>`
+  }
+  // Seconds as a player shows them: m:ss, or h:mm:ss past an hour.
+  function clockOf(secs) {
+    const n = Math.max(0, Math.floor(secs || 0))
+    const two = v => String(v).padStart(2, '0')
+    return n >= 3600 ? `${Math.floor(n / 3600)}:${two(Math.floor((n % 3600) / 60))}:${two(n % 60)}` : `${Math.floor(n / 60)}:${two(n % 60)}`
+  }
+
   // Whether it has a card (a large size).
   const hasCard = w => !!w && Widgets.sizesOf(w).includes('l')
 
@@ -473,6 +607,10 @@
         return todayCard(w, ctx, all)
       case 'mail':
         return mailCard(w, ctx)
+      case 'calendar':
+        return calendarCard(w, ctx)
+      case 'media':
+        return mediaCard(w, ctx)
       default:
         return genericCard(w, ctx)
     }
@@ -502,7 +640,7 @@
     return `${d.getMonth() + 1}/${d.getDate()}`
   }
 
-  const api = { KINDS, kindOf, colorOf, trendOf, glyphOf, glyphHTML, memberGlyph, titleOf, briefOf, spark, ring, bars, hourSlots, hourBars, faceHTML, emptyFaceHTML, rowHTML, stackRowHTML, hasCard, cardHTML, upFor, whenOf, esc }
+  const api = { KINDS, kindOf, colorOf, trendOf, glyphOf, glyphHTML, memberGlyph, titleOf, briefOf, spark, ring, bars, hourSlots, hourBars, faceHTML, emptyFaceHTML, rowHTML, stackRowHTML, hasCard, cardHTML, upFor, whenOf, esc, actionsHTML, monthGrid, clockOf, shorten }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api

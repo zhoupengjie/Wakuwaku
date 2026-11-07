@@ -1,20 +1,22 @@
-// Her capsule inside Windows' own taskbar (zhoupengjie/Wakuwaku#105; the
-// user, 2026-11-07: 做嵌入模式, as TrafficMonitor does it, at both ends).
-// Her island set to the taskbar (islandEdge taskbar) along the bottom or the
-// top of her display: a small window of ours, as big as the closed capsule,
-// is made a child of Explorer's taskbar window (Shell_TrayWnd, or a second
-// display's Shell_SecondaryTrayWnd) with SetParent, as TrafficMonitor's is,
-// and lies on the taskbar's own ground in the free stretch at one end of
-// it: at the right, just left of the tray's icons (TrafficMonitor's place);
-// at the left, at the strip's start (left of Start, where Start is there).
-// Its page (pet/index.html?role=island&part=capsule, island.js) draws the
-// closed capsule alone: her portrait, the session's words, the clock, the
-// widgets taking their turns, the flow light's ring. Everything that opens
-// from it (hovered, a prompt, the settings, pulling her out) is the island's
-// own window's (island.rs): shown as the pointer comes onto the capsule,
-// its own closed island laid exactly over the capsule and unseen (island.js
-// isl-ghost), so it takes the pointer over and grows from there; hidden
-// again once it has shrunk back and the pointer has gone.
+// Her island inside Windows' own taskbar (zhoupengjie/Wakuwaku#105; the
+// user, 2026-11-07: 做嵌入模式, as TrafficMonitor does it, at both ends, and
+// one window, not two). Her island set to the taskbar (islandEdge taskbar)
+// along the bottom or the top of her display: the island's own window
+// (island.rs) is made a child of Explorer's taskbar window (Shell_TrayWnd,
+// or a second display's Shell_SecondaryTrayWnd) with SetParent, as
+// TrafficMonitor's is, while nothing is open in it. A child is clipped to
+// its parent, so of the window (760 x 688, the closed island at its foot,
+// island.rs ISLAND_BOTTOM) only the closed capsule shows, in the strip, on
+// the taskbar's own ground, in the free stretch at one end of it: at the
+// right, just left of the tray's icons (TrafficMonitor's place); at the
+// left, at the strip's start (left of Start, where Start is there). As the
+// pointer comes onto the capsule, or anything opens in it (a prompt, the
+// settings, pulling her out), the window is taken out again (SetParent to
+// none, kept on top, where it was), whole over the taskbar, and the island
+// opens from the capsule as ever; closed again and the pointer gone, it goes
+// back in. One window, one capsule: nothing to line up, nothing drawn twice
+// (two windows, the capsule's own and the island's over it, showed two
+// capsules at the island's corners and as it closed: the user, the same day).
 //
 // What examples/embed_spike.rs found (docs/DEVELOPMENT.md, 嵌进 Windows 的任务栏):
 // the window keeps its own style (not made WS_CHILD), is made WS_EX_LAYERED
@@ -40,13 +42,13 @@
 //
 // Only while Explorer's taskbar is shown along the bottom or the top of her
 // display, the work area stopping at it (shell.rs shown_bar): along a side,
-// hiding itself, or put away, the capsule's window is taken out and hidden
-// and the island lies over the work area's edge as it does with the
-// embedding turned off (island.rs fit). Looked at every second (the
-// programs' buttons come and go, Explorer may start again, which takes its
-// taskbar's children with it: the window gone, it is made again, under a
-// label of its own, and put into the new taskbar), and at once as the
-// settings or the capsule's size change (look_soon).
+// hiding itself, or put away, the window is taken out and the island lies
+// over the work area's edge as it does with the embedding turned off
+// (island.rs fit). Looked at every second (the programs' buttons come and
+// go), and at once as the settings or the capsule's size change (look_soon).
+// Explorer started again takes its taskbar's children with it, hers among
+// them: the island's window gone, she starts herself again (updates.rs
+// start_again, as after WebView2's browser going), a couple of seconds.
 use crate::island::Side;
 
 // Physical px: x and w along the strip.
@@ -54,11 +56,9 @@ pub type Span = (i32, i32);
 // Physical px: x, y, w, h.
 pub type Rect = (i32, i32, i32, i32);
 
-// The window's margin round the capsule (logical px): the flow light's ring
-// runs 3 px outside it (style.css #flow), and the island's own window keeps
-// its island 8 px off its edge (island.js TOP, midLeft): laid at the
-// strip's start, the capsule and the island over it then line up exactly
-// (a capsule 4 px in showed 4 px past the open island's left, 2026-11-07).
+// The capsule's room off the stretch's end (logical px): the flow light's
+// ring runs 3 px outside it (style.css #flow), and the island keeps 8 px
+// off its window's edge (island.js TOP, midLeft).
 pub const MARGIN: f64 = 8.0;
 // The closed capsule before its page has said its size (island.js WIDTHS normal, 36 high).
 pub const CAPSULE: (f64, f64) = (300.0, 36.0);
@@ -98,7 +98,7 @@ pub fn pick(gaps: &[Span], side: Side) -> Option<Span> {
 
 // Where a capsule `width` wide lies in a stretch, by the side: at its start
 // (the left), or at its end, against the tray (the right), `margin` off the
-// stretch's end (the window's margin round it).
+// stretch's end.
 pub fn place_in(gap: Span, side: Side, width: i32, margin: i32) -> i32 {
     match side {
         Side::Left => gap.0 + margin,
@@ -111,9 +111,9 @@ pub fn fits(gap: Span, width: i32, margin: i32) -> bool {
     width > 0 && width + 2 * margin <= gap.1
 }
 
-// Her capsule as it lies now (physical), for the page and the island: the
-// capsule's own rect, the room the page is told (physical px, 0 none) and
-// whether its window is in the taskbar.
+// Her capsule as it lies now (physical), for the island: the capsule's rect
+// (none: no room for it, or not in the taskbar), the room the page is told
+// (physical px, 0 none) and whether the island is in the taskbar.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Laid {
     pub cap: Option<Rect>,
@@ -124,13 +124,11 @@ pub struct Laid {
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
-    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Condvar, Mutex};
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use serde_json::{json, Value};
-    use tauri::utils::config::BackgroundThrottlingPolicy;
-    use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
     use super::{fits, gaps, pick, place_in, Laid, Rect, Span, CAPSULE, MARGIN};
     use crate::appbar::Edge;
@@ -161,11 +159,9 @@ mod imp {
         fn IsWindowVisible(hwnd: Hwnd) -> i32;
         fn IsChild(parent: Hwnd, hwnd: Hwnd) -> i32;
         fn SetParent(child: Hwnd, parent: Hwnd) -> Hwnd;
-        fn GetAncestor(hwnd: Hwnd, flags: u32) -> Hwnd;
         fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
         fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
         fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
-        fn ShowWindow(hwnd: Hwnd, cmd: i32) -> i32;
         fn ScreenToClient(hwnd: Hwnd, pt: *mut Point) -> i32;
         fn GetDpiForWindow(hwnd: Hwnd) -> u32;
         fn SetLayeredWindowAttributes(hwnd: Hwnd, key: u32, alpha: u8, flags: u32) -> i32;
@@ -174,64 +170,42 @@ mod imp {
     }
 
     const GWL_EXSTYLE: i32 = -20;
-    // The window's parent in the hierarchy: GetParent gives a popup's owner,
-    // and nothing for an overlapped window (tao's), whatever SetParent did.
-    const GA_PARENT: u32 = 1;
     // The first of a window's children (the top of their order).
     const GW_CHILD: u32 = 5;
     const WS_EX_LAYERED: isize = 0x0008_0000;
     const LWA_ALPHA: u32 = 0x2;
     const HWND_TOP: isize = 0;
+    const HWND_TOPMOST: isize = -1;
     const HWND_NOTOPMOST: isize = -2;
     const SWP_NOSIZE: u32 = 0x1;
     const SWP_NOMOVE: u32 = 0x2;
+    const SWP_NOZORDER: u32 = 0x4;
     const SWP_NOACTIVATE: u32 = 0x10;
     const SWP_FRAMECHANGED: u32 = 0x20;
     const SWP_SHOWWINDOW: u32 = 0x40;
-    const SW_HIDE: i32 = 0;
-
-    // Its window's label: LABEL the first, then LABEL-2, LABEL-3 as it is
-    // made again after Explorer took it (Tauri keeps a webview's label for
-    // one Explorer destroyed: "a webview with label `capsule` already
-    // exists", 2026-11-07). The windows' pages are told by the label of the
-    // one there is (label); any of them is hers (main.rs is_capsule).
-    pub const LABEL: &str = "capsule";
-    static MADE: AtomicU32 = AtomicU32::new(0);
-    // How often the taskbar is looked at while the capsule is wanted.
+    // How often the taskbar is looked at while the island is wanted in it.
     const EVERY: Duration = Duration::from_secs(1);
-
-    // The label of the capsule's window now (the one made last).
-    pub fn label() -> String {
-        match MADE.load(Ordering::SeqCst) {
-            0 | 1 => LABEL.to_string(),
-            n => format!("{LABEL}-{n}"),
-        }
-    }
 
     #[derive(Default)]
     struct Embed {
-        // Its window asked for (made off this thread), and its handle once made.
-        created: bool,
+        // The island's window (island.rs hwnd) as last seen here, and the
+        // taskbar window it is in now (0: none, out on its own).
         hwnd: isize,
-        // The taskbar window it is in now (0: none, out on its own, hidden).
         tray: isize,
-        // Its window's rect (physical) as laid last, and whether it is shown.
-        rect: Option<Rect>,
-        shown: bool,
-        // What the island and the page were last told.
+        parented: bool,
+        // Where it was laid in the taskbar last (physical), to lay again only on a change.
+        child: Option<Rect>,
+        // Made layered (once; frameless.rs keeps the bit after).
+        layered: bool,
+        // What the island was last told.
         laid: Laid,
         // The stretches seen last, and the one picked, for the log.
         said: String,
-        // The pointer on the capsule (its page said), and when it was last.
-        over: bool,
-        over_at: Option<Instant>,
-        // Its page told to draw nothing (the settings standing above the
-        // taskbar in the island's window, the capsule left showing under
-        // them: two islands, the user, 2026-11-07).
-        covered: bool,
+        // The window gone with Explorer's taskbar: her restart under way.
+        restarting: bool,
     }
 
-    static EMBED: Mutex<Embed> = Mutex::new(Embed { created: false, hwnd: 0, tray: 0, rect: None, shown: false, laid: Laid { cap: None, room: 0, embedded: false }, said: String::new(), over: false, over_at: None, covered: false });
+    static EMBED: Mutex<Embed> = Mutex::new(Embed { hwnd: 0, tray: 0, parented: false, child: None, layered: false, laid: Laid { cap: None, room: 0, embedded: false }, said: String::new(), restarting: false });
     static WAKE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
     static STARTED: AtomicBool = AtomicBool::new(false);
     static QUITTING: AtomicBool = AtomicBool::new(false);
@@ -279,134 +253,168 @@ mod imp {
         cv.notify_all();
     }
 
-    // Quitting: the capsule's window out of Explorer's taskbar before it
-    // goes with her (a child of another process's window left behind).
+    // Quitting: the island's window out of Explorer's taskbar before it goes
+    // with her (a child of another process's window left behind).
     pub fn stop() {
         QUITTING.store(true, Ordering::SeqCst);
         look_soon();
         let mut e = EMBED.lock().unwrap();
-        if e.hwnd != 0 && e.tray != 0 {
-            // SAFETY: plain calls on our own window; a stale handle only makes them fail.
-            unsafe {
-                ShowWindow(e.hwnd as Hwnd, SW_HIDE);
-                SetParent(e.hwnd as Hwnd, std::ptr::null_mut());
-            }
-            e.tray = 0;
+        if e.parented && e.hwnd != 0 {
+            // SAFETY: a plain call on our own window; a stale handle only makes it fail.
+            unsafe { SetParent(e.hwnd as Hwnd, std::ptr::null_mut()) };
+            e.parented = false;
         }
+        e.tray = 0;
     }
 
-    // The capsule's page says the pointer is on it, or not: the island's
-    // window shows over it for the pointer (island.rs is_shown).
-    pub fn capsule_hover(sh: &Arc<Shared>, over: bool) {
-        {
+    // Whether the island's window is a child of the taskbar now: laid by
+    // lay_child then (island.rs lay), and never raised (island.rs raise, uncover).
+    pub fn is_parented() -> bool {
+        EMBED.lock().unwrap().parented
+    }
+
+    // The island's window laid in the taskbar (its rect physical, on the
+    // screen): in the taskbar's client coordinates, first among its children.
+    pub fn lay_child((x, y): (i32, i32), (w, h): (i32, i32)) {
+        let (hwnd, tray) = {
             let mut e = EMBED.lock().unwrap();
-            e.over = over;
-            e.over_at = Some(Instant::now());
-        }
-        if over {
-            crate::wake_monitor();
-        }
-        island::apply_visibility(sh);
-        // The pointer's loop looks now, not up to half a second on (it waits
-        // longer while the island's window is hidden): the window shown, the
-        // pointer over it is forwarded to its page at once (pointer.rs).
-        crate::wake_pointer();
-    }
-
-    // Whether the capsule is being used: the pointer on it, or gone from it
-    // this moment (the island's window takes it over meanwhile).
-    pub fn in_use() -> bool {
-        let e = EMBED.lock().unwrap();
-        e.over || e.over_at.is_some_and(|at| at.elapsed() < Duration::from_millis(600))
-    }
-
-    // Its page is up: drawn, and looked at again (its size is to come).
-    pub fn ready(sh: &Arc<Shared>) {
-        sh.log("capsule: page ready");
-        EMBED.lock().unwrap().covered = false;
-        sh.redraw();
-        island::tell_cover(sh);
-        look_soon();
-    }
-
-    // The capsule's page told to draw nothing, or to draw again
-    // (capsule:cover): while the settings stand above the taskbar in the
-    // island's window, which does not cover the capsule as the open island
-    // does. Told as it changes.
-    pub fn cover(sh: &Shared, on: bool) {
-        {
-            let mut e = EMBED.lock().unwrap();
-            if e.covered == on || !e.created {
+            if !e.parented || e.hwnd == 0 || e.tray == 0 {
                 return;
             }
-            e.covered = on;
+            if e.child == Some((x, y, w, h)) {
+                return;
+            }
+            e.child = Some((x, y, w, h));
+            (e.hwnd as Hwnd, e.tray as Hwnd)
+        };
+        let mut pt = Point { x, y };
+        // SAFETY: plain calls on our own window and its parent.
+        unsafe {
+            ScreenToClient(tray, &mut pt);
+            SetWindowPos(hwnd, HWND_TOP, pt.x, pt.y, w, h, SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
-        let _ = sh.app.emit_to(label().as_str(), "capsule:cover", json!({ "on": on }));
+        settle_webview(hwnd);
     }
 
-    pub fn is_created() -> bool {
-        EMBED.lock().unwrap().created
+    // WebView2's window inside ours (wry's WRY_WEBVIEW, the browser's own
+    // in it) back over the whole of ours: as the window changes parent it is
+    // left where the parent's client area would have put it (seen
+    // 2026-11-07: our window a child of the taskbar, at (0, 580) on the
+    // screen, laid at (0, -800) in the taskbar's client area; wry's at (0,
+    // -800) on the screen, 1380 px up, and nothing drawn in the strip).
+    // Moves and sizes after that keep it in place; this puts it right once.
+    fn settle_webview(hwnd: Hwnd) {
+        // SAFETY: plain calls on our own window and its child.
+        unsafe {
+            let child = GetWindow(hwnd, GW_CHILD);
+            if child.is_null() {
+                return;
+            }
+            let (Some(ours), Some(theirs)) = (rect_of(hwnd), rect_of(child)) else { return };
+            if ours != theirs {
+                SetWindowPos(child, HWND_TOP, 0, 0, ours.2, ours.3, SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
     }
 
     // Where it is, for /health.
     pub fn where_() -> Value {
         let e = EMBED.lock().unwrap();
         json!({
-            "label": label(),
-            "created": e.created,
             "hwnd": e.hwnd,
             "tray": e.tray,
-            "shown": e.shown,
-            "rect": e.rect.map(|r| [r.0, r.1, r.2, r.3]),
+            "parented": e.parented,
+            "child": e.child.map(|r| [r.0, r.1, r.2, r.3]),
             "cap": e.laid.cap.map(|r| [r.0, r.1, r.2, r.3]),
             "room": e.laid.room,
             "embedded": e.laid.embedded,
-            "over": e.over,
-            "covered": e.covered,
             "gaps": e.said,
         })
     }
 
+    // The island's window into the taskbar, or out of it, as it is used
+    // (island.rs parenting): in while the island is closed and nobody is
+    // on it, out as the pointer comes or anything opens. Cheap when
+    // nothing changes; called from the island's every look at the pointer.
+    pub fn apply(sh: &Shared) {
+        let Some((hwnd, pos, size, shown, want_child)) = island::parenting(sh) else { return };
+        let (tray, parented, layered) = {
+            let e = EMBED.lock().unwrap();
+            (e.tray, e.parented, e.layered)
+        };
+        if want_child && tray != 0 && !QUITTING.load(Ordering::SeqCst) {
+            if parented {
+                // Explorer's own children made after ours (its XAML, as it
+                // lays itself out anew) lie over it: first among them again.
+                // SAFETY: plain calls on windows that exist.
+                unsafe {
+                    if IsWindow(tray as Hwnd) != 0 && GetWindow(tray as Hwnd, GW_CHILD) != hwnd as Hwnd {
+                        SetWindowPos(hwnd as Hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    }
+                }
+                settle_webview(hwnd as Hwnd);
+                return;
+            }
+            adopt(hwnd as Hwnd, tray as Hwnd, layered);
+            {
+                let mut e = EMBED.lock().unwrap();
+                e.hwnd = hwnd;
+                e.parented = true;
+                e.layered = true;
+                e.child = None;
+            }
+            lay_child(pos, size);
+            if shown {
+                // SAFETY: a plain call on our own window.
+                unsafe { SetWindowPos(hwnd as Hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW) };
+            }
+            sh.log(&format!("island: into Explorer's taskbar {tray:#x}, the capsule in the strip"));
+        } else if parented {
+            release(hwnd as Hwnd, pos, size, shown);
+            {
+                let mut e = EMBED.lock().unwrap();
+                e.parented = false;
+                e.child = None;
+            }
+            sh.log("island: out of the taskbar, whole over it");
+        }
+    }
+
     // One look: Explorer's taskbar along the bottom or the top of her
-    // display, what is on it, the stretch for the capsule, its window there
-    // (made, put in, laid, shown or hidden), and the island told where it lies.
+    // display, what is on it, the stretch for the capsule, and the island
+    // told where its capsule lies (set_capsule lays its window about it);
+    // then the window into the taskbar or out of it (apply).
     fn look(sh: &Arc<Shared>) {
         let wanted = island::embedding_wanted(sh);
         let bar = wanted.then(|| island::home_area(sh)).flatten().and_then(|a| shell::shown_bar(a.mon)).filter(|(_, _, edge)| matches!(edge, Edge::Top | Edge::Bottom));
         let Some((tray, strip, edge)) = bar else {
             return detach(sh, if wanted { "no taskbar of Explorer's shown along the bottom or the top of her display" } else { "not wanted" });
         };
-        let hwnd = {
-            let e = EMBED.lock().unwrap();
-            if !e.created {
-                drop(e);
-                create(sh);
-                return;
-            }
-            e.hwnd
-        };
+        let hwnd = island::hwnd(sh);
         if hwnd == 0 {
             return;
         }
         // SAFETY: a plain query about a window; a stale handle answers no.
         if unsafe { IsWindow(hwnd as Hwnd) } == 0 {
-            // Gone with Explorer's taskbar (its children go with it): made
-            // again, under the next label; the gone one let go of too,
-            // whatever Tauri keeps of it.
-            let gone = label();
-            let mut e = EMBED.lock().unwrap();
-            e.created = false;
-            e.hwnd = 0;
-            e.tray = 0;
-            e.rect = None;
-            e.shown = false;
-            drop(e);
-            sh.disown(hwnd);
-            sh.log(&format!("capsule: its window {gone} is gone (Explorer started again?): made anew"));
-            if let Some(win) = sh.app.get_webview_window(&gone) {
-                let _ = win.destroy();
+            // Gone with Explorer's taskbar (its children go with it): the
+            // island's window, her home, with the settings and all; Tauri
+            // keeps its label, so she starts herself anew (as after
+            // WebView2's browser going, crash.rs), once.
+            let first = {
+                let mut e = EMBED.lock().unwrap();
+                e.parented = false;
+                e.tray = 0;
+                !std::mem::replace(&mut e.restarting, true)
+            };
+            if first {
+                sh.log("island: its window is gone with Explorer's taskbar (Explorer started again?): she starts anew");
+                let sh = sh.clone();
+                std::thread::spawn(move || match crate::updates::start_again(&sh) {
+                    Ok(()) => sh.quit(crate::data::Quit::Wakeable, "her restart, the island's window gone with Explorer's taskbar"),
+                    Err(e) => sh.log(&format!("island: could not start anew: {e}")),
+                });
             }
-            return look_soon();
+            return;
         }
         // SAFETY: a plain query about a window that exists.
         let sf = unsafe { GetDpiForWindow(tray as Hwnd) } as f64 / 96.0;
@@ -421,166 +429,90 @@ mod imp {
         let (cw, ch, page_sf) = island::closed_size(sh).unwrap_or((CAPSULE.0, CAPSULE.1, sf));
         let (w, h) = ((cw * page_sf).round() as i32, (ch * page_sf).round() as i32);
         let fit = gap.is_some_and(|g| fits(g, w, margin));
-        let up = fit && sh.is_visible() && !sh.is_fullscreen();
-        // Into the taskbar (made layered first, its own style kept, no
-        // longer kept on top: a child is in its parent's order).
-        // SAFETY: a plain query about our own window.
-        let parent = unsafe { GetAncestor(hwnd as Hwnd, GA_PARENT) } as isize;
-        if parent != tray {
-            adopt(hwnd as Hwnd, tray as Hwnd);
-            sh.log(&format!("capsule: into Explorer's taskbar {tray:#x} at {strip:?} along the {edge:?} (dpi {})", (sf * 96.0).round()));
-        }
         let cap = gap.filter(|_| fit).map(|g| (place_in(g, side, w, margin), strip.1 + (strip.3 - h) / 2, w, h));
-        let rect = cap.map(|c| (c.0 - margin, c.1 - margin, c.2 + 2 * margin, c.3 + 2 * margin));
         let said = format!("{free:?} of {taken:?} on {strip:?} along the {edge:?}; {} {:?}", side.name(), gap);
-        let (laid_before, moved) = {
+        let laid = Laid { cap, room, embedded: true };
+        let before = {
             let mut e = EMBED.lock().unwrap();
-            e.tray = tray;
-            let moved = up && (e.rect != rect || !e.shown);
-            if moved {
-                e.rect = rect;
+            e.hwnd = hwnd;
+            let tray_was = std::mem::replace(&mut e.tray, tray);
+            if tray_was != tray && tray_was != 0 && e.parented {
+                // Another taskbar window (another display's): adopted anew by it (apply).
+                e.parented = false;
+                e.child = None;
             }
-            if !up && e.shown {
-                // SAFETY: a plain call on our own window.
-                unsafe { ShowWindow(hwnd as Hwnd, SW_HIDE) };
-            }
-            e.shown = up;
             if e.said != said {
                 e.said = said.clone();
-                sh.log(&format!("capsule: free {said}; the capsule {w}x{h} {}", if up { "shown" } else if fit { "hidden with her" } else { "does not fit: hidden" }));
+                sh.log(&format!("island: free {said}; the capsule {w}x{h} {}", if fit { "fits" } else { "does not fit: the island hidden" }));
             }
-            (std::mem::replace(&mut e.laid, Laid { cap: cap.filter(|_| up), room, embedded: true }), moved)
+            std::mem::replace(&mut e.laid, laid)
         };
-        if let (true, Some(r)) = (moved, rect) {
-            lay(hwnd as Hwnd, tray as Hwnd, r);
-        } else if up {
-            // Explorer's own children made after ours (its XAML, as a new
-            // Explorer starts up) lie over it, and it is unseen and gets no
-            // pointer: first among its siblings again.
-            // SAFETY: plain calls on windows that exist.
-            unsafe {
-                if GetWindow(tray as Hwnd, GW_CHILD) != hwnd as Hwnd {
-                    SetWindowPos(hwnd as Hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    sh.log("capsule: under the taskbar's own children: first among them again");
-                }
-            }
-        }
-        let laid = Laid { cap: cap.filter(|_| up), room, embedded: true };
-        if laid != laid_before {
+        if laid != before {
             island::set_capsule(sh, laid);
         }
+        apply(sh);
     }
 
-    // Out of the taskbar and hidden: the island lies as it does with no
-    // capsule in the taskbar (island.rs fit).
+    // Out of the taskbar, and the island laid as it is with no capsule in
+    // the taskbar (island.rs fit).
     fn detach(sh: &Arc<Shared>, why: &str) {
-        let (was, hwnd, tray) = {
+        let parenting = island::parenting(sh);
+        let (was, hwnd, parented) = {
             let mut e = EMBED.lock().unwrap();
             let was = std::mem::take(&mut e.laid);
-            let (hwnd, tray) = (e.hwnd, std::mem::take(&mut e.tray));
-            e.shown = false;
-            e.rect = None;
+            let parented = std::mem::take(&mut e.parented);
+            e.tray = 0;
+            e.child = None;
             e.said.clear();
-            (was, hwnd, tray)
+            (was, e.hwnd, parented)
         };
-        if hwnd != 0 && tray != 0 {
-            // SAFETY: plain calls on our own window; a stale handle only makes them fail.
-            unsafe {
-                ShowWindow(hwnd as Hwnd, SW_HIDE);
-                SetParent(hwnd as Hwnd, std::ptr::null_mut());
-            }
-            sh.log(&format!("capsule: out of the taskbar ({why})"));
+        if parented && hwnd != 0 {
+            let (pos, size, shown) = parenting.map_or(((0, 0), (1, 1), false), |p| (p.1, p.2, p.3));
+            release(hwnd as Hwnd, pos, size, shown);
+            sh.log(&format!("island: out of the taskbar ({why})"));
         }
         if was != Laid::default() {
             island::set_capsule(sh, Laid::default());
         }
     }
 
-    // Its window: made once off this thread (building waits on the main
-    // thread), kept, hidden while out of the taskbar. The same page as the
-    // island's, as the capsule alone.
-    fn create(sh: &Arc<Shared>) {
-        {
-            let mut e = EMBED.lock().unwrap();
-            if e.created {
-                return;
-            }
-            e.created = true;
-        }
-        let sh = sh.clone();
-        std::thread::spawn(move || {
-            MADE.fetch_add(1, Ordering::SeqCst);
-            let label = label();
-            let built = WebviewWindowBuilder::new(&sh.app, &label, WebviewUrl::App("pet/index.html?role=island&part=capsule".into()))
-                .title("wakuwaku capsule")
-                .inner_size(CAPSULE.0 + 2.0 * MARGIN, CAPSULE.1 + 2.0 * MARGIN)
-                .additional_browser_args(crate::browser_args(&sh))
-                .data_directory(crate::webview_dir(&sh))
-                .transparent(true)
-                .decorations(false)
-                .resizable(false)
-                .maximizable(false)
-                .minimizable(false)
-                .skip_taskbar(true)
-                .shadow(false)
-                .always_on_top(true)
-                .visible_on_all_workspaces(true)
-                .focusable(false)
-                .focused(false)
-                .visible(false)
-                .background_throttling(BackgroundThrottlingPolicy::Disabled)
-                .build();
-            match built {
-                Ok(win) => {
-                    let hwnd = win.hwnd().map(|h| h.0 as isize).unwrap_or(0);
-                    crate::tasks::no_transitions(hwnd);
-                    sh.own_window(&win);
-                    // Layered it stays, whatever tao writes back (frameless.rs).
-                    crate::frameless::keep_layered(hwnd);
-                    crate::crash::watch(&sh, &win);
-                    crate::addons::guard_frames(&sh, &win, false);
-                    EMBED.lock().unwrap().hwnd = hwnd;
-                    sh.log(&format!("capsule: window {hwnd:#x} made ({label})"));
-                    look_soon();
-                }
-                Err(err) => {
-                    EMBED.lock().unwrap().created = false;
-                    sh.log(&format!("capsule: could not make its window: {err}"));
-                }
-            }
-        });
-    }
-
     // Into the taskbar, as TrafficMonitor's window goes (embed_spike.rs
     // --layered --popup): no longer kept on top, made layered and wholly
-    // opaque, then a child of the taskbar's window.
-    fn adopt(hwnd: Hwnd, tray: Hwnd) {
+    // opaque (once; frameless.rs keeps the bit as tao writes its style),
+    // then a child of the taskbar's window.
+    fn adopt(hwnd: Hwnd, tray: Hwnd, layered: bool) {
         // SAFETY: plain calls on our own window; the parent a window that exists.
         unsafe {
             SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
-            SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+            if !layered {
+                crate::frameless::keep_layered(hwnd as isize);
+                let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
+                SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+            }
             SetParent(hwnd, tray);
         }
     }
 
-    // Laid on its rect (physical) in the taskbar's client area, first among
-    // its siblings, and shown.
-    fn lay(hwnd: Hwnd, tray: Hwnd, r: Rect) {
-        let mut pt = Point { x: r.0, y: r.1 };
-        // SAFETY: plain calls on our own window and its parent.
+    // Out of the taskbar: a window of its own again, kept on top, where
+    // the island has it (physical), shown if it is to be.
+    fn release(hwnd: Hwnd, (x, y): (i32, i32), (w, h): (i32, i32), shown: bool) {
+        // SAFETY: plain calls on our own window; a stale handle only makes them fail.
         unsafe {
-            ScreenToClient(tray, &mut pt);
-            SetWindowPos(hwnd, HWND_TOP, pt.x, pt.y, r.2, r.3, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+            if IsWindow(hwnd) == 0 {
+                return;
+            }
+            SetParent(hwnd, std::ptr::null_mut());
+            SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_FRAMECHANGED | if shown { SWP_SHOWWINDOW } else { 0 });
         }
+        settle_webview(hwnd);
     }
 
     // What lies on the taskbar (x, w each, physical): the tray's window
     // (its icons, the clock, the show-the-desktop sliver), Start's where it
     // is a window, and every button UI Automation knows on it (Start,
     // search, task view, the widgets, the programs'); nothing of ours (the
-    // capsule's own window, a child of it).
+    // island's own window, a child of it).
     fn taken_on(tray: Hwnd, ours: Hwnd) -> Vec<Span> {
         let mut out = Vec::new();
         for class in ["TrayNotifyWnd", "Start"] {
@@ -641,38 +573,20 @@ mod imp {
 
     use crate::Shared;
 
-    pub const LABEL: &str = "capsule";
-    pub fn label() -> String {
-        LABEL.to_string()
-    }
     pub fn start(_sh: &Arc<Shared>) {}
     pub fn look_soon() {}
     pub fn stop() {}
-    pub fn capsule_hover(_sh: &Arc<Shared>, _over: bool) {}
-    pub fn cover(_sh: &Shared, _on: bool) {}
-    pub fn in_use() -> bool {
+    pub fn is_parented() -> bool {
         false
     }
-    pub fn ready(_sh: &Arc<Shared>) {}
-    pub fn is_created() -> bool {
-        false
-    }
+    pub fn lay_child(_pos: (i32, i32), _size: (i32, i32)) {}
+    pub fn apply(_sh: &Shared) {}
     pub fn where_() -> serde_json::Value {
         serde_json::Value::Null
     }
 }
 
-pub use imp::{capsule_hover, cover, in_use, is_created, label, look_soon, ready, start, stop, where_, LABEL};
-
-// The windows told of the island's state: the island's own, and the capsule's in the taskbar once made.
-pub fn labels() -> impl Iterator<Item = String> {
-    ["island".to_string(), label()].into_iter().take(if is_created() { 2 } else { 1 })
-}
-
-// Whether a window's label is the capsule's (any made so far).
-pub fn is_label(label: &str) -> bool {
-    label == LABEL || label.strip_prefix(LABEL).is_some_and(|rest| rest.strip_prefix('-').is_some_and(|n| n.parse::<u32>().is_ok()))
-}
+pub use imp::{apply, is_parented, lay_child, look_soon, start, stop, where_};
 
 #[cfg(test)]
 mod tests {
@@ -713,27 +627,16 @@ mod tests {
 
     #[test]
     fn the_capsule_in_its_stretch() {
-        // 300 x 36 at 125%: 375 wide, 5 px of margin (the ring's room).
-        let (w, m) = (375, 5);
-        assert_eq!(place_in((0, 1004), Side::Left, w, m), 5);
-        assert_eq!(place_in((1555, 343), Side::Right, w, m), 1555 + 343 - 5 - 375);
-        assert_eq!(place_in((1555, 343), Side::Center, w, m), 1555 + 343 - 5 - 375);
+        // 300 x 36 at 125%: 375 wide, 10 px of margin (MARGIN 8).
+        let (w, m) = (375, 10);
+        assert_eq!(place_in((0, 1004), Side::Left, w, m), 10);
+        assert_eq!(place_in((1555, 343), Side::Right, w, m), 1555 + 343 - 10 - 375);
+        assert_eq!(place_in((1555, 343), Side::Center, w, m), 1555 + 343 - 10 - 375);
         // It fits with its margins, or not: the page is told the room
         // (the stretch less the margins) and narrows, or shows her alone.
         assert!(fits((0, 1004), w, m));
         assert!(!fits((1555, 343), w, m));
         assert!(fits((1555, 343), 300, m));
         assert!(!fits((1555, 343), 0, m));
-    }
-
-    #[test]
-    fn the_windows_label_is_hers_whatever_time_it_was_made() {
-        assert!(is_label("capsule"));
-        assert!(is_label("capsule-2"));
-        assert!(is_label("capsule-13"));
-        assert!(!is_label("capsule-"));
-        assert!(!is_label("capsules"));
-        assert!(!is_label("island"));
-        assert!(!is_label("capsule-x"));
     }
 }

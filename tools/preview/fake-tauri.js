@@ -399,10 +399,8 @@
       // In Windows' taskbar (the setting's "taskbar"): taken as one along
       // the bottom here, as thick as Windows 11's (48 px, physical).
       ...(world.home !== 'taskbar' ? { islandEdge: config().islandEdge === 'taskbar' ? 'bottom' : 'top', islandStrip: config().islandEdge === 'taskbar' ? Math.round(48 * (window.devicePixelRatio || 1)) : 0 } : {}),
-      // Her capsule inside Windows' taskbar (embed.rs): never here, where
-      // there is no taskbar to go into; the island's page draws its closed
-      // island as ever. The capsule's own page (part=capsule) draws the
-      // capsule alone whatever is said here (island.js isCapsuleWin).
+      // The island inside Windows' taskbar (embed.rs): never here, where
+      // there is no taskbar to go into; the page lays the island as over one.
       ...(world.home !== 'taskbar' ? { islandEmbed: false, islandMx: null, islandRoom: 0 } : {}),
       widgets: widgetsNow(),
       unconnected: !world.connected,

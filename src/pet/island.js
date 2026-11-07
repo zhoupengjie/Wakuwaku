@@ -131,14 +131,13 @@
   // Where the settings' foot stands above it: off the strip as off the
   // taskbar's (TASKBAR_GAP), or the island's own foot with no strip.
   const settingsFoot = () => Math.max(stripUnder() + TASKBAR_GAP, footAt())
-  // Her capsule inside Windows' taskbar (pet:update islandEmbed; embed.rs,
-  // zhoupengjie/Wakuwaku#105): a window of its own, a child of the taskbar's,
-  // runs this page as the capsule alone (PART capsule, isCapsuleWin); the
-  // island's own window then shows only what opens from the capsule, its
-  // closed island laid exactly over the capsule and unseen (isl-ghost), about
-  // islandMx (the capsule's middle, physical px from the window's left).
-  // islandRoom is the room the capsule has in the taskbar (physical px; 0
-  // none), its width kept within it in both windows (slotWidth).
+  // The island inside Windows' taskbar (pet:update islandEmbed; embed.rs,
+  // zhoupengjie/Wakuwaku#105): its window a child of the taskbar's while it
+  // is closed, clipped to the strip, so the closed island is the capsule in
+  // the taskbar; laid about islandMx (the capsule's middle, physical px
+  // from the window's left) as the taskbar's middle run is (isl-embed,
+  // placeMid). islandRoom is the room the capsule has in the taskbar
+  // (physical px; 0 none), its width kept within it (slotWidth).
   let islandEmbed = false
   let islandMx = null
   let islandRoom = 0
@@ -147,7 +146,7 @@
   // strip (--isl-foot down from the top, isl-in-top), as it is centred in
   // one along the bottom.
   const inTopStrip = () => isOn() && home() === 'island' && !screenTop && !atBottom() && islandStrip > 0
-  const isEmbedded = () => isOn() && !isCapsuleWin() && islandEmbed && (atBottom() || inTopStrip())
+  const isEmbedded = () => isOn() && islandEmbed && (atBottom() || inTopStrip())
   const roomPx = () => (islandRoom > 0 ? islandRoom / (devicePixelRatio || 1) : 0)
   // Dropped open from the notch by her tray icon (setPeek), for PEEK_MS at
   // most if the pointer never comes.
@@ -316,8 +315,7 @@
   function oledShift() {
     clearTimeout(oledTimer)
     const root = document.documentElement
-    // Not in her capsule's own window in the taskbar: as big as the capsule, no room to move.
-    if (oledOn && !isCapsuleWin()) {
+    if (oledOn) {
       const at = Date.now()
       const [x, y] = OLED_PATH[Math.floor(at / OLED_STEP_MS) % OLED_PATH.length]
       const dpr = devicePixelRatio || 1
@@ -436,12 +434,6 @@
   let spinTimer = null
 
   const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
-  // Her capsule's own window inside Windows' taskbar (part=capsule, embed.rs):
-  // this page as the closed capsule alone, as big as its window
-  // (isl-capsule-win), never opening; the pointer on it brings the island's
-  // window over it, which takes over (hover).
-  const PART = new URLSearchParams(location.search).get('part') === 'capsule' ? 'capsule' : 'island'
-  const isCapsuleWin = () => ROLE === 'island' && PART === 'capsule'
   // Risen only for the settings (she is the pet on her own): it goes once they close.
   // This page draws her home in the home's window; her own window draws her.
   const isOn = () => ROLE === 'island'
@@ -519,9 +511,9 @@
   const taskCompactH = () => (isCapsule() ? stripH() - 2 * capsuleY() : stripH())
   // In her seat: there is a pet to show, and she is not out on the desktop.
   const isHome = () => !!spriteUrl && (config.out !== true || isComingHome)
-  const isAsking = () => isOn() && !isCapsuleWin() && !panel.hidden
+  const isAsking = () => isOn() && !panel.hidden
   // The settings open in the island (settings.js).
-  const isSetting = () => isOn() && !isCapsuleWin() && !!window.Settings?.isOpen()
+  const isSetting = () => isOn() && !!window.Settings?.isOpen()
   const isNudging = () => !!nudge && Date.now() < nudge.until
   // The specifics on screen (session names, commands, replies), unless turned off.
   const isDetailed = () => config.details !== false
@@ -1177,12 +1169,12 @@
     openUp[part] = on
     const open = openUp.island || openUp.pops
     // On the taskbar, and along the foot of the screen over Windows' own (#105).
-    if (on && !was && isOn() && !isCapsuleWin() && (home() === 'taskbar' || atBottom())) window.pet.raise()
-    // Her capsule inside Windows' taskbar (embed.rs): the island's window is
-    // up only while something is open in it (or the pointer on it): told as
+    if (on && !was && isOn() && (home() === 'taskbar' || atBottom())) window.pet.raise()
+    // Inside Windows' taskbar (embed.rs): the window is out of the taskbar
+    // while something is open in it (or the pointer is on it): told as
     // something opens, and, nothing open any more, once the island has
-    // shrunk back (the spring), so the window goes with nothing moving in it.
-    if (open !== was && !isCapsuleWin()) tellOpened(open)
+    // shrunk back (the spring), so it goes back in with nothing moving in it.
+    if (open !== was) tellOpened(open)
   }
   let openedTimer = 0
   function tellOpened(on) {
@@ -1191,20 +1183,8 @@
     openedTimer = setTimeout(() => window.pet.opened(false), SPRING_MS + 100)
   }
 
-  // Her capsule inside Windows' taskbar (isEmbedded): this window's closed
-  // island lies exactly over it, unseen (isl-ghost) until something opens
-  // from it, or she is pulled out, reached for or taken in; it fades back
-  // once the island has shrunk to the capsule again (style.css).
-  function setGhost() {
-    const on = isEmbedded()
-    body.classList.toggle('isl-embed', on)
-    body.classList.toggle('isl-ghost', on && view === 'compact' && !pull && !isReaching && !isAbsorbing && !isComingHome)
-  }
-
   // Returns true when the window has to grow first.
   function setRoom(next) {
-    // The capsule's window in the taskbar is sized by embed.rs, never grown.
-    if (isCapsuleWin()) return false
     const size = r => r || baseRoom()
     clearTimeout(roomTimer)
     if (JSON.stringify(next) === JSON.stringify(room)) return false
@@ -1307,7 +1287,7 @@
   let overMaxTop = false
 
   function plateWanted() {
-    if (!isOn() || isCapsuleWin() || now.plate !== true || quiet || view === 'settings' || body.classList.contains('pulling') || body.classList.contains('isl-stowed')) return false
+    if (!isOn() || now.plate !== true || quiet || view === 'settings' || body.classList.contains('pulling') || body.classList.contains('isl-stowed')) return false
     const { op, blur } = groundOf(lookNow())
     if (!(op < 1 && blur > 0)) return false
     return home() !== 'taskbar' || view !== 'compact'
@@ -1530,14 +1510,7 @@
         : screenTop
           ? // Hung from a Mac's screen top: square where it meets the edge.
             `0 0 ${view === 'compact' ? 12 : 30}px ${view === 'compact' ? 12 : 30}px`
-          : isEmbedded() && view !== 'compact'
-            ? // Grown out of her capsule in Windows' taskbar, which stays
-              // drawn under it: the corners at the capsule's edge as round as
-              // the capsule's (18), so none of it shows past them.
-              atBottom()
-              ? `${height > 60 ? 30 : height / 2}px ${height > 60 ? 30 : height / 2}px 18px 18px`
-              : `18px 18px ${height > 60 ? 30 : height / 2}px ${height > 60 ? 30 : height / 2}px`
-            : `${height > 60 ? 30 : height / 2}px`
+          : `${height > 60 ? 30 : height / 2}px`
   }
 
   // --- Deciding ---------------------------------------------------------------
@@ -5073,7 +5046,7 @@
   // edited, for her menu's 退出编辑; the rects whatever it is).
   let solidSent = ''
   function sendSolid() {
-    if (!isOn() || isCapsuleWin()) return
+    if (!isOn()) return
     const extra = window.Picker?.solids() || []
     const on = !!editLayout
     // Settings are a large interactive surface, often much bigger than the
@@ -5255,8 +5228,7 @@
     // A prompt answered: the island closes rather than lingering open.
     if (view === 'ask' && !isAsking()) nudge = null
     const was = view
-    // Her capsule's own window in the taskbar never opens (isCapsuleWin).
-    view = isCapsuleWin() ? 'compact' : isSetting() ? 'settings' : isAsking() ? 'ask' : isHover || isNudging() || peek ? 'expanded' : 'compact'
+    view = isSetting() ? 'settings' : isAsking() ? 'ask' : isHover || isNudging() || peek ? 'expanded' : 'compact'
     // Open, for whatever reason: what happened has been seen (its dot and
     // its ring go), and what the island would have shown by itself is in it.
     if (view !== 'compact') {
@@ -5363,8 +5335,6 @@
     setStow()
     // Opened on the taskbar: over any window come over hers.
     openedUp('island', view !== 'compact')
-    // Over her capsule in Windows' taskbar, unseen while closed (embed.rs).
-    setGhost()
   }
 
   // Each second while something is timed: the times' words alone, put in
@@ -5390,8 +5360,6 @@
   // time (after: NUDGE_MS, NUDGE_READ_MS) from then on. kind: what opened it
   // (an ending's goes as its session is at work again: movedOn).
   function nudgeFor(clip, text, ms = NUDGE_MS, widget = null, { kind = null, after = ms } = {}) {
-    // Her capsule's own window never opens: the island's does (embed.rs).
-    if (isCapsuleWin()) return
     // In the notch nothing opens by itself (done, failed, a hello, a widget):
     // only a prompt, which Claude waits on (the user's call, 2026-10-14).
     if (screenTop?.notch) return update()
@@ -5788,13 +5756,10 @@
 
   function pullDown(e) {
     console.log('pointerdown on her in the island, button', e.button)
-    // Not out of her capsule's own window in the taskbar: the island's, laid
-    // over it, has the pointer by then (a press there is a click).
-    if (e.button !== 0 || !isHome() || view === 'ask' || isSetting() || isAbsorbing || isCapsuleWin()) return
+    if (e.button !== 0 || !isHome() || view === 'ask' || isSetting() || isAbsorbing) return
     // No mouse events follow, so the island does not take this for a click.
     e.preventDefault()
     pull = { x0: e.clientX, y0: e.clientY, started: false, broken: false, at: null, carrying: false }
-    setGhost()
     window.pet.holding(true)
     window.addEventListener('pointermove', pullMove)
     window.addEventListener('pointerup', pullUp)
@@ -5932,7 +5897,6 @@
     if (!pull) return
     const done = pull
     pull = null
-    setGhost()
     if (!done.started) {
       // A click on her, not a pull: the settings, as anywhere on the island;
       // open by itself, it closes instead, as anywhere on it (pressNudge).
@@ -6014,7 +5978,6 @@
     }
     if (!isReaching) {
       isReaching = true
-      setGhost()
       // Down from out of the way, to reach for her.
       setStow()
       // The next call draws, once the window has grown.
@@ -6041,7 +6004,6 @@
     isReaching = false
     isAbsorbing = true
     isComingHome = true
-    setGhost()
     setStow()
     clearTimeout(comingHomeTimer)
     // Main says she is in a moment after; should it not, she is not.
@@ -6095,30 +6057,26 @@
     // Over Windows' taskbar along the top: centred in its strip too (isl-in-top).
     const high = inTopStrip()
     body.classList.toggle('isl-in-top', high)
-    // Her capsule's own window in the taskbar (isCapsuleWin): the capsule
-    // alone, centred in the window (the strip's thickness, its room each side).
-    body.classList.toggle('isl-capsule-win', isCapsuleWin())
     const root = document.documentElement.style
     root.setProperty('--isl-foot', `${low || high ? footAt() : TOP}px`)
     root.setProperty('--isl-strip', `${low || high ? stripUnder() : 0}px`)
     root.setProperty('--isl-set-foot', `${low || high ? settingsFoot() : TOP}px`)
-    // Over her capsule in Windows' taskbar: the island about the capsule's
-    // middle (islandMx), as the taskbar's middle run has it (isl-mid,
-    // placeMid); the picker and its toasts about it too (picker.css --isl-cx).
+    // Inside Windows' taskbar: the island about its capsule's middle there
+    // (islandMx), as the taskbar's middle run has it (isl-mid, placeMid);
+    // the picker and its toasts about it too (picker.css --isl-cx).
+    body.classList.toggle('isl-embed', isEmbedded())
     if (home() !== 'taskbar') {
       slotMiddle = isEmbedded() && Number.isFinite(islandMx) ? islandMx / (devicePixelRatio || 1) : null
       if (slotMiddle != null) root.setProperty('--isl-cx', `${onPixels(slotMiddle)}px`)
       else root.removeProperty('--isl-cx')
       placeMid()
     }
-    setGhost()
   }
 
   // The prompt panel lives in the island while it is on (a banner in the
   // settings while they are open), above the pet otherwise.
   function seatPanel() {
-    // Her capsule's own window shows no prompt: the island's does.
-    if (!isOn() || isCapsuleWin()) return
+    if (!isOn()) return
     const seat = isSetting() ? window.Settings.askSlot : island
     if (panel.parentElement !== seat) seat.append(panel)
   }
@@ -6288,9 +6246,6 @@
   for (const target of [island]) {
     target.addEventListener('mouseenter', () => {
       window.pet.hover(true)
-      // Her capsule's own window in the taskbar never opens: the island's
-      // window comes over it for that (embed.rs capsule_hover).
-      if (isCapsuleWin()) return
       // Open by itself until seen: seen now.
       seenNudge()
       clearTimeout(hoverTimer)
@@ -6304,7 +6259,6 @@
     target.addEventListener('mouseleave', () => {
       // Pulling her out keeps the window's pointer, wherever it goes.
       if (!pull?.started) window.pet.hover(false)
-      if (isCapsuleWin()) return
       // Off the island it was closed under: coming back is a new hover.
       dismissed = false
       clearTimeout(hoverTimer)
@@ -6331,9 +6285,6 @@
     // (pressNudge), but on a session (to its window, the island closed too)
     // or a widget (its settings).
     target.addEventListener('click', e => {
-      // On her capsule's own window in the taskbar (a press before the
-      // island's window had the pointer): the settings, as a click on the island.
-      if (isCapsuleWin()) return window.pet.openSettings()
       // A click in the settings (✕, the head) may just have closed them: not a click to open.
       if (isSetting() || window.Settings?.layer?.contains(e.target) || Date.now() - pulledAt < 500) return
       if (view === 'ask' || panel.contains(e.target) || her.contains(e.target)) return
@@ -6413,14 +6364,6 @@
   // taskbar (bars.rs): it is open here already; a ring in the waiting
   // colour goes round the island twice so the eye finds it (style.css
   // look-here; held still a moment instead with reduced motion).
-  // Her capsule's own window in Windows' taskbar (isCapsuleWin): nothing
-  // drawn while the settings stand above the taskbar in the island's window
-  // (embed.rs cover), which does not cover the capsule as the open island
-  // does; back as they close.
-  window.pet.onCover(({ on } = {}) => {
-    if (isCapsuleWin()) body.classList.toggle('isl-covered', on === true)
-  })
-
   window.pet.onLookHere(() => {
     if (!isAsking()) return
     island.style.setProperty('--look', hue().waiting)
@@ -6485,12 +6428,10 @@
     home,
     // At the top of the screen, the side the island is at (anchor.js), and
     // the edge of the screen it is along: the top, or the bottom (#105);
-    // and, there, whether her capsule is inside Windows' taskbar, this
-    // window over it (embed.rs), or this window is the capsule's own.
+    // and, there, whether the island is inside Windows' taskbar (embed.rs).
     anchor,
     islandEdge: () => (atBottom() ? 'bottom' : 'top'),
     isEmbedded,
-    isCapsuleWin,
     tbEdge,
     isSide,
     isLight,

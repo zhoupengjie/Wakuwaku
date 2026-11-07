@@ -404,12 +404,11 @@ impl Shared {
             // px; 0 with none) the page centres the closed island in.
             now["islandEdge"] = json!(island::edge_name(self));
             now["islandStrip"] = json!(island::strip_under(self));
-            // Her capsule inside Windows' taskbar (embed.rs): the island's
-            // window then shows only what opens from it, its own closed
-            // island laid over the capsule unseen, about islandMx (physical
-            // px from the window's left); and the room the capsule has in
-            // the taskbar (physical px; 0 none), which its width keeps
-            // within (anchor.js capsuleWidth).
+            // The island inside Windows' taskbar (embed.rs): the page lays
+            // the island about islandMx (physical px from the window's left,
+            // where its capsule lies in the strip), and keeps the capsule's
+            // width within the room it has there (islandRoom, physical px; 0
+            // none; anchor.js capsuleWidth).
             let (embedded, mx, room) = island::embedding(self);
             now["islandEmbed"] = json!(embedded);
             now["islandMx"] = json!(mx);
@@ -433,28 +432,12 @@ impl Shared {
         // Her window hidden (she is home) hears no updates: it gets the
         // whole state as it shows (pet.rs apply_visibility).
         let pet_hears = event != "pet:update" || pet::is_up(self);
-        // Her capsule's window in Windows' taskbar (embed.rs) draws from the
-        // same: it hears what the island's hears.
-        for label in ["pet".to_string()].into_iter().chain(embed::labels()) {
+        for label in ["pet", "island"] {
             if label == "pet" && !pet_hears {
                 continue;
             }
-            let _ = self.app.emit_to(label.as_str(), event, payload.clone());
+            let _ = self.app.emit_to(label, event, payload.clone());
         }
-    }
-
-    // What the island's page hears, its capsule's in Windows' taskbar hears too (embed.rs).
-    pub fn to_home(&self, event: &str, payload: Value) {
-        for label in embed::labels() {
-            let _ = self.app.emit_to(label.as_str(), event, payload.clone());
-        }
-    }
-
-    // A window of hers gone (the capsule's, taken by Explorer's taskbar,
-    // embed.rs): its handle no longer hers, before Windows hands it to
-    // another window.
-    pub fn disown(&self, hwnd: isize) {
-        self.own.lock().unwrap().retain(|&h| h != hwnd);
     }
 
     // The mood or the settings changed: the pages, the tray, the settings.
@@ -470,7 +453,7 @@ impl Shared {
     // seconds): the island's widgets alone, not the whole state to both
     // pages, the tray and the settings.
     pub fn redraw_widgets(&self) {
-        self.to_home("pet:widgets", json!({ "widgets": self.widgets_said() }));
+        let _ = self.app.emit_to("island", "pet:widgets", json!({ "widgets": self.widgets_said() }));
         self.push_settings();
         desk::push_widgets(self);
     }
@@ -508,7 +491,7 @@ impl Shared {
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(250));
             sh.push_pending.store(false, Ordering::SeqCst);
-            sh.to_home("settings:changed", settings::snapshot(&sh));
+            let _ = sh.app.emit_to("island", "settings:changed", settings::snapshot(&sh));
         });
     }
 
@@ -635,7 +618,7 @@ impl Shared {
 
     // A chime from her home, and a system notification if asked for.
     fn alert(&self, mood: &str, project: &str) {
-        self.to_home("pet:alert", json!({ "mood": mood }));
+        let _ = self.app.emit_to("island", "pet:alert", json!({ "mood": mood }));
         let group = match mood {
             "waiting" => "waiting",
             "error" => "error",
@@ -740,7 +723,7 @@ impl Shared {
         let which = if is_full { format!(", {}", fullscreen::front()) } else { String::new() };
         let which = format!("{which}; hers on {:?}", self.displays());
         self.log(&format!("another app full screen: {is_full}{which} ({how})"));
-        self.to_home("pet:full-screen", json!({ "on": is_full }));
+        let _ = self.app.emit_to("island", "pet:full-screen", json!({ "on": is_full }));
         let t = Instant::now();
         self.apply_visibility();
         shortcuts::update(self);
@@ -914,28 +897,16 @@ pub(crate) fn shared(app: &AppHandle) -> Arc<Shared> {
 
 // --- From the pages -----------------------------------------------------------------
 // Async, so none of them runs on the main thread while it waits on a lock.
-// `window` says which page: "pet", "island", or "capsule" (her capsule's
-// in Windows' taskbar, embed.rs: her home's page too, the closed capsule
-// alone, so it counts as the island's but where it says).
+// `window` says which page: "pet" or "island".
 
 fn is_island(window: &WebviewWindow) -> bool {
-    window.label() == "island" || is_capsule(window)
-}
-
-fn is_capsule(window: &WebviewWindow) -> bool {
-    embed::is_label(window.label())
+    window.label() == "island"
 }
 
 #[tauri::command]
 async fn pet_ready(app: AppHandle, window: WebviewWindow) {
     let sh = shared(&app);
-    if is_capsule(&window) {
-        embed::ready(&sh)
-    } else if is_island(&window) {
-        island::ready(&sh)
-    } else {
-        pet::ready(&sh)
-    }
+    if is_island(&window) { island::ready(&sh) } else { pet::ready(&sh) }
     let views = sh.asks.lock().unwrap().views();
     let _ = app.emit_to(window.label(), "pet:asks", views);
 }
@@ -943,13 +914,7 @@ async fn pet_ready(app: AppHandle, window: WebviewWindow) {
 #[tauri::command]
 async fn pet_hover(app: AppHandle, window: WebviewWindow, is_over: bool, her: Option<bool>) {
     let sh = shared(&app);
-    if is_capsule(&window) {
-        embed::capsule_hover(&sh, is_over)
-    } else if is_island(&window) {
-        island::hover(&sh, is_over)
-    } else {
-        pet::hover(&sh, is_over, her != Some(false))
-    }
+    if is_island(&window) { island::hover(&sh, is_over) } else { pet::hover(&sh, is_over, her != Some(false)) }
 }
 
 #[tauri::command]
@@ -1000,10 +965,6 @@ async fn pet_double_click(app: AppHandle, window: WebviewWindow) {
 #[tauri::command]
 async fn pet_panel(app: AppHandle, window: WebviewWindow, measured: Value) {
     let sh = shared(&app);
-    // The capsule's window in the taskbar is sized by embed.rs, never grown.
-    if is_capsule(&window) {
-        return;
-    }
     if is_island(&window) {
         island::set_room(&sh, &measured);
     } else {
@@ -1080,15 +1041,13 @@ async fn island_holding(app: AppHandle, is_holding: bool) {
 // The taskbar's layout being edited (island.js editTaskbar), and where its
 // bar, library and tools are in the page: the window keeps the mouse there.
 #[tauri::command]
-async fn island_editing(app: AppHandle, window: WebviewWindow, on: bool, rects: Vec<[f64; 4]>, page_sf: Option<f64>) {
-    if !is_capsule(&window) {
-        island::set_editing(&shared(&app), on, rects, page_sf);
-    }
+async fn island_editing(app: AppHandle, on: bool, rects: Vec<[f64; 4]>, page_sf: Option<f64>) {
+    island::set_editing(&shared(&app), on, rects, page_sf);
 }
 
 // The island's page has something open in it (hovered open, a prompt, the
-// settings, opened by itself), or nothing now: with her capsule inside
-// Windows' taskbar its window goes once nothing is (island.rs set_opened).
+// settings, opened by itself), or nothing now: inside Windows' taskbar its
+// window goes back in once nothing is (island.rs set_opened).
 #[tauri::command]
 async fn island_opened(app: AppHandle, window: WebviewWindow, on: bool) {
     if window.label() == "island" {
@@ -1114,7 +1073,7 @@ async fn island_seat(app: AppHandle, x: f64) {
 // zhoupengjie/Wakuwaku#55).
 #[tauri::command]
 async fn island_raise(app: AppHandle, window: WebviewWindow) {
-    if is_island(&window) && !is_capsule(&window) {
+    if is_island(&window) {
         island::raise(&shared(&app));
     }
 }
@@ -1135,10 +1094,7 @@ async fn island_stow(app: AppHandle, window: WebviewWindow, stowed: bool, width:
 // fade ms; none, faded out. Measured in a window of another size (resized
 // meanwhile), it is not shown: the page sends it again once resized.
 #[tauri::command]
-async fn island_plate(app: AppHandle, window: WebviewWindow, rect: Option<Value>, fade: u32) {
-    if is_capsule(&window) {
-        return;
-    }
+async fn island_plate(app: AppHandle, rect: Option<Value>, fade: u32) {
     let sh = shared(&app);
     let Some(r) = rect else { return backplate::set(&sh, None, fade) };
     let ((ox, oy), (ww, wh), sf) = island::frame(&sh);
@@ -2127,8 +2083,8 @@ fn main() {
                 }
             });
 
-            // Her capsule inside Windows' taskbar, looked after every second
-            // while her island is along the foot of the screen (embed.rs).
+            // Her island inside Windows' taskbar, looked after every second
+            // while it is set to be there (embed.rs).
             embed::start(&sh);
 
             // Another app full screen, looked at on this thread alone
@@ -2252,7 +2208,7 @@ fn main() {
             if let tauri::RunEvent::Exit = event {
                 let sh = shared(app);
                 sh.log("quitting: the bar given back, the mail stopped");
-                // Her capsule out of Explorer's taskbar before it goes with her.
+                // Her island out of Explorer's taskbar before it goes with her.
                 embed::stop();
                 island::release_bar(&sh);
                 mail::stop_all(&sh);

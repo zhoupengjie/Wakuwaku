@@ -102,9 +102,6 @@
     onLanded: on('island:landed'),
     // The prompt waiting asked for from her taskbar on another display (bars.rs).
     onLookHere: on('island:look-here'),
-    // Her capsule's own window in Windows' taskbar (embed.rs): draw nothing
-    // while the settings stand above the taskbar in the island's window.
-    onCover: on('capsule:cover'),
     // Up over an app full screen for the prompts alone ({ on }, island.rs over_full): her island only.
     onOverFull: on('island:over-full'),
     // A maximized window on her display, at the top of the screen ({ on }, island.rs look_over_max).
@@ -123,9 +120,9 @@
     // other that has come over it (island.rs raise, zhoupengjie/Wakuwaku#55).
     raise: () => send('island_raise'),
     // Something open in the island (hovered open, a prompt, the settings,
-    // opened by itself), or nothing now, shrunk back: with her capsule inside
-    // Windows' taskbar its window shows only while something is (island.rs
-    // set_opened, embed.rs).
+    // opened by itself), or nothing now, shrunk back: inside Windows'
+    // taskbar its window is out of the taskbar while something is
+    // (island.rs set_opened, embed.rs).
     opened: on => send('island_opened', { on: on === true }),
     // The settings in the island (settings.js): open them here or from
     // anywhere else (the tray, her double-click), what they show, what they change.

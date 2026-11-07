@@ -150,13 +150,6 @@ test("the island's window where it sits, as island.rs will put it (anchor.js win
   assert.deepEqual(Scenes.windowOf(Scenes.byId('island-bottom-open')), Scenes.islandWindow('center', 'bottom'))
   assert.deepEqual(Scenes.windowOf(Scenes.byId('scene-island-bottom')), Scenes.islandWindow('center', 'bottom'))
   assert.equal(Scenes.edgeOf(Scenes.byId('scene-island-bottom')), 'bottom')
-  // Her capsule's own window inside Windows' taskbar (embed.rs): as big as
-  // the capsule and its margin, centred in the 48 px strip along the foot.
-  const capsule = Scenes.byId('island-capsule')
-  assert.equal(capsule.part, 'capsule')
-  assert.deepEqual(Scenes.windowOf(capsule), [992, 854, 308, 44])
-  assert.equal(Scenes.edgeOf(capsule), 'bottom')
-  assert.equal(Scenes.worldFor(capsule, F).config.islandEdge, 'taskbar')
   assert.equal(Scenes.edgeOf(Scenes.byId('scene-island-right')), 'top')
   assert.equal(Scenes.worldFor(Scenes.byId('island-bottom-open'), F).config.islandEdge, 'taskbar')
   // A shot's: its own place, else its scene's; its world says it too.

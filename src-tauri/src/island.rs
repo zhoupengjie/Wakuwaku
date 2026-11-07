@@ -148,14 +148,15 @@ pub struct Island {
     // (pet:update islandEdge, islandStrip).
     bottom: bool,
     strip: Option<i32>,
-    // Her capsule inside Windows' taskbar (embed.rs; islandEmbed): where it
-    // lies (physical), the room it has there (physical px; 0 none: the page
-    // keeps its width within it, anchor.js capsuleWidth), and whether it is
-    // in. Then this window shows only as the capsule is used (is_shown), its
-    // own closed island laid over the capsule and unseen (island.js
-    // isl-ghost), about mx (physical px from the window's left; pet:update
-    // islandMx), and the page says whether it has something open in it
-    // (island_opened: opened), which keeps the window up.
+    // Her island inside Windows' taskbar (embed.rs; islandEmbed): where its
+    // closed capsule lies there (physical; none: no room for it), the room
+    // it has (physical px; 0 none: the page keeps its width within it,
+    // anchor.js capsuleWidth), and whether it is in. The window is laid
+    // about the capsule, its middle mx (physical px from the window's left;
+    // pet:update islandMx) where the page lays the island, and is a child of
+    // the taskbar, clipped to the strip, while nothing is open in it and
+    // nobody is on it (parenting; the page says what is open: island_opened,
+    // opened); out, whole over the taskbar, as it is used.
     cap: Option<(i32, i32, i32, i32)>,
     cap_room: i32,
     embedded: bool,
@@ -307,13 +308,10 @@ pub fn is_shown(sh: &Shared) -> bool {
     // Nor while another copy of her holds the taskbar (taskbar.rs waiting).
     let up = if sh.home() == "taskbar" { !sh.is_fullscreen() && !taskbar::waiting() } else { sh.is_visible() };
     let isl = sh.island.lock().unwrap();
-    // With her capsule inside Windows' taskbar (embed.rs) this window is up
-    // only while it is used: the pointer on the capsule (or just gone from
-    // it, this window taking it over) or on this one, the button held on
-    // her, reaching for her or taking her in, something open in it (a
-    // prompt, the settings, opened by itself; the page says: opened).
-    if up && isl.embedded {
-        return isl.temp || isl.settings_open || isl.for_asks || isl.holding || isl.reaching || isl.absorbing || isl.opened || isl.ct.over || crate::embed::in_use();
+    // Inside Windows' taskbar (embed.rs) with no room for the capsule: hidden
+    // until there is, but for the settings and the prompts, which rise.
+    if up && isl.embedded && isl.cap.is_none() {
+        return isl.temp || isl.settings_open || isl.for_asks;
     }
     up || isl.temp || isl.settings_open || isl.for_asks
 }
@@ -550,9 +548,8 @@ pub fn side_wanted(sh: &Shared) -> Side {
     Side::of(sh.setting("islandPos").as_str().unwrap_or("center"))
 }
 
-// The closed capsule as its page has it (logical width and height; the
-// capsule's page and the island's lay it out the same) and the page's
-// scale; none before a page has said its size (set_stow).
+// The closed capsule as the page has it (logical width and height) and the
+// page's scale; none before the page has said its size (set_stow).
 pub fn closed_size(sh: &Shared) -> Option<(f64, f64, f64)> {
     let isl = sh.island.lock().unwrap();
     let (w, h) = isl.stow.closed;
@@ -560,9 +557,8 @@ pub fn closed_size(sh: &Shared) -> Option<(f64, f64, f64)> {
 }
 
 // Where her capsule lies in Windows' taskbar now, with the room it has
-// there, or none (out of the taskbar, hidden): the window laid about it,
-// shown or hidden by the new rule (is_shown), and the pages told
-// (islandEmbed, islandMx, islandRoom).
+// there, or none (out of the taskbar): the window laid about it, shown or
+// hidden (is_shown), and the page told (islandEmbed, islandMx, islandRoom).
 pub fn set_capsule(sh: &Arc<Shared>, laid: crate::embed::Laid) {
     let changed = {
         let mut isl = sh.island.lock().unwrap();
@@ -583,8 +579,8 @@ pub fn set_capsule(sh: &Arc<Shared>, laid: crate::embed::Laid) {
 
 // The island's page has something open in it (hovered open, a prompt, the
 // settings, opened by itself), or nothing now, its island shrunk back
-// (island_opened): with her capsule inside Windows' taskbar, the window goes
-// once nothing is open and the pointer has gone (is_shown).
+// (island_opened): inside Windows' taskbar the window goes back into it
+// once nothing is open and the pointer has gone (parenting, embed.rs apply).
 pub fn set_opened(sh: &Arc<Shared>, on: bool) {
     let (was, embedded) = {
         let mut isl = sh.island.lock().unwrap();
@@ -595,22 +591,18 @@ pub fn set_opened(sh: &Arc<Shared>, on: bool) {
     }
 }
 
-// The capsule inside Windows' taskbar covered (its page drawing nothing)
-// while the settings stand above the taskbar in this window: the open
-// island grows out of the capsule and covers it (its corners at the
-// capsule's edge as round as the capsule's, island.js setSize: rounder,
-// they left the capsule's corners showing), but the settings stand off the
-// strip, and the capsule showing under them looked like a second island
-// (the user, 2026-11-07). Not for the open island: covered for it, the
-// capsule came back a moment after the island's own pill had faded, a
-// blink (the user, the same day). Told as the settings open and close, and
-// as the capsule's page comes up (embed.rs cover).
-pub fn tell_cover(sh: &Shared) {
-    let on = {
-        let isl = sh.island.lock().unwrap();
-        isl.embedded && isl.settings_open
-    };
-    crate::embed::cover(sh, on);
+// For embed.rs: the window's handle, where it is to be (physical), whether
+// it is shown, and whether it is to be a child of Windows' taskbar now:
+// inside it with room for its capsule, and not in use (the pointer on it,
+// the button held on her, reaching for her or taking her in, something
+// open in it, the settings, the prompts, risen). None before it is made.
+pub fn parenting(sh: &Shared) -> Option<(isize, (i32, i32), (i32, i32), bool, bool)> {
+    let isl = sh.island.lock().unwrap();
+    if isl.hwnd == 0 {
+        return None;
+    }
+    let in_use = isl.ct.over || isl.opened || isl.settings_open || isl.holding || isl.reaching || isl.absorbing || isl.for_asks || isl.temp;
+    Some((isl.hwnd, isl.pos, isl.size, isl.shown, isl.embedded && isl.cap.is_some() && !in_use))
 }
 
 // For the pages (main.rs payload): whether her capsule is inside Windows'
@@ -884,6 +876,12 @@ pub fn take_strip_again(sh: &Shared) {
 // minimized (keep_on_screen lays it once it is given back).
 fn lay(win: &WebviewWindow, (x, y): (i32, i32), (w, h): (i32, i32)) {
     if is_minimized(win) {
+        return;
+    }
+    // A child of Windows' taskbar (embed.rs): laid in its client area, not
+    // on the screen as tao would.
+    if crate::embed::is_parented() {
+        crate::embed::lay_child((x, y), (w, h));
         return;
     }
     let _ = win.set_position(PhysicalPosition::new(x, y));
@@ -1253,6 +1251,8 @@ pub fn apply_visibility(sh: &Arc<Shared>) {
     if !over && told {
         tell_over_full(sh, false);
     }
+    // Into Windows' taskbar or out of it, as it is used now (embed.rs).
+    crate::embed::apply(sh);
 }
 
 // Up over an app full screen for the prompts alone (show_asks), her taskbar
@@ -1315,15 +1315,8 @@ fn show_or_hide(sh: &Arc<Shared>) {
             isl.reaching = false;
         }
     }
-    let embedded = sh.island.lock().unwrap().embedded;
     if let Some(win) = window(sh) {
         let _ = if want { win.show() } else { win.hide() };
-        // Shown over Windows' taskbar for the capsule in it (embed.rs): over
-        // the taskbar, which Explorer brings to the top of the windows kept on
-        // top as it is pressed.
-        if want && embedded {
-            crate::tasks::raise_top(hwnd(sh));
-        }
     }
     // The blur under the island goes with it, and comes back with it (backplate.rs).
     if want {
@@ -1567,10 +1560,9 @@ pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
     if came {
         uncover(sh);
     }
-    // Up for her capsule inside Windows' taskbar (embed.rs), and no longer
-    // used (the pointer gone, nothing open in it): it goes (is_shown).
-    if embedded && !is_shown(sh) {
-        apply_visibility(&crate::shared(&sh.app));
+    // Inside Windows' taskbar: into it or out of it as it is used now (embed.rs).
+    if embedded {
+        crate::embed::apply(sh);
     }
     wait
 }
@@ -1583,6 +1575,8 @@ pub fn hover(sh: &Shared, is_over: bool) {
         (isl.ct.set_over(is_over, held, false), is_over && !was)
     };
     set_ignore(sh, ignore);
+    // Inside Windows' taskbar: out of it as the pointer comes, back as it goes (embed.rs).
+    crate::embed::apply(sh);
     // The pointer come to her home: the monitor reads what its widget's card
     // shows now, not at its next turn (widgets.rs Watching::looking).
     if came {
@@ -1712,6 +1706,7 @@ pub fn set_holding(sh: &Shared, is_holding: bool) {
         if is_holding { isl.ct.force(Mode::Catch) } else { None }
     };
     set_ignore(sh, ignore);
+    crate::embed::apply(sh);
 }
 
 // Where her home is on the screen, physical, whether it is up or not: what
@@ -1860,7 +1855,6 @@ pub fn open_settings(sh: &Arc<Shared>, tab: Option<&str>) {
     };
     sh.log(&format!("island: settings open on {:?}{}", tab, if is_up { "" } else { " (risen for them)" }));
     apply_visibility(sh);
-    tell_cover(sh);
     keep_on_top(sh);
     // Mail's agents looked for again while they are open; the monitor's
     // sensors read whole for their list.
@@ -1879,7 +1873,6 @@ pub fn settings_closed(sh: &Arc<Shared>) {
     sh.island.lock().unwrap().settings_open = false;
     sh.log("island: settings closed");
     keep_on_top(sh);
-    tell_cover(sh);
     // Set up once Claude Code or Codex is connected, not as the settings
     // close (a click outside closed them, and a new user, nothing
     // connected, was never asked again: the test session, 2026-10-12).
@@ -1947,7 +1940,8 @@ pub fn raise(sh: &Arc<Shared>) {
         let isl = sh.island.lock().unwrap();
         (isl.shown, isl.bottom || isl.strip.is_some())
     };
-    if hwnd == 0 || !shown || !(sh.home() == "taskbar" || over) || !TOPMOST.load(Ordering::SeqCst) {
+    // Not as a child of Windows' taskbar (embed.rs): in its order there.
+    if hwnd == 0 || !shown || !(sh.home() == "taskbar" || over) || !TOPMOST.load(Ordering::SeqCst) || crate::embed::is_parented() {
         return;
     }
     let own = sh.own.lock().unwrap().clone();
@@ -1983,7 +1977,7 @@ pub fn uncover(sh: &Shared) {
         (isl.hwnd, (isl.shown && !isl.embedded).then_some(isl.strip).flatten().map(|thick| if isl.bottom { (true, isl.pos.1 + isl.size.1 - thick) } else { (false, isl.pos.1 + thick) }))
     };
     let Some((low, band)) = band else { return };
-    if hwnd == 0 || !TOPMOST.load(Ordering::SeqCst) {
+    if hwnd == 0 || !TOPMOST.load(Ordering::SeqCst) || crate::embed::is_parented() {
         return;
     }
     let own = sh.own.lock().unwrap().clone();
@@ -2077,7 +2071,7 @@ pub fn where_(sh: &Shared) -> Value {
         "capRoom": isl.cap_room,
         "mx": isl.mx,
         "opened": isl.opened,
-        "capsule": crate::embed::where_(),
+        "embed": crate::embed::where_(),
         "stow": {
             "closed": closed_rect(&isl).map(|r| json!([r.0, r.1, r.2, r.3])),
             "under": isl.stow.under,

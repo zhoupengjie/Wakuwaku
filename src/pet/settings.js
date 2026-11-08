@@ -3268,7 +3268,7 @@
     const mono = text => `<span class="mono">${esc(text)}</span>`
     const { shown: file, backup } = Agents.read(snap, tool)
     const undo = `<span class="link" data-agent="${tool}:remove">${esc(T('wc.undo'))}</span>`
-    if (['claude', 'agy', 'zcode', 'dsh', 'reasonix'].includes(tool) && state === 'set') {
+    if (['claude', 'agy', 'zcode', 'dsh', 'reasonix', 'workbuddy'].includes(tool) && state === 'set') {
       const where = backup ? T('wc.written', { path: mono(file), backup: mono(`${file.split(/[\\/]/).pop()}.wakuwaku.bak`) }) : T('wc.created', { path: mono(file) })
       return `<div class="wc-tnote"><div>${T(`wc.${tool}Left`)}</div><div class="wc-where">${where}${undo}</div></div>`
     }

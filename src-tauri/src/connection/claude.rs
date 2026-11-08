@@ -62,7 +62,7 @@ pub(super) fn is_ours(hook: &Value) -> bool {
 }
 
 // Our hooks, event by event.
-fn ours_by_event(settings: &Value) -> Map<String, Value> {
+pub(super) fn ours_by_event(settings: &Value) -> Map<String, Value> {
     let mut found = Map::new();
     for (event, groups) in settings.get("hooks").and_then(Value::as_object).into_iter().flatten() {
         let ours: Vec<Value> = groups

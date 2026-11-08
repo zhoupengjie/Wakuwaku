@@ -170,7 +170,7 @@ pub struct Shared {
     // installed, waiting for a session (agents.js). Codex runs its hooks only
     // once the person trusts them; omp loads its extension only as it
     // starts after it was written.
-    pub seen: [std::sync::atomic::AtomicU64; 8],
+    pub seen: [std::sync::atomic::AtomicU64; 9],
     is_logging: bool,
     // Our windows' handles: never counted as another app full screen.
     own: Mutex<Vec<isize>>,

@@ -4,7 +4,7 @@
 
 [README](../README.md) 说她是什么；这里是全部的细节：怎么装、怎么连上每个 agent、每个地方怎么用，以及她是怎么工作的。
 
-- [安装](#安装)：装上宠物，连上 Claude Code、Codex、Antigravity、OpenCode、oh-my-pi、ZCode、DeepSeek Harness、Reasonix
+- [安装](#安装)：装上宠物，连上 Claude Code、Codex、Antigravity、OpenCode、oh-my-pi、ZCode、DeepSeek Harness、Reasonix、WorkBuddy
 - [使用](#使用)：拖动和点击、她的家、插件、邮件、更新、崩溃报告、卸载
 - [宠物的动作](#宠物的动作)、[在宠物上直接确认](#在宠物上直接确认)
 - [工作原理](#工作原理)、[测试](#测试)
@@ -111,6 +111,14 @@ ZCode 的 hook 只能是命令，没有 HTTP：每个事件运行一次 `wakuwak
 - 在 Studio 里按「停下」时，它会在对话里提示一条 Wakuwaku 的 hook「could not run · context canceled」：Reasonix 在取消之后才去跑那一步的 hook，跑不起来，不影响使用。
 
 Reasonix 的 hook 只能是命令：每个事件经 `cmd.exe` 运行一次 `"wakuwaku.exe" --wakuwaku-reasonix-hook <事件名>`，把事件转给她，什么都不输出（Reasonix 会把 `SessionStart` 的输出塞给模型）。Reasonix 每一步都等它跑完，大约 0.1 秒；她没开时它马上退出，Reasonix 照常。新会话开始时她没开，也会把她拉起来（除非你让她退出了）。Node 版的 Reasonix 0.x 不支持：它的 hook 只有 4 种事件，也不带会话编号，「Agent」页会写出它的版本，不去改它的设置。
+
+### 10. 连上 WorkBuddy（可选）
+
+支持腾讯的 [WorkBuddy](https://www.codebuddy.cn/docs/workbuddy/Overview) 桌面版（实测 2.137.1）：它是 Electron 外壳加内置的 CodeBuddy CLI，hook 和 Claude Code 一样，支持 HTTP。在「Agent」页 WorkBuddy 那一行点「连接」，会在桌面端真正读取的用户级配置 `~/.workbuddy/settings.json` 里给 11 个事件各加一条我们的 HTTP hook（先备份；移除时只删我们的条目，别的设置不动）。
+
+注意桌面端读的**不是** `~/.codebuddy/settings.json`：WorkBuddy 启动时把 `CODEBUDDY_CONFIG_DIR` / `WORKBUDDY_CONFIG_DIR` 设成自己的数据目录，并用 `--setting-sources user` 启动内置 CLI，所以生效的是 `~/.workbuddy/settings.json`；`~/.codebuddy/settings.json` 只影响手动运行的 `codebuddy` CLI。专享版的数据目录是 product.json 里的 `dataFolderName`（比如 `~/.aimea`），这时要让 Wakuwaku 的 `WORKBUDDY_CONFIG_DIR` 指向它再点「连接」。
+
+能做的：会话开始、干活、每一步的工具、做完（带上它最后说的话）、出错，「今天」也算上它的轮次和时长。要你批准时，岛上弹出**允许** / **拒绝**，WorkBuddy 自己的确认框同时弹出，**先答的那边算数**。它问你问题时，岛上只显示它在等你，要在 WorkBuddy 里答。装好或改完要重开 WorkBuddy（或新建会话）才会用上，已经开着的会话不算。桌面端的会话记录在 `~/.workbuddy/projects/` 下，格式不是 Claude Code 的，所以「今天的 token」还不算它。
 
 ### 从源码运行
 

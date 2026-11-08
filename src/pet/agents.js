@@ -275,6 +275,25 @@
         mail: ['no', 'ag.cap.mail.no'],
       },
     },
+    {
+      id: 'workbuddy',
+      name: 'WorkBuddy',
+      via: 'hooks',
+      site: 'agent:workbuddy',
+      read: block('workbuddy'),
+      in: ['ok', 'stale', 'partial'],
+      good: ['ok'],
+      words: { unreadable: 's.workbuddyUnreadable' },
+      // Its hooks are Claude Code's over HTTP, in the desktop app's
+      // ~/.workbuddy/settings.json; its questions stay in WorkBuddy.
+      caps: {
+        status: ['yes', 'ag.cap.status.workbuddy'],
+        approve: ['yes', 'ag.cap.approve.workbuddy'],
+        choose: ['no', 'ag.cap.choose.workbuddy'],
+        stats: ['yes', 'ag.cap.stats.turns'],
+        mail: ['no', 'ag.cap.mail.no'],
+      },
+    },
   ]
 
   const byId = id => TABLE.find(a => a.id === id) || null

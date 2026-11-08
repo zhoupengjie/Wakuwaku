@@ -1288,6 +1288,7 @@
 
   function plateWanted() {
     if (!isOn() || now.plate !== true || quiet || view === 'settings' || body.classList.contains('pulling') || body.classList.contains('isl-stowed')) return false
+    if (fullScreen && !body.classList.contains('over-full')) return false
     const { op, blur } = groundOf(lookNow())
     if (!(op < 1 && blur > 0)) return false
     return home() !== 'taskbar' || view !== 'compact'
@@ -6212,6 +6213,12 @@
   // An app full screen on her display, or none now: no ring while one is.
   window.pet.onFullScreen(({ on } = {}) => {
     fullScreen = on === true
+    if (fullScreen) {
+      if (nudge) endNudge()
+      placePlate(false)
+    } else {
+      update()
+    }
   })
 
   // A widget asks to open the island (main checked that nothing wants you):

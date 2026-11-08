@@ -137,7 +137,8 @@ pub fn snapshot(sh: &Shared) -> Value {
     let packs = crate::packs::list(&sh.dir);
     let pets: Vec<Value> = data::pets(&sh.dir)
         .iter()
-        .map(|p| json!({ "id": p.id, "name": p.name, "author": p.author, "url": p.url(), "version": p.version, "codex": p.from_codex, "pack": crate::packs::of_pet(&packs, p) }))
+        // mine: in her own pets' folder (downloaded, or a pack), so the Look page can delete it.
+        .map(|p| json!({ "id": p.id, "name": p.name, "author": p.author, "url": p.url(), "version": p.version, "codex": p.from_codex, "pack": crate::packs::of_pet(&packs, p), "mine": p.sheet.starts_with(sh.dir.join("pets")) }))
         .collect();
     let paper = crate::paper::now();
     let (now, sessions) = {

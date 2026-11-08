@@ -1420,14 +1420,170 @@ mod imp {
     // window's at (x, y, w, h) on the screen, physical, its shape kept, on
     // the window of their own laid over those rooms. None: all taken away.
     pub fn thumbs(items: Vec<(isize, (i32, i32, i32, i32))>) {
-        place_thumbs(THUMB_HOST.load(Ordering::SeqCst) as Hwnd, &mut THUMBS.lock().unwrap(), items);
+        place_thumbs(THUMB_HOST.load(Ordering::SeqCst) as Hwnd, &mut THUMBS.lock().unwrap(), items, None);
     }
 
     // The windows minimized into the dock, each its live picture where the
     // dock's page left room for it (bars.rs show_mins); none, taken away.
-    // On the main thread, the window's own (make_dock_host).
-    pub fn dock_thumbs(items: Vec<(isize, (i32, i32, i32, i32))>) {
-        place_thumbs(DOCK_HOST.load(Ordering::SeqCst) as Hwnd, &mut DOCK_THUMBS.lock().unwrap(), items);
+    // Their window laid over the whole dock (`area`, its window's rect), not
+    // about the pictures: it never moves as they do, so a picture kept is
+    // never a frame out of its room. On the main thread, the window's own
+    // (make_dock_host).
+    pub fn dock_thumbs(items: Vec<(isize, (i32, i32, i32, i32))>, area: Option<(i32, i32, i32, i32)>) {
+        place_thumbs(DOCK_HOST.load(Ordering::SeqCst) as Hwnd, &mut DOCK_THUMBS.lock().unwrap(), items, area);
+    }
+
+    // Each minimized window's program's icon over its live picture's corner
+    // in the dock (bars.rs show_mins: where its page has it, physical), as
+    // macOS's: the pictures are DWM's, drawn over the dock in their own
+    // window, and the page's icon there lay under them; so the icons are a
+    // window of their own over that one (owned by it: kept over it however
+    // either is raised), drawn with UpdateLayeredWindow. The dock's cells
+    // narrower for it (the user, 2026-11-08: 应用的icon往他们略缩图窗口挤一挤，
+    // 不需要占那么大位置). Each window's icon read once from what the taskbar
+    // last sent (its program's png), kept while the window is in the dock.
+    static DOCK_BADGES: AtomicIsize = AtomicIsize::new(0);
+    static BADGE_ICONS: Mutex<Vec<(isize, (u32, u32, Vec<u8>))>> = Mutex::new(Vec::new());
+
+    pub fn dock_badges(items: Vec<(isize, (i32, i32, i32, i32))>) {
+        let host = DOCK_BADGES.load(Ordering::SeqCst) as Hwnd;
+        let mut icons = BADGE_ICONS.lock().unwrap();
+        icons.retain(|(h, _)| items.iter().any(|i| i.0 == *h));
+        if host.is_null() {
+            return;
+        }
+        let items: Vec<_> = items.into_iter().filter(|i| i.1 .2 > 0 && i.1 .3 > 0).collect();
+        if items.is_empty() {
+            // SAFETY: our own window.
+            unsafe { ShowWindow(host, SW_HIDE) };
+            return;
+        }
+        // The icons not read yet: from the programs as last sent (their png).
+        let missing: Vec<isize> = items.iter().map(|i| i.0).filter(|h| !icons.iter().any(|(k, _)| k == h)).collect();
+        if !missing.is_empty() {
+            let sent = SENT_WINDOWS.lock().unwrap();
+            for h in missing {
+                let png = sent.as_array().into_iter().flatten().find(|a| a["windows"].as_array().is_some_and(|ws| ws.iter().any(|w| w["id"].as_i64() == Some(h as i64)))).and_then(|a| a["png"].as_str());
+                if let Some(px) = png.and_then(rgba_of) {
+                    icons.push((h, px));
+                }
+            }
+        }
+        let left = items.iter().map(|i| i.1 .0).min().unwrap_or(0);
+        let top = items.iter().map(|i| i.1 .1).min().unwrap_or(0);
+        let w = items.iter().map(|i| i.1 .0 + i.1 .2).max().unwrap_or(0) - left;
+        let h = items.iter().map(|i| i.1 .1 + i.1 .3).max().unwrap_or(0) - top;
+        // Premultiplied BGRA, top-down, as UpdateLayeredWindow takes it.
+        let mut canvas = vec![0u8; (w * h * 4) as usize];
+        for (hwnd, (x, y, iw, ih)) in &items {
+            let Some((_, (sw, sh, src))) = icons.iter().find(|(k, _)| k == hwnd) else { continue };
+            draw_scaled(&mut canvas, w, (x - left, y - top, *iw, *ih), (*sw, *sh, src));
+        }
+        show_layered(host, (left, top, w, h), &canvas);
+    }
+
+    // A png (a data URL, as the taskbar sends its icons) as straight RGBA.
+    fn rgba_of(url: &str) -> Option<(u32, u32, Vec<u8>)> {
+        let bytes = base64::engine::general_purpose::STANDARD.decode(url.strip_prefix("data:image/png;base64,")?).ok()?;
+        let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+        decoder.set_transformations(png::Transformations::EXPAND);
+        let mut reader = decoder.read_info().ok()?;
+        let mut buf = vec![0u8; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).ok()?;
+        let (w, h) = (info.width, info.height);
+        let px = (w * h) as usize;
+        let rgba = match info.color_type {
+            png::ColorType::Rgba => buf[..px * 4].to_vec(),
+            png::ColorType::Rgb => buf[..px * 3].chunks(3).flat_map(|c| [c[0], c[1], c[2], 255]).collect(),
+            _ => return None,
+        };
+        Some((w, h, rgba))
+    }
+
+    // An icon (straight RGBA) into its rect on the canvas (premultiplied
+    // BGRA, `cw` wide), scaled to it, each pixel the mean of what it covers.
+    fn draw_scaled(canvas: &mut [u8], cw: i32, (x, y, w, h): (i32, i32, i32, i32), (sw, sh, src): (u32, u32, &Vec<u8>)) {
+        let ch = canvas.len() as i32 / 4 / cw.max(1);
+        for dy in 0..h {
+            for dx in 0..w {
+                let (cx, cy) = (x + dx, y + dy);
+                if cx < 0 || cy < 0 || cx >= cw || cy >= ch {
+                    continue;
+                }
+                // The source pixels this one covers.
+                let (x0, x1) = ((dx as u32 * sw) / w as u32, (((dx + 1) as u32 * sw) / w as u32).max(dx as u32 * sw / w as u32 + 1).min(sw));
+                let (y0, y1) = ((dy as u32 * sh) / h as u32, (((dy + 1) as u32 * sh) / h as u32).max(dy as u32 * sh / h as u32 + 1).min(sh));
+                let (mut r, mut g, mut b, mut a, mut n) = (0u32, 0u32, 0u32, 0u32, 0u32);
+                for sy in y0..y1 {
+                    for sx in x0..x1 {
+                        let i = ((sy * sw + sx) * 4) as usize;
+                        let al = src[i + 3] as u32;
+                        r += src[i] as u32 * al;
+                        g += src[i + 1] as u32 * al;
+                        b += src[i + 2] as u32 * al;
+                        a += al;
+                        n += 1;
+                    }
+                }
+                if n == 0 {
+                    continue;
+                }
+                let o = ((cy * cw + cx) * 4) as usize;
+                canvas[o] = (b / 255 / n) as u8;
+                canvas[o + 1] = (g / 255 / n) as u8;
+                canvas[o + 2] = (r / 255 / n) as u8;
+                canvas[o + 3] = (a / n) as u8;
+            }
+        }
+    }
+
+    // A layered window of ours shown at (x, y, w, h) with this picture
+    // (premultiplied BGRA, top-down, w x h).
+    fn show_layered(host: Hwnd, (x, y, w, h): (i32, i32, i32, i32), canvas: &[u8]) {
+        #[repr(C)]
+        struct Blend {
+            op: u8,
+            flags: u8,
+            alpha: u8,
+            format: u8,
+        }
+        #[link(name = "user32")]
+        extern "system" {
+            fn GetDC(hwnd: Hwnd) -> isize;
+            fn ReleaseDC(hwnd: Hwnd, dc: isize) -> i32;
+            fn UpdateLayeredWindow(hwnd: Hwnd, dst: isize, at: *const Point, size: *const Point, src: isize, from: *const Point, key: u32, blend: *const Blend, flags: u32) -> i32;
+        }
+        const ULW_ALPHA: u32 = 0x2;
+        const SWP_NOSIZE: u32 = 0x1;
+        const SWP_NOMOVE: u32 = 0x2;
+        // SAFETY: the screen's DC and GDI objects of our own, each let go of
+        // here; the DIB's bits (w x h, 32 bits, top-down) written within them;
+        // our own window drawn and shown.
+        unsafe {
+            let screen = GetDC(std::ptr::null_mut());
+            if screen == 0 {
+                return;
+            }
+            let mem = CreateCompatibleDC(screen);
+            let info = BitmapInfoHeader { size: 40, width: w, height: -h, planes: 1, bit_count: 32, compression: 0, size_image: 0, x_ppm: 0, y_ppm: 0, clr_used: 0, clr_important: 0 };
+            let mut bits: *mut u8 = std::ptr::null_mut();
+            let dib = CreateDIBSection(screen, &info, 0, &mut bits, 0, 0);
+            if mem != 0 && dib != 0 && !bits.is_null() {
+                std::ptr::copy_nonoverlapping(canvas.as_ptr(), bits, canvas.len().min((w * h * 4) as usize));
+                let old = SelectObject(mem, dib);
+                let blend = Blend { op: 0, flags: 0, alpha: 255, format: 1 };
+                UpdateLayeredWindow(host, screen, &Point { x, y }, &Point { x: w, y: h }, mem, &Point { x: 0, y: 0 }, 0, &blend, ULW_ALPHA);
+                SelectObject(mem, old);
+                SetWindowPos(host, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            }
+            if dib != 0 {
+                DeleteObject(dib);
+            }
+            if mem != 0 {
+                DeleteDC(mem);
+            }
+            ReleaseDC(std::ptr::null_mut(), screen);
+        }
     }
 
     // The window of the dock's minimized windows' pictures: owned by the
@@ -1482,14 +1638,35 @@ mod imp {
             if !host.is_null() {
                 SetLayeredWindowAttributes(host, DOCK_KEY, 255, LWA_COLORKEY);
                 DOCK_HOST.store(host as isize, Ordering::SeqCst);
+                // The icons over the pictures (dock_badges): owned by their
+                // window, so Windows keeps them over it; drawn by
+                // UpdateLayeredWindow, so no colour of their own to key out.
+                let badges = CreateWindowExW(
+                    WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED | WS_EX_TRANSPARENT,
+                    class.as_ptr(),
+                    std::ptr::null(),
+                    WS_POPUP,
+                    0,
+                    0,
+                    0,
+                    0,
+                    host,
+                    0,
+                    instance,
+                    std::ptr::null_mut(),
+                );
+                DOCK_BADGES.store(badges as isize, Ordering::SeqCst);
             }
         }
     }
 
     // The dock gone: its pictures with it (the window goes with its owner).
     pub fn drop_dock_host() {
-        place_thumbs(std::ptr::null_mut(), &mut DOCK_THUMBS.lock().unwrap(), Vec::new());
+        place_thumbs(std::ptr::null_mut(), &mut DOCK_THUMBS.lock().unwrap(), Vec::new(), None);
         DOCK_HOST.store(0, Ordering::SeqCst);
+        // Its icons' window goes with it (owned by it).
+        DOCK_BADGES.store(0, Ordering::SeqCst);
+        BADGE_ICONS.lock().unwrap().clear();
     }
 
     // The windows of the live pictures (the lists', the dock's) back over
@@ -1566,12 +1743,21 @@ mod imp {
     }
 
     // Windows' live pictures of windows (DWM thumbnails) in a host window of
-    // ours, laid over the rooms (screen, physical) and above the rest.
-    fn place_thumbs(host: Hwnd, shown: &mut Vec<(isize, isize)>, items: Vec<(isize, (i32, i32, i32, i32))>) {
-        for (_, thumb) in shown.drain(..) {
-            // SAFETY: a thumbnail of ours.
-            unsafe { DwmUnregisterThumbnail(thumb) };
-        }
+    // ours, laid over the rooms (screen, physical; or over `area`, kept so)
+    // and above the rest. Those asked for again kept, only laid anew; the
+    // rest unregistered, the new ones registered. All were unregistered and
+    // registered again at each call: the dock's flashed its grey rooms as a
+    // window went into it or came out (the user, 2026-11-08: 每次最小化到dock
+    // 和点开后，dock的略缩图都会闪灰黑一下然后又出现略缩图).
+    fn place_thumbs(host: Hwnd, shown: &mut Vec<(isize, isize)>, items: Vec<(isize, (i32, i32, i32, i32))>, area: Option<(i32, i32, i32, i32)>) {
+        shown.retain(|&(hwnd, thumb)| {
+            let keep = !host.is_null() && items.iter().any(|i| i.0 == hwnd);
+            if !keep {
+                // SAFETY: a thumbnail of ours.
+                unsafe { DwmUnregisterThumbnail(thumb) };
+            }
+            keep
+        });
         if host.is_null() {
             return;
         }
@@ -1580,18 +1766,24 @@ mod imp {
             unsafe { ShowWindow(host, SW_HIDE) };
             return;
         }
-        // Over all the rooms at once, above the home's window.
-        let left = items.iter().map(|i| i.1 .0).min().unwrap_or(0);
-        let top = items.iter().map(|i| i.1 .1).min().unwrap_or(0);
-        let right = items.iter().map(|i| i.1 .0 + i.1 .2).max().unwrap_or(0);
-        let bottom = items.iter().map(|i| i.1 .1 + i.1 .3).max().unwrap_or(0);
+        // Over all the rooms at once (or the area given), above the home's window.
+        let (left, top, right, bottom) = match area {
+            Some((x, y, w, h)) => (x, y, x + w, y + h),
+            None => (
+                items.iter().map(|i| i.1 .0).min().unwrap_or(0),
+                items.iter().map(|i| i.1 .1).min().unwrap_or(0),
+                items.iter().map(|i| i.1 .0 + i.1 .2).max().unwrap_or(0),
+                items.iter().map(|i| i.1 .1 + i.1 .3).max().unwrap_or(0),
+            ),
+        };
         // SAFETY: our own window.
         unsafe { SetWindowPos(host, HWND_TOPMOST, left, top, right - left, bottom - top, SWP_NOACTIVATE | SWP_SHOWWINDOW) };
+        let mut next = Vec::with_capacity(items.len());
         for (hwnd, (x, y, w, h)) in items {
             let (x, y) = (x - left, y - top);
-            let mut thumb = 0isize;
+            let mut thumb = shown.iter().find(|s| s.0 == hwnd).map_or(0, |s| s.1);
             // SAFETY: our own window and another's; the handle is ours to unregister.
-            if unsafe { DwmRegisterThumbnail(host, hwnd as Hwnd, &mut thumb) } != 0 || thumb == 0 {
+            if thumb == 0 && (unsafe { DwmRegisterThumbnail(host, hwnd as Hwnd, &mut thumb) } != 0 || thumb == 0) {
                 continue;
             }
             let mut size = Size::default();
@@ -1612,8 +1804,9 @@ mod imp {
             };
             // SAFETY: our own thumbnail and struct.
             unsafe { DwmUpdateThumbnailProperties(thumb, &props) };
-            shown.push((hwnd, thumb));
+            next.push((hwnd, thumb));
         }
+        *shown = next;
     }
 
     // A press on a program's button kept on the taskbar with no window: it
@@ -2244,8 +2437,8 @@ mod imp {
     // in front: closed first, as a press on Windows' taskbar closes it. Ours
     // takes no focus away from it, and the window pressed for could not come
     // up past it (it holds the foreground). Esc to it, and a moment for it to
-    // go. Whether there was one.
-    fn close_flyout() -> bool {
+    // go. Whether there was one. The dock's menu too (bars.rs bar_pop).
+    pub fn close_flyout() -> bool {
         let front = tasks::front();
         if !tasks::is_shell_flyout(front) {
             return false;
@@ -2473,7 +2666,8 @@ mod imp {
             log(&format!("tray handed back; it was handed {}", systray::seen()));
             systray::stop();
             thumbs(Vec::new());
-            dock_thumbs(Vec::new());
+            dock_thumbs(Vec::new(), None);
+            dock_badges(Vec::new());
             let host = THUMB_HOST.swap(0, Ordering::SeqCst);
             if host != 0 {
                 DestroyWindow(host as Hwnd);
@@ -2650,6 +2844,7 @@ mod imp {
         if START_OPEN.swap(open, Ordering::SeqCst) == open {
             return;
         }
+        log(&format!("Windows' Start {}; in front: {}", if open { "open" } else { "closed" }, crate::fullscreen::front()));
         if let Some(sh) = sh() {
             let _ = sh.app.emit_to("island", "taskbar:start", json!({ "open": open }));
             // Split: Start is in the dock, which comes up while it is open (bars.rs).
@@ -3559,13 +3754,17 @@ mod imp {
     pub fn start_open() -> bool {
         false
     }
+    pub fn close_flyout() -> bool {
+        false
+    }
     pub fn keys_now() -> serde_json::Value {
         serde_json::Value::Null
     }
     pub fn recycle_bin() -> serde_json::Value {
         serde_json::Value::Null
     }
-    pub fn dock_thumbs(_items: Vec<(isize, (i32, i32, i32, i32))>) {}
+    pub fn dock_thumbs(_items: Vec<(isize, (i32, i32, i32, i32))>, _area: Option<(i32, i32, i32, i32)>) {}
+    pub fn dock_badges(_items: Vec<(isize, (i32, i32, i32, i32))>) {}
     pub fn thumbs_on_top() {}
     pub fn dock_thumbs_over(_dock: isize) {}
     pub fn make_dock_host(_owner: isize) {}
@@ -3630,7 +3829,7 @@ mod imp {
     }
 }
 
-pub use imp::{dock_thumbs, dock_thumbs_over, drop_dock_host, make_dock_host, thumbs_on_top, end_task_on, explorer_room, give_back, handing_back, is_up, keys_now, recycle_bin, set_edge, start_open, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
+pub use imp::{close_flyout, dock_badges, dock_thumbs, dock_thumbs_over, drop_dock_host, make_dock_host, thumbs_on_top, end_task_on, explorer_room, give_back, handing_back, is_up, keys_now, recycle_bin, set_edge, start_open, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
 
 // A number Windows keeps for a setting of its own (end_task_on, seconds_on):
 // on once set, but for 0.

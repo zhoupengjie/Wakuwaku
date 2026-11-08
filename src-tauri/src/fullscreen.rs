@@ -91,6 +91,22 @@ mod imp {
         ex & (WS_EX_LAYERED | WS_EX_TRANSPARENT) == WS_EX_LAYERED | WS_EX_TRANSPARENT
     }
 
+    // A tool window (no button on the taskbar, none in Alt+Tab) in front is
+    // a layer over the screen, not an app one uses full screen: a
+    // screenshot's, an overlay's. QQ's (QQScreenCapture Window Class,
+    // 0x8000080) and Windows' Snipping Tool's (XamlWindow, 0x200188) were
+    // taken for one: her top bar and dock stepped aside as the shot began,
+    // missing from it, and came back as QQ's own window came to the front
+    // (the user, 2026-11-08: QQ截图没办法正常截到顶栏和Dock，一直在争抢/避让).
+    // It changes nothing, either way (covering: None, as one of hers in
+    // front): NVIDIA's overlay over a game (0x8080080) leaves her taskbar
+    // away. A game or a video full screen is an app's own window.
+    const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
+
+    pub(crate) fn tool_window(ex: u32) -> bool {
+        ex & WS_EX_TOOLWINDOW != 0
+    }
+
     // The desktop, the taskbars, and task view and Alt+Tab (they cover the screen).
     const SKIP_CLASSES: [&str; 5] = ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "XamlExplorerHostIslandWindow"];
     // Windows' own, which cover the screen a moment as they open: search
@@ -184,8 +200,12 @@ mod imp {
             if SKIP_CLASSES.contains(&String::from_utf16_lossy(&name[..n]).as_str()) {
                 return Some(None);
             }
-            if click_through(GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32) {
+            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+            if click_through(ex) {
                 return Some(None);
+            }
+            if tool_window(ex) {
+                return None;
             }
             let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
             let mut rect = Rect::default();
@@ -241,7 +261,19 @@ mod imp {
 
     #[cfg(test)]
     mod tests {
-        use super::{click_through, fills, titled};
+        use super::{click_through, fills, titled, tool_window};
+
+        #[test]
+        fn a_screenshot_or_an_overlay_changes_nothing() {
+            // QQ's screenshot, Windows' Snipping Tool's, NVIDIA's overlay.
+            assert!(tool_window(0x0800_0080));
+            assert!(tool_window(0x0020_0188));
+            assert!(tool_window(0x0808_0080));
+            // A game's (GF2, Unity), QQ's own window, a browser's full screen.
+            assert!(!tool_window(0x0000_0000));
+            assert!(!tool_window(0x0020_0008));
+            assert!(!tool_window(0x0000_0100));
+        }
 
         #[test]
         fn a_layer_the_pointer_goes_through_is_no_app() {

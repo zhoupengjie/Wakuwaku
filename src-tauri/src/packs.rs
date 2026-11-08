@@ -456,8 +456,12 @@ fn keep_shown(root: &Path, file: &Path) -> Result<PathBuf, String> {
 }
 
 // A pack taken away, by its kind and id: a marked pack's folder alone,
-// never the person's own. Her pet, if it was this one, the default one
-// first; Windows' slideshow, if on its folder, ended on the picture shown.
+// never the person's own wallpapers. A pet downloaded into her pets (from
+// codex-pets.net: fetch.rs put_pet, no pack's mark) too, deleted from the
+// Look page's list (the user, 2026-11-08: 宠物增加删除按钮); never one of
+// Codex's (only read), nor the last she has. Her pet, if it was this one,
+// the default one first; Windows' slideshow, if on its folder, ended on the
+// picture shown.
 pub fn uninstall(sh: &Shared, kind: Kind, id: &str) -> Result<(), String> {
     addons::with_id_lock(id, || uninstall_held(sh, kind, id))
 }
@@ -465,10 +469,16 @@ pub fn uninstall(sh: &Shared, kind: Kind, id: &str) -> Result<(), String> {
 fn uninstall_held(sh: &Shared, kind: Kind, id: &str) -> Result<(), String> {
     let root = root(&sh.dir, kind);
     let folder = root.join(id);
-    let pack = addons::is_id(id).then(|| mark_of(&folder, kind)).flatten().ok_or_else(|| format!("{id}: no {} pack of that name here", kind.name()))?;
+    let pack = addons::is_id(id).then(|| mark_of(&folder, kind)).flatten();
+    let plain_pet = kind == Kind::Pet && pack.is_none() && crate::fetch::is_id(id) && folder.join("spritesheet.webp").is_file();
+    if pack.is_none() && !plain_pet {
+        return Err(format!("{id}: no {} pack of that name here", kind.name()));
+    }
     if kind == Kind::Pet && sh.setting("pet") == id {
         let next = match fallback_pet(&crate::data::pets(&sh.dir), id) {
             Some(next) => next,
+            // The default one written anew in its place: never the default one itself.
+            None if id == crate::fetch::DEFAULT_PET => return Err(format!("{id}: her only pet")),
             None => crate::fetch::seed_default_pet(&root).map(|_| crate::fetch::DEFAULT_PET.to_string()).map_err(|e| format!("the default pet not written: {e}"))?,
         };
         sh.log(&format!("packs: {id} was her pet; {next} now"));
@@ -494,7 +504,10 @@ fn uninstall_held(sh: &Shared, kind: Kind, id: &str) -> Result<(), String> {
     if kind == Kind::Pet {
         crate::data::forget_pets();
     }
-    sh.log(&format!("packs: {} {id} {} taken away", kind.name(), pack.version));
+    match pack {
+        Some(pack) => sh.log(&format!("packs: {} {id} {} taken away", kind.name(), pack.version)),
+        None => sh.log(&format!("packs: pet {id} (downloaded) deleted")),
+    }
     sh.redraw();
     Ok(())
 }

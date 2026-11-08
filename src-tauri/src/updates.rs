@@ -907,11 +907,13 @@ fn replace(part: &Path) -> Result<PathBuf, String> {
 }
 
 // Her own exe started again, to wait for her to end (crash.rs: WebView2's
-// browser process gone, her pages with it); as an update's, she goes only
-// once it is up (hand_over), and stays should it not come up.
-pub fn start_again(sh: &Shared) -> Result<(), String> {
+// browser process gone, her pages with it; embed.rs: her island's window
+// gone with Explorer's taskbar; her menu's 重启应用); as an update's, she
+// goes only once it is up (hand_over), and stays should it not come up.
+// `why`, for the new one's log.
+pub fn start_again(sh: &Shared, why: &str) -> Result<(), String> {
     let exe = crate::data::exe().map_err(|e| e.to_string())?;
-    let by = format!("her restart, WebView2's browser gone (pid {})", std::process::id());
+    let by = format!("her restart, {why} (pid {})", std::process::id());
     hand_over(sh, &exe, current(), &by).map_err(|failed| match failed {
         Failed::Start(why) | Failed::Lost(why) => why,
     })

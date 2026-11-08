@@ -977,7 +977,7 @@ pub fn webview_failed(sh: &Arc<Shared>, label: &str, kind: i32, reason: i32, cod
         let sh = sh.clone();
         std::thread::spawn(move || {
             sh.log("crash: WebView2's browser process gone: starting anew");
-            match crate::updates::start_again(&sh) {
+            match crate::updates::start_again(&sh, "WebView2's browser gone") {
                 Ok(()) => sh.quit(crate::data::Quit::Wakeable, "a restart's handover"),
                 Err(e) => sh.log(&format!("crash: could not start anew: {e}")),
             }

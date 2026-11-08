@@ -4168,10 +4168,24 @@
   const mica = Mica.mount(micaBox)
   let paper = null
 
+  // The settings as Windows' own Settings in every home, her island's too:
+  // its light panel in Windows' light mode (settings.css set-light), its
+  // dark greys in the dark. They were the island's own (its ground, its
+  // greys) at the top of the screen and over a black strip, Windows' on a
+  // strip of mica, clear or light: two looks for the one page (the user,
+  // 2026-11-08: 灵动岛设置不同模式都应该统一). The island's own look stays
+  // its capsule's and what opens in it.
+  const isWinLight = () => isOn() && look.mode === 'light'
+  function setSettingsLook() {
+    body.classList.toggle('set-light', isWinLight())
+    setInk()
+  }
+
   function drawMica() {
     const clearMica = isClear() && clearWhen() === 'mica'
     body.classList.toggle('tb-mica', isMica())
     body.classList.toggle('tb-light', isLight())
+    body.classList.toggle('set-light', isWinLight())
     body.classList.toggle('tb-ink-light', isStripLight())
     setAccent('--strip-accent', Mica.accentShade(look.accent, isStripLight()))
     body.classList.toggle('tb-capsule', isCapsule())
@@ -4323,11 +4337,11 @@
   // Her island's words dark (style.css isl-light, hue, ink) on a light
   // ground: Windows' light mode's, or a light one of the settings' own
   // (groundLight; null: none given); in the settings, theirs, as Windows'
-  // mode.
+  // mode in every home (setSettingsLook).
   function setInk() {
     const own = view === 'settings' ? null : groundLight
     const was = inkLight
-    inkLight = own === null ? isLight() : own
+    inkLight = own === null ? (view === 'settings' ? isWinLight() : isLight()) : own
     body.classList.toggle('isl-light', inkLight)
     // A card's plugin view told her theme, and its card's colours.
     if (was !== inkLight) islandViews?.relook(allWidgets)
@@ -4355,6 +4369,8 @@
     const seconds = look.seconds
     look = { mode: l?.mode === 'light' ? 'light' : 'dark', accent: l?.accent || null, endTask: l?.endTask === true, seconds: l?.seconds === true, taskView: l?.taskView === true }
     if (look.seconds !== seconds) clockLoop()
+    // The settings by Windows' mode in every home, now (setSettingsLook).
+    setSettingsLook()
     // How many times a button flashes for attention (style.css .flash).
     if (l?.flashes !== undefined) barRest.style.setProperty('--flashes', l.flashes === 0 ? 'infinite' : String(l.flashes))
     setAccent('--win-accent', Mica.accentShade(look.accent, look.mode === 'light'))

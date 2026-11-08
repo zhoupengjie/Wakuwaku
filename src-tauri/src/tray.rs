@@ -24,12 +24,14 @@ fn face(mood: &str) -> &'static [u8] {
     }
 }
 
-// Where the menu opens: the tray icon, her, or her home's window.
+// Where the menu opens: the tray icon, her, her home's window, or the dock
+// (split: off its programs, bar.js).
 #[derive(Clone, Copy, PartialEq)]
 pub enum Over {
     Tray,
     Her,
     Home,
+    Dock,
 }
 
 // The menu, over the tray, her or her home. Over the taskbar (her home as
@@ -59,17 +61,26 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     // at the top of the screen) her capsule's panel. Greyed while her island
     // is not up to show them (she hidden, do not disturb).
     let isle_up = home == "taskbar" || crate::island::is_shown(sh);
-    if over == Over::Home && home == "taskbar" {
+    // The dock's (split) is the taskbar's, with whether the dock keeps its
+    // room (splitDock room, else it gets out of the way: hide), checked so.
+    if (over == Over::Home && home == "taskbar") || over == Over::Dock {
         menu.append(&MenuItem::with_id(app, "addWidgets", t("menu.addWidgets"), true, None::<&str>)?)?;
         menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, flag("dnd"), None::<&str>)?)?;
         menu.append(&MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?)?;
-        menu.append(&MenuItem::with_id(app, "editTaskbar", t("menu.editTaskbar"), true, None::<&str>)?)?;
+        // Split, what it edits is the top bar's.
+        let edit = if crate::island::is_split(sh) { "menu.editTopBar" } else { "menu.editTaskbar" };
+        menu.append(&MenuItem::with_id(app, "editTaskbar", t(edit), true, None::<&str>)?)?;
+        if over == Over::Dock {
+            let room = settings.get("splitDock").and_then(|v| v.as_str()) == Some("room");
+            menu.append(&CheckMenuItem::with_id(app, "dockRoom", t("s.splitDock.room"), true, room, None::<&str>)?)?;
+        }
         menu.append(&PredefinedMenuItem::separator(app)?)?;
         menu.append(&MenuItem::with_id(app, "taskManager", t("menu.taskManager"), true, None::<&str>)?)?;
         menu.append(&MenuItem::with_id(app, "winSettings", t("menu.winSettings"), true, None::<&str>)?)?;
         menu.append(&MenuItem::with_id(app, "controlPanel", t("menu.controlPanel"), true, None::<&str>)?)?;
         menu.append(&MenuItem::with_id(app, "deviceManager", t("menu.deviceManager"), true, None::<&str>)?)?;
         menu.append(&PredefinedMenuItem::separator(app)?)?;
+        menu.append(&MenuItem::with_id(app, "restart", t("menu.restart"), true, None::<&str>)?)?;
         menu.append(&MenuItem::with_id(app, "quit", t("menu.quit"), true, None::<&str>)?)?;
         return Ok(menu);
     }
@@ -112,6 +123,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
         menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, flag("dnd"), None::<&str>)?)?;
         menu.append(&MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?)?;
         menu.append(&PredefinedMenuItem::separator(app)?)?;
+        menu.append(&MenuItem::with_id(app, "restart", t("menu.restart"), true, None::<&str>)?)?;
         menu.append(&MenuItem::with_id(app, "quit", t("menu.quit"), true, None::<&str>)?)?;
         return Ok(menu);
     }
@@ -139,6 +151,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, flag("dnd"), None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&MenuItem::with_id(app, "restart", t("menu.restart"), true, None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, "quit", t("menu.quit"), true, None::<&str>)?)?;
     Ok(menu)
 }
@@ -177,6 +190,11 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
     match id {
         "toggle" => sh.set_hidden(sh.is_visible()),
         "walk" | "look" | "dnd" => sh.change(json!({ id: !sh.flag(id) })),
+        // The dock's 占着位置: keeping its room, or getting out of the way.
+        "dockRoom" => {
+            let room = sh.setting("splitDock").as_str() == Some("room");
+            sh.change(json!({ "splitDock": if room { "hide" } else { "room" } }));
+        }
         "out" => crate::set_out(sh, !sh.flag("out")),
         "corner" => crate::come_home(sh),
         "settings" => crate::island::open_settings(sh, None),
@@ -215,6 +233,16 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
         // Quit by the person: no session's hook starts her again until she
         // is opened (data.rs Quit).
         "quit" => sh.quit(crate::data::Quit::ByChoice, "her menu's Quit"),
+        // Started anew (the user, 2026-11-08: 所有模式的右键菜单加个重启应用):
+        // the new one comes up and takes over, as after WebView2's browser
+        // went (crash.rs); off this thread, as it waits for it.
+        "restart" => {
+            let sh = sh.clone();
+            std::thread::spawn(move || match crate::updates::start_again(&sh, "her menu's Restart") {
+                Ok(()) => sh.quit(crate::data::Quit::Wakeable, "her menu's Restart"),
+                Err(e) => sh.log(&format!("could not start anew: {e}")),
+            });
+        }
         _ => {
             if let Some(what) = id.strip_prefix("win:") {
                 crate::taskbar::taskbar_open(what.to_string());

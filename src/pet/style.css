@@ -3470,18 +3470,6 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
   }
 }
 
-/* The settings as Windows' own Settings in the dark mode too, as they are
-   in the light: its grey ground, the cards a step lighter. */
-.home-taskbar.tb-capsule:not(.tb-light) #island[data-view='settings'] {
-  background: #202020;
-}
-
-.home-taskbar.tb-capsule:not(.tb-light) #island-settings {
-  --g1: #2b2b2b;
-  --g2: #373737;
-  --g3: #454545;
-}
-
 /* A prompt's parts on a dark ground: a step lighter than it, whatever it is
    (on black they were greys of their own), what is quoted too. */
 .home-taskbar.tb-capsule:not(.isl-light) #panel .chip,

@@ -98,6 +98,52 @@ extern "system" {
     fn IsIconic(hwnd: Hwnd) -> i32;
     fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
     fn RedrawWindow(hwnd: Hwnd, rect: *const c_void, region: isize, flags: u32) -> i32;
+    fn RegisterWindowMessageW(name: *const u16) -> u32;
+    fn SendMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
+}
+
+// --- A job on a window's own thread ---------------------------------------------------
+//
+// Run inside the window's procedure (the subclass below, on the thread that
+// has the window), the caller waiting for it (SendMessage; called on that
+// thread, it runs at once). The Win32 calls a job makes on the window go
+// through there one after another with nothing between them, where from
+// another thread each is a message the window's thread answers in its
+// turn, a frame or more apart while it is busy with her page: embed.rs
+// takes the island's window into Windows' taskbar and out of it in one
+// such job, so that DWM never draws a frame of it half done (the user,
+// 2026-11-08: 展开后收缩到胶囊，胶囊会闪一下; caught on the screen: the
+// capsule gone for a frame going in, for four going out). A window without
+// the subclass (none of hers), or gone: the job runs on the caller's thread.
+static RUN: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+// In wparam, so that nothing else sent the registered message is taken for a job.
+const RUN_MARK: usize = 0x7761_6b75;
+
+pub fn on_its_thread<T>(hwnd: isize, job: impl FnOnce() -> T) -> T {
+    let msg = *RUN.get_or_init(|| {
+        let name: Vec<u16> = "wakuwaku.frameless.run".encode_utf16().chain(std::iter::once(0)).collect();
+        // SAFETY: a name of ours, nul-terminated.
+        unsafe { RegisterWindowMessageW(name.as_ptr()) }
+    });
+    let mut job = Some(job);
+    let mut out = None;
+    if msg != 0 {
+        let mut call = || {
+            if let Some(job) = job.take() {
+                out = Some(job());
+            }
+        };
+        let mut call: &mut dyn FnMut() = &mut call;
+        // SAFETY: lparam points at `call` on this stack, which outlives the
+        // call: SendMessage returns once the window's procedure has run it
+        // (or not: a window without the subclass answers 0 and runs nothing).
+        unsafe { SendMessageW(hwnd as Hwnd, msg, RUN_MARK, &mut call as *mut &mut dyn FnMut() as isize) };
+    }
+    match (out, job) {
+        (Some(done), _) => done,
+        (None, Some(job)) => job(),
+        (None, None) => unreachable!("a job taken is run"),
+    }
 }
 
 fn without_title_bar(style: u32) -> u32 {
@@ -128,6 +174,13 @@ pub fn keep_layered(hwnd: isize) {
 }
 
 unsafe extern "system" fn hold_off_title_bar(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize, _id: usize, _data: usize) -> isize {
+    if wparam == RUN_MARK && RUN.get() == Some(&msg) {
+        // SAFETY: on_its_thread sent a pointer to its `&mut dyn FnMut()`,
+        // alive on its stack while it waits for this answer.
+        let call = &mut *(lparam as *mut &mut dyn FnMut());
+        call();
+        return 1;
+    }
     match msg {
         WM_STYLECHANGING if wparam as i32 == GWL_STYLE => {
             // SAFETY: for this message, lparam is Windows' STYLESTRUCT, ours to change.

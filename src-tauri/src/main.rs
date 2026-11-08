@@ -730,7 +730,9 @@ impl Shared {
         }
         *CHANGED.lock().unwrap() = Some(Instant::now());
         let is_full = is_full == Some(true);
-        let which = if is_full { format!(", {}", fullscreen::front()) } else { String::new() };
+        // What is in front either way: back, which window it was (Start over
+        // a game, or another program) tells why the taskbar came back.
+        let which = format!(", {}", fullscreen::front());
         let which = format!("{which}; hers on {:?}", self.displays());
         self.log(&format!("another app full screen: {is_full}{which} ({how})"));
         let _ = self.app.emit_to("island", "pet:full-screen", json!({ "on": is_full }));
@@ -948,7 +950,16 @@ async fn pet_drag_end(app: AppHandle, window: WebviewWindow) {
 #[tauri::command]
 async fn pet_menu(app: AppHandle, window: WebviewWindow, part: Option<String>) {
     let sh = shared(&app);
-    let menu = part.as_deref().and_then(|p| tray::part_menu(&sh, p)).unwrap_or_else(|| tray::menu(&sh, if is_island(&window) { tray::Over::Home } else { tray::Over::Her }));
+    let over = if is_island(&window) {
+        tray::Over::Home
+    } else if window.label().starts_with("dock-") {
+        // Windows' Start closed first, as for a program's menu there (bars.rs bar_pop).
+        taskbar::close_flyout();
+        tray::Over::Dock
+    } else {
+        tray::Over::Her
+    };
+    let menu = part.as_deref().and_then(|p| tray::part_menu(&sh, p)).unwrap_or_else(|| tray::menu(&sh, over));
     if let Ok(menu) = menu {
         // A Windows menu closes at once unless its window can come to the
         // front, which these cannot (they never take focus): for the menu, it may.

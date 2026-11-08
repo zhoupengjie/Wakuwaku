@@ -283,6 +283,16 @@
     ...uninstallLayerOf(p, T, busy),
     notes: [T(p?.kind === 'wallpaper' ? 'packs.uninstallNote.wallpaper' : 'packs.uninstallNote.pet')],
   })
+  // A pet deleted from the Look page's list (删除: downloaded, or a pack),
+  // asked first in its own words; the rest as a pack's (packs.rs uninstall).
+  const petDeleteLayerOf = (p, T, busy = false) => ({
+    ...packUninstallLayerOf({ ...p, kind: 'pet' }, T, busy),
+    title: T('pets.deleteAsk', { name: p?.name || p?.id || '' }),
+    buttons: [
+      ['cancel', T('addons.cancel'), ''],
+      ['uninstall', T('pets.delete'), 'no'],
+    ],
+  })
 
   // --- Packs (packs.rs view; spec §1, §3) ------------------------------------------------
   // A pack by its kind and id, as the page names it (data-pack, its row's part).
@@ -535,7 +545,7 @@
   const api = {
     CATS, catOf, byline, labelOf, clockOf, stoppedWords, statusOf, aboutOf, permLines, isSensitive, freshFirst, badgeOf, makeNews, IDLE, verdict, next, refusedWords, layerOf, uninstallLayerOf, brokenLine, cut, fileOf,
     MARKET_CATS, marketCat, wordsIn, marketLink, marketList, isNewer, marketButton, sizeOf, marketAbout, marketByline, permsBeyond, marketAskOf, permsOfNew, updatesBanner, updatesAskOf, marketTroubleOf, marketFailOf, marketDoneOf, sampleWidget, sampleSizes,
-    isPack, packKey, packLine, packByline, lookPartOf, petNote, wallLine, installedOf, installedWords, packUninstallLayerOf, approveLayerOf,
+    isPack, packKey, packLine, packByline, lookPartOf, petNote, wallLine, installedOf, installedWords, packUninstallLayerOf, petDeleteLayerOf, approveLayerOf,
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = api
   else {

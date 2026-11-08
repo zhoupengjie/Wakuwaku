@@ -173,8 +173,9 @@ test("the strip's words' class reaches nothing but the strip", () => {
     assert.match(s, /#bar-rest/, `${file}: ${s}`)
     assert.doesNotMatch(s, /#island\b|#island-|\.tbedit|\.tblib|\.wpop|\.tfly|\.wgpop|\.wstk|\.wmenu/, `${file}: ${s}`)
   }
-  // The settings follow Windows' mode alone.
-  assert.ok(selectors(css('settings.css')).some(s => s.startsWith('.tb-light #island-settings')))
+  // The settings follow Windows' mode alone, in every home (set-light).
+  assert.ok(selectors(css('settings.css')).some(s => s.startsWith('.set-light #island-settings')))
+  assert.ok(!selectors(css('settings.css')).some(s => s.includes('.tb-light')))
   // The strip's own words and its clear halo go by each part's class.
   const style = selectors(css('style.css'))
   assert.ok(style.includes('#bar-rest .ink-light'))

@@ -71,7 +71,7 @@ fn err(code: &'static str, vars: Value) -> PetError {
     PetError { code, vars }
 }
 
-fn is_id(text: &str) -> bool {
+pub(crate) fn is_id(text: &str) -> bool {
     let mut chars = text.chars();
     chars.next().is_some_and(|c| c.is_ascii_alphanumeric()) && chars.all(|c| c.is_ascii_alphanumeric() || c == '-')
 }

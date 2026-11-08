@@ -75,7 +75,8 @@ struct Bar {
     plate: Option<crate::backplate::Plate>,
     // The windows minimized into it, each where its page left room for its
     // live picture (its px from its corner) and their scale (show_mins).
-    mins: Vec<(isize, (f64, f64, f64, f64))>,
+    // Each with where its program's icon goes over its picture (dock_badges).
+    mins: Vec<(isize, (f64, f64, f64, f64), Option<(f64, f64, f64, f64)>)>,
     mins_sf: f64,
     // The Recycle Bin as last told it (empty or full), and when looked at.
     bin: Value,
@@ -565,15 +566,18 @@ fn reveal(sh: &Shared, label: &str) {
 }
 
 // Where the dock's page left room for the windows minimized into it (each
-// window's id and x, y, w, h in its px; dpr, their scale): their live
-// pictures there while it is up.
+// window's id and x, y, w, h in its px, and where its program's icon goes
+// over it; dpr, their scale): their live pictures there while it is up,
+// their icons over them. Sent at every frame as a window grows into it or
+// shrinks away (bar.js follow), the pictures kept all the while.
 #[tauri::command]
-pub fn dock_thumbs(app: tauri::AppHandle, window: WebviewWindow, items: Vec<(i64, f64, f64, f64, f64)>, dpr: Option<f64>) {
+#[allow(clippy::type_complexity)]
+pub fn dock_thumbs(app: tauri::AppHandle, window: WebviewWindow, items: Vec<(i64, f64, f64, f64, f64, Option<(f64, f64, f64, f64)>)>, dpr: Option<f64>) {
     let sh = crate::shared(&app);
     {
         let mut bars = BARS.lock().unwrap();
         let Some(b) = bars.iter_mut().find(|b| b.label == window.label() && b.dock) else { return };
-        b.mins = items.into_iter().map(|(h, x, y, w, ht)| (h as isize, (x, y, w, ht))).collect();
+        b.mins = items.into_iter().map(|(h, x, y, w, ht, badge)| (h as isize, (x, y, w, ht), badge)).collect();
         b.mins_sf = page_scale(dpr, b.sf);
     }
     show_mins(&sh, false);
@@ -581,21 +585,29 @@ pub fn dock_thumbs(app: tauri::AppHandle, window: WebviewWindow, items: Vec<(i64
 
 // The minimized windows' live pictures on the dock, where its page left
 // room for them, while it is up (not out of the way, nor sliding: off,
-// nor hidden by an app full screen); none else. Placed on the main thread,
-// their window's (taskbar.rs make_dock_host), in the order asked.
+// nor hidden by an app full screen); none else. Their window over the
+// whole dock (its window's rect), their icons over them. Placed on the
+// main thread, their windows' (taskbar.rs make_dock_host), in the order asked.
 fn show_mins(sh: &Shared, off: bool) {
-    let items = {
+    #[allow(clippy::type_complexity)]
+    let (rooms, badges, area): (Vec<(isize, Mon)>, Vec<(isize, Mon)>, Option<Mon>) = {
         let bars = BARS.lock().unwrap();
         bars.iter()
             .find(|b| b.dock && b.ready && b.shown && !b.hidden && !b.stow.stowed && !off)
             .and_then(|b| b.strip.map(|r| (r, b)))
             .map(|(r, b)| {
                 let px = |v: f64| (v * b.mins_sf).round() as i32;
-                b.mins.iter().map(|&(h, (x, y, w, ht))| (h, (r.0 + px(x), r.1 + px(y), px(w), px(ht)))).collect::<Vec<_>>()
+                let on = |(x, y, w, ht): (f64, f64, f64, f64)| (r.0 + px(x), r.1 + px(y), px(w), px(ht));
+                let rooms = b.mins.iter().map(|&(h, room, _)| (h, on(room))).collect();
+                let badges = b.mins.iter().filter_map(|&(h, _, badge)| badge.map(|at| (h, on(at)))).collect();
+                (rooms, badges, Some(r))
             })
             .unwrap_or_default()
     };
-    let _ = sh.app.run_on_main_thread(move || taskbar::dock_thumbs(items));
+    let _ = sh.app.run_on_main_thread(move || {
+        taskbar::dock_thumbs(rooms, area);
+        taskbar::dock_badges(badges);
+    });
 }
 
 // From its page (bar.js glass; its px from its corner, dpr their scale):
@@ -657,8 +669,12 @@ pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
         let Some(b) = bars.iter_mut().find(|b| b.dock && b.ready && !b.hidden && b.shown) else { return 500 };
         let Some(rect) = b.glass else { return 500 };
         // Kept up while its list or menu is open, Windows' Start menu is, or
-        // a window of its programs flashes for attention.
-        let keep = !hides || held.as_deref() == Some(b.label.as_str()) || taskbar::start_open() || b.flashing;
+        // a window of its programs flashes for attention. Start looked for
+        // in front now too, with a window touching the dock: Win pressed
+        // over a game full screen, the dock was shown again (another app no
+        // longer in front) and left down, out of the way of the game, Start
+        // not seen open (the user, 2026-11-08: 全屏游戏下按 Win，dock 不会一起弹出来).
+        let keep = !hides || held.as_deref() == Some(b.label.as_str()) || taskbar::start_open() || b.flashing || (b.stow.under && crate::tasks::is_start(crate::tasks::front()));
         let now = Instant::now();
         let stowed = stow_look(&mut b.stow, rect, b.mon, b.sf, cursor, keep, now, || crate::pet::any_down().unwrap_or(false));
         (stowed != b.stow.stowed).then(|| {
@@ -978,11 +994,32 @@ pub fn bar_pop(app: tauri::AppHandle, window: WebviewWindow, kind: String, key: 
     let sh = crate::shared(&app);
     let Some((_, sf, _, _)) = bar_of(window.label()) else { return };
     let bar_sf = page_scale(dpr, sf);
+    let menu = kind == "menu";
     *OPEN.lock().unwrap() = Some(Pop { bar: window.label().to_string(), kind, key, at, bar_sf, rect: None });
-    if !POP_MADE.swap(true, Ordering::SeqCst) {
-        return make_pop(&sh);
+    // A program's menu (a right press): Windows' Start (search, the quick
+    // settings, the notifications) closed first, as a press on Windows' own
+    // taskbar closes it. They open in a band of Windows' own above every
+    // window kept on top, none of a program's can go over them, and the
+    // menu opened under Start, hidden by it (the user, 2026-11-08: 展开Win菜单
+    // 的时候，对图标按右键，图标的右键菜单会被Win菜单挡住). Off this thread:
+    // closing waits for it to go (taskbar.rs close_flyout, 400 ms at most).
+    if menu {
+        std::thread::spawn(move || {
+            taskbar::close_flyout();
+            open_pop(&sh);
+        });
+        return;
     }
-    send_pop(&sh);
+    open_pop(&sh);
+}
+
+// The list's window made the first time (its page asks for what to show once
+// it is up: barpop_ready), else told what to show now.
+fn open_pop(sh: &Arc<Shared>) {
+    if !POP_MADE.swap(true, Ordering::SeqCst) {
+        return make_pop(sh);
+    }
+    send_pop(sh);
 }
 
 // The pointer on a strip's buttons or off them (bar.js), for the list to

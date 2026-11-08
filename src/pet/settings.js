@@ -393,11 +393,15 @@
   // codex-pets.net and its download box as ever.
   function pagePets() {
     const current = snap.settings.pet
+    // 删除 on those in her own folder (downloaded, or the market's), asked
+    // first (petDeleteLayerOf); never Codex's, nor the only one (the user,
+    // 2026-11-08: 宠物增加删除按钮).
+    const canDelete = p => p.mine && snap.pets.length > 1
     const installed = snap.pets.length
       ? snap.pets
           .map(
             p => `<div class="r petrow">${thumb(52, p.url, p.version)}<div class="grow"><div>${esc(p.name)}</div><div class="d">${esc(AddonUI.petNote(p, T))}</div></div>
-            ${p.id === current ? `<span class="d in-use">${esc(T('home.inUse'))}</span>` : `<button class="pbtn" data-use="${esc(p.id)}">${esc(T('home.use'))}</button>`}</div>`,
+            ${p.id === current ? `<span class="d in-use">${esc(T('home.inUse'))}</span>` : `<button class="pbtn" data-use="${esc(p.id)}">${esc(T('home.use'))}</button>`}${canDelete(p) ? `<button class="pbtn no" data-pet-delete="${esc(p.id)}">${esc(T('pets.delete'))}</button>` : ''}</div>`,
           )
           .join('')
       : `<div class="note">${esc(T('settings.petsEmpty'))}</div>`
@@ -671,7 +675,11 @@
   // edited as her menu's 编辑任务栏布局 does (data-tb-edit).
   function islandPosRow() {
     const s = snap.settings
-    if (onTaskbar(s)) return row(esc(T('s.islandPos')), esc(T('s.islandPosTaskbar')), `<button class="pbtn sm" data-tb-edit>${esc(T('s.islandPosEdit'))}</button>`)
+    // On the top bar (split), its words: the top bar's layout, as her menu's (tray.rs editTopBar).
+    if (onTaskbar(s)) {
+      const top = s.display === 'split'
+      return row(esc(T('s.islandPos')), esc(T(top ? 's.islandPosTopBar' : 's.islandPosTaskbar')), `<button class="pbtn sm" data-tb-edit>${esc(T(top ? 'menu.editTopBar' : 's.islandPosEdit'))}</button>`)
+    }
     const notch = window.Island?.notched?.() === true
     // In Windows' taskbar (islandEdgeRow): its left end or its right end,
     // where the capsule inside it takes its room (embed.rs); laid over it
@@ -716,7 +724,7 @@
   function pageLook() {
     const s = snap.settings
     return `${sec(T('home.display'))}<div class="modes">
-        <div class="mode${onTaskbar(s) ? '' : ' on'}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div><div class="ml">${esc(T('s.displayIslandKeeps'))}</div></div>
+        <div class="mode${onTaskbar(s) ? '' : ' on'}" data-mode="island"><div class="pv"><i></i></div><div class="l"><span class="rd"></span>${esc(T('s.displayIsland'))}</div></div>
         <div class="mode${s.display === 'taskbar' ? ' on' : ''}" data-mode="taskbar"><div class="pv"><s></s></div><div class="l"><span class="rd"></span>${esc(T('s.displayTaskbar'))}</div></div>
         <div class="mode${s.display === 'split' ? ' on' : ''}" data-mode="split"><div class="pv"><u></u><b></b></div><div class="l"><span class="rd"></span>${esc(T('s.displaySplit'))}</div></div>
       </div>
@@ -1172,7 +1180,7 @@
     if (item.preview) return `${sec(T('mk.picture'))}<div class="mk-preview"><img src="${esc(item.preview)}" alt=""></div>`
     if (!AddonUI.sampleWidget(item, lang)) return ''
     const note = item.view ? `<div class="note mk-cap">${esc(T('mk.viewNote'))}</div>` : ''
-    const light = document.body.classList.contains('tb-light')
+    const light = document.body.classList.contains('set-light')
     return `${sec(T('mk.looks'))}<div class="mk-cards${light ? ' lw' : ''}" data-mk-cards="${esc(item.id)}"></div>${note}`
   }
 
@@ -1180,7 +1188,7 @@
   // (wdesk.js, loaded the first time one is shown), each in its glass at
   // its size, with the desktop's stylesheet in a shadow of their own so
   // neither page's styles reach the other's (desk.css takes its colours
-  // from :host there, light as Windows is: tb-light). Beside this script's
+  // from :host there, light as Windows is: set-light). Beside this script's
   // own tag (a module has no currentScript; the preview writes the page into
   // one of its own, so location is not where these files are).
   const PAGE_BASE = document.querySelector('script[src$="settings.js"]')?.src || location.href
@@ -1200,7 +1208,7 @@
     const hosts = [...body.querySelectorAll('[data-mk-cards]')]
     if (!hosts.length) return
     if (!window.WDesk) return void loadDeskCards().then(() => isOpen && fillCards())
-    const light = document.body.classList.contains('tb-light')
+    const light = document.body.classList.contains('set-light')
     for (const host of hosts) {
       const item = marketItem(host.dataset.mkCards)
       const w = item && AddonUI.sampleWidget(item, lang)
@@ -1293,7 +1301,13 @@
   // developer docs, its buttons; nothing while none is asked.
   function sheetHTML() {
     const mk = mkAsk?.kind === 'install' ? marketAsk(mkAsk.id) : mkAsk?.kind === 'updates' ? AddonUI.updatesAskOf(snap?.marketUpdates, T, andList) : null
-    const out = gone && (gone.kind ? AddonUI.packUninstallLayerOf(packById(gone.kind, gone.id) || { id: gone.id, kind: gone.kind }, T, gone.busy) : AddonUI.uninstallLayerOf(addonById(gone.id) || { id: gone.id }, T, gone.busy))
+    const out =
+      gone &&
+      (gone.del
+        ? AddonUI.petDeleteLayerOf((snap.pets || []).find(p => p.id === gone.id) || { id: gone.id }, T, gone.busy)
+        : gone.kind
+          ? AddonUI.packUninstallLayerOf(packById(gone.kind, gone.id) || { id: gone.id, kind: gone.kind }, T, gone.busy)
+          : AddonUI.uninstallLayerOf(addonById(gone.id) || { id: gone.id }, T, gone.busy))
     const ap = approveFor ? AddonUI.approveLayerOf(addonById(approveFor), T, andList) : null
     const l = out || mk || ap || AddonUI.layerOf(flow, T, andList)
     if (!l) return ''
@@ -1362,8 +1376,8 @@
   // (packs.rs uninstall).
   async function uninstallGo() {
     if (!gone || gone.busy) return
-    const { id, kind } = gone
-    gone = { id, kind, busy: true }
+    const { id, kind, del } = gone
+    gone = { id, kind, del, busy: true }
     drawSheet()
     const asked = kind ? window.pet.addons.uninstallPack(kind, id) : window.pet.addons.uninstall(id)
     const got = await asked.catch(e => ({ ok: false, error: String(e?.message || e || '') }))
@@ -3854,6 +3868,12 @@
     if (packOut) {
       const [kind, id] = packOut.dataset.packUninstall.split(':')
       gone = { id, kind, busy: false }
+      return drawSheet()
+    }
+    // A pet's 删除 in the Look page's list: as a pack's 卸载, in its own words.
+    const petOut = at('[data-pet-delete]')
+    if (petOut) {
+      gone = { id: petOut.dataset.petDelete, kind: 'pet', busy: false, del: true }
       return drawSheet()
     }
     // The Look page's 获取更多宠物… and 获取更多壁纸…: the market on its kind.

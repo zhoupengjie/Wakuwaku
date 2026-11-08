@@ -874,8 +874,11 @@ body {
   gap: 2px;
 }
 
+/* Its program's icon over its picture's corner, as macOS's (drawn again over
+   Windows' picture there: bars.rs dock_badges), not in a column of its own
+   beside it (the user, 2026-11-08: 应用的icon往他们略缩图窗口挤一挤). */
 .b-dock .mini {
-  width: 60px;
+  width: 50px;
   overflow: hidden;
 }
 
@@ -893,12 +896,16 @@ body {
   background: rgba(0, 0, 0, 0.05);
 }
 
+/* Where its icon goes; drawn there over the picture by bars.rs dock_badges
+   alone, this one only measured: shown too, it trailed a frame behind as
+   the cells moved, two icons at each corner. */
 .mini .badge {
   position: absolute;
-  right: 2px;
-  bottom: 3px;
+  left: 31px;
+  top: 21px;
   width: 16px;
   height: 16px;
+  visibility: hidden;
 }
 
 .bin[hidden] {

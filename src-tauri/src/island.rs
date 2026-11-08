@@ -572,6 +572,13 @@ pub fn embedding_wanted(sh: &Shared) -> bool {
     sh.home() != "taskbar" && sh.setting("islandEdge").as_str() == Some("taskbar") && sh.setting("islandEmbed").as_bool() != Some(false)
 }
 
+// Her island laid over Windows' taskbar (islandEdge taskbar, the embedding
+// off): embed.rs makes the taskbar's window its owner, so Windows keeps it
+// over the taskbar as Explorer raises the taskbar (uncover only finds it under one).
+pub fn over_wanted(sh: &Shared) -> bool {
+    sh.home() != "taskbar" && sh.setting("islandEdge").as_str() == Some("taskbar") && sh.setting("islandEmbed").as_bool() == Some(false)
+}
+
 // The display her home is on, for the capsule to go into its taskbar.
 pub fn home_area(sh: &Shared) -> Option<Area> {
     area(sh)
@@ -2065,7 +2072,10 @@ pub fn raise(sh: &Arc<Shared>) {
 // (islandEdge taskbar, the embedding off, zhoupengjie/Wakuwaku#105): Explorer brings its
 // taskbar to the top of the windows kept on top as it is pressed (Start, a
 // button, the tray), over hers, which is then hidden under it, the pointer
-// never reaching it. Hers is raised over it again once seen under it: every
+// never reaching it. So it is owned by Windows' taskbar there (embed.rs
+// detach, over_wanted), which Windows keeps it over; and, should it be found
+// under a taskbar all the same (another's kept on top, Windows' own along a
+// side or hiding itself, not its owner), raised over it again: every
 // 2 s (keep_on_screen), and as the pointer comes near it (poll). Only from
 // under a taskbar: Windows' own (Shell_TrayWnd, a second display's), or
 // another's kept on top within the strip's band (Start11's and the like);

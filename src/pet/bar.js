@@ -402,7 +402,16 @@
   })
   // The middle button pressed: no scrolling by the pointer (Chromium's).
   document.addEventListener('mousedown', e => e.button === 1 && e.preventDefault())
-  document.addEventListener('contextmenu', e => e.preventDefault())
+  // A right press: never the browser's menu. On the dock, off its programs,
+  // its minimized windows, the clock, the Recycle Bin and her, the menu her
+  // taskbar has (tray.rs Over::Dock), with 占着位置 checked while the dock
+  // keeps its room (splitDock room; the user, 2026-11-08: 对着dock右键 …
+  // 跟任务栏保持一致，加上「占着位置」).
+  document.addEventListener('contextmenu', e => {
+    e.preventDefault()
+    if (!isDock() || e.target.closest('[data-app], #mins, .bin, #her') || clock.contains(e.target)) return
+    invoke('pet_menu', { part: null }).catch(() => {})
+  })
 
   // Over a program's button, as on the main taskbar (island.js openPop): the
   // pointer resting on a running one, its windows; a right press, its menu.
@@ -667,7 +676,10 @@
   // (bar.css .hdrop; the user, 2026-11-04: "as on her taskbar"). It comes
   // and goes in place, jumps rather than slides a long way, and gives a
   // little under a press. The buttons' own hover washes give way to it.
-  const GLIDE_ON = '.start, .tview, .win, .quick, .clock'
+  // Not on a minimized window's: its picture is Windows' own, over the
+  // page, and the wash showed round it as a lighter block (the user,
+  // 2026-11-08: 窗口第一次最小化到dock后，背景会有一个高亮亮块).
+  const GLIDE_ON = '.start, .tview, .win:not(.mini), .quick, .clock'
   const GLIDE_FAR = 360
   const glide = el('span', 'hdrop')
   strip.insertBefore(glide, glassEl.nextSibling)
@@ -809,7 +821,7 @@
   // are once it is still (settle).
   const mins = document.getElementById('mins')
   const minSep = document.getElementById('minsep')
-  const MIN_W = 60
+  const MIN_W = 50
   const MIN_MS = 220
   let minMoving = 0
   function drawMins() {
@@ -821,7 +833,8 @@
     const want = new Set(list.map(({ w }) => String(w.id)))
     for (const b of [...mins.querySelectorAll('[data-min]')]) {
       if (want.has(b.dataset.min)) continue
-      // Brought back: no longer pressed as it goes.
+      // Brought back: no longer pressed as it goes; its picture shrinks with it.
+      b.dataset.going = b.dataset.min
       delete b.dataset.min
       moveMin(b, false).then(() => {
         b.remove()
@@ -849,14 +862,13 @@
     sendMins()
   }
   // Grown in from nothing, or shrunk away (a minimized window, or a
-  // program's button); the live pictures off meanwhile. Its own width
-  // (a program's 40, a minimized window's 60), and the gap beside it going
-  // with it, so nothing jumps as it is taken out at the end. Going, the
-  // glass as it will be without it, first (glassMoves).
+  // program's button); the live pictures following their rooms meanwhile
+  // (follow). Its own width (a program's 40, a minimized window's 50), and
+  // the gap beside it going with it, so nothing jumps as it is taken out at
+  // the end. Going, the glass as it will be without it, first (glassMoves).
   function moveMin(b, coming) {
     minMoving++
-    sending.mins = ''
-    call('dock_thumbs', { items: [], dpr: devicePixelRatio || 1 })
+    follow()
     if (!coming) {
       const was = b.style.display
       b.style.display = 'none'
@@ -877,20 +889,48 @@
         if (--minMoving === 0) settleSoon()
       })
   }
-  // Where their rooms are, once it is up and still (settle), as they change.
+  // Where their rooms are, once it is up and still (settle), as they change;
+  // and where each one's program's icon is, drawn over its picture there
+  // (bars.rs dock_badges: the picture is Windows', over the page).
   const sending = { mins: '' }
+  function roomsNow() {
+    return [...mins.querySelectorAll('[data-min], [data-going]')].map(b => {
+      const r = b.querySelector('.room').getBoundingClientRect()
+      const i = b.querySelector('.badge').getBoundingClientRect()
+      return [Number(b.dataset.min ?? b.dataset.going), r.left, r.top, r.width, r.height, i.width > 0 ? [i.left, i.top, i.width, i.height] : null]
+    })
+  }
+  function sendRooms(items) {
+    const sent = JSON.stringify(items)
+    if (sent === sending.mins) return
+    sending.mins = sent
+    call('dock_thumbs', { items, dpr: devicePixelRatio || 1 })
+  }
   function sendMins() {
     if (!isDock() || minMoving > 0 || down || sliding || !settled) return
-    requestAnimationFrame(() => {
-      const items = [...mins.querySelectorAll('[data-min]')].map(b => {
-        const r = b.querySelector('.room').getBoundingClientRect()
-        return [Number(b.dataset.min), r.left, r.top, r.width, r.height]
-      })
-      const sent = JSON.stringify(items)
-      if (sent === sending.mins) return
-      sending.mins = sent
-      call('dock_thumbs', { items, dpr: devicePixelRatio || 1 })
-    })
+    requestAnimationFrame(() => sendRooms(roomsNow()))
+  }
+  // While one grows in or shrinks away, the pictures follow their rooms at
+  // every frame. They were taken off for it and put back once the glass was
+  // still: each went grey and came back, every time a window went into the
+  // dock or came out (the user, 2026-11-08: 每次最小化到dock和点开后，dock的
+  // 略缩图都会闪灰黑一下然后又出现略缩图).
+  let following = false
+  function follow() {
+    if (following) return
+    following = true
+    const step = () => {
+      if (minMoving === 0 || !isDock()) {
+        following = false
+        return
+      }
+      if (!down && !sliding) sendRooms(roomsNow())
+      // The wash under the pointer kept on its button as the buttons move
+      // (it stayed where the button had been, a block beside it).
+      if (glideOn?.isConnected && glide.classList.contains('on')) glideTo(glideOn, true)
+      requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
   }
 
   // The Recycle Bin, last in the dock (split): Windows' own picture of it,

@@ -1,10 +1,15 @@
-/* The settings, grown out of the island (settings.js). The island's own
-   greys and its one spring; switches green when on; every button a pill. */
+/* The settings, grown out of the island (settings.js). As Windows' own
+   Settings in every home (island.js setSettingsLook): its grey ground and
+   cards a step lighter in the dark mode, light in the light (set-light,
+   below); the island's one spring; switches green when on; every button a
+   pill. At the top of the screen and over a black strip they were the
+   island's own (its ground, iOS's greys), Windows' elsewhere (the user,
+   2026-11-08: 灵动岛设置不同模式都应该统一才对). */
 
 #island-settings {
-  --g1: #1c1c1e;
-  --g2: #2c2c2e;
-  --g3: #3a3a3c;
+  --g1: #2b2b2b;
+  --g2: #373737;
+  --g3: #454545;
   --g4: #8e8e93;
   --g5: #a1a1a6;
   --fg: #f5f5f7;
@@ -31,28 +36,29 @@
   transition: opacity 0.24s ease 0.16s;
 }
 
-/* In the settings the island is a panel, not a button. */
+/* In the settings the island is a panel, not a button, on Windows' grey. */
 #island[data-view='settings'] {
+  background: #202020;
   cursor: default;
   box-shadow:
     0 18px 50px rgba(0, 0, 0, 0.35),
     0 0 0 1px rgba(255, 255, 255, 0.07);
 }
 
-/* Light, on the taskbar in Windows' light mode (style.css tb-light), as
+/* Light, in Windows' light mode in every home (island.js set-light), as
    Windows' own Settings: a light grey panel, white cards. Its greys
    swapped; the colours on them deeper, so they read on white. The
    colours settings.js gives in place (the sessions' clocks, the widgets'
    icons) darkened by a filter, their hues kept. The pictures of her homes
    stay as they are: they show the dark island. */
-.tb-light #island[data-view='settings'] {
+.set-light #island[data-view='settings'] {
   background: #f3f3f3;
   box-shadow:
     0 18px 50px rgba(0, 0, 0, 0.2),
     0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
-.tb-light #island-settings {
+.set-light #island-settings {
   --g1: #ffffff;
   --g2: #f0f0f0;
   --g3: #d9d9d9;
@@ -61,109 +67,109 @@
   --fg: #1b1b1b;
 }
 
-.tb-light #island-settings [data-mood],
-.tb-light #island-settings .wi {
+.set-light #island-settings [data-mood],
+.set-light #island-settings .wi {
   filter: brightness(0.62) saturate(1.3);
 }
 
-.tb-light #island-settings .r + .r,
-.tb-light #island-settings .m-text {
+.set-light #island-settings .r + .r,
+.set-light #island-settings .m-text {
   border-top-color: #ececec;
 }
 
-.tb-light #island-settings .r.jumps:hover,
-.tb-light #island-settings .letter:hover,
-.tb-light #island-settings .draft-row:hover {
+.set-light #island-settings .r.jumps:hover,
+.set-light #island-settings .letter:hover,
+.set-light #island-settings .draft-row:hover {
   background: rgba(0, 0, 0, 0.04);
 }
 
-.tb-light #island-settings .in {
+.set-light #island-settings .in {
   background: #ffffff;
 }
 
-.tb-light #island-settings .inbox .letter.child {
+.set-light #island-settings .inbox .letter.child {
   background: rgba(0, 0, 0, 0.025);
 }
 
-.tb-light #island-settings .letter.open,
-.tb-light #island-settings .letter.open:hover,
-.tb-light #island-settings .inbox .letter.child.open {
+.set-light #island-settings .letter.open,
+.set-light #island-settings .letter.open:hover,
+.set-light #island-settings .inbox .letter.child.open {
   background: rgba(0, 95, 184, 0.1);
 }
 
-.tb-light #island-settings .letter.unread .twisty {
+.set-light #island-settings .letter.unread .twisty {
   color: #0067c0;
 }
 
-.tb-light #island-settings .md-pre {
+.set-light #island-settings .md-pre {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.tb-light #island-settings .adv-b,
-.tb-light #island-settings .cmd {
+.set-light #island-settings .adv-b,
+.set-light #island-settings .cmd {
   background: #f0f0f0;
   color: #1b1b1b;
 }
 
-.tb-light #island-settings .mmenu {
+.set-light #island-settings .mmenu {
   background: #ffffff;
   box-shadow:
     0 10px 30px rgba(0, 0, 0, 0.18),
     0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
-.tb-light #island-settings .link,
-.tb-light #island-settings .adv-h,
-.tb-light #island-settings .chip.running {
+.set-light #island-settings .link,
+.set-light #island-settings .adv-h,
+.set-light #island-settings .chip.running {
   color: #0067c0;
 }
 
-.tb-light #island-settings .in-use,
-.tb-light #island-settings .note.ok,
-.tb-light #island-settings .chip.done,
-.tb-light #island-settings .m-sum-h,
-.tb-light #island-settings .mi.on::after {
+.set-light #island-settings .in-use,
+.set-light #island-settings .note.ok,
+.set-light #island-settings .chip.done,
+.set-light #island-settings .m-sum-h,
+.set-light #island-settings .mi.on::after {
   color: #0f7b3f;
 }
 
 /* The button that does the thing (Send, Done, Hand to…): Windows' own
    accent fill on light, white words. */
-.tb-light #island-settings .pbtn.al {
+.set-light #island-settings .pbtn.al {
   border-color: #005fb8;
   background: #005fb8;
   color: #ffffff;
 }
 
-.tb-light #island-settings .note.err,
-.tb-light #island-settings .pbtn.no,
-.tb-light #island-settings .chip.failed {
+.set-light #island-settings .note.err,
+.set-light #island-settings .pbtn.no,
+.set-light #island-settings .chip.failed {
   color: #c42b3c;
 }
 
-.tb-light #island-settings .d.bad,
-.tb-light #island-settings .note.lhm-note.bad {
+.set-light #island-settings .d.bad,
+.set-light #island-settings .note.lhm-note.bad {
   color: #b25e00;
 }
 
-.tb-light #island-settings .welcome,
-.tb-light #island-settings .m-sum.run {
+.set-light #island-settings .welcome,
+.set-light #island-settings .m-sum.run {
   color: #0b4a8f;
 }
 
-.tb-light #island-settings .m-sum {
+.set-light #island-settings .m-sum {
   color: #0b5e30;
 }
 
-.tb-light #island-settings .m-sum.bad,
-.tb-light #island-settings .talk.failed .talk-h {
+.set-light #island-settings .m-sum.bad,
+.set-light #island-settings .talk.failed .talk-h {
   color: #9f1d2c;
 }
 
-.tb-light #island-settings .talk-h {
+.set-light #island-settings .talk-h {
   color: #0b4a8f;
 }
 
-.tb-light #island-settings .star.on {
+.set-light #island-settings .star.on {
   color: #c97a00;
 }
 
@@ -258,7 +264,7 @@
   color: #ffffff;
 }
 
-.tb-light #island-settings .s-head .x.g.on {
+.set-light #island-settings .s-head .x.g.on {
   background: #005fb8;
 }
 
@@ -397,6 +403,17 @@
   overflow: hidden;
   border-radius: 18px;
   background: var(--g1);
+}
+
+/* Every block apart from what follows it, as the display's cards are, never
+   glued to the next (the user, 2026-11-08: 圆角矩形背景块之间没有空行 … 所有的
+   圆角矩形之间都要加空行). By each one's own margin, not by pairs: a part's
+   mark (settings.js part) or what a row builds comes between two blocks in
+   places, and .grp + .grp held in some alone. A heading after it keeps its
+   own 12 px (the margins fold into one). */
+#island-settings .modes,
+#island-settings .grp:not(:last-child) {
+  margin-bottom: 8px;
 }
 
 #island-settings .r {
@@ -1569,7 +1586,7 @@
   color: #000;
 }
 
-.tb-light #island-settings .tile.on .c {
+.set-light #island-settings .tile.on .c {
   background: var(--win-accent, #005fb8);
   color: #fff;
 }
@@ -1669,15 +1686,6 @@
   transform: translateX(-50%);
 }
 
-/* Under the island's: it leaves Windows' taskbar alone, the home for
-   Start11, MyDockFinder and the like (it stays: the user, 2026-11-07,
-   zhoupengjie/Wakuwaku#105). */
-#island-settings .mode .ml {
-  padding: 2px 4px 0 24px;
-  font-size: 11px;
-  color: var(--g4);
-}
-
 #island-settings .mode .pv .thumb {
   position: absolute;
   right: 10px;
@@ -1726,6 +1734,10 @@
 #island-settings .petrow .thumb {
   border-radius: 12px;
   background: var(--g2);
+}
+
+#island-settings .petrow [data-pet-delete] {
+  margin-left: 6px;
 }
 
 /* The gallery: three across. */
@@ -1998,7 +2010,7 @@
   box-shadow: 0 0 0 1px #0a84ff;
 }
 
-.tb-light #island-settings .ilook-card.on {
+.set-light #island-settings .ilook-card.on {
   border-color: #005fb8;
   box-shadow: 0 0 0 1px #005fb8;
 }
@@ -2095,7 +2107,7 @@
   accent-color: #0a84ff;
 }
 
-.tb-light #island-settings .rng {
+.set-light #island-settings .rng {
   accent-color: #005fb8;
 }
 
@@ -2327,31 +2339,31 @@
   font-variant-numeric: tabular-nums;
 }
 
-.tb-light #island-settings .r.go:hover,
-.tb-light #island-settings .ag-row:hover {
+.set-light #island-settings .r.go:hover,
+.set-light #island-settings .ag-row:hover {
   background: rgba(0, 0, 0, 0.04);
 }
 
-.tb-light #island-settings .ag-row.open,
-.tb-light #island-settings .s-row.open,
-.tb-light #island-settings .ag-det {
+.set-light #island-settings .ag-row.open,
+.set-light #island-settings .s-row.open,
+.set-light #island-settings .ag-det {
   background: rgba(0, 0, 0, 0.025);
 }
 
-.tb-light #island-settings .ag-det + .r {
+.set-light #island-settings .ag-det + .r {
   border-top-color: #ececec;
 }
 
-.tb-light #island-settings .ag-note.warn {
+.set-light #island-settings .ag-note.warn {
   background: rgba(157, 93, 0, 0.1);
   color: #7a4800;
 }
 
-.tb-light #island-settings .ag-way {
+.set-light #island-settings .ag-way {
   background: #f6f6f6;
 }
 
-.tb-light #island-settings .ag-way .wc-cmd {
+.set-light #island-settings .ag-way .wc-cmd {
   background: #ffffff;
 }
 
@@ -2385,7 +2397,7 @@
   border-bottom-left-radius: 0;
 }
 
-.tb-light #island-settings .split > .pbtn.more {
+.set-light #island-settings .split > .pbtn.more {
   border-left-color: rgba(255, 255, 255, 0.45);
 }
 
@@ -2410,7 +2422,7 @@
 }
 
 .isl-light #island-settings .wcard,
-.tb-light #island-settings .wcard {
+.set-light #island-settings .wcard {
   --wc-ok: #107c10;
   --wc-warn: #9d5d00;
   background: rgba(0, 103, 192, 0.08);
@@ -2713,12 +2725,12 @@
 }
 
 .isl-light #island-settings .wc-err,
-.tb-light #island-settings .wc-err {
+.set-light #island-settings .wc-err {
   background: rgba(196, 43, 28, 0.08);
 }
 
 .isl-light #island-settings .wc-err b,
-.tb-light #island-settings .wc-err b {
+.set-light #island-settings .wc-err b {
   color: #c42b1c;
 }
 
@@ -2738,7 +2750,7 @@
   vertical-align: 1px;
 }
 
-.tb-light #island-settings .chip.warn {
+.set-light #island-settings .chip.warn {
   background: rgba(178, 94, 0, 0.1);
   color: #b25e00;
 }
@@ -2763,7 +2775,7 @@
   box-shadow: inset 3px 0 0 #5e9bff;
 }
 
-.tb-light #island-settings .r.fresh {
+.set-light #island-settings .r.fresh {
   box-shadow: inset 3px 0 0 #005fb8;
 }
 
@@ -2772,7 +2784,7 @@
   border-top: 1px solid #262628;
 }
 
-.tb-light #island-settings .note.ad-broken {
+.set-light #island-settings .note.ad-broken {
   border-top-color: #ececec;
 }
 
@@ -2835,7 +2847,7 @@
   color: var(--c);
 }
 
-.tb-light #island-settings .ad-tile {
+.set-light #island-settings .ad-tile {
   color: color-mix(in srgb, var(--c) 62%, #000);
 }
 
@@ -2909,7 +2921,7 @@
   display: none;
 }
 
-.tb-light #island-settings .s-sheet {
+.set-light #island-settings .s-sheet {
   background: rgba(243, 243, 243, 0.55);
 }
 
@@ -2936,7 +2948,7 @@
   animation: s-ask-in 0.2s var(--spring);
 }
 
-.tb-light #island-settings .sh {
+.set-light #island-settings .sh {
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.08),
     0 18px 50px rgba(0, 0, 0, 0.18);
@@ -2969,11 +2981,11 @@
   font-weight: 600;
 }
 
-.tb-light #island-settings .sh-warn {
+.set-light #island-settings .sh-warn {
   background: rgba(178, 94, 0, 0.08);
 }
 
-.tb-light #island-settings .sh-warn b {
+.set-light #island-settings .sh-warn b {
   color: #b25e00;
 }
 
@@ -3006,7 +3018,7 @@
   background: rgba(255, 107, 122, 0.18);
 }
 
-.tb-light #island-settings .sh .pbtn.no {
+.set-light #island-settings .sh .pbtn.no {
   background: rgba(196, 43, 60, 0.1);
 }
 
@@ -3035,7 +3047,7 @@
   animation: s-fade 0.16s ease-out;
 }
 
-.tb-light #island-settings .s-toast {
+.set-light #island-settings .s-toast {
   background: #ffffff;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.08),
@@ -3065,7 +3077,7 @@
   font: normal 16px/1 'Segoe Fluent Icons', 'Segoe MDL2 Assets';
 }
 
-.tb-light #island-settings .mk-big {
+.set-light #island-settings .mk-big {
   background: rgba(0, 95, 184, 0.1);
   color: #005fb8;
 }
@@ -3085,7 +3097,7 @@
   background: rgba(94, 155, 255, 0.14);
 }
 
-.tb-light #island-settings .mk-banner {
+.set-light #island-settings .mk-banner {
   background: rgba(0, 95, 184, 0.08);
 }
 
@@ -3114,7 +3126,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.tb-light #island-settings .mk-prog {
+.set-light #island-settings .mk-prog {
   background: linear-gradient(90deg, rgba(0, 95, 184, 0.25) var(--p, 0%), var(--g2) var(--p, 0%));
 }
 
@@ -3126,7 +3138,7 @@
   vertical-align: 1px;
 }
 
-.tb-light #island-settings .chip.mk-ok {
+.set-light #island-settings .chip.mk-ok {
   background: rgba(15, 123, 63, 0.1);
   color: #0f7b3f;
 }
@@ -3303,23 +3315,23 @@
   margin-top: 3px;
 }
 
-.tb-light #island-settings .kbadge:hover {
+.set-light #island-settings .kbadge:hover {
   border-color: #005fb8;
   color: #005fb8;
 }
 
-.tb-light #island-settings .kbadge.rec {
+.set-light #island-settings .kbadge.rec {
   border-color: #005fb8;
   background: rgba(0, 95, 184, 0.12);
   color: #005fb8;
   box-shadow: 0 0 0 1px #005fb8;
 }
 
-.tb-light #island-settings .kclear:hover {
+.set-light #island-settings .kclear:hover {
   color: #c42b3c;
 }
 
-.tb-light #island-settings .kerr {
+.set-light #island-settings .kerr {
   color: #c42b3c;
 }
 
@@ -3356,7 +3368,7 @@
   color: var(--fg);
 }
 
-.tb-light #island-settings .s-exp:hover {
+.set-light #island-settings .s-exp:hover {
   background: rgba(0, 0, 0, 0.06);
 }
 
@@ -3419,6 +3431,6 @@
   color: #ff5c6c;
 }
 
-.tb-light #island-settings .s-step.err .s-st-ic {
+.set-light #island-settings .s-step.err .s-st-ic {
   color: #c42b3c;
 }

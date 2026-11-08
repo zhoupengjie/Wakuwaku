@@ -84,9 +84,9 @@ mod tests {
 
     #[test]
     fn words_in_either_language_or_the_key() {
-        assert_eq!(t("zh", "menu.quit"), "退出");
-        assert_eq!(t("en", "menu.quit"), "Quit");
-        assert_eq!(t("fr", "menu.quit"), "Quit");
+        assert_eq!(t("zh", "menu.quit"), "退出应用");
+        assert_eq!(t("en", "menu.quit"), "Quit app");
+        assert_eq!(t("fr", "menu.quit"), "Quit app");
         assert_eq!(t("zh", "no.suchKey"), "no.suchKey");
         assert!(t("en", "crash.box").contains("{n} times in a row.
 

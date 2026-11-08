@@ -1061,8 +1061,12 @@ mod imp {
     // 2026-10-11). What it is doing, for the log should it not stop.
     static TASKS_DOING: Mutex<&'static str> = Mutex::new("");
 
+    // Not easy on the power for good (power.rs thread_eco), as the loops
+    // that only look now and then are: the buttons it makes are seen as
+    // windows come and go, and with the CPU busy they came late (the user,
+    // 2026-11-08: 高负载的情况下整个界面很容易卡死). Slowed with the process
+    // while nobody is about (main.rs check_quiet).
     fn tasks_loop(sh: Arc<Shared>) {
-        crate::power::thread_eco();
         let doing = |what: &'static str| *TASKS_DOING.lock().unwrap() = what;
         let stopping = || TASKS_STOP.load(Ordering::SeqCst);
         let mut marked_at = Instant::now() - Duration::from_secs(10);

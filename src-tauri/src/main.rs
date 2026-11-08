@@ -264,7 +264,38 @@ impl Shared {
                 taskbar::wake();
             }
         }
+        self.keep_brisk(quiet);
         quiet
+    }
+
+    // Her processes and WebView2's for her pages before others' on the CPU
+    // and the GPU while someone is at it and no app is full screen; as any
+    // other's while nobody is about (and easy on the power, above) or a game
+    // has the screen (power.rs brisk; the user, 2026-11-08: GPU或者CPU高负载的
+    // 情况下，Wakuwaku的整个界面很容易卡死). Logged as it changes; done again
+    // every half minute meanwhile, WebView2 making processes as her windows
+    // come (a list's, the dock's) and Chromium setting a hidden page's lower.
+    // Off this thread (the pointer's): it looks through every process.
+    fn keep_brisk(&self, quiet: bool) {
+        static AT: Mutex<(Option<bool>, Option<Instant>)> = Mutex::new((None, None));
+        let want = !quiet && !self.is_fullscreen();
+        let changed = {
+            let mut at = AT.lock().unwrap();
+            let changed = at.0 != Some(want);
+            let due = want && at.1.is_none_or(|t| t.elapsed() >= Duration::from_secs(30));
+            if !changed && !due {
+                return;
+            }
+            *at = (Some(want), Some(Instant::now()));
+            changed
+        };
+        let sh = shared(&self.app);
+        std::thread::spawn(move || {
+            let said = power::brisk(want);
+            if changed {
+                sh.log(&format!("priority: {} ({said})", if want { "before others'" } else { "as any other's" }));
+            }
+        });
     }
 
     // Another app is full screen (watched always: look_fullscreen).

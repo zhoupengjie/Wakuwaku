@@ -10,6 +10,13 @@
 //   (webview_eco), and their memory kept low (webview_memory).
 // - How long since the keyboard or mouse was last touched (idle_ms), for
 //   the quiet state: she holds still and the loops look less often.
+// - While someone is at it and no app is full screen (main.rs keep_brisk),
+//   her process and WebView2's for her pages before others' (brisk): above
+//   normal on the CPU, high on the GPU (Windows' scheduling class, as OBS
+//   sets its own), so her island, taskbar and dock keep up with the person
+//   while something else has the CPU or the GPU busy (the user,
+//   2026-11-08: GPU或者CPU高负载的情况下，Wakuwaku的整个界面很容易卡死). Never
+//   high or realtime on the CPU: what makes the load would go wanting.
 
 #[cfg(windows)]
 mod imp {
@@ -70,7 +77,22 @@ mod imp {
         fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> isize;
         fn Process32FirstW(snapshot: isize, entry: *mut ProcessEntry) -> i32;
         fn Process32NextW(snapshot: isize, entry: *mut ProcessEntry) -> i32;
+        fn SetPriorityClass(process: isize, class: u32) -> i32;
     }
+
+    #[link(name = "gdi32")]
+    extern "system" {
+        // The GPU's scheduling class of a process (d3dkmthk.h): its work
+        // before others' while the GPU is busy. An NTSTATUS, 0 done.
+        fn D3DKMTSetProcessSchedulingPriorityClass(process: isize, class: i32) -> i32;
+    }
+
+    const NORMAL_PRIORITY_CLASS: u32 = 0x20;
+    const ABOVE_NORMAL_PRIORITY_CLASS: u32 = 0x8000;
+    // D3DKMT_SCHEDULINGPRIORITYCLASS_NORMAL and _HIGH (REALTIME, 5, asks
+    // for the right to raise priorities, an administrator's).
+    const GPU_NORMAL: i32 = 2;
+    const GPU_HIGH: i32 = 4;
 
     const TH32CS_SNAPPROCESS: u32 = 0x2;
     const PROCESS_SET_INFORMATION: u32 = 0x0200;
@@ -158,6 +180,43 @@ mod imp {
         done
     }
 
+    // Her process and WebView2's under it before others' on the CPU (above
+    // normal) and the GPU (high), or back to normal. What was done, for the
+    // log: how many of how many, and what the GPU's answer was if it refused.
+    pub fn brisk(on: bool) -> String {
+        let (cpu, gpu) = if on { (ABOVE_NORMAL_PRIORITY_CLASS, GPU_HIGH) } else { (NORMAL_PRIORITY_CLASS, GPU_NORMAL) };
+        let (mut n, mut on_cpu, mut on_gpu, mut refused) = (0, 0, 0, 0i32);
+        let mut set = |process: isize| {
+            n += 1;
+            // SAFETY: a process handle of ours (our own, or one opened with
+            // the right to set its information); plain calls.
+            unsafe {
+                if SetPriorityClass(process, cpu) != 0 {
+                    on_cpu += 1;
+                }
+                match D3DKMTSetProcessSchedulingPriorityClass(process, gpu) {
+                    0 => on_gpu += 1,
+                    status => refused = status,
+                }
+            }
+        };
+        // SAFETY: a pseudo handle to this process.
+        set(unsafe { GetCurrentProcess() });
+        for pid in webview_processes() {
+            // SAFETY: a handle we close.
+            unsafe {
+                let process = OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+                if process == 0 {
+                    continue;
+                }
+                set(process);
+                CloseHandle(process);
+            }
+        }
+        let gpu_said = if refused != 0 { format!(" (refused: {refused:#x})") } else { String::new() };
+        format!("{on_cpu} of {n} processes {} on the CPU, {on_gpu} {} on the GPU{gpu_said}", if on { "above normal" } else { "normal" }, if on { "high" } else { "normal" })
+    }
+
     // Her pages' memory as WebView2 is to keep it: low while nobody is at
     // the computer (it may page some out), normal again as someone is; as
     // WebView2 has it done for an app gone inactive (#14).
@@ -223,10 +282,13 @@ mod imp {
     pub fn webview_eco(_on: bool) -> usize {
         0
     }
+    pub fn brisk(_on: bool) -> String {
+        String::new()
+    }
     pub fn webview_memory(_window: &tauri::WebviewWindow, _low: bool) {}
     pub fn idle_ms() -> u64 {
         0
     }
 }
 
-pub use imp::{idle_ms, process_eco, thread_brisk, thread_eco, webview_eco, webview_memory};
+pub use imp::{brisk, idle_ms, process_eco, thread_brisk, thread_eco, webview_eco, webview_memory};

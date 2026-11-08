@@ -310,8 +310,11 @@ mod imp {
         }
     }
 
+    // Not easy on the power for good: the plates follow the island's and the
+    // dock's glass as they grow and shrink, frame by frame, and with the CPU
+    // busy they lagged behind them (the user, 2026-11-08: 高负载的情况下整个界面
+    // 很容易卡死). Slowed with the process while nobody is about.
     fn run() {
-        crate::power::thread_eco();
         // SAFETY: our own class and window, on this thread, which runs its loop.
         unsafe {
             let instance = GetModuleHandleW(std::ptr::null());

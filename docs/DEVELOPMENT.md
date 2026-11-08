@@ -59,7 +59,7 @@ src-tauri/
     lhm.rs, lhm_setup.rs  监控的 LibreHardwareMonitor 来源：读它的网页服务器；用户点了时下载，以管理员身份装进 Program Files、配置、启动它，它自己的开机任务
     fetch.rs              codex-pets.net：解析地址、下载宠物、图库
     fullscreen.rs         别的程序是否全屏（user32）
-    power.rs              省电：后台线程一直、整个进程和 WebView2 的进程在静默时交给效率核（EcoQoS），静默时页面内存设为低；多久没碰键盘鼠标
+    power.rs              省电：后台线程一直、整个进程和 WebView2 的进程在静默时交给效率核（EcoQoS），静默时页面内存设为低；多久没碰键盘鼠标。有人在、没有程序全屏时反过来（brisk，main.rs keep_brisk，每 30 秒补一次新开的 WebView2 进程）：她的进程和 WebView2 的进程 CPU 高于正常、GPU 调度类为高（D3DKMTSetProcessSchedulingPriorityClass，OBS 也这样；渲染进程不碰 GPU，会回 0xc000000d），CPU 不用「高」或「实时」，免得抢走正在干活的程序；画按钮的 tasks 线程和挪亚克力垫板的 plate 线程不再一直在效率核上（2026-11-08 用户：CPU 或 GPU 高负载时整个界面很容易卡死）
     gpu.rs                她那块屏由哪块显卡输出（D3DKMT），WebView2 就在那块上渲染
     focus.rs              前台窗口：设置拿走键盘前记下，收起时还回去
     frameless.rs          她的窗口不留标题栏样式：tao 写回样式时拿掉 WS_CAPTION，分层窗口才不会被画上旧式外框（见「踩过的坑」）

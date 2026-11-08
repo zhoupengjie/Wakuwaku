@@ -11,6 +11,7 @@ src/                      页面，Tauri 直接把整个文件夹打进 exe（ta
     bridge.js             window.pet：页面和 Rust 之间的调用和事件；替页面补发鼠标进出（见"点击穿透"）
     hovers.js             页面进入过、光标已经不在其中的元素：bridge.js 替它们补发 mouseleave（见"点击穿透"第 4 条）
     pet.js                她的动画、空闲时走动和东张西望
+    play.js               她玩的时候（设置 play）：拎起来晃、放手落下、爬上窗口、摸头、打瞌睡，站在哪、怎么过去（见「她玩的时候」）
     island.js             灵动岛：几种形状、她在岛里、把她拉出来和放回去
     settings.js           长在岛里的设置（五个页签：通用、Agent、外观、插件、邮件）
     panel.js              确认面板：在岛里，或在设置的横幅里
@@ -33,7 +34,7 @@ src/                      页面，Tauri 直接把整个文件夹打进 exe（ta
 src-tauri/
   src/
     main.rs               入口：--wakuwaku-ensure-running、--wakuwaku-codex-hook、单实例、各部分共享的 Shared、页面能调的命令
-    pet.rs                她的窗口：大小和位置、眼睛、拖动和被"携带"、走动、头顶的面板、飞回岛里
+    pet.rs                她的窗口：大小和位置、眼睛、拖动和被"携带"、走动、头顶的面板、飞回岛里；她玩时的移动和站着的窗口
     island.rs             她的家的窗口：灵动岛、任务栏各放在哪，按页面要求扩大、伸手够她、把她吸回去、为设置临时升起、灵动岛下面有窗口时让开
     desk.rs               桌面小工具的窗口：每块有小工具的屏一个，压在别的窗口下面、桌面图标上面（显示桌面后也在），点击只在小工具上被接住，每块屏的壁纸
     backplate.rs          垫在岛的窗口正下面的亚克力：一个自己的原生窗口，DWM 模糊它后面的别的窗口（#20）
@@ -839,6 +840,20 @@ zhoupengjie/Wakuwaku#44：exe 改名后 Run 还指着旧文件，开机什么也
 - **数据**：页面打开时取一次快照（`settings_get`），之后 Rust 在状态、确认请求、设置变化时推 `settings:changed`（每秒最多 4 次）。改动先在页面上显示，再发 `settings_set` 补丁，Rust 按白名单校验（`settings.rs` 的 `is_ok`），大小、显示方式、出门通过窗口去改，她的位置不跳。
 - **高度**：面板宽 520px，正文高度不超过屏幕（`screen.availHeight` 减去头、页签、脚），超出的在正文里滚动；页签切换时岛的高度用弹簧过渡。
 
+## 她玩的时候（play.js、pet.rs）
+
+设置 `play`（默认 `false`，外观 →「她」一组、右键菜单；关着时和以前完全一样）。**决定在页面，移动在 Rust**：`src/pet/play.js` 决定做什么（纯函数算站在哪、怎么过去，`create()` 是状态机，靠传进来的桥、舞台和时钟运行，`test/play.test.js` 在假的桥上跑全部流程），`pet.js` 只画它说的 `pose`（`{ row, frame }` 或 `{ clip }`，排在 reaction 之后），`pet.rs` 移动窗口。
+
+- **移动**：`pet_go { x, y, ms, how, bend, on }`（`pet.rs` 的 `go`、`Way`）：她的脚到 (x, y)，物理像素；`line` 匀速、`fall` 越来越快、`arc` 跳（`bend` 是比直线高多少）、`float` 匀速下落、左右摆（`bend` 是摆多远）；到了站在窗口 `on` 上。和 `walk` 一样用 `walk_gen` 打断（拖她、回家、下一次移动），走的是 `w.pos`，所以点击穿透、拖动都知道她在哪。只有横着走的 `pet_walk` 不够：外面挪窗口的话 `w.pos` 要等 `keep_on_screen`（2 秒）才知道，这期间点不到她，头顶的面板还会把她拉回去。
+- **站在哪**：`pet_surfaces`（`pet.rs` 的 `surfaces`，`tasks.rs` 的 `windows_up`）给她的脚、窗口和她自己的大小、所在屏的工作区（下沿就是地面）、站着的窗口，以及伸进这块工作区的窗口，从前到后：只有位置，没有标题和内容。`play.js` 的 `topsOf` 算每个窗口顶边上她能站的几段：屏幕顶上放得下她（最大化的放不下），前面的窗口伸进她要站的地方（左右各多她半个身宽）就去掉那一段。Mac 上没有窗口列表，只有地面。
+- **跟着窗口**：`Win.perch`（窗口和它上次的左上角）。`pet::poll` 每次看一眼（`tasks::stood_on`，几个不发消息的查询；平时 200ms，窗口刚动过或者鼠标按着时 16ms），窗口动了她跟着动（`Win::follow`，头顶面板要退回的位置也一起），不见了、最小化、最大化（`stood_on` 为 None）、把她带出屏幕、缩窄到她脚外面，发 `pet:perch-gone`，页面让她掉下来。藏起来时（全屏、勿扰）`perch` 还在，回来时看一眼就行；回家、拖走、回到右下角才清掉。
+- **屏幕顶**：她窗口上面那块是留给头顶的字的，站在靠上的窗口时可以伸出屏幕顶（`Win::kept_high`，`keep_on_screen` 和 `walk` 在 `perch` 时用它），她本人必须在屏幕里。
+- **事件**：`pet:drag-start`（按下，还没算拎起来）、`pet:let-go { moved, carried }`（放手、没被吸回家：`let_go` 判断完才发，所以被吸回去时不会掉）、`pet:perch-gone`、`pet:front`（前台窗口换了，只有开着 `play` 才看）。`pet:drag` 飞回家时也发，所以只有 `pet:drag-start` 之后的才算拎起来。
+- **姿势**：图里没有坐和躺，用每只宠物都有的东西拼：坐是 Jumping 第 0 帧（起跳前蹲下）；躺是这一帧和整个 `#pet` 转 ±90°；跑上窗口侧边是 Run 加转 ±90°（`her-wall-r`：墙在右边，脚朝右，往前就是往上），所以她的中线离墙半个身高（`routeUp`）；探头是 `#pet` 的 `clip-path` 切掉下面 46%，窗口往下沉同样多。转和切都在 `#pet` 本身，所以点击也跟着：切掉的那部分点到的是下面的窗口。
+- **跟手**：拖她、她跟着窗口走、`go` 都是 8ms 一步（`pet::KEEP_UP_MS`，约 120 次/秒）。指针线程的 `park_timeout(16ms)` 在 Windows 上要等到时钟的下一格，实测 31ms、约 34 次/秒，320Hz 的屏上同一个位置显示十帧，快速拖动时眼睛看到一串她；`thread::sleep` 准（16ms 就是 16ms），所以这么短的等待用它。关着 `play` 时拖动也一样受益。
+- **动效**（`docs/design/style.md`）：拎着时才有逐帧的步子（`swinging`，弹簧，跟着 `requestAnimationFrame`，至少隔 8ms 算一步，放手摆停了就停，没变就不写样式）；步速平滑两次（`PACE_OVER`）：移动不是每步一次，不平滑的话一步是 0、下一步是两倍，她在拉长和不拉长之间抖，看着就是两个她叠在一起；灰、爱心、星星、感叹号都是播完就删的元素；小伞只在下落时；瞌睡的 Zzz 淡入后不动，符合「没人在电脑前时全部停下」。不理她的计时只在可以出发时才排（`plan`），别的时候不空转。`prefers-reduced-motion` 时整个不做。
+- **试**：`node --test test/play.test.js`、`cargo test pet`（`Way` 的路径、`kept_high`、`follow`）。整体：测试副本带 `WAKUWAKU_DEBUG=1`，`/debug/eval` 里 `window.Play.machine.wander()` 不用等 5 分钟，`window.Play.machine.state()` 看姿势，`/health` 的 `window.perch` 看站在哪个窗口。
+
 ## 精灵图
 
 Codex pet v2 图集为 1536×2288，8 列 × 11 行，每格 192×208。v1 是 1536×1872、9 行，没有注视动作。
@@ -848,7 +863,7 @@ Codex pet v2 图集为 1536×2288，8 列 × 11 行，每格 192×208。v1 是 1
 | 0 | Idle | 6 | 空闲：播一轮再停 4 秒 |
 | 1 / 2 | Run right / left | 8 | 空闲走动、拖动 |
 | 3 | Waving | 4 | done、打招呼 |
-| 4 | Jumping | 5 | TaskCompleted、单击 |
+| 4 | Jumping | 5 | TaskCompleted、单击；她玩时第 0 帧当坐和躺（见「她玩的时候」） |
 | 5 | Failed | 8 | error、工具失败 |
 | 6 | Waiting | 6 | waiting |
 | 7 | Running | 6 | working |

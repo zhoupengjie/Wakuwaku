@@ -740,6 +740,7 @@
       ['win', '大小 ›'],
       ['walk', '空闲时走动', world.config.walk !== false],
       ['look', '眼睛跟着鼠标', world.config.look !== false],
+      ['play', '让她玩', world.config.play === true],
       ['display:island', '她的家：灵动岛', world.home === 'island'],
       ['display:taskbar', '她的家：任务栏（代替 Windows 的）', world.home === 'taskbar'],
       ['out', '放她出来'],
@@ -783,8 +784,8 @@
     const act = e.target.closest('[data-act]')?.dataset.act
     if (!act) return
     hideMenu()
-    if (act === 'dnd' || act === 'walk' || act === 'look') {
-      world.config[act] = act === 'dnd' ? !world.config.dnd : world.config[act] === false
+    if (act === 'dnd' || act === 'walk' || act === 'look' || act === 'play') {
+      world.config[act] = act === 'dnd' || act === 'play' ? !world.config[act] : world.config[act] === false
       pushIsland()
     } else if (act === 'settings') {
       toIsland('island:settings', { tab: null })

@@ -187,6 +187,8 @@ fn defaults() -> Map<String, Value> {
         "mail": [],
         "walk": true,
         "look": true,
+        // Her playing (src/pet/play.js): off, she stays where she is put.
+        "play": false,
         // Done, changed or failed: shown 8 s, or until seen ("seen"); 30 and
         // 120 the other quick choices, any whole seconds from 3 to 600 too
         // (settings.rs is_hold, #59).

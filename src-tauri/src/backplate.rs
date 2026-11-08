@@ -285,8 +285,9 @@ mod imp {
     static LAST: Mutex<Option<(Plate, isize)>> = Mutex::new(None);
 
     // The page's wish (kept: shown again with the window).
-    pub fn wish(plate: Option<Plate>, under: isize, fade_ms: u32) {
+    pub fn wish(plate: Option<Plate>, under: isize, fade_ms: u32, shown: bool) {
         *LAST.lock().unwrap() = plate.map(|p| (p, under));
+        let plate = if shown { plate } else { None };
         set(ISLAND, plate, under, fade_ms);
     }
 
@@ -468,7 +469,7 @@ mod imp {
         false
     }
     pub fn set(_which: usize, _plate: Option<Plate>, _under: isize, _fade_ms: u32) {}
-    pub fn wish(_plate: Option<Plate>, _under: isize, _fade_ms: u32) {}
+    pub fn wish(_plate: Option<Plate>, _under: isize, _fade_ms: u32, _shown: bool) {}
     pub fn again() {}
 }
 
@@ -481,7 +482,11 @@ static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
 // fade_ms; none: faded out and hidden.
 pub fn set(sh: &Shared, plate: Option<Plate>, fade_ms: u32) {
     APP.get_or_init(|| sh.app.clone());
-    imp::wish(plate, crate::island::hwnd(sh), fade_ms.min(1000));
+    // Her island's window hidden (an app full screen, hideInFullscreen; the
+    // taskbar her home): the wish kept, nothing shown till it is again
+    // (again). The page, hidden with it, still asks: opened by itself for
+    // an ending, a blur with nothing over it stood on the screen.
+    crate::island::with_shown(sh, |under, shown| imp::wish(plate, under, fade_ms.min(1000), shown));
 }
 
 // Gone at once with her island's window (island.rs show_or_hide), and back

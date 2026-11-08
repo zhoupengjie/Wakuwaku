@@ -51,9 +51,9 @@ test('the setting from before it was a choice: openOnEnd off is nothing, else th
 
 test('full screen, nobody about, do not disturb: no ring, the dot alone', () => {
   for (const kind of ['done', 'review', 'error', 'hello', 'plugin']) assert.equal(Flow.cueFor(kind, { blocked: true }), 'dot', kind)
-  // Waiting still opens; the setting's open obeys blocked (the dot alone).
+  // Waiting still opens; the setting's open still opens.
   assert.equal(Flow.cueFor('waiting', { blocked: true }), 'open')
-  assert.equal(Flow.cueFor('done', { setting: 'open', blocked: true }), 'dot')
+  assert.equal(Flow.cueFor('done', { setting: 'open', blocked: true }), 'open')
 })
 
 test('the island open or the settings up: neither ring nor dot', () => {

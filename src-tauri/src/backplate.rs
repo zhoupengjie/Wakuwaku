@@ -482,8 +482,11 @@ static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
 // fade_ms; none: faded out and hidden.
 pub fn set(sh: &Shared, plate: Option<Plate>, fade_ms: u32) {
     APP.get_or_init(|| sh.app.clone());
-    let shown = sh.island.lock().unwrap().shown;
-    imp::wish(plate, crate::island::hwnd(sh), fade_ms.min(1000), shown);
+    // Her island's window hidden (an app full screen, hideInFullscreen; the
+    // taskbar her home): the wish kept, nothing shown till it is again
+    // (again). The page, hidden with it, still asks: opened by itself for
+    // an ending, a blur with nothing over it stood on the screen.
+    crate::island::with_shown(sh, |under, shown| imp::wish(plate, under, fade_ms.min(1000), shown));
 }
 
 // Gone at once with her island's window (island.rs show_or_hide), and back

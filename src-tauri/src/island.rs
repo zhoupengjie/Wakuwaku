@@ -355,6 +355,15 @@ pub fn hwnd(sh: &Shared) -> isize {
     sh.island.lock().unwrap().hwnd
 }
 
+// Its handle and whether its window is shown, read together, and f run
+// before either can change: the plate's wish (backplate.rs set) goes in so,
+// and the window hidden meanwhile (show_or_hide) never leaves a plate
+// standing over the screen on its own (zhoupengjie/Wakuwaku#112).
+pub fn with_shown<R>(sh: &Shared, f: impl FnOnce(isize, bool) -> R) -> R {
+    let isl = sh.island.lock().unwrap();
+    f(isl.hwnd, isl.shown)
+}
+
 // Where its window is (physical) and its scale: the page's px to the screen's.
 // The page's, as it told it (page_sf): Windows' text size makes it bigger
 // than its display's (110% at 150%: 1.65), the windows' live pictures

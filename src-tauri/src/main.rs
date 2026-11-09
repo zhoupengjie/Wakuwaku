@@ -482,6 +482,16 @@ impl Shared {
         }
     }
 
+    // A mail verification code or link arrived.
+    pub fn push_mail_notice(&self, kind: &str, sender: &str, code_or_url: &str, domain: Option<&str>, subject: &str) {
+        let now = now_ms();
+        let expires_at = now + 20_000;
+        self.asks.lock().unwrap().add_mail(kind, sender, code_or_url, domain, subject, expires_at);
+        self.log(&format!("mail notice: {kind} from {sender}"));
+        self.push_asks();
+        self.alert("waiting", sender);
+    }
+
     // The open settings follow what happens, a few times a second at most.
     pub fn push_settings(&self) {
         if !self.island.lock().unwrap().settings_open || self.push_pending.swap(true, Ordering::SeqCst) {
@@ -994,8 +1004,8 @@ async fn pet_answer(app: AppHandle, id: u64, choice: Value) -> bool {
     sh.log(&format!("answer {id}: {choice} -> {ok}"));
     if ok {
         sh.push_asks();
-        // An approval given on her, for today's count.
-        if matches!(choice["action"].as_str(), Some("allow" | "always")) {
+        // An approval given on her, for today's count (mail notices never counted).
+        if id < 100_000 && matches!(choice["action"].as_str(), Some("allow" | "always")) {
             sh.count_today(|t| t.approvals += 1);
         }
     }

@@ -1085,6 +1085,54 @@
   overflow-wrap: anywhere;
 }
 
+/* Whose letter: the sender's face at its head, a letter of their name on the
+   colour of their address (settings.js avatarHTML), and their name and the
+   date beside it. */
+#island-settings .mail-read .from {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 6px;
+}
+
+#island-settings .mail-read .from .who {
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+#island-settings .mail-read .av {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: hsl(var(--av-h, 214) 45% 42%);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+
+/* The letter's body as HTML, inside a sandboxed frame as its sender made it.
+   The frame's box is rounded on all four corners, so no corner of the letter
+   is a right angle; the wrapper is what clips it. */
+#island-settings .m-html-wrap {
+  margin: 10px 0 4px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+#island-settings .m-html {
+  display: block;
+  width: 100%;
+  height: 160px;
+  border: 0;
+  background: transparent;
+  color-scheme: light dark;
+}
+
 #island-settings .m-files {
   display: flex;
   flex-wrap: wrap;
@@ -1398,23 +1446,35 @@
 }
 
 #island-settings .pane-r {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
   padding-right: 4px;
 }
 
+/* The letter bar is kept at the top of the pane; only what is under it
+   scrolls, so Reply and the hand-off stay where they are however far down a
+   letter is read (the user, 2026-10-21). */
 #island-settings .pane-r > .mail-bar {
-  margin-top: 0;
+  flex: none;
+  height: 32px;
+  margin: 0 4px 8px;
+}
+
+#island-settings .pane-r-body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 #island-settings .pane-l .inbox::-webkit-scrollbar,
-#island-settings .pane-r::-webkit-scrollbar {
+#island-settings .pane-r-body::-webkit-scrollbar {
   width: 6px;
 }
 
 #island-settings .pane-l .inbox::-webkit-scrollbar-thumb,
-#island-settings .pane-r::-webkit-scrollbar-thumb {
+#island-settings .pane-r-body::-webkit-scrollbar-thumb {
   border-radius: 3px;
   background: var(--g3);
 }

@@ -484,6 +484,41 @@ body {
   font-family: inherit;
 }
 
+#panel .code.mail-code,
+.island #panel .code.mail-code,
+.isl-light.island #panel .code.mail-code,
+.home-taskbar.tb-capsule #panel .code.mail-code {
+  max-height: none !important;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  letter-spacing: 6px !important;
+  text-indent: 6px !important;
+  text-align: center !important;
+  padding: 10px 12px !important;
+  user-select: text !important;
+}
+
+#panel .code.mail-link,
+.island #panel .code.mail-link,
+.isl-light.island #panel .code.mail-link,
+.home-taskbar.tb-capsule #panel .code.mail-link {
+  max-height: none !important;
+  font-size: 13px !important;
+  text-align: center !important;
+  padding: 8px 12px !important;
+  color: #5e9bff;
+  user-select: text !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.isl-light #panel .code.mail-link,
+.tb-light #panel .code.mail-link,
+.isl-light.island #panel .code.mail-link {
+  color: #0067c0 !important;
+}
+
 #panel .text {
   margin-bottom: 8px;
 }

@@ -30,7 +30,7 @@
   // The keys answer what the buttons do: an approval or a plan, theirs too
   // (zcode, dsh), whose own dialog closes as the answer reaches it
   // (zhoupengjie/Wakuwaku#97).
-  const canAnswerWithHotkey = ask => !!ask && (ask.kind === 'permission' || ask.kind === 'plan') && ask.canAnswer !== false
+  const canAnswerWithHotkey = ask => !!ask && (ask.kind === 'permission' || ask.kind === 'plan' || ask.kind === 'mail_code' || ask.kind === 'mail_link') && ask.canAnswer !== false
   const keyHintOf = (key, ask) => (canAnswerWithHotkey(ask) && config.shortcutsEnabled && config[key] ? config[key] : '')
   let shownId = null
   let step = 0
@@ -98,6 +98,45 @@
   }
 
   const answer = choice => window.pet.answer(shownId, choice)
+
+  function fallbackCopy(text) {
+    if (typeof document === 'undefined') return
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    ta.style.pointerEvents = 'none'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    try {
+      document.execCommand('copy')
+    } catch (_) {}
+    document.body.removeChild(ta)
+  }
+
+  function copyAndAnswer(ask, btn) {
+    const textToCopy = ask.kind === 'mail_code' ? (ask.code || '') : (ask.url || '')
+    const targetId = ask?.id || shownId
+    if (textToCopy) {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(textToCopy).catch(() => {
+          fallbackCopy(textToCopy)
+        })
+      } else {
+        fallbackCopy(textToCopy)
+      }
+    }
+    if (btn && btn.childNodes && btn.childNodes[0]) {
+      btn.childNodes[0].textContent = T('panel.copied')
+      btn.disabled = true
+      setTimeout(() => {
+        window.pet.answer(targetId, { action: 'allow', text: textToCopy })
+      }, 350)
+    } else {
+      window.pet.answer(targetId, { action: 'allow', text: textToCopy })
+    }
+  }
   // To the terminal: the prompt is its again, and its window comes to the front.
   const dismiss = () => {
     const session = asks.find(a => a.id === shownId)?.session
@@ -110,6 +149,7 @@
       'div',
       { class: 'head' },
       el('span', { class: 'title' }, title),
+      ask.sender ? el('span', { class: 'chip' }, ask.sender) : null,
       FROM[ask.from] ? el('span', { class: 'chip' }, FROM[ask.from]) : null,
       ask.project ? el('span', { class: 'chip' }, ask.project) : null,
     )
@@ -145,6 +185,47 @@
       ),
       ask.always ? alwaysNote(ask.always) : null,
       ask.reason ? reasonNote(ask.reason) : null,
+    ]
+  }
+
+  function mailCodeBody(ask) {
+    return [
+      header(T('panel.mailCode'), ask),
+      el('pre', {
+        class: 'code mail-code',
+        style: 'cursor: pointer;',
+        onclick: () => {
+          const btn = panel?.querySelector('button[data-action="allow"]')
+          copyAndAnswer(ask, btn)
+        },
+      }, ask.code || ''),
+      el(
+        'div',
+        { class: 'row' },
+        button(T('panel.copy'), 'allow', e => copyAndAnswer(ask, e?.currentTarget), 'primary', keyHintOf('shortcutApprove', ask)),
+        button(T('panel.ignore'), 'deny', () => answer({ action: 'deny' }), 'danger', keyHintOf('shortcutDeny', ask)),
+      ),
+    ]
+  }
+
+  function mailLinkBody(ask) {
+    return [
+      header(T('panel.mailLink'), ask),
+      el('pre', {
+        class: 'code mail-link',
+        style: 'cursor: pointer;',
+        onclick: () => {
+          const btn = panel?.querySelector('button[data-action="allow"]')
+          copyAndAnswer(ask, btn)
+        },
+      }, ask.displayUrl || ask.domain || ask.url || ''),
+      el(
+        'div',
+        { class: 'row' },
+        button(T('panel.copy'), 'allow', e => copyAndAnswer(ask, e?.currentTarget), 'primary', keyHintOf('shortcutApprove', ask)),
+        button(T('panel.openInBrowser'), 'always', () => answer({ action: 'always', url: ask.url }), 'always'),
+        button(T('panel.ignore'), 'deny', () => answer({ action: 'deny' }), 'danger', keyHintOf('shortcutDeny', ask)),
+      ),
     ]
   }
 
@@ -325,18 +406,27 @@
       letGoOfKeyboard()
     }
 
-    const body = ask.kind === 'question' ? questionBody(ask) : ask.kind === 'plan' ? planBody(ask) : permissionBody(ask)
+    const isMail = ask.kind === 'mail_code' || ask.kind === 'mail_link'
+    const body = ask.kind === 'question' ? questionBody(ask)
+      : ask.kind === 'plan' ? planBody(ask)
+      : ask.kind === 'mail_code' ? mailCodeBody(ask)
+      : ask.kind === 'mail_link' ? mailLinkBody(ask)
+      : permissionBody(ask)
     const more = asks.length > 1 ? el('span', { class: 'more' }, T('panel.more', { n: asks.length - 1 })) : null
+    const foot = isMail
+      ? (more ? el('div', { class: 'foot' }, more) : null)
+      : el(
+          'div',
+          { class: 'foot' },
+          // An app's prompt (ZCode's, DSH's dialog stays open meanwhile) is handled there.
+          button(ask.kind === 'question' && !ask.canAnswer ? T('panel.gotIt') : IN_APP.has(ask.from) ? T('panel.toApp', { app: FROM[ask.from] }) : T('panel.toTerminal'), 'dismiss', dismiss, 'ghost'),
+          more,
+        )
     panel.append(
       ...body.filter(Boolean),
-      el(
-        'div',
-        { class: 'foot' },
-        // An app's prompt (ZCode's, DSH's dialog stays open meanwhile) is handled there.
-        button(ask.kind === 'question' && !ask.canAnswer ? T('panel.gotIt') : IN_APP.has(ask.from) ? T('panel.toApp', { app: FROM[ask.from] }) : T('panel.toTerminal'), 'dismiss', dismiss, 'ghost'),
-        more,
-      ),
+      ...(foot ? [foot] : []),
     )
+    
     panel.hidden = false
     arm(armMs)
     report()
@@ -413,7 +503,11 @@
       if (decision.type === 'toggle') {
         window.Island?.peek?.()
       } else if (decision.type === 'answer') {
-        answer({ action: which })
+        if (ask && (ask.kind === 'mail_code' || ask.kind === 'mail_link') && which === 'allow') {
+          copyAndAnswer(ask, actionBtn)
+        } else {
+          answer({ action: which })
+        }
       } else if (decision.type === 'open') {
         if (ROLE === 'island' && !islandOpen) {
           window.Island?.peek?.(true)

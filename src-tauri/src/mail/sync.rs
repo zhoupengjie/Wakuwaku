@@ -91,7 +91,7 @@ pub fn run(sh: &Arc<Shared>, account: &Account, watch: &Watch) {
                         sync_folder(sh, &mut conn, &st, Folder::Inbox, Mailbox::Inbox)?;
                         true
                     } else {
-                        look_new(sh, &mut conn, &st)?
+                        look_new(sh, &mut conn, &st, newest_seen.unwrap_or(0))?
                     };
                     tell(sh, account, watch, &st, "ok", &mut newest_seen);
                     if left == 0 && !came {
@@ -279,11 +279,12 @@ fn download(sh: &Shared, conn: &mut Session, st: &Mutex<Store>, watch: &Watch, s
 
 // New mail in the inbox since the newest kept (UID SEARCH UID n:*), by its
 // header fields; whether there was any.
-fn look_new(sh: &Shared, conn: &mut Session, st: &Mutex<Store>) -> Result<bool, Fail> {
+fn look_new(sh: &Arc<Shared>, conn: &mut Session, st: &Mutex<Store>, since: u32) -> Result<bool, Fail> {
     conn.folder(Mailbox::Inbox, false)?;
     let newest = st.lock().unwrap().inbox.letters.keys().next_back().copied().unwrap_or(0);
     let mut new = conn.newer(newest)?;
     new.sort_unstable_by(|a, b| b.cmp(a));
     heads(sh, conn, st, Folder::Inbox, &new)?;
+    super::code::new_mail(sh, conn, st, &new, since);
     Ok(!new.is_empty())
 }

@@ -46,6 +46,7 @@ use tauri::AppHandle;
 use crate::{i18n, now_ms, settings, shared, Shared};
 
 pub mod agent;
+pub mod code;
 mod discover;
 mod imap;
 pub mod letters;
@@ -724,7 +725,11 @@ pub(crate) mod secret {
             if CredReadW(target.as_ptr(), GENERIC, 0, &mut found) == 0 || found.is_null() {
                 return None;
             }
-            let bytes = std::slice::from_raw_parts((*found).blob, (*found).blob_size as usize).to_vec();
+            let bytes = if (*found).blob.is_null() || (*found).blob_size == 0 {
+                Vec::new()
+            } else {
+                std::slice::from_raw_parts((*found).blob, (*found).blob_size as usize).to_vec()
+            };
             CredFree(found);
             String::from_utf8(bytes).ok()
         }

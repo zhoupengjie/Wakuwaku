@@ -2387,31 +2387,147 @@
     noteFor({ text: T(`mail.w.sent.${got.kept || 'server'}`), bad: got.kept === 'failed' })
   }
 
+  // Whose letter: the sender's face at its head, as a mail program has one.
+  // Drawn of her own, with no network look (a picture fetched from outside
+  // is read without telling its sender it was opened): the first letter of
+  // the name, on the colour of the address, the same address always the
+  // same one.
+  function avatarHTML(l) {
+    const from = (l.from || [])[0] || {}
+    const name = String(from.name || from.address || '').trim()
+    const first = Array.from(name)[0] || '?'
+    let hash = 0
+    for (const ch of String(from.address || name)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+    return `<span class="av" style="--av-h:${hash % 360}" aria-hidden="true">${esc(first.toLocaleUpperCase())}</span>`
+  }
+
   // A letter open: back to the inbox, its star and the hand-off, who, when,
   // its attachments, the talk about it, the text.
-  function readingHTML() {
+  // Beside the list (two panes) the bar is kept above the scrolling part, so
+  // the star, Reply and the hand-off stay at hand however far down the letter
+  // is read (the user, 2026-10-21). Its top is the left list's top: the bar
+  // and the inbox's head are the same height, so both cards begin together.
+  function readingHTML(note = '') {
     const r = reading
     const l = r.letter
     const talk = l ? talkOf(l.key) || r.talk : null
     // Beside the list (two panes) there is no inbox to go back to.
-    const back = twoPanes() ? '' : `<span class="link" data-mail-back>‹ ${esc(T('mail.inbox'))}</span>`
+    const two = twoPanes()
+    const back = two ? '' : `<span class="link" data-mail-back>‹ ${esc(T('mail.inbox'))}</span>`
     const bar = `<div class="mail-bar">${back}<span class="grow"></span>${l ? handButtons(l, talk) : ''}</div>`
-    const note = handNote && !twoPanes() ? `<div class="note${handNote.bad ? ' err' : ''}">${esc(handNote.text)}</div>` : ''
-    if (r.busy) return `${bar}<div class="grp"><div class="note">${esc(T('mail.opening'))}</div></div>`
-    if (r.error) return `${bar}<div class="grp"><div class="note err">${esc(handError(r.error))}</div></div>`
+    const hand = handNote && !two ? `<div class="note${handNote.bad ? ' err' : ''}">${esc(handNote.text)}</div>` : ''
+    // Two panes: the bar stays, the letter (and the note about its hand-off)
+    // scrolls under it. One pane: the whole page scrolls, as it did.
+    const wrap = inner => (two ? `${bar}<div class="pane-r-body">${note}${inner}</div>` : `${bar}${hand}${inner}`)
+    if (r.busy) return wrap(`<div class="grp"><div class="note">${esc(T('mail.opening'))}</div></div>`)
+    if (r.error) return wrap(`<div class="grp"><div class="note err">${esc(handError(r.error))}</div></div>`)
     const files = l.attachments.length ? `<div class="m-files">${l.attachments.map(f => `<span class="chip">📎 ${esc(f.name || '?')} · ${mailSize(f.size)}</span>`).join('')}</div>` : ''
     // Whose (several accounts), and one's own, from Sent.
     const address = accountOf(l.account)?.address || ''
     const inSent = l.folder === 'sent' ? T('mail.inSent', { address }) : ''
     const whose = inSent || (snap.mail || []).length > 1 ? `<div class="d">${esc(inSent || T('mail.in', { address }))}</div>` : ''
-    return `${bar}${note}<div class="grp mail-read" ${where(l)}>
+    return wrap(`<div class="grp mail-read" ${where(l)}>
       <div class="m-subj">${esc(l.subject || T('mail.noSubject'))}</div>
-      <div class="d">${esc(people(l.from))} · ${esc(mailDate(l.date, true))}</div>
+      <div class="from">${avatarHTML(l)}<div class="grow"><div class="who">${esc(people(l.from))}</div><div class="d">${esc(mailDate(l.date, true))}</div></div></div>
       ${l.to.length ? `<div class="d">${esc(T('mail.to'))}: ${esc(people(l.to))}</div>` : ''}
       ${l.cc.length ? `<div class="d">${esc(T('mail.cc'))}: ${esc(people(l.cc))}</div>` : ''}
       ${whose}${files}${talk ? talkHTML(talk, l) : ''}
-      <div class="m-text">${esc(l.text)}</div>${l.cut ? `<div class="d">${esc(T('mail.cut'))}</div>` : ''}
-    </div>`
+      ${mailBodyHTML(l)}
+    </div>`)
+  }
+
+  // The letter's body: as it was written (its styles, its cards, its
+  // pictures), in a frame that cannot run anything, or the plain text when
+  // there is no HTML. The frame is sandboxed: no scripts, no forms, nothing
+  // of hers in it. Its pictures are the letter's own (the sender's server),
+  // so they are read as they come. The text it was written with is not put
+  // under it: a letter shows as its sender made it (the user, 2026-10-20).
+  function mailBodyHTML(l) {
+    const html = String(l.html || '')
+    if (!html.trim()) {
+      return `<div class="m-text">${esc(l.text)}</div>${l.cut ? `<div class="d">${esc(T('mail.cut'))}</div>` : ''}`
+    }
+    // The frame's own document: the letter, and a little of her own page
+    // around it (the letter's own styles are in it, and they win). The
+    // frame is sandboxed without scripts: what is in it cannot run, and the
+    // page can still measure it (the same origin, no scripts) to give it
+    // the height of the letter.
+    const doc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src http: https: data: cid:; style-src 'unsafe-inline'; font-src data:"><style>
+      html,body{width:100%;max-width:100%;margin:0;padding:0;overflow-x:hidden;background:transparent;color:inherit;font:inherit;line-height:inherit}
+      /* A letter made for a 600px inbox is read in a pane narrower or wider
+         than that: whatever it was laid out at gives way to the frame, so
+         nothing runs off the right and is cut (the user, 2026-10-21). */
+      *,*::before,*::after{box-sizing:border-box;max-width:100%!important;min-width:0!important}
+      img,video,svg,canvas,iframe{height:auto!important}
+      td,th,div,p,span,a,li{overflow-wrap:anywhere}
+      a{color:#5e9eff}
+    </style></head><body>${html}</body></html>`
+    return `<div class="m-html-wrap"><iframe class="m-html" sandbox="allow-same-origin" referrerpolicy="no-referrer" scrolling="no" title="${esc(l.subject || T('mail.noSubject'))}" srcdoc="${esc(doc)}"></iframe></div>`
+  }
+
+  // The frame as tall as the letter in it: the page measures it (the frame
+  // is of her own origin and runs nothing) and gives it the height. Measured
+  // again as its pictures arrive and its fonts settle — the first measure is
+  // of a letter whose pictures are not there yet, and a letter 3,000px tall
+  // was left showing its first 160 (the user's letter, 2026-10-20). A letter
+  // longer than 4,000px is cut there; the panel's own scroll goes on.
+  //
+  // The document a frame starts with (about:blank, already "complete") is
+  // not the letter's: watching it missed every picture the letter brought,
+  // and a cold letter stayed 992px tall with 1,149px of itself under
+  // (2026-10-21). So the watch is put on the document the frame has when it
+  // runs and again whenever that document is replaced; a load anywhere in
+  // the document (a picture, a font) measures it again. Timed measures run
+  // further out too, for what loads late and says nothing.
+  function fitFrames() {
+    for (const frame of body.querySelectorAll('iframe.m-html')) {
+      // A letter can carry a rule of its own that outweighs the frame's
+      // stylesheet (a 600px wrapper marked !important in a 542px frame ran
+      // 58px off the right and was cut). What is still wider than the frame
+      // is given its width inline, which nothing in the letter can outweigh
+      // (the user, 2026-10-21).
+      const fitWidth = doc => {
+        const w = doc.documentElement.clientWidth
+        if (!w) return
+        for (const el of doc.body.querySelectorAll('table,img,div')) {
+          if (el.getBoundingClientRect().width <= w + 1) continue
+          el.style.setProperty('max-width', '100%', 'important')
+          el.style.setProperty(el.tagName === 'IMG' ? 'height' : 'width', el.tagName === 'IMG' ? 'auto' : '100%', 'important')
+        }
+      }
+      const fit = () => {
+        if (!frame.isConnected) return
+        try {
+          const doc = frame.contentDocument
+          if (!doc || !doc.body) return
+          fitWidth(doc)
+          const h = Math.min(4000, Math.max(120, doc.body.scrollHeight + 8))
+          if (frame.style.height !== `${h}px`) frame.style.height = `${h}px`
+        } catch (e) {
+          // The frame's document is not to be read (it is of another origin,
+          // or it is not ready): the height it has is left as it is.
+        }
+      }
+      const watch = () => {
+        fit()
+        try {
+          const doc = frame.contentDocument
+          if (!doc || frame._fitDoc === doc) return
+          frame._fitDoc = doc
+          doc.addEventListener('load', fit, true)
+          doc.addEventListener('error', fit, true)
+          doc.fonts?.ready?.then(fit).catch(() => {})
+        } catch (e) {}
+      }
+      frame._fit = watch
+      if (!frame._fitHooked) {
+        frame._fitHooked = true
+        frame.addEventListener('load', () => frame._fit?.())
+      }
+      watch()
+      for (const t of frame._fitTimers || []) clearTimeout(t)
+      frame._fitTimers = [250, 900, 2200, 5000, 10000, 20000].map(ms => setTimeout(() => frame.isConnected && frame._fit?.(), ms))
+    }
   }
 
   // Mail: each account with its switch and setting one up; the inbox
@@ -2425,8 +2541,9 @@
       if (id && inbox.for !== `${id}|${inbox.filter}` && !inbox.busy) setTimeout(() => loadInbox(false))
       const left = id ? inboxHTML(id) : `<div class="note">${esc(T('mail.noBox'))}</div>`
       const note = handNote ? `<div class="note${handNote.bad ? ' err' : ''}">${esc(handNote.text)}</div>` : ''
-      const right = writing && draft ? writeHTML() : reading ? readingHTML() : `${accountsHTML()}${id ? agentsHTML() : ''}`
-      return `<div class="panes"><div class="pane-l">${left}</div><div class="pane-r">${note}${right}</div></div>`
+      const body = inner => `<div class="pane-r-body">${note}${inner}</div>`
+      const right = writing && draft ? body(writeHTML()) : reading ? readingHTML(note) : body(`${accountsHTML()}${id ? agentsHTML() : ''}`)
+      return `<div class="panes"><div class="pane-l">${left}</div><div class="pane-r">${right}</div></div>`
     }
     if (writing && draft) return writeHTML()
     if (reading) return readingHTML()
@@ -3448,6 +3565,7 @@
       back.setSelectionRange(caret, caret)
     }
     startThumbs()
+    fitFrames()
     fillCards()
   }
 

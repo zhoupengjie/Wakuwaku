@@ -33,7 +33,9 @@
 // "mailPanes": "two" | "one", the Mail page as list and letter side by side
 // (the default), or one under the other (settings.js);
 // "mailOffline": "year" (the default) | "90d" | "all" | "opened", how much
-// is kept whole on this computer ahead (store.rs Offline).
+// is kept whole on this computer ahead (store.rs Offline);
+// "mailCodes": true (the default) | false, a code or a link to sign in with
+// in new mail put on the island (codes.rs).
 use std::collections::HashMap;
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -46,6 +48,7 @@ use tauri::AppHandle;
 use crate::{i18n, now_ms, settings, shared, Shared};
 
 pub mod agent;
+pub mod codes;
 mod discover;
 mod imap;
 pub mod letters;

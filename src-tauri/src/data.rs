@@ -185,6 +185,8 @@ fn defaults() -> Map<String, Value> {
         "plugins": {},
         // Mail accounts (mail.rs); their passwords are in the Credential Manager.
         "mail": [],
+        // A code or a link to sign in with, come by mail, on the island (mail/codes.rs).
+        "mailCodes": true,
         "walk": true,
         "look": true,
         // Done, changed or failed: shown 8 s, or until seen ("seen"); 30 and

@@ -484,6 +484,27 @@ body {
   font-family: inherit;
 }
 
+/* A code come by mail (panel.js mailBody): large enough to read off and
+   type by hand; a click on it copies it. Its colours are the look's .code. */
+#panel .code.mail-code {
+  max-height: none;
+  padding: 8px 10px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-align: center;
+  cursor: pointer;
+}
+
+/* A link: one line, its start, the whole of it on hover. */
+#panel .code.mail-link {
+  max-height: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
 #panel .text {
   margin-bottom: 8px;
 }

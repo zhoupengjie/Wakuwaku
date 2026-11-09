@@ -682,6 +682,8 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "mailPanes" => matches!(v.as_str(), Some("one" | "two")),
         // How much mail is kept whole offline (mail/store.rs Offline).
         "mailOffline" => matches!(v.as_str(), Some("90d" | "year" | "all" | "opened")),
+        // New mail's codes and links to sign in with on the island (mail/codes.rs).
+        "mailCodes" => is_bool,
         "mailAgentConf" => mail::agent::is_conf_ok(v),
         // How mail reaches its servers (mail/proxy.rs): its own way, or the General page's.
         "mailProxy" => mail::proxy::is_page_way(v),

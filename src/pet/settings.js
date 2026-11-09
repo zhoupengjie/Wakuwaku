@@ -2460,7 +2460,7 @@
       .join('')
     const add = mailForm ? '' : `<div class="r"><button class="pbtn wide" data-mail-add>${esc(T('mail.add'))}</button></div>`
     return `${sec(T('mail.section'))}<div class="grp"><div class="note">${esc(T('mail.note'))}</div>${rows}${add}</div>
-      ${accounts.length ? offlineHTML() : ''}${proxyHTML()}${mailForm ? mailFormHTML() : ''}`
+      ${accounts.length ? offlineHTML() + codesHTML() : ''}${proxyHTML()}${mailForm ? mailFormHTML() : ''}`
   }
 
   // How much is kept whole on this computer (the setting mailOffline: the
@@ -2471,6 +2471,12 @@
     const note = T(`mail.keep.${value}Note`) + (used ? ` ${T('mail.keep.used', { size: mailSize(used) })}` : '')
     const choices = ['90d', 'year', 'all', 'opened'].map(v => [v, T(`mail.keep.${v}`)])
     return `<div class="grp keep">${row(esc(T('mail.keep')), esc(note), seg('mailOffline', choices, value))}</div>`
+  }
+
+  // A code or a link to sign in with, in new mail, on the island (the
+  // setting mailCodes, on unless turned off; mail/codes.rs).
+  function codesHTML() {
+    return `<div class="grp">${row(esc(T('mail.codes')), esc(T('mail.codesNote')), sw('mailCodes', snap.settings.mailCodes !== false))}</div>`
   }
 
   // The ways out, as set: the General page's Network proxy (netProxy,
@@ -3790,6 +3796,8 @@
       if (key === 'ilookBare') return ilookSave(ilookFor(), { ...ilookOf(ilookFor()), bare: !ilookOf(ilookFor()).bare })
       if (key.startsWith('notify.')) return patch({ notify: { ...s.notify, [key.slice(7)]: !s.notify?.[key.slice(7)] } })
       if (key === 'widgetNudge') return patch({ widgetNudge: s.widgetNudge === false })
+      // Mail's codes on the island: on unless turned off (mail/codes.rs).
+      if (key === 'mailCodes') return patch({ mailCodes: s.mailCodes === false })
       // On unless turned off (market.rs).
       if (key === 'pluginAutoUpdate') return patch({ pluginAutoUpdate: s.pluginAutoUpdate === false })
       // One of the monitor's parts on or off.

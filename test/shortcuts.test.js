@@ -40,6 +40,16 @@ describe('global shortcuts behavioral tests', () => {
       assert.deepEqual(res, { type: 'open' })
     })
 
+    it('a code come by mail: approve copies it, deny lets it go; once copied the keys only open the island', () => {
+      const ask = { id: 2 ** 40, kind: 'mailCode', code: '482910' }
+      const on = { ask, shownId: 2 ** 40, isArmed: true, islandOpen: true }
+      assert.deepEqual(decideHotkeyAction({ which: 'allow', ...on }), { type: 'answer', which: 'allow', id: 2 ** 40 })
+      assert.deepEqual(decideHotkeyAction({ which: 'deny', ...on }), { type: 'answer', which: 'deny', id: 2 ** 40 })
+      const link = { id: 2 ** 40 + 1, kind: 'mailLink', url: 'https://a.test/verify?token=1' }
+      assert.deepEqual(decideHotkeyAction({ which: 'allow', ask: link, shownId: link.id, isArmed: true, islandOpen: true }).type, 'answer')
+      assert.deepEqual(decideHotkeyAction({ which: 'allow', ...on, ask: { ...ask, copied: true } }), { type: 'open' })
+    })
+
     it('if prompt is a question (ask.kind === "question"), only opens island and never answers blindly', () => {
       const ask = { id: 103, kind: 'question', questions: [{ question: 'Which branch?' }] }
       const res = decideHotkeyAction({

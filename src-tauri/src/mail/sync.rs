@@ -21,7 +21,9 @@
 //   meanwhile (Windows' proxy switched on or off).
 // Nothing is marked read here: folders are EXAMINEd and letters PEEKed.
 // The account's widget (unread, the newest unread letter, new mail opening
-// the island) comes from the store, at once from what was kept.
+// the island) comes from the store, at once from what was kept. New mail is
+// read for a code or a link to sign in with first (codes.rs), whichever way
+// it came: the look between downloads, or the inbox synced again after IDLE.
 use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -51,6 +53,9 @@ pub fn run(sh: &Arc<Shared>, account: &Account, watch: &Watch) {
     let st = store::of(sh, account);
     // The newest unread letter seen: one newer is new mail.
     let mut newest_seen: Option<u32> = None;
+    // The new letters read for a code (codes.rs), each once whatever the
+    // connection does.
+    let mut looked: HashSet<u32> = HashSet::new();
     tell(sh, account, watch, &st, "connecting", &mut None);
     let mut failures = 0u32;
     while !watch.stopped() {
@@ -79,6 +84,7 @@ pub fn run(sh: &Arc<Shared>, account: &Account, watch: &Watch) {
                     sh.log(&format!("mail {}: {gone} letters no longer kept offline", account.id));
                 }
                 save(&st);
+                super::codes::look(sh, &mut conn, &st, account, newest_seen, &mut looked);
                 tell(sh, account, watch, &st, "ok", &mut newest_seen);
                 // Whole letters, a while at a time; new mail between, and
                 // now and then the inbox's flags.
@@ -93,6 +99,9 @@ pub fn run(sh: &Arc<Shared>, account: &Account, watch: &Watch) {
                     } else {
                         look_new(sh, &mut conn, &st)?
                     };
+                    if came {
+                        super::codes::look(sh, &mut conn, &st, account, newest_seen, &mut looked);
+                    }
                     tell(sh, account, watch, &st, "ok", &mut newest_seen);
                     if left == 0 && !came {
                         break;

@@ -8,7 +8,8 @@
 // (approve: it is executed; deny: omp refines it), with omp's own review
 // open meanwhile; and ZCode's (allow or deny) beside its own. DeepSeek
 // Harness's approvals (allow or deny, with why it asks) and its questions,
-// its own dialog open all the while.
+// its own dialog open all the while. After them, a code or a link to sign
+// in with come by mail (mail/codes.rs): Copy, Open for a link, Ignore.
 //
 // Everything shown comes from the tool call, so it is set as text, never HTML.
 ;(function (root) {
@@ -29,8 +30,10 @@
   let asks = []
   // The keys answer what the buttons do: an approval or a plan, theirs too
   // (zcode, dsh), whose own dialog closes as the answer reaches it
-  // (zhoupengjie/Wakuwaku#97).
-  const canAnswerWithHotkey = ask => !!ask && (ask.kind === 'permission' || ask.kind === 'plan') && ask.canAnswer !== false
+  // (zhoupengjie/Wakuwaku#97). A code come by mail: approve copies it,
+  // deny lets it go (until it says it is copied).
+  const isMail = ask => !!ask && (ask.kind === 'mailCode' || ask.kind === 'mailLink')
+  const canAnswerWithHotkey = ask => !!ask && (ask.kind === 'permission' || ask.kind === 'plan' || (isMail(ask) && !ask.copied)) && ask.canAnswer !== false
   const keyHintOf = (key, ask) => (canAnswerWithHotkey(ask) && config.shortcutsEnabled && config[key] ? config[key] : '')
   let shownId = null
   let step = 0
@@ -145,6 +148,39 @@
       ),
       ask.always ? alwaysNote(ask.always) : null,
       ask.reason ? reasonNote(ask.reason) : null,
+    ]
+  }
+
+  // A code or a link to sign in with, come by mail: whose, the code (a
+  // click on it copies it too) or where the link goes, and Copy, Open (a
+  // link), Ignore. The clipboard is written by main (the island never has
+  // the focus a page's own copy needs); copied, it says so and goes.
+  function mailBody(ask) {
+    const isCode = ask.kind === 'mailCode'
+    const copy = () => answer({ action: 'allow' })
+    const copyBtn = button(T(ask.copied ? 'panel.copied' : 'panel.copy'), 'allow', copy, 'primary', keyHintOf('shortcutApprove', ask))
+    return [
+      el('div', { class: 'head' }, el('span', { class: 'title' }, T(isCode ? 'panel.mailCode' : 'panel.mailLink')), ask.sender ? el('span', { class: 'chip' }, ask.sender) : null),
+      el(
+        'pre',
+        {
+          class: `code ${isCode ? 'mail-code' : 'mail-link'}`,
+          title: isCode ? '' : ask.url || '',
+          onclick: () => {
+            if (!copyBtn.disabled && !ask.copied) copy()
+          },
+        },
+        (isCode ? ask.code : ask.shown || ask.url) || '',
+      ),
+      el(
+        'div',
+        { class: 'row' },
+        copyBtn,
+        isCode ? null : button(T('panel.open'), 'open', () => answer({ action: 'open' }), 'always'),
+        ask.copied ? null : button(T('panel.ignore'), 'deny', () => answer({ action: 'deny' }), 'danger', keyHintOf('shortcutDeny', ask)),
+      ),
+      // Where a link goes, plainly: the address it opens, not what the letter calls it.
+      !isCode && ask.host ? el('div', { class: 'note' }, T('panel.mailLinkTo', { host: ask.host })) : null,
     ]
   }
 
@@ -325,17 +361,24 @@
       letGoOfKeyboard()
     }
 
-    const body = ask.kind === 'question' ? questionBody(ask) : ask.kind === 'plan' ? planBody(ask) : permissionBody(ask)
+    const body = isMail(ask) ? mailBody(ask) : ask.kind === 'question' ? questionBody(ask) : ask.kind === 'plan' ? planBody(ask) : permissionBody(ask)
     const more = asks.length > 1 ? el('span', { class: 'more' }, T('panel.more', { n: asks.length - 1 })) : null
     panel.append(
       ...body.filter(Boolean),
-      el(
-        'div',
-        { class: 'foot' },
-        // An app's prompt (ZCode's, DSH's dialog stays open meanwhile) is handled there.
-        button(ask.kind === 'question' && !ask.canAnswer ? T('panel.gotIt') : IN_APP.has(ask.from) ? T('panel.toApp', { app: FROM[ask.from] }) : T('panel.toTerminal'), 'dismiss', dismiss, 'ghost'),
-        more,
-      ),
+      // A code come by mail has no terminal to go back to: its Ignore is in its row.
+      ...(isMail(ask)
+        ? more
+          ? [el('div', { class: 'foot' }, more)]
+          : []
+        : [
+            el(
+              'div',
+              { class: 'foot' },
+              // An app's prompt (ZCode's, DSH's dialog stays open meanwhile) is handled there.
+              button(ask.kind === 'question' && !ask.canAnswer ? T('panel.gotIt') : IN_APP.has(ask.from) ? T('panel.toApp', { app: FROM[ask.from] }) : T('panel.toTerminal'), 'dismiss', dismiss, 'ghost'),
+              more,
+            ),
+          ]),
     )
     panel.hidden = false
     arm(armMs)

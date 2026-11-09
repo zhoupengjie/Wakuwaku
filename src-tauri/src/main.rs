@@ -489,12 +489,23 @@ impl Shared {
         desk::push_widgets(self);
     }
 
+    // What the prompt panel shows: the agents' prompts, then the codes and
+    // links come by mail (mail/codes.rs), which never stand before a prompt.
+    pub fn asks_views(&self) -> Value {
+        let mut views = self.asks.lock().unwrap().views();
+        if let Value::Array(list) = &mut views {
+            list.extend(mail::codes::views());
+        }
+        views
+    }
+
     // The prompts waiting changed.
     pub fn push_asks(&self) {
-        let (views, none, handed) = {
+        let (none, handed) = {
             let mut asks = self.asks.lock().unwrap();
-            (asks.views(), asks.is_empty(), asks.take_handed())
+            (asks.is_empty() && mail::codes::is_empty(), asks.take_handed())
         };
+        let views = self.asks_views();
         // DeepSeek Harness's handed back to its own window: its session waits
         // to be answered there (asks.rs handed_event), as her line says and
         // the apps listening are told.
@@ -781,6 +792,10 @@ impl Shared {
             let n = self.asks.lock().unwrap().dismiss_all();
             if n > 0 {
                 self.log(&format!("{n} prompt(s) handed to the terminal: out of sight"));
+            }
+            // A code come by mail is a minute's thing: gone, not kept for later.
+            let codes = mail::codes::clear();
+            if n > 0 || codes > 0 {
                 self.push_asks();
             }
         }
@@ -950,8 +965,7 @@ fn is_island(window: &WebviewWindow) -> bool {
 async fn pet_ready(app: AppHandle, window: WebviewWindow) {
     let sh = shared(&app);
     if is_island(&window) { island::ready(&sh) } else { pet::ready(&sh) }
-    let views = sh.asks.lock().unwrap().views();
-    let _ = app.emit_to(window.label(), "pet:asks", views);
+    let _ = app.emit_to(window.label(), "pet:asks", sh.asks_views());
 }
 
 #[tauri::command]
@@ -1031,6 +1045,14 @@ async fn pet_panel(app: AppHandle, window: WebviewWindow, measured: Value) {
 #[tauri::command]
 async fn pet_answer(app: AppHandle, id: u64, choice: Value) -> bool {
     let sh = shared(&app);
+    // A code come by mail: copied, opened or let go (nothing of it logged,
+    // and no approval counted).
+    if mail::codes::holds(id) {
+        let ok = mail::codes::answer(&sh, id, &choice);
+        sh.log(&format!("mail code {id}: {} -> {ok}", choice["action"].as_str().unwrap_or("?")));
+        sh.push_asks();
+        return ok;
+    }
     let lang = sh.lang();
     let ok = sh.asks.lock().unwrap().answer(id, &choice, &i18n::t(lang, "deny.message"));
     sh.log(&format!("answer {id}: {choice} -> {ok}"));
@@ -1047,6 +1069,10 @@ async fn pet_answer(app: AppHandle, id: u64, choice: Value) -> bool {
 #[tauri::command]
 async fn pet_dismiss(app: AppHandle, id: u64) {
     let sh = shared(&app);
+    if mail::codes::dismiss(id) {
+        sh.push_asks();
+        return;
+    }
     if sh.asks.lock().unwrap().dismiss(id) {
         sh.log(&format!("prompt {id} handed to the terminal: asked to on her"));
         sh.push_asks();
@@ -2185,10 +2211,11 @@ fn main() {
                         // is: a prompt let wait its whole time said nothing
                         // (the test session, 2026-10-13).
                         let gone = ticker.asks.lock().unwrap().expire(now);
-                        if !gone.is_empty() {
-                            for id in gone {
-                                ticker.log(&format!("prompt {id} handed to the terminal: its time is up"));
-                            }
+                        for id in &gone {
+                            ticker.log(&format!("prompt {id} handed to the terminal: its time is up"));
+                        }
+                        // A code come by mail, its minute up (or its "Copied" read).
+                        if mail::codes::expire(now) || !gone.is_empty() {
                             ticker.push_asks();
                         }
                     }

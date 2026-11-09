@@ -205,6 +205,7 @@ mod imp {
     const SWP_NOZORDER: u32 = 0x4;
     const SWP_NOACTIVATE: u32 = 0x10;
     const SWP_NOOWNERZORDER: u32 = 0x200;
+    const SWP_ASYNCWINDOWPOS: u32 = 0x4000;
 
     extern "system" fn collect_maximized(hwnd: Hwnd, param: isize) -> i32 {
         // SAFETY: param is the Vec refit_maximized passed, alive for the
@@ -224,6 +225,8 @@ mod imp {
     // was (its frame past the edges, as Windows lays a maximized window)
     // has each side moved as far as the work area's moved; one already
     // over the new one, or laid otherwise, is left be. How many were moved.
+    // Not waiting on their programs (SWP_ASYNCWINDOWPOS): it is called on
+    // the taskbar's thread, the tray's too, which a busy one would hold.
     pub fn refit_maximized(was: (i32, i32, i32, i32), now: (i32, i32, i32, i32)) -> usize {
         if was == now {
             return 0;
@@ -249,8 +252,8 @@ mod imp {
             let Some(to) = super::refit(at, was, now, whole).filter(|_| ok) else {
                 continue;
             };
-            // SAFETY: another program's window moved, not activated; one we may not move (run as administrator) refuses.
-            if unsafe { SetWindowPos(h as Hwnd, 0, to.0, to.1, to.2, to.3, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER) } != 0 {
+            // SAFETY: another program's window moved, not activated, not waited on; one we may not move (run as administrator) refuses.
+            if unsafe { SetWindowPos(h as Hwnd, 0, to.0, to.1, to.2, to.3, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS) } != 0 {
                 moved += 1;
             }
         }

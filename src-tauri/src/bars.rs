@@ -295,9 +295,12 @@ fn close(sh: &Shared, g: Gone) {
 // the bottom the room Windows' own keeps there mostly does it already. Its
 // side on the strip's edge set where the strip starts: at once for a new
 // one, then at most every two seconds should something set it back
-// (Explorer, as app bars come and go).
-pub fn keep_work(sh: &Shared) {
+// (Explorer, as app bars come and go); a quarter of a second at Windows'
+// word that the work area changed (eager: taskbar.rs keep_work), Explorer's
+// taskbar showing itself having set it to the whole display.
+pub fn keep_work(sh: &Shared, eager: bool) {
     let now = Instant::now();
+    let every = if eager { EAGER_EVERY } else { Duration::from_secs(2) };
     let due: Vec<(String, Mon, Edge, Mon)> = {
         let mut bars = BARS.lock().unwrap();
         // The dock keeps no work area of its own: Windows' room along the
@@ -306,7 +309,7 @@ pub fn keep_work(sh: &Shared) {
             .filter(|b| !b.dock)
             .filter_map(|b| {
                 let strip = b.strip?;
-                if b.work_at.is_some_and(|at| now.duration_since(at) < Duration::from_secs(2)) {
+                if b.work_at.is_some_and(|at| now.duration_since(at) < every) {
                     return None;
                 }
                 let work = appbar::work_of(b.mon)?;
@@ -326,8 +329,11 @@ pub fn keep_work(sh: &Shared) {
         let moved = if ok { appbar::refit_maximized(work, to) } else { 0 };
         sh.log(&format!("bars: {label}'s display's work area {work:?} reaches into its strip {strip:?}: made {to:?} ({ok}), {moved} maximized window(s) laid on it anew"));
     }
-    keep_bare(sh, now);
+    keep_bare(sh, now, every);
 }
+
+// How soon a display's work area is set again at Windows' word (keep_work).
+const EAGER_EVERY: Duration = Duration::from_millis(250);
 
 // The displays without a strip of hers (her taskbar on the main display
 // alone, or one not made yet): no taskbar there at all, Windows' own put
@@ -336,9 +342,9 @@ pub fn keep_work(sh: &Shared) {
 // work area the whole display, and the windows maximized there laid on
 // it. With hers on the main display alone, the second showed Windows' own
 // (the user, 2026-10-13: whosever it is, none is to show there). At most
-// every two seconds a display; Windows' own given its room back as it
-// shows again (shell.rs rooms_back).
-fn keep_bare(sh: &Shared, now: Instant) {
+// every two seconds a display (`every`; sooner at Windows' word, keep_work);
+// Windows' own given its room back as it shows again (shell.rs rooms_back).
+fn keep_bare(sh: &Shared, now: Instant, every: Duration) {
     let home = island::display(sh);
     let with_bars: Vec<Mon> = BARS.lock().unwrap().iter().map(|b| b.mon).collect();
     for a in sh.screens().areas {
@@ -353,7 +359,7 @@ fn keep_bare(sh: &Shared, now: Instant) {
         }
         {
             let mut at = BARE_AT.lock().unwrap();
-            if at.iter().any(|(m, t)| *m == a.mon && now.duration_since(*t) < Duration::from_secs(2)) {
+            if at.iter().any(|(m, t)| *m == a.mon && now.duration_since(*t) < every) {
                 continue;
             }
             at.retain(|(m, _)| *m != a.mon);
@@ -467,7 +473,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
         };
         sh.log(&format!("bars: {label} on {:?} at {}%, strip {granted:?} along the {edge:?}, window {laid}", area.mon, (area.sf * 100.0).round()));
         // The work area there clear of it at once, not at the next look.
-        keep_work(&sh);
+        keep_work(&sh, false);
     });
 }
 

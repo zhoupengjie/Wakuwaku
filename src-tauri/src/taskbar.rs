@@ -250,10 +250,13 @@ mod imp {
     // by her own settings: looked at until it is in place (settle).
     const WM_PAPER: u32 = 0x8004;
     const WM_PAPER_SET: u32 = 0x8005;
-    // The timers on the window: the half second's tick, and the looks
-    // after Windows' word (settle).
+    // The timers on the window: the half second's tick, the looks after
+    // Windows' word (settle), and the work area looked at once Explorer
+    // has been still a moment (WORK_STILL_MS: keep_work).
     const TICK: usize = 1;
     const SETTLE: usize = 2;
+    const WORK_STILL: usize = 3;
+    const WORK_STILL_MS: u32 = 250;
     const WM_SETTINGCHANGE: u32 = 0x001A;
     const WM_DWMCOLORIZATIONCOLORCHANGED: u32 = 0x0320;
     const GCLP_HBRBACKGROUND: i32 = -10;
@@ -2355,25 +2358,52 @@ mod imp {
         set_work_area(r);
     }
 
+    fn xywh_of(r: &Rect) -> (i32, i32, i32, i32) {
+        (r.left, r.top, r.right - r.left, r.bottom - r.top)
+    }
+
     fn set_work_area(mut r: Rect) {
         let was = work_area();
+        // The windows maximized there laid on it anew: set quietly, it moves
+        // none (appbar.rs). Before it is set, so as not to wait on the call,
+        // which took 0 to 1.3 s (2026-11-09, at a tick or at Explorer's word
+        // alike); when it took a second, though, the windows too went down
+        // only as it returned.
+        let (from, asked) = (xywh_of(&was), xywh_of(&r));
+        let mut moved = crate::appbar::refit_maximized(from, asked);
+        let t = Instant::now();
         // SAFETY: our own struct, handed back.
         let ok = unsafe { SystemParametersInfoW(SPI_SETWORKAREA, 0, &mut r as *mut Rect as *mut c_void, 0) } != 0;
         // Why, only when it failed: a call that worked leaves an old error
         // there (it read "access denied" after a set that took).
         let error = if ok { String::new() } else { format!(" ({})", std::io::Error::last_os_error()) };
+        let set_ms = t.elapsed().as_millis();
         let now = work_area();
-        // The windows maximized there laid on it anew: set quietly, it moves none (appbar.rs).
-        let xywh = |r: &Rect| (r.left, r.top, r.right - r.left, r.bottom - r.top);
-        let moved = if ok { crate::appbar::refit_maximized(xywh(&was), xywh(&now)) } else { 0 };
+        let to = xywh_of(&now);
+        // Not set, or set otherwise than asked: those just laid on the one
+        // asked laid on the work area as it is.
+        if to != asked {
+            moved = crate::appbar::refit_maximized(asked, to);
+        }
         if moved > 0 {
             log(&format!("{moved} maximized window(s) laid on the work area anew"));
         }
+        // And again a moment after: set at Explorer's word (keep_work), the
+        // maximized windows were going up to the whole display 10 to 25 ms
+        // after it, and one gone up after the look above lay under the strip
+        // (the test session, 2026-11-09). Only while the work area is still hers.
         std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(150));
+            let mut late = 0;
+            for wait in [40, 110] {
+                std::thread::sleep(Duration::from_millis(wait));
+                if ok && xywh_of(&work_area()) == to {
+                    late += crate::appbar::refit_maximized(from, to);
+                }
+            }
             let later = work_area();
+            let late = if late > 0 { format!("; {late} maximized window(s) laid on it late") } else { String::new() };
             log(&format!(
-                "work area set: {ok}{error}; then ({}, {}, {}, {}), 150 ms after ({}, {}, {}, {})",
+                "work area set: {ok}{error} in {set_ms} ms; then ({}, {}, {}, {}), 150 ms after ({}, {}, {}, {}){late}",
                 now.left, now.top, now.right, now.bottom, later.left, later.top, later.right, later.bottom
             ));
         });
@@ -2666,6 +2696,7 @@ mod imp {
             DeregisterShellHookWindow(hwnd);
             KillTimer(hwnd, TICK);
             KillTimer(hwnd, SETTLE);
+            KillTimer(hwnd, WORK_STILL);
             LOOKS_LEFT.store(0, Ordering::SeqCst);
             log(&format!("tray handed back; it was handed {}", systray::seen()));
             systray::stop();
@@ -3156,65 +3187,7 @@ mod imp {
                 raise_own_with_thumbs(&sh);
             }
         }
-        // The work area reaching into the strip: Windows has not counted it.
-        // Or stopping short of it where she set it for the strip before it
-        // moved. Its side on the strip's edge is set where the strip starts
-        // (after half a second of it, at most every two seconds, should
-        // something set it back).
-        let work = work_area();
-        let bottom = work.bottom;
-        if bottom != WORK_BOTTOM.swap(bottom, Ordering::SeqCst) {
-            log(&format!("work area's bottom now {bottom}"));
-        }
-        let edge = *EDGE.lock().unwrap();
-        // The strip and its display; none while the strip as told lies off
-        // its display's edge (appbar.rs lies_along): told before the display
-        // changed, it would set the work area by where the edge was. Nothing
-        // is set until it is told anew.
-        let told = *STRIP.lock().unwrap();
-        let laid = told.map(|s| (s, monitor_of(s).0)).filter(|&(s, mon)| {
-            let along = edge.lies_along(s, mon);
-            if !along && !STRIP_OFF.swap(true, Ordering::SeqCst) {
-                log(&format!("the strip as told {s:?} lies off the {edge:?} of its display {mon:?} (the display changed): the work area left be until it is told anew"));
-            } else if along {
-                STRIP_OFF.store(false, Ordering::SeqCst);
-            }
-            along
-        });
-        let strip = laid.map(|(s, _)| s);
-        let xywh = (work.left, work.top, work.right - work.left, work.bottom - work.top);
-        let ours = WORK_SIDE.lock().unwrap().filter(|w| w.0 == edge).map(|w| w.1);
-        let fix = strip.and_then(|s| edge.work_fix(xywh, s, ours));
-        // A side an earlier strip of hers held in, kept by Explorer: given back (appbar.rs stale_sides).
-        let stale = laid.filter(|_| edge != Edge::Bottom).map(|(s, m)| edge.stale_sides(xywh, s, m)).unwrap_or_default();
-        let lost = fix.is_some() || !stale.is_empty();
-        let ticks = TICKS.load(Ordering::SeqCst);
-        if !lost {
-            LOST_SINCE.store(0, Ordering::SeqCst);
-        } else if LOST_SINCE.load(Ordering::SeqCst) == 0 {
-            LOST_SINCE.store(ticks.max(1), Ordering::SeqCst);
-        } else if ticks >= LOST_SINCE.load(Ordering::SeqCst) + 1 && ticks >= LAST_TAKEN.load(Ordering::SeqCst) + 4 {
-            LAST_TAKEN.store(ticks, Ordering::SeqCst);
-            LOST_SINCE.store(0, Ordering::SeqCst);
-            if let Some(side) = fix {
-                let (how, why) = if strip.is_some_and(|s| edge.reaches(xywh, s)) { ("reaches into", "") } else { ("stops short of", ", where she set it for one before") };
-                log(&format!("work area ({}, {}, {}, {}) {how} the strip ({strip:?}, {edge:?}){why}: its side set to {side}", work.left, work.top, work.right, work.bottom));
-                set_work_side(edge, side);
-                *WORK_SIDE.lock().unwrap() = Some((edge, side));
-                if let Some(strip) = strip {
-                    icons_out(strip, edge);
-                }
-            }
-            for (side, at) in stale {
-                log(&format!("work area ({}, {}, {}, {}) held in along the {side:?} as by a strip of hers before, the strip along the {edge:?}: that side set to {at}", work.left, work.top, work.right, work.bottom));
-                set_work_side(side, at);
-            }
-        }
-        // The other displays' work areas: clear of her strips there, and
-        // whole where there is none (bars.rs).
-        if let Some(sh) = sh() {
-            crate::bars::keep_work(&sh);
-        }
+        keep_work(false);
         systray::sweep();
         if systray::keep_first() {
             log("tray: Explorer's window had come first (timer); ours put ahead again");
@@ -3246,6 +3219,113 @@ mod imp {
         // began on: one quiet looks at).
         if at % 60 == 0 {
             send_look();
+        }
+    }
+
+    // Explorer's taskbar showing itself (a right-click's menu, Win+Shift+S,
+    // Task Manager opening: put away again at once, put_away_again) sets the
+    // work area to the whole display, her strip not counted, and tells every
+    // window (WM_SETTINGCHANGE, SPI_SETWORKAREA; hers are set quietly): the
+    // maximized ones went up under the top bar within 10 to 25 ms, and
+    // stayed there till the tick saw it, half a second, then the next, and
+    // up to two seconds more, four when quiet (the user, 2026-11-09: 顶栏边
+    // 界有概率会消失，让最大化窗口直接顶上去, 在我右键的时候，或者我
+    // win+shift+s截图的时候; shown again on purpose in the test session:
+    // Explorer's word 140 ms after, the work area back 1.5 and 3.8 s after).
+    // So its word, or its taskbar shown, looks at the work area once
+    // Explorer has been still a moment (WORK_STILL_MS, the timer set again
+    // at each): taken at its first word, Explorer showed its taskbar again
+    // and again for some seconds, setting the work area back each time, the
+    // windows going up and down five times in seven seconds (the test
+    // session). So taken a few times within a while; more, and the tick's
+    // pace is kept.
+    fn work_after_still(hwnd: Hwnd) {
+        // SAFETY: our own window's timer, on its thread; set again, it starts over.
+        unsafe { SetTimer(hwnd, WORK_STILL, WORK_STILL_MS, std::ptr::null()) };
+    }
+
+    const EAGER_TIMES: usize = 6;
+    const EAGER_WITHIN: Duration = Duration::from_secs(10);
+    static EAGER: Mutex<Vec<Instant>> = Mutex::new(Vec::new());
+
+    fn eager_allowed() -> bool {
+        let mut times = EAGER.lock().unwrap();
+        times.retain(|at| at.elapsed() < EAGER_WITHIN);
+        if times.len() >= EAGER_TIMES {
+            return false;
+        }
+        times.push(Instant::now());
+        true
+    }
+
+    // The work area reaching into the strip: Windows has not counted it.
+    // Or stopping short of it where she set it for the strip before it
+    // moved. Its side on the strip's edge is set where the strip starts
+    // (after half a second of it, at most every two seconds, should
+    // something set it back; at Explorer's word once it is still, eager:
+    // work_after_still); and the other displays' (bars.rs).
+    fn keep_work(eager: bool) {
+        let work = work_area();
+        let bottom = work.bottom;
+        if bottom != WORK_BOTTOM.swap(bottom, Ordering::SeqCst) {
+            log(&format!("work area's bottom now {bottom}"));
+        }
+        let edge = *EDGE.lock().unwrap();
+        // The strip and its display; none while the strip as told lies off
+        // its display's edge (appbar.rs lies_along): told before the display
+        // changed, it would set the work area by where the edge was. Nothing
+        // is set until it is told anew.
+        let told = *STRIP.lock().unwrap();
+        let laid = told.map(|s| (s, monitor_of(s).0)).filter(|&(s, mon)| {
+            let along = edge.lies_along(s, mon);
+            if !along && !STRIP_OFF.swap(true, Ordering::SeqCst) {
+                log(&format!("the strip as told {s:?} lies off the {edge:?} of its display {mon:?} (the display changed): the work area left be until it is told anew"));
+            } else if along {
+                STRIP_OFF.store(false, Ordering::SeqCst);
+            }
+            along
+        });
+        let strip = laid.map(|(s, _)| s);
+        let xywh = (work.left, work.top, work.right - work.left, work.bottom - work.top);
+        let ours = WORK_SIDE.lock().unwrap().filter(|w| w.0 == edge).map(|w| w.1);
+        let fix = strip.and_then(|s| edge.work_fix(xywh, s, ours));
+        // A side an earlier strip of hers held in, kept by Explorer: given back (appbar.rs stale_sides).
+        let stale = laid.filter(|_| edge != Edge::Bottom).map(|(s, m)| edge.stale_sides(xywh, s, m)).unwrap_or_default();
+        let lost = fix.is_some() || !stale.is_empty();
+        let ticks = TICKS.load(Ordering::SeqCst);
+        let due = if !lost {
+            LOST_SINCE.store(0, Ordering::SeqCst);
+            false
+        } else if eager && eager_allowed() {
+            true
+        } else if LOST_SINCE.load(Ordering::SeqCst) == 0 {
+            LOST_SINCE.store(ticks.max(1), Ordering::SeqCst);
+            false
+        } else {
+            ticks >= LOST_SINCE.load(Ordering::SeqCst) + 1 && ticks >= LAST_TAKEN.load(Ordering::SeqCst) + 4
+        };
+        if due {
+            LAST_TAKEN.store(ticks, Ordering::SeqCst);
+            LOST_SINCE.store(0, Ordering::SeqCst);
+            let when = if eager { " at Explorer's word, it still" } else { "" };
+            if let Some(side) = fix {
+                let (how, why) = if strip.is_some_and(|s| edge.reaches(xywh, s)) { ("reaches into", "") } else { ("stops short of", ", where she set it for one before") };
+                log(&format!("work area ({}, {}, {}, {}) {how} the strip ({strip:?}, {edge:?}){why}: its side set to {side}{when}", work.left, work.top, work.right, work.bottom));
+                set_work_side(edge, side);
+                *WORK_SIDE.lock().unwrap() = Some((edge, side));
+                if let Some(strip) = strip {
+                    icons_out(strip, edge);
+                }
+            }
+            for (side, at) in stale {
+                log(&format!("work area ({}, {}, {}, {}) held in along the {side:?} as by a strip of hers before, the strip along the {edge:?}: that side set to {at}", work.left, work.top, work.right, work.bottom));
+                set_work_side(side, at);
+            }
+        }
+        // The other displays' work areas: clear of her strips there, and
+        // whole where there is none (bars.rs).
+        if let Some(sh) = sh() {
+            crate::bars::keep_work(&sh, eager);
         }
     }
 
@@ -3720,15 +3800,25 @@ mod imp {
     extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
         match msg {
             WM_TIMER if wparam == SETTLE => settling(hwnd),
+            WM_TIMER if wparam == WORK_STILL => {
+                // SAFETY: our own window's timer, on its thread.
+                unsafe { KillTimer(hwnd, WORK_STILL) };
+                keep_work(true);
+            }
             WM_TIMER => tick(),
             WM_TASKBAR_SHOWN => {
                 // SAFETY: a plain check of Explorer's window.
                 if unsafe { IsWindowVisible(lparam as Hwnd) } != 0 {
                     put_away_again("its show event");
+                    work_after_still(hwnd);
                 }
             }
             WM_TRAY_CHANGED => send_icons(),
             WM_PAPER => send_look(),
+            WM_SETTINGCHANGE if wparam == SPI_SETWORKAREA as usize => {
+                work_after_still(hwnd);
+                settle(hwnd);
+            }
             WM_PAPER_SET | WM_DWMCOLORIZATIONCOLORCHANGED | WM_SETTINGCHANGE => settle(hwnd),
             WM_STOP => {
                 watch(false);

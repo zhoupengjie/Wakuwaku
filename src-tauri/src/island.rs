@@ -887,7 +887,8 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
         sh.log("island: Windows would not take the bar");
         return;
     }
-    let granted = appbar::place(hwnd, area.mon, edge, height);
+    // Asked of Explorer itself, not by the taskbar's window of ours (taskbar.rs claim).
+    let granted = taskbar::claim(|| appbar::place(hwnd, area.mon, edge, height));
     {
         let mut isl = sh.island.lock().unwrap();
         isl.bar = Some(granted);
@@ -926,6 +927,43 @@ pub fn take_strip_again(sh: &Shared) {
     // Should it remember after all, a second registration would be refused.
     appbar::remove(hwnd);
     place(sh);
+}
+
+// Explorer set the work area as though the strip were not there
+// (taskbar.rs keep_work): its place told again (ABM_QUERYPOS, ABM_SETPOS,
+// to Explorer itself: taskbar.rs claim), as an app bar is to do when
+// Explorer says the bars moved (ABN_POSCHANGED, which her home's window, a
+// webview's, does not hear). Explorer had the bar registered but left it
+// out of every work area it worked out: its place, asked by the taskbar's
+// window of ours, never reached it (systray.rs explorer_first), and its own
+// taskbar shown again (a right-click's menu, Win+Shift+S, Click to Do, an
+// app full screen going) set the work area to the whole display each time,
+// the maximized windows going up under the top bar. Told its place from
+// another process, the same rect, Explorer counted it from then on, and its
+// taskbar shown went by with the work area as it was, no word to the
+// windows (the test session, 2026-11-09). Here should Explorer forget it
+// all the same. Only the bar held and its own (a strip over Windows' room
+// along the foot has none), never while it is being taken or given back
+// (SYNCING). Called on the taskbar's thread: nothing here waits on the
+// main thread. The rect Windows grants, or None.
+pub fn reclaim_bar(sh: &Shared) -> Option<(i32, i32, i32, i32)> {
+    if SYNCING.load(Ordering::SeqCst) {
+        return None;
+    }
+    let (hwnd, held, own, was) = {
+        let isl = sh.island.lock().unwrap();
+        (isl.hwnd, isl.bar_for, isl.bar_own, isl.bar)
+    };
+    let (mon, height, _, edge, _) = held?;
+    if !own || hwnd == 0 {
+        return None;
+    }
+    let granted = taskbar::claim(|| appbar::place(hwnd, mon, edge, height));
+    sh.island.lock().unwrap().bar = Some(granted);
+    if Some(granted) != was {
+        sh.log(&format!("island: bar's place told again, granted {granted:?} where it was {was:?} (the window left where it is)"));
+    }
+    Some(granted)
 }
 
 // The window laid on its rect (physical), in steps (lay_steps): sized down

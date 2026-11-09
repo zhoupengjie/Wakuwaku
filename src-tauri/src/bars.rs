@@ -297,11 +297,13 @@ fn close(sh: &Shared, g: Gone) {
 // one, then at most every two seconds should something set it back
 // (Explorer, as app bars come and go); a quarter of a second at Windows'
 // word that the work area changed (eager: taskbar.rs keep_work), Explorer's
-// taskbar showing itself having set it to the whole display.
+// taskbar showing itself having set it to the whole display. Its app bar's
+// place told again first, as hers (island.rs reclaim_bar): Explorer then
+// counts it, and sets the work area itself.
 pub fn keep_work(sh: &Shared, eager: bool) {
     let now = Instant::now();
     let every = if eager { EAGER_EVERY } else { Duration::from_secs(2) };
-    let due: Vec<(String, Mon, Edge, Mon)> = {
+    let due: Vec<(String, Mon, Edge, Mon, isize, Mon, i32)> = {
         let mut bars = BARS.lock().unwrap();
         // The dock keeps no work area of its own: Windows' room along the
         // foot is it, or none (it steps out of the way).
@@ -318,11 +320,21 @@ pub fn keep_work(sh: &Shared, eager: bool) {
                 }
                 b.work_side = Some(b.edge.inner(strip));
                 b.work_at = Some(now);
-                Some((b.label.clone(), work, b.edge, strip))
+                let thick = (island::TASKBAR_H * b.sf).round() as i32;
+                Some((b.label.clone(), work, b.edge, strip, b.hwnd, b.mon, thick))
             })
             .collect()
     };
-    for (label, work, edge, strip) in due {
+    for (label, work, edge, strip, hwnd, mon, thick) in due {
+        let granted = (hwnd != 0).then(|| taskbar::claim(|| appbar::place(hwnd, mon, edge, thick)));
+        let work = granted.and_then(|_| appbar::work_of(mon)).unwrap_or(work);
+        if let Some(g) = granted {
+            let counted = if edge.reaches(work, strip) { "still leaving it out" } else { "counting it now" };
+            sh.log(&format!("bars: {label}'s place told again, granted {g:?} (its strip {strip:?}): Explorer {counted}"));
+        }
+        if !edge.reaches(work, strip) {
+            continue;
+        }
         let to = edge.with_side(work, edge.inner(strip));
         let ok = appbar::set_work(to);
         // The windows maximized there laid on it anew: set quietly, it moves none.
@@ -432,7 +444,8 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
         crate::tasks::no_transitions(hwnd);
         sh.own_window(&win);
         // The dock asks Windows for no room: Windows' own keeps it, or none is kept.
-        let granted = if dock { strip } else if hwnd != 0 && appbar::register(hwnd) { appbar::place(hwnd, area.mon, edge, thick) } else { strip };
+        // Its place asked of Explorer itself (taskbar.rs claim).
+        let granted = if dock { strip } else if hwnd != 0 && appbar::register(hwnd) { taskbar::claim(|| appbar::place(hwnd, area.mon, edge, thick)) } else { strip };
         lay(&win, granted);
         // Zoomed before its page lays out (fit_zoom).
         let zoom = 1.0 / island::text_size(&sh);

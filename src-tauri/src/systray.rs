@@ -522,10 +522,11 @@ mod imp {
     }
 
     // Ours put ahead of Explorer's again; true if it had fallen behind.
-    // Not while it is set aside.
+    // Not while it is set aside, nor put behind for an app bar's place
+    // (explorer_first).
     pub fn keep_first() -> bool {
         let ours = OURS.load(Ordering::SeqCst);
-        if ours == 0 || ASIDE.load(Ordering::SeqCst) || first() {
+        if ours == 0 || held_back() || first() {
             return false;
         }
         // SAFETY: our own window.
@@ -913,7 +914,7 @@ mod imp {
         let ours = OURS.load(Ordering::SeqCst);
         if ours != 0 {
             // Set aside, it stays where it is among the windows.
-            let aside = if ASIDE.load(Ordering::SeqCst) { SWP_NOZORDER } else { 0 };
+            let aside = if held_back() { SWP_NOZORDER } else { 0 };
             // SAFETY: our own window.
             unsafe { SetWindowPos(ours as Hwnd, HWND_TOPMOST, rect.0, rect.1, rect.2, rect.3, SWP_NOACTIVATE | aside) };
         }
@@ -937,6 +938,56 @@ mod imp {
 
     pub fn aside() -> bool {
         ASIDE.load(Ordering::SeqCst)
+    }
+
+    // Her own app bar's place asked of Explorer (appbar.rs place: ABM_QUERYPOS
+    // and ABM_SETPOS) with ours behind Explorer's for that moment, so the
+    // message goes to Explorer's window itself. To ours, a window of her own
+    // process, it carried the rect's address in her process where a handle
+    // to memory Explorer can open goes (shell32 makes none for a taskbar in
+    // the process asking: at offset 48 of what came, 0x2080F485000, seen in
+    // the test session, 2026-11-09), and handed on, Explorer could neither
+    // read nor answer it: the bar registered (ABM_NEW needs no memory), its
+    // place never told but when Explorer's window happened to be first as she
+    // asked (it is, for a moment, as it shows on being put away), so it was
+    // left out of the work area Explorer worked out each time its own taskbar
+    // showed again, a right-click's menu or Win+Shift+S sending the maximized
+    // windows up under the top bar (the user, 2026-11-09). The same message
+    // sent from another process, its handle made, Explorer counted the bar.
+    // Ours left where it is while set aside already (a new Explorer starting),
+    // or not made. Asked on several threads at once (the island's strip
+    // taken on one, its place told again on the taskbar's), they share the
+    // moment: the first puts ours behind, the last puts it first again, and
+    // meanwhile nothing else does (held_back). Nobody waits on anybody here:
+    // moving ours from another thread waits on the taskbar's thread, which
+    // asks too. What f gave, and whether ours was put behind for it (what
+    // programs said meanwhile went to Explorer's alone).
+    static CLAIMING: AtomicU32 = AtomicU32::new(0);
+
+    fn held_back() -> bool {
+        ASIDE.load(Ordering::SeqCst) || CLAIMING.load(Ordering::SeqCst) > 0
+    }
+
+    pub fn explorer_first<R>(f: impl FnOnce() -> R) -> (R, bool) {
+        let ours = OURS.load(Ordering::SeqCst);
+        if ours == 0 || ASIDE.load(Ordering::SeqCst) {
+            return (f(), false);
+        }
+        if CLAIMING.fetch_add(1, Ordering::SeqCst) == 0 {
+            // SAFETY: our own window.
+            unsafe {
+                SetWindowPos(ours as Hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                SetWindowPos(ours as Hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            if first() {
+                note("tray: put behind for her app bar's place, ours still first: Explorer's would not hear it".to_string());
+            }
+        }
+        let r = f();
+        if CLAIMING.fetch_sub(1, Ordering::SeqCst) == 1 {
+            keep_first();
+        }
+        (r, true)
     }
 
     // Ours gone (on the thread that made it). Explorer's has had nearly
@@ -1480,6 +1531,9 @@ mod imp {
     pub fn aside() -> bool {
         false
     }
+    pub fn explorer_first<R>(f: impl FnOnce() -> R) -> (R, bool) {
+        (f(), false)
+    }
     pub fn ask_again() {}
     pub fn sweep() {}
     pub fn scan_held() {}
@@ -1502,7 +1556,7 @@ mod imp {
 }
 
 #[allow(unused_imports)]
-pub use imp::{aside, ask_again, describe, first, handed_back, holders, keep_first, notes, place, scan_held, seen, set_aside, set_rects, shown, start, stop, sweep, tell};
+pub use imp::{aside, ask_again, describe, explorer_first, first, handed_back, holders, keep_first, notes, place, scan_held, seen, set_aside, set_rects, shown, start, stop, sweep, tell};
 
 #[cfg(test)]
 mod tests {

@@ -258,6 +258,7 @@ mod imp {
     const WORK_STILL: usize = 3;
     const WORK_STILL_MS: u32 = 250;
     const WM_SETTINGCHANGE: u32 = 0x001A;
+    const WM_DISPLAYCHANGE: u32 = 0x007E;
     const WM_DWMCOLORIZATIONCOLORCHANGED: u32 = 0x0320;
     const GCLP_HBRBACKGROUND: i32 = -10;
     const MONITOR_DEFAULTTONEAREST: u32 = 2;
@@ -2996,25 +2997,42 @@ mod imp {
     // window goes full screen, 8 times in 30 to 440 ms, and she left the
     // taskbar to nobody (the test VM, 2026-10-30, zhoupengjie/Wakuwaku#98);
     // #69's, all the while, is two a second so, caught in some four.
+    // The displays changed (one turned off, the main one another, a new
+    // resolution or scale): Explorer lays its taskbars out anew for some
+    // twenty seconds, setting the work area back and showing its taskbar
+    // again and again as it goes, a few times a second or a few seconds
+    // apart, 16 in 12 s as the displays went from both to the second alone
+    // (2026-11-10, zhoupengjie/Wakuwaku#115): none of it counted until
+    // TUG_CALM after the last change, the count from nothing then.
     const TUG_TICKS: u32 = 20;
     const TUG_TIMES: usize = 8;
+    const TUG_CALM: u32 = 60;
 
     struct Tug {
         // The ticks of the last TUG_TIMES times (a ring), and how many in all.
         at: [u32; TUG_TIMES],
         seen: usize,
         lost: bool,
+        // Not counted before this tick (the displays changed).
+        calm_until: u32,
     }
 
     impl Tug {
         const fn new() -> Self {
-            Tug { at: [0; TUG_TIMES], seen: 0, lost: false }
+            Tug { at: [0; TUG_TIMES], seen: 0, lost: false, calm_until: 0 }
+        }
+
+        // The displays changed at this tick: what was counted forgotten,
+        // and nothing counted for TUG_CALM.
+        fn displays_changed(&mut self, tick: u32) {
+            self.seen = 0;
+            self.calm_until = self.calm_until.max(tick + TUG_CALM);
         }
 
         // Shown again once more, at this tick: whether that makes it the
         // tug of war (once; from then on it is left to the other program).
         fn shown(&mut self, tick: u32) -> bool {
-            if self.lost {
+            if self.lost || tick < self.calm_until {
                 return false;
             }
             // Once already this tick.
@@ -3048,6 +3066,17 @@ mod imp {
         }
     }
 
+    // The displays changed (WM_DISPLAYCHANGE, to every top-level window:
+    // the main display's new size and colour depth with it). Logged, and
+    // Windows' taskbar showing itself as Explorer lays it out anew is no
+    // tug of war (zhoupengjie/Wakuwaku#115).
+    fn displays_changed(wparam: usize, lparam: isize) {
+        let (w, h) = (lparam & 0xffff, (lparam >> 16) & 0xffff);
+        let displays = sh().map(|sh| sh.displays()).unwrap_or_default();
+        log(&format!("the displays changed: the main one {w}x{h}, {wparam} bits; now {displays:?}; Windows' taskbar showing again not counted for {} s", TUG_CALM / 2));
+        TUG.lock().unwrap().displays_changed(TICKS.load(Ordering::SeqCst));
+    }
+
     // The tug of war given up: Windows' taskbar left to the other program,
     // her home the island (kept, so the next start does not fight again),
     // and the island saying why, its button opening 外观 to go back.
@@ -3067,7 +3096,7 @@ mod imp {
 
     #[cfg(test)]
     mod tug_tests {
-        use super::{Tug, TUG_TICKS, TUG_TIMES};
+        use super::{Tug, TUG_CALM, TUG_TICKS, TUG_TIMES};
 
         // Shown again now and then (once every three ticks, for a long
         // while: TUG_TIMES of them never within TUG_TICKS): never a tug of war.
@@ -3127,6 +3156,36 @@ mod imp {
             assert!((0..half).all(|i| !tug.shown(TUG_TICKS - half + i)));
             let told: Vec<bool> = (0..half).map(|i| tug.shown(TUG_TICKS + 1 + i)).collect();
             assert_eq!(told.last(), Some(&true));
+        }
+
+        // The displays changed: Explorer's taskbar shown again as it lays
+        // itself out anew, as on 2026-11-10 (#115: 16 times in some 12 s,
+        // by the tick from the log), is no tug of war; counted again from
+        // nothing after TUG_CALM, and a real one caught then.
+        #[test]
+        fn the_displays_changing_is_nothing() {
+            let mut tug = Tug::new();
+            // Some shown before, from a full screen.
+            assert!(!tug.shown(0) && !tug.shown(2));
+            tug.displays_changed(5);
+            let after = [20, 23, 23, 31, 32, 33, 34, 34, 35, 35, 45];
+            assert!(after.iter().all(|&tick| !tug.shown(tick)));
+            // Then just before the calm is over, and after: from nothing.
+            assert!(!tug.shown(5 + TUG_CALM - 1));
+            let at = (0..TUG_TICKS * 2).find(|&i| tug.shown(5 + TUG_CALM + i));
+            assert_eq!(at, Some(TUG_TIMES as u32 - 1));
+        }
+
+        // Changed again while calm: the calm from the last change.
+        #[test]
+        fn the_calm_from_the_last_change() {
+            let mut tug = Tug::new();
+            tug.displays_changed(0);
+            tug.displays_changed(30);
+            assert!((0..TUG_TIMES as u32).all(|i| !tug.shown(30 + TUG_CALM - TUG_TIMES as u32 + i)));
+            // A change before an earlier one's calm is up never shortens it.
+            tug.displays_changed(1);
+            assert!(!tug.shown(30 + TUG_CALM - 1));
         }
 
         // A run of ticks, then quiet, then another: each counted alone.
@@ -3834,6 +3893,7 @@ mod imp {
                     work_after_still(hwnd);
                 }
             }
+            WM_DISPLAYCHANGE => displays_changed(wparam, lparam),
             WM_TRAY_CHANGED => send_icons(),
             WM_PAPER => send_look(),
             WM_SETTINGCHANGE if wparam == SPI_SETWORKAREA as usize => {

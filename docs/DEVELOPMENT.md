@@ -271,6 +271,8 @@ hook 事件先由 agent-core 读成 `AgentEvent`（每家在它自己的模块�
 | `POST /debug/eval` | `{ page: "pet" \| "island", code }`：在页面里运行一段表达式，返回结果（可以是 Promise） |
 | `POST /debug/walk` | `{ dx, ms }`：立刻走一段 |
 
+**网页来的请求一概 403**（`server.rs` 的 `turned_away`，在 `serve` 里、任何处理之前；`/v1` 除外，它有自己的 Host 检查和令牌）。浏览器发 POST 时总带 `Origin`，`text/plain` 的简单请求不用预检就能送到，只是页面读不到回复；以前随便哪个打开着的网页都能让她退出（`/quit`）、弹一个假的确认面板等你点（`/hook` 的 `PermissionRequest`）、塞进假的会话（`/state`）和插件（`/widget`），设了 `WAKUWAKU_DEBUG=1` 时还能在她的页面里运行任意代码（`/debug/eval`，页面能调她的全部命令）。所以：`Origin` 是网站的（`http:`、`https:`）、本地文件的（`file:`）或 `null`（沙盒 iframe、data: 地址）的，不管什么路径都拒绝；`Host` 不是 `127.0.0.1` / `localhost` / `[::1]` 的也拒绝（DNS rebinding：同源的 GET 不带 `Origin`，但能读到 `/health` 的回复），没有 `Host` 的不是浏览器，照常处理。不拒绝的：不带 `Origin` 的（2026-11-11 实测 Claude Code 的 HTTP hook（axios 1.15）、Node 的 fetch 和 http、curl、PowerShell 7 和 5.1 都不带；她自己转发 Codex 等的 hook 用 ureq，也不带），以及浏览器扩展的（Thunderbird 扩展发 `/widget` 带 `moz-extension://…`）。被拒绝的写进日志 `http: POST /quit from the web page https://…, turned away (a web page's)`，同一句只写一次，最多 8 种。
+
 ## 给别的应用：/v1
 
 本机别的应用（以后的 Markdown 编辑器、脚本）想知道 agent 在做什么时，不用自己装 hook，问她的端口就行。会话和事件由 agent-hub 管（它的仓库里 `agent-hub/src/lib.rs` 开头写了每个接口），`server.rs` 只管 HTTP；同一套代码以后也编进编辑器，谁先占着 47213 谁当 hub。

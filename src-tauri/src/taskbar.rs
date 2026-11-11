@@ -1745,7 +1745,7 @@ mod imp {
     // thread: the pictures' windows after them, from there (in its queue
     // after those raises).
     fn raise_own_with_thumbs(sh: &Shared) {
-        let own = sh.own.lock().unwrap().clone();
+        let own = sh.own_windows();
         tasks::raise_own(&own);
         let _ = sh.app.run_on_main_thread(thumbs_on_top);
     }

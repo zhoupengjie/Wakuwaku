@@ -55,7 +55,7 @@ pub async fn pet_menu(app: AppHandle, window: WebviewWindow, part: Option<String
     if let Ok(menu) = menu {
         // A Windows menu closes at once unless its window can come to the
         // front, which these cannot (they never take focus): for the menu, it may.
-        let was_open = sh.island.lock().unwrap().settings_open && is_island(&window);
+        let was_open = sh.settings_open() && is_island(&window);
         let _ = window.set_focusable(true);
         let _ = window.popup_menu(&menu);
         if !was_open {
@@ -131,7 +131,7 @@ pub async fn pet_dismiss(app: AppHandle, id: u64) {
 pub async fn pet_keyboard(app: AppHandle, window: WebviewWindow, needs: bool) {
     let sh = shared(&app);
     // The open settings keep it whatever a prompt's box does.
-    if !needs && is_island(&window) && sh.island.lock().unwrap().settings_open {
+    if !needs && is_island(&window) && sh.settings_open() {
         return;
     }
     sh.set_keyboard(&window, needs);

@@ -18,6 +18,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 #[cfg(windows)]
 use crate::frameless;
+use crate::lock::Lock;
 use crate::{asks, backplate, bars, connection, crash, data, desk, focus, fullscreen, i18n, island, logon, mail, notify, pet, plugins, power, screen, settings, shortcuts, state, taskbar, tray, wallpaper, widgets};
 
 // The island's own animation of taking her in, before she counts as in.
@@ -34,30 +35,31 @@ pub fn now_ms() -> u64 {
 // Answers a held hook request: Some(output), or None to drop it.
 pub type Responder = Box<dyn FnOnce(Option<Value>) + Send>;
 
-// What every part shares. No two of its locks are ever held at once.
+// What every part shares. No two of its locks are ever held at once: each
+// a Lock (lock.rs), which says so should a thread take one holding another.
 pub struct Shared {
     pub app: AppHandle,
     pub dir: PathBuf,
     pub port: u16,
-    pub settings: Mutex<Map<String, Value>>,
-    pub pet: Mutex<state::Pet>,
-    pub win: Mutex<pet::Win>,
-    pub island: Mutex<island::Island>,
-    pub asks: Mutex<asks::Asks<Responder>>,
+    pub settings: Lock<Map<String, Value>>,
+    pub pet: Lock<state::Pet>,
+    pub win: Lock<pet::Win>,
+    pub island: Lock<island::Island>,
+    pub asks: Lock<asks::Asks<Responder>>,
     // The agents' sessions and events, for other apps on this machine
     // (agent-hub, server.rs /v1).
     pub hub: agent_hub::Hub,
     // Plugins in the island (widgets.rs), and what today has seen.
-    pub widgets: Mutex<widgets::Widgets>,
-    pub today: Mutex<widgets::Today>,
+    pub widgets: Lock<widgets::Widgets>,
+    pub today: Lock<widgets::Today>,
     // The plugins she runs for you (plugins.rs).
-    pub plugins: Mutex<plugins::Runner>,
+    pub plugins: Lock<plugins::Runner>,
     // The mail accounts being watched (mail.rs).
-    pub mail: Mutex<mail::Runner>,
-    pub(crate) screens: Mutex<screen::Screens>,
+    pub mail: Lock<mail::Runner>,
+    screens: Lock<screen::Screens>,
     // Out of sight: hidden from the tray, or another app is full screen.
     pub hidden: AtomicBool,
-    pub(crate) by_fullscreen: AtomicBool,
+    by_fullscreen: AtomicBool,
     // Nobody at the keyboard or mouse for a while (check_quiet).
     quiet: AtomicBool,
     greeted: AtomicBool,
@@ -67,51 +69,60 @@ pub struct Shared {
     // once the person trusts them; omp loads its extension only as it
     // starts after it was written.
     pub seen: [std::sync::atomic::AtomicU64; 8],
-    pub(crate) is_logging: bool,
+    is_logging: bool,
     // Our windows' handles: never counted as another app full screen.
-    pub(crate) own: Mutex<Vec<isize>>,
+    own: Lock<Vec<isize>>,
     // The window that had the keyboard before one of hers took it.
-    prev_focus: Mutex<isize>,
+    prev_focus: Lock<isize>,
     push_pending: AtomicBool,
     // Until when (ms) a loss of focus is our own doing: showing a window of
     // hers makes it the active one, and that is no click elsewhere.
     pub shuffle_until: std::sync::atomic::AtomicU64,
     // Debug only: answers to /debug/eval, by id.
-    pub evals: Mutex<(u64, std::collections::HashMap<u64, std::sync::mpsc::Sender<Value>>)>,
+    pub evals: Lock<(u64, std::collections::HashMap<u64, std::sync::mpsc::Sender<Value>>)>,
 }
 
 impl Shared {
     // Made once, as she starts (main.rs setup), and kept in Tauri's state.
-    pub fn new(app: AppHandle, dir: PathBuf, port: u16, settings: Map<String, Value>, hub: agent_hub::Hub, today: widgets::Today) -> Self {
+    // Two of its locks held at once are said in her log (lock.rs: a debug
+    // build's only).
+    pub fn new(app: AppHandle, dir: PathBuf, port: u16, settings: Map<String, Value>, hub: agent_hub::Hub, today: widgets::Today) -> Arc<Self> {
         let is_logging = dir.join("debug.on").exists();
-        let screens = Mutex::new(screen::read(&app));
-        Shared {
+        let screens = Lock::new("screens", screen::read(&app));
+        let sh = Arc::new(Shared {
             app,
             is_logging,
             dir,
             port,
-            settings: Mutex::new(settings),
-            pet: Mutex::new(state::Pet::default()),
-            win: Mutex::new(pet::Win::default()),
-            island: Mutex::new(island::Island::default()),
-            asks: Mutex::new(asks::Asks::default()),
+            settings: Lock::new("settings", settings),
+            pet: Lock::new("pet", state::Pet::default()),
+            win: Lock::new("win", pet::Win::default()),
+            island: Lock::new("island", island::Island::default()),
+            asks: Lock::new("asks", asks::Asks::default()),
             hub,
-            widgets: Mutex::new(widgets::Widgets::default()),
-            plugins: Mutex::new(plugins::Runner::default()),
-            mail: Mutex::new(mail::Runner::default()),
-            today: Mutex::new(today),
+            widgets: Lock::new("widgets", widgets::Widgets::default()),
+            plugins: Lock::new("plugins", plugins::Runner::default()),
+            mail: Lock::new("mail", mail::Runner::default()),
+            today: Lock::new("today", today),
             screens,
             hidden: AtomicBool::new(false),
             by_fullscreen: AtomicBool::new(false),
             quiet: AtomicBool::new(false),
             greeted: AtomicBool::new(false),
             seen: Default::default(),
-            own: Mutex::new(Vec::new()),
-            prev_focus: Mutex::new(0),
+            own: Lock::new("own", Vec::new()),
+            prev_focus: Lock::new("prev_focus", 0),
             push_pending: AtomicBool::new(false),
             shuffle_until: std::sync::atomic::AtomicU64::new(0),
-            evals: Mutex::new((0, std::collections::HashMap::new())),
-        }
+            evals: Lock::new("evals", (0, std::collections::HashMap::new())),
+        });
+        let said = Arc::downgrade(&sh);
+        crate::lock::say_with(move |line| {
+            if let Some(sh) = said.upgrade() {
+                sh.log(line);
+            }
+        });
+        sh
     }
 
     pub fn setting(&self, key: &str) -> Value {
@@ -144,6 +155,34 @@ impl Shared {
 
     pub fn screens(&self) -> screen::Screens {
         self.screens.lock().unwrap().clone()
+    }
+
+    // The displays read again (loops.rs ticker): whether their work areas
+    // changed.
+    pub fn put_screens(&self, screens: screen::Screens) -> bool {
+        let mut now = self.screens.lock().unwrap();
+        let moved = now.areas != screens.areas;
+        *now = screens;
+        moved
+    }
+
+    // Whether the settings are open in her home now.
+    pub fn settings_open(&self) -> bool {
+        self.island.lock().unwrap().settings_open
+    }
+
+    // Our windows' handles (own_window): never another app's.
+    pub fn own_windows(&self) -> Vec<isize> {
+        self.own.lock().unwrap().clone()
+    }
+
+    pub fn is_own(&self, hwnd: isize) -> bool {
+        self.own.lock().unwrap().contains(&hwnd)
+    }
+
+    // Writing debug.log (debug.on in her data folder as she started).
+    pub fn is_logging(&self) -> bool {
+        self.is_logging
     }
 
     // Where a prompt can be answered: her up, or, put away only by an app
@@ -242,6 +281,12 @@ impl Shared {
 
     pub fn is_fullscreen(&self) -> bool {
         self.by_fullscreen.load(Ordering::SeqCst)
+    }
+
+    // An app full screen already as she starts (main.rs setup), before her
+    // home first shows.
+    pub fn starts_full_screen(&self) {
+        self.by_fullscreen.store(true, Ordering::SeqCst);
     }
 
     // Her home: 'island' or 'taskbar' (island.rs).
@@ -455,7 +500,7 @@ impl Shared {
 
     // The open settings follow what happens, a few times a second at most.
     pub fn push_settings(&self) {
-        if !self.island.lock().unwrap().settings_open || self.push_pending.swap(true, Ordering::SeqCst) {
+        if !self.settings_open() || self.push_pending.swap(true, Ordering::SeqCst) {
             return;
         }
         let sh = shared(&self.app);
@@ -679,7 +724,7 @@ impl Shared {
     pub fn look_fullscreen(self: &Arc<Self>, asked: Option<Instant>) {
         static CHANGED: Mutex<Option<Instant>> = Mutex::new(None);
         let watching = fullscreen::AVAILABLE;
-        let own = self.own.lock().unwrap().clone();
+        let own = self.own_windows();
         let cover = if watching { fullscreen::covering(&own) } else { Some(None) };
         // Her taskbar on the other displays steps aside on its own display alone.
         if let Some(cover) = cover {
@@ -749,7 +794,7 @@ impl Shared {
     pub fn show_window(&self, win: &WebviewWindow) {
         self.shuffle_until.store(now_ms() + 500, Ordering::SeqCst);
         let _ = win.show();
-        if self.island.lock().unwrap().settings_open && win.label() != "island" {
+        if self.settings_open() && win.label() != "island" {
             if let Some(island) = self.app.get_webview_window("island") {
                 let _ = island.set_focus();
             }
@@ -807,7 +852,7 @@ impl Shared {
         let mine = 0isize;
         if on {
             let before = focus::foreground();
-            if before != mine && !self.own.lock().unwrap().contains(&before) {
+            if before != mine && !self.is_own(before) {
                 *self.prev_focus.lock().unwrap() = before;
             }
             let _ = window.set_focusable(true);

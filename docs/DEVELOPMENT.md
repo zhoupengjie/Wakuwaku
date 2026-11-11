@@ -34,6 +34,7 @@ src-tauri/
   src/
     main.rs               入口：先看参数（守护进程、读传感器、各家 hook 的 --wakuwaku-*），单实例，再搭 Tauri 的 Builder：注册页面能调的命令、wakuplugin://、启动时的各步
     shared.rs             各部分共享的 Shared（设置、会话的心情、各窗口的状态、等着的确认、插件、邮件，各有一把锁）和它的方法：日志、发给页面（redraw、push_asks、push_settings）、改设置、全屏、静默、退出；还有 now_ms、spawn_named、她在哪（set_display、set_out、absorb、come_home）
+    lock.rs               Shared 的锁（Lock）：用法和 Mutex 一样（lock().unwrap()），调试版和测试里每个线程记着自己拿着哪几把，同一线程拿着一把又去拿另一把时，测试里直接 panic，调试版在日志里写一行 `lock: X taken at 文件:行 while Y is held (taken at 文件:行)`（同一对地方只写一次），不让她挂掉；发布版什么都不记
     commands/             页面能调的命令（main.rs 里注册）：pet.rs 是她的窗口和两个页面共用的（ready、悬停、拖动、走路、菜单、确认的回答、键盘），island.rs 是岛的（展开、编辑任务栏、座位、让开、垫板、把她放出来、和 Windows 任务栏的交接），mod.rs 是别的（跳到会话、插件按钮、/debug/eval 的回答）；设置、副屏的条、桌面小工具、邮件、任务栏、插件的命令在各自的模块里
     hooks.rs              她的 exe 当 agent 的 hook 跑（--wakuwaku-ensure-running、--wakuwaku-codex-hook，Antigravity、ZCode、DeepSeek Harness、Reasonix 的）：从 stdin 读事件交给端口，确认的回答打印回去，她不在时随会话启动她
     loops.rs              她隔一会儿看一次的线程：鼠标（pointer）、插件（widgets）、监控（monitor）、全屏（fullscreen）、每半秒的 ticker；鼠标和监控的线程可以提前叫醒（wake_pointer、wake_monitor）
@@ -907,7 +908,7 @@ CPU 主要花在 GPU 进程和渲染进程上，两边几乎一样（页面是�
 - **监听要先注册好**：`listen()` 本身也是一次 IPC，是异步的。bridge 等所有监听注册完再发 `pet_ready`，Rust 收到后才开始推状态。
 - **新窗口要写进 capability**：`capabilities/default.json` 的 `windows` 里没有 `island` 时，岛的页面调 `listen()` 会被拒绝，页面永远等不到 `pet_ready`。
 - **调用要排队**：每次 `invoke` 都是独立请求，async 命令的执行顺序没有保证。拉她出来时页面依次发 holding、release、drop，顺序乱了就会出错，所以 bridge 把调用排成队一个个发（`walk` 除外，它要等走完才回复）。
-- **锁和窗口 getter**：Tauri 的 getter（`outer_position`、`cursor_position` 等）要等主线程回复，菜单回调又在主线程上拿锁。所以拿着锁时绝不调 getter，同一时间也不拿两把锁；页面的命令一律写成 async，不在主线程上跑。
+- **锁和窗口 getter**：Tauri 的 getter（`outer_position`、`cursor_position` 等）要等主线程回复，菜单回调又在主线程上拿锁。所以拿着锁时绝不调 getter，同一时间也不拿两把锁；页面的命令一律写成 async，不在主线程上跑。「不同时拿两把」由 `lock.rs` 查：`Shared` 的锁都是 `Lock`，测试里同一线程拿第二把就 panic，调试版写进日志（见「目录」的 lock.rs）。注意临时值活到哪里：`match`、`if let`（含 else）的条件里拿的锁一直拿到整个块结束，函数和方法的参数里拿的锁活到这条语句结束（`a.lock().unwrap().f(sh.flag(..))` 就是两把），`&&`、`||` 的每一边自己结束。
 - **在主线程上建窗口会卡死**：菜单回调在主线程上，第一次建岛的窗口要放到另一个线程去建。
 - **路径里不能有 `..`**：asset 协议的允许范围按路径匹配，带 `..` 的路径匹配不上（`data.rs` 的 `in_tree`）。
 - **16 位 PNG**：Tauri 的 PNG 解码只要 8 位 RGBA，托盘和窗口图标都用 8 位（`make-icons.js` 加了 `-depth 8`）。

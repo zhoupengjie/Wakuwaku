@@ -410,7 +410,7 @@ pub fn watch(sh: &Arc<Shared>) {
     }
     let sh = sh.clone();
     std::thread::spawn(move || loop {
-        let open = || sh.island.lock().unwrap().settings_open;
+        let open = || sh.settings_open();
         let mut was = available();
         while open() {
             std::thread::sleep(WATCH_EVERY);

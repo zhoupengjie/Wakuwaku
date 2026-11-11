@@ -379,7 +379,7 @@ fn seen_now(sh: &Shared, mon: Mon) -> bool {
         }
     }
     count(&LOOKS);
-    let own = sh.own.lock().unwrap().clone();
+    let own = sh.own_windows();
     let shown = imp::desktop_shown(&own);
     let full = crate::fullscreen::covering(&own).flatten();
     let mons: Vec<Mon> = DESKS.lock().unwrap().iter().map(|d| d.mon).collect();
@@ -623,7 +623,7 @@ pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
     // (WebView2 in this process has the focus, DEVELOPMENT.md's Win keys;
     // seen again here, 2026-10-17), so Ctrl is looked for at its own pace
     // over a desktop with widgets.
-    let keys_ours = under.is_some() && seen && !ctrl_over && sh.own.lock().unwrap().contains(&crate::focus::foreground());
+    let keys_ours = under.is_some() && seen && !ctrl_over && sh.is_own(crate::focus::foreground());
     pace(under.is_some(), seen, false, near, in_strip, ctrl_over || keys_ours).unwrap_or(IDLE_MS)
 }
 
@@ -723,7 +723,7 @@ pub fn minute(sh: &Shared) {
     let take = |c: &AtomicU64| c.swap(0, Ordering::Relaxed);
     let counts = [take(&POLLS), take(&PUSHES), take(&SENT), take(&EMITS), take(&COMMANDS), take(&PLACED), take(&LOOKS), take(&THREAD_MSGS)];
     let traced = TRACE.lock().unwrap().as_mut().map(std::mem::take);
-    if !any() || !sh.is_logging {
+    if !any() || !sh.is_logging() {
         return;
     }
     let [polls, pushes, sent, emits, commands, placed, looks, thread] = counts;

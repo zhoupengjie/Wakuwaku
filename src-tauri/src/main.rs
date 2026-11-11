@@ -87,6 +87,7 @@ mod island;
 mod jump;
 mod lhm;
 mod lhm_setup;
+mod lock;
 mod logon;
 mod loops;
 mod mail;
@@ -128,8 +129,6 @@ mod winkeys;
 mod zip;
 
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 use serde_json::{json, Value};
 use tauri::Manager;
@@ -443,7 +442,7 @@ fn main() {
                 Ok(hub) => (hub, None),
                 Err(e) => (agent_hub::Hub::with_token(agent_hub::new_token(), hub_folder.join("token"), now_ms()), Some(e)),
             };
-            let sh = Arc::new(Shared::new(app.handle().clone(), dir, port, settings, hub, today));
+            let sh = Shared::new(app.handle().clone(), dir, port, settings, hub, today);
             app.manage(sh.clone());
             // Her requests to the web the way the General page says (proxy.rs).
             proxy::set_web(&sh.setting("netProxy"));
@@ -477,7 +476,7 @@ fn main() {
             // it was unlocked, 170 s on, and the log said nothing of it (the
             // user's PC, 2026-10-13).
             if fullscreen::AVAILABLE && fullscreen::check(&[], &sh.displays()) == Some(true) {
-                sh.by_fullscreen.store(true, Ordering::SeqCst);
+                sh.starts_full_screen();
                 sh.log(&format!("an app full screen as she starts: {}; her home waits for it to go", fullscreen::front()));
             }
             island::apply_visibility(&sh);

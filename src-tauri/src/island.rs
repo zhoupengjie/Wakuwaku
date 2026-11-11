@@ -2104,7 +2104,7 @@ pub fn raise(sh: &Arc<Shared>) {
     if hwnd == 0 || !shown || !(sh.home() == "taskbar" || over) || !TOPMOST.load(Ordering::SeqCst) || crate::embed::is_parented() {
         return;
     }
-    let own = sh.own.lock().unwrap().clone();
+    let own = sh.own_windows();
     let Some((class, on_top, _)) = crate::tasks::cover(hwnd, &own) else { return };
     let mine = crate::tasks::is_topmost(hwnd);
     crate::tasks::raise_top(hwnd);
@@ -2143,7 +2143,7 @@ pub fn uncover(sh: &Shared) {
     if hwnd == 0 || !TOPMOST.load(Ordering::SeqCst) || crate::embed::is_parented() {
         return;
     }
-    let own = sh.own.lock().unwrap().clone();
+    let own = sh.own_windows();
     let taskbar = crate::tasks::cover(hwnd, &own).filter(|(class, on_top, r)| matches!(class.as_str(), "Shell_TrayWnd" | "Shell_SecondaryTrayWnd") || (*on_top && if low { r.1 >= band - 2 } else { r.3 <= band + 2 }));
     let Some((class, _, _)) = taskbar else {
         UNDER_TASKBAR.store(false, Ordering::SeqCst);
@@ -2173,7 +2173,7 @@ static TOPMOST: AtomicBool = AtomicBool::new(true);
 static WATCHING_TOP: AtomicBool = AtomicBool::new(false);
 
 pub fn keep_on_top(sh: &Arc<Shared>) {
-    let open = sh.island.lock().unwrap().settings_open;
+    let open = sh.settings_open();
     let (locked, top) = (sh.flag("settingsPin"), sh.flag("settingsTop"));
     let topmost = !(open && locked && !top);
     if TOPMOST.swap(topmost, Ordering::SeqCst) != topmost {
@@ -2191,10 +2191,10 @@ pub fn keep_on_top(sh: &Arc<Shared>) {
     }
     let sh = sh.clone();
     std::thread::spawn(move || loop {
-        let watched = || sh.island.lock().unwrap().settings_open && sh.flag("settingsPin") && sh.flag("settingsTop");
+        let watched = || sh.settings_open() && sh.flag("settingsPin") && sh.flag("settingsTop");
         while watched() {
             let hwnd = hwnd(&sh);
-            let own = sh.own.lock().unwrap().clone();
+            let own = sh.own_windows();
             if hwnd != 0 && crate::tasks::covered(hwnd, &own) {
                 crate::tasks::raise_top(hwnd);
             }

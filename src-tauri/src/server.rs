@@ -498,7 +498,7 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool, hooks: &SyncSender
         ("POST", "/hw") => {
             let ok = read_json(&mut req).is_some_and(|body| crate::sensors::accept(&sh.dir, &body));
             // The switch's line follows the helper while the settings watch.
-            if ok && sh.island.lock().unwrap().settings_open {
+            if ok && sh.settings_open() {
                 sh.push_settings();
             }
             reply(req, if ok { 200 } else { 403 }, json!({ "ok": ok }))

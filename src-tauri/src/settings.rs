@@ -155,7 +155,7 @@ pub fn snapshot(sh: &Shared) -> Value {
     let lhm = crate::lhm::view();
     let lhm_status = lhm["status"].as_str().unwrap_or("").to_string();
     let monitor_source = crate::hw::Source::of(&sh.setting("monitor"), &sh.setting("monitorSource"), lhm_status == "found");
-    let lhm_shown = monitor_source == crate::hw::Source::Lhm && sh.island.lock().unwrap().settings_open;
+    let lhm_shown = monitor_source == crate::hw::Source::Lhm && sh.settings_open();
     json!({
         "settings": Value::Object(sh.settings.lock().unwrap().clone()),
         "lang": sh.lang(),

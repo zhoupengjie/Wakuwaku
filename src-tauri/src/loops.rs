@@ -124,7 +124,7 @@ pub fn monitor(sh: &Arc<Shared>) {
             let mut watching = widgets::Watching::from(&setting[0], &setting[1]);
             // On in the island, or put on the taskbar (its widget there).
             let (on, quiet) = (monitored.is_widget_wanted("monitor"), monitored.is_quiet());
-            let listing = monitored.island.lock().unwrap().settings_open;
+            let listing = monitored.settings_open();
             // The pointer on her home: its widget's card may be looked at;
             // on the desktop medium or large, its card's readings show.
             let looking = !quiet && (island::is_over(&monitored) || desk::shows_more(&monitored, "monitor"));
@@ -236,8 +236,7 @@ pub fn ticker(sh: &Arc<Shared>) {
                 let screens = screen::read(&ticker.app);
                 // Displays come or go, or change: the desktop's widgets' windows
                 // with them (only while there are any).
-                let moved = desk::any() && ticker.screens.lock().unwrap().areas != screens.areas;
-                *ticker.screens.lock().unwrap() = screens;
+                let moved = desk::any() & ticker.put_screens(screens);
                 if moved {
                     desk::sync(&ticker);
                 }

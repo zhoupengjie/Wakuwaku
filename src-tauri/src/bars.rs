@@ -418,8 +418,8 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
         let built = WebviewWindowBuilder::new(&sh.app, &label, WebviewUrl::App("pet/bar.html".into()))
             .title("wakuwaku bar")
             .inner_size(strip.2 as f64 / area.sf, strip.3 as f64 / area.sf)
-            .additional_browser_args(crate::browser_args(&sh))
-            .data_directory(crate::webview_dir(&sh))
+            .additional_browser_args(crate::webview::browser_args(&sh))
+            .data_directory(crate::webview::webview_dir(&sh))
             .transparent(true)
             .decorations(false)
             .resizable(false)
@@ -820,7 +820,7 @@ fn look_at_bin(sh: &Shared) {
 }
 
 // A window touching the dock, or none now (with her island's look_under,
-// main.rs): kept for poll.
+// loops.rs): kept for poll.
 pub fn look_under(sh: &Shared) {
     let hides = island::is_split(sh) && !island::dock_keeps_room(sh);
     let rect = BARS.lock().unwrap().iter().find(|b| b.dock && b.ready && !b.hidden).and_then(|b| b.glass);
@@ -936,7 +936,7 @@ pub fn bar_asks(app: tauri::AppHandle) {
 }
 
 // One of them up on a display no app full screen covers: her capsule there
-// shows the prompts waiting (main.rs asks_seen).
+// shows the prompts waiting (shared.rs asks_seen).
 pub fn any_shown() -> bool {
     BARS.lock().unwrap().iter().any(|b| b.ready && !b.hidden && b.strip.is_some() && !b.dock)
 }
@@ -1074,8 +1074,8 @@ fn make_pop(sh: &Arc<Shared>) {
         let built = WebviewWindowBuilder::new(&sh.app, POP, WebviewUrl::App("pet/barpop.html".into()))
             .title("wakuwaku bar list")
             .inner_size(420.0, 300.0)
-            .additional_browser_args(crate::browser_args(&sh))
-            .data_directory(crate::webview_dir(&sh))
+            .additional_browser_args(crate::webview::browser_args(&sh))
+            .data_directory(crate::webview::webview_dir(&sh))
             .transparent(true)
             .decorations(false)
             .resizable(false)

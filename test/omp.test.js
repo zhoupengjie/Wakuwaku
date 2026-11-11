@@ -197,7 +197,7 @@ test('her not up: nothing thrown or left unhandled, and for a while nothing trie
 })
 
 // Her not up as a session starts: her exe run once to start her (it does
-// not, should the person have quit her: main.rs ensure_running), on her port
+// not, should the person have quit her: hooks.rs ensure_running), on her port
 // and with her data folder, told it is omp's and how the session started,
 // for her log's "started by" (starts.rs ensure_who).
 test('her not up as a session starts: her exe asked to start her, saying it is omp', async () => {

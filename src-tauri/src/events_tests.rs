@@ -336,7 +336,7 @@ mod opencode {
 }
 
 // Reasonix's hook events (zhoupengjie/Wakuwaku#60), handed to her port by
-// this program with connection::REASONIX_FLAG (main.rs reasonix_hook):
+// this program with connection::REASONIX_FLAG (hooks.rs reasonix_hook):
 // agent-core reads them (reasonix.rs to_event_at: in Claude Code's words, a
 // subagent's steps as its session's, a failure told once, its approvals
 // answered in Reasonix), events.rs tells them in her words. Here, what she

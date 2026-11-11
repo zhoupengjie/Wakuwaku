@@ -121,7 +121,7 @@
   }
 
   // The settings that turn one on or off: a plugin by its own (plugins[id].on),
-  // a widget by widgetsOff (main.rs is_widget_on). null: already so.
+  // a widget by widgetsOff (shared.rs is_widget_on). null: already so.
   function switchPatch(config = {}, key, on) {
     const item = itemOf(key)
     if (item.plugin) {

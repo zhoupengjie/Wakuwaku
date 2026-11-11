@@ -1048,7 +1048,7 @@ mod imp {
         cv.notify_one();
     }
 
-    // From outside: the quiet over (main.rs check_quiet), the buttons and
+    // From outside: the quiet over (shared.rs check_quiet), the buttons and
     // the keys looked at now.
     pub fn wake() {
         wake_tasks();
@@ -1069,7 +1069,7 @@ mod imp {
     // that only look now and then are: the buttons it makes are seen as
     // windows come and go, and with the CPU busy they came late (the user,
     // 2026-11-08: 高负载的情况下整个界面很容易卡死). Slowed with the process
-    // while nobody is about (main.rs check_quiet).
+    // while nobody is about (shared.rs check_quiet).
     fn tasks_loop(sh: Arc<Shared>) {
         let doing = |what: &'static str| *TASKS_DOING.lock().unwrap() = what;
         let stopping = || TASKS_STOP.load(Ordering::SeqCst);
@@ -2737,7 +2737,7 @@ mod imp {
         // A window to the front, or the one in front sized (full screen, or
         // no longer: a video, F11): looked at at once, not at the clock's
         // next look (up to 1.5 s late); on the look's own thread, not this
-        // one (main.rs, Shared::look_fullscreen).
+        // one (shared.rs, Shared::look_fullscreen).
         if event == EVENT_SYSTEM_FOREGROUND || (event == EVENT_OBJECT_LOCATIONCHANGE && tasks::front() == hwnd as isize) {
             crate::fullscreen::ask();
         }
@@ -3095,7 +3095,7 @@ mod imp {
         let Some(sh) = sh() else { return };
         // Not on this thread: going home stops it and waits for it (give_back).
         std::thread::spawn(move || {
-            crate::set_display(&sh, "island");
+            crate::shared::set_display(&sh, "island");
             // The island settled in its new home first.
             std::thread::sleep(Duration::from_secs(2));
             let lang = sh.lang();

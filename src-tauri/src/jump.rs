@@ -7,7 +7,7 @@
 //   Claude Code   the process on the other end of the hook's connection
 //                 (server.rs), found in the TCP table
 //   Codex         the hook command's own parents, from Codex up, past the
-//                 shell it runs hooks in (main.rs codex_hook); Antigravity's,
+//                 shell it runs hooks in (hooks.rs codex_hook); Antigravity's,
 //                 ZCode's and Reasonix's the same (Reasonix Studio's: its
 //                 kernel, then the app's window process)
 //   OpenCode      a program connected to its background service, where her
@@ -41,7 +41,7 @@ mod imp {
     use super::Chain;
 
     type Hwnd = *mut c_void;
-    // As main.rs declares them too (one signature per function).
+    // As shared.rs declares them too (one signature per function).
     type Handle = isize;
 
     // Where a chain stops: the processes every program runs under.

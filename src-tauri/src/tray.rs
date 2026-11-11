@@ -195,8 +195,8 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
             let room = sh.setting("splitDock").as_str() == Some("room");
             sh.change(json!({ "splitDock": if room { "hide" } else { "room" } }));
         }
-        "out" => crate::set_out(sh, !sh.flag("out")),
-        "corner" => crate::come_home(sh),
+        "out" => crate::shared::set_out(sh, !sh.flag("out")),
+        "corner" => crate::shared::come_home(sh),
         "settings" => crate::island::open_settings(sh, None),
         // The taskbar's parts dragged about, on the strip itself (island.js).
         "editTaskbar" => {
@@ -247,7 +247,7 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
             if let Some(what) = id.strip_prefix("win:") {
                 crate::taskbar::taskbar_open(what.to_string());
             } else if let Some(home) = id.strip_prefix("display:") {
-                crate::set_display(sh, home);
+                crate::shared::set_display(sh, home);
             } else if let Some(pet_id) = id.strip_prefix("pet:") {
                 sh.change(json!({ "pet": pet_id }));
             } else if let Some(name) = id.strip_prefix("size:") {

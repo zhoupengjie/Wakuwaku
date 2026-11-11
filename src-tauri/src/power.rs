@@ -2,7 +2,7 @@
 //
 // - This process may run on the efficient cores at lower clocks (the
 //   "efficiency mode" Task Manager shows with a leaf), while nobody is at
-//   the keyboard or mouse (main.rs check_quiet); and its background threads
+//   the keyboard or mouse (shared.rs check_quiet); and its background threads
 //   always may (thread_eco), whatever the core layout: a CPU with small
 //   cores (Intel's E-cores, AMD's dense cores) puts them there, one
 //   without runs them slower. Windows keeps the choice itself; nothing is
@@ -10,7 +10,7 @@
 //   (webview_eco), and their memory kept low (webview_memory).
 // - How long since the keyboard or mouse was last touched (idle_ms), for
 //   the quiet state: she holds still and the loops look less often.
-// - While someone is at it and no app is full screen (main.rs keep_brisk),
+// - While someone is at it and no app is full screen (shared.rs keep_brisk),
 //   her process and WebView2's for her pages before others' (brisk): above
 //   normal on the CPU, high on the GPU (Windows' scheduling class, as OBS
 //   sets its own), so her island, taskbar and dock keep up with the person
@@ -61,7 +61,7 @@ mod imp {
         exe: [u16; 260],
     }
 
-    // Handles as isize, as main.rs declares GetCurrentProcess too.
+    // Handles as isize, as shared.rs declares GetCurrentProcess too.
     #[link(name = "kernel32")]
     extern "system" {
         fn GetCurrentProcess() -> isize;

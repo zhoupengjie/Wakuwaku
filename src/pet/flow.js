@@ -104,7 +104,7 @@
 
   // The hold setting as a time (ms): its seconds, or until seen (Infinity)
   // for "seen" and for anything that is not a number of them, as main reads
-  // it (main.rs hold).
+  // it (shared.rs hold).
   function holdMs(hold) {
     return Number.isInteger(hold) && hold > 0 ? hold * 1000 : Infinity
   }
@@ -153,7 +153,7 @@
 
   // Which choice is on: until seen, a quick one, or custom (a number of its
   // own, or Custom picked to type one in). No whole number: until seen, as
-  // main reads it (main.rs hold).
+  // main reads it (shared.rs hold).
   function holdChoice(hold, custom = false) {
     if (custom) return 'custom'
     if (!Number.isInteger(hold) || hold < 0) return 'seen'

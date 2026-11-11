@@ -1,5 +1,5 @@
 // Antigravity's hook events, handed to her port by this program with
-// connection::AGY_FLAG and the event's name (main.rs agy_hook): agent-core
+// connection::AGY_FLAG and the event's name (hooks.rs agy_hook): agent-core
 // reads them (agy.rs to_event, with the person's words and the reply from
 // its transcript), events.rs tells them in her words. A PreToolUse that
 // Antigravity will ask the person about (needs_approval) comes as Claude
@@ -42,7 +42,7 @@ pub fn read_cli_settings() -> Value {
 
 // Whether an Antigravity event comes from `agy` CLI (vs Antigravity 2.0 Desktop).
 // CLI events have transcripts/artifacts inside `antigravity-cli/`, or are flagged
-// by main.rs via process inspection (jump::agy_cli_info).
+// by hooks.rs via process inspection (jump::agy_cli_info).
 pub fn is_cli_event(e: &Value) -> bool {
     if e.get("is_cli").and_then(Value::as_bool) == Some(true) {
         return true;

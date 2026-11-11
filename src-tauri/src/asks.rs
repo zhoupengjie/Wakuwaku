@@ -16,7 +16,7 @@ fn s<'a>(v: &'a Value, key: &str) -> &'a str {
 // DeepSeek Harness 处理", out of sight): its session still waits, now to be
 // answered there ("在 DeepSeek Harness 里批准：写 note.txt", "在 DeepSeek
 // Harness 里回答：…": events.rs wait_of), only within its turn still under
-// way. Told to the apps listening too (main.rs push_asks).
+// way. Told to the apps listening too (shared.rs push_asks).
 pub fn handed_event(handed: &Handed) -> AgentEvent {
     let there = || AnswerIn::App { name: "DeepSeek Harness".into() };
     let wait = if s(&handed.view, "kind") == "question" {

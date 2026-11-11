@@ -8,7 +8,8 @@ use serde::Serialize;
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, WebviewWindow};
 
-use crate::{connection, data, fetch, fullscreen, i18n, island, logon, mail, now_ms, pet, plugins, set_display, set_out, shared, Shared};
+use crate::shared::{set_display, set_out};
+use crate::{connection, data, fetch, fullscreen, i18n, island, logon, mail, now_ms, pet, plugins, shared, Shared};
 
 const REPO: &str = "https://github.com/zhoupengjie/wakuwaku";
 // How to write a plugin (the Plugins page's 开发文档, under a .zip it cannot take).
@@ -27,7 +28,7 @@ const AGENT_SITES: [(&str, &str); 8] = [
     ("reasonix", "https://github.com/esengine/DeepSeek-Reasonix"),
 ];
 
-// When an agent's last event came (ms), 0 never (main.rs seen).
+// When an agent's last event came (ms), 0 never (shared.rs seen).
 fn seen_at(sh: &Shared, agent: Agent) -> u64 {
     sh.seen[connection::slot(agent)].load(Ordering::SeqCst)
 }
@@ -536,7 +537,7 @@ fn is_taskbar_layout(v: &Value) -> bool {
     })
 }
 
-// How long done, review and error stay (main.rs hold): until seen, or whole
+// How long done, review and error stay (shared.rs hold): until seen, or whole
 // seconds from 3 to 600; the settings offer 8, 30 and 120, and Custom for
 // any other (#59; flow.js holdSecs keeps what is typed within).
 const HOLD_SECS: std::ops::RangeInclusive<u64> = 3..=600;

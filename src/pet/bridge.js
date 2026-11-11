@@ -106,7 +106,7 @@
     onOverFull: on('island:over-full'),
     // A maximized window on her display, at the top of the screen ({ on }, island.rs look_over_max).
     onOverMax: on('island:over-max'),
-    // An app full screen on her display, or none now ({ on }, main.rs
+    // An app full screen on her display, or none now ({ on }, shared.rs
     // look_fullscreen): no flow light's ring while one is (island.js).
     onFullScreen: on('pet:full-screen'),
     // At the top of the screen, a window under her closed island ({ on },

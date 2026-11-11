@@ -15,7 +15,7 @@
 //
 // Its clicks: through it but where a widget is. The page says where they
 // are (desk_shapes: rounded rects, and an open menu); the pointer's own
-// loop (main.rs) asks poll() where the pointer is, and the window takes the
+// loop (loops.rs) asks poll() where the pointer is, and the window takes the
 // mouse while it is on one, lets it through elsewhere; held during a press
 // (desk_hold), so a drag keeps it anywhere. With Ctrl held, its bare desktop
 // too (off Explorer's icons), for widgets to be picked with a rectangle.
@@ -239,7 +239,7 @@ fn look_read() -> (bool, Value) {
     (light, accent.map_or(Value::Null, |a| json!({ "base": a.base, "light": a.light, "dark": a.dark })))
 }
 
-// The widgets' words, to the pages (with the island's, main.rs redraw_widgets):
+// The widgets' words, to the pages (with the island's, shared.rs redraw_widgets):
 // not to one whose display's desktop nobody sees (a window maximized or full
 // screen over it: the design session, 2026-10-16), which is told them once
 // it is seen again (catch_up).
@@ -278,7 +278,7 @@ pub fn catch_up(sh: &Shared) {
     let stale: Vec<Mon> = DESKS.lock().unwrap().iter().filter(|d| d.ready && d.stale).map(|d| d.mon).collect();
     if stale.iter().any(|&mon| seen_now(sh, mon)) {
         push_widgets(sh);
-        crate::wake_monitor();
+        crate::loops::wake_monitor();
     } else {
         views(sh);
     }
@@ -407,8 +407,8 @@ fn create(sh: &Arc<Shared>, label: String, area: Area) {
         let built = WebviewWindowBuilder::new(&sh.app, &label, WebviewUrl::App("pet/desk.html".into()))
             .title("wakuwaku desk")
             .inner_size(rect.2 as f64 / area.sf, rect.3 as f64 / area.sf)
-            .additional_browser_args(crate::browser_args(&sh))
-            .data_directory(crate::webview_dir(&sh))
+            .additional_browser_args(crate::webview::browser_args(&sh))
+            .data_directory(crate::webview::webview_dir(&sh))
             .transparent(true)
             .decorations(false)
             .resizable(false)
@@ -667,7 +667,7 @@ fn keep_icons(label: &str, icons: Vec<[f64; 4]>) {
 
 // --- What it does, counted --------------------------------------------------------------------
 // Each minute while there are desktop windows and the debug log is on
-// (main.rs ticker): the pointer's looks, the words pushed and sent, the
+// (loops.rs ticker): the pointer's looks, the words pushed and sent, the
 // events to the pages, what the pages asked, the windows put back in their
 // place, the looks at whether a desktop is covered, the desk thread's
 // messages; and, with WAKUWAKU_DESK_TRACE=1, every message the main thread
@@ -1880,7 +1880,7 @@ mod imp {
     }
 
     // Ctrl's keys going down and up anywhere: the pointer's look woken at
-    // once (main.rs wake_pointer), not at its pace, so a press right after
+    // once (loops.rs wake_pointer), not at its pace, so a press right after
     // Ctrl reaches the desktop's page (poll). A low-level keyboard hook
     // (WH_KEYBOARD_LL) on a thread of its own that does nothing else:
     // Windows hands it every key on the machine and waits for its answer,
@@ -1925,7 +1925,7 @@ mod imp {
                 if held != was {
                     CTRL_HELD.store(held, std::sync::atomic::Ordering::Relaxed);
                     CTRL_AT.store(k.time, std::sync::atomic::Ordering::Relaxed);
-                    crate::wake_pointer();
+                    crate::loops::wake_pointer();
                 }
             }
         }

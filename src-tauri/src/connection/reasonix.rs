@@ -18,7 +18,7 @@
 // settings' hooks), its payload on stdin: on Windows `cmd.exe /d /s /c
 // "<command>"` with no window (reasonix_command), so this program with
 // REASONIX_FLAG and the event's name hands each to her port and is gone
-// (main.rs reasonix_hook), some 0.1 s. cmd waits for it, a program with a
+// (hooks.rs reasonix_hook), some 0.1 s. cmd waits for it, a program with a
 // window of its own as it is; one that holds the hook's output open after it
 // (a child that inherited it) is a failure, which on its gating events
 // (PreToolUse, UserPromptSubmit), as a timeout is, blocks the call or the

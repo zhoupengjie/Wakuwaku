@@ -304,7 +304,7 @@ static READ_NOW: AtomicBool = AtomicBool::new(false);
 pub fn ask_now() {
     ASKED_AGAIN.fetch_add(1, Ordering::SeqCst);
     READ_NOW.store(true, Ordering::SeqCst);
-    crate::wake_monitor();
+    crate::loops::wake_monitor();
 }
 
 // Whether a reading is wanted now (ask_now), for the monitor's thread.

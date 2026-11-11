@@ -9,7 +9,7 @@
 // Read: only a new letter (unread, come since the newest unread seen after
 // the first sync, sync.rs), got by the server in the last ten minutes, and
 // small (a code's letter is a few kB). Shown: under any agent's prompt (the
-// prompt panel's, main.rs asks_views), only while she is in sight and not
+// prompt panel's, shared.rs asks_views), only while she is in sight and not
 // asked to keep quiet (a code nobody can see is no use); a minute, then
 // gone. Not written down: the log says a code came, never which.
 //

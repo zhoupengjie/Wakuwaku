@@ -548,7 +548,7 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
 }
 
 // The side its window is at the top of the screen (the centre on the
-// taskbar), for the page (main.rs payload islandAt).
+// taskbar), for the page (shared.rs payload islandAt).
 pub fn side(sh: &Shared) -> Side {
     sh.island.lock().unwrap().at
 }
@@ -666,7 +666,7 @@ pub fn in_use(sh: &Shared) -> bool {
     used(&sh.island.lock().unwrap())
 }
 
-// For the pages (main.rs payload): whether her capsule is inside Windows'
+// For the pages (shared.rs payload): whether her capsule is inside Windows'
 // taskbar, where its middle lies in the island's window then (physical px
 // from its left), and the room it has there (physical px; 0 none).
 pub fn embedding(sh: &Shared) -> (bool, Option<i32>, i32) {
@@ -680,7 +680,7 @@ pub fn embedding(sh: &Shared) -> (bool, Option<i32>, i32) {
 // taskbar on the others and the dock made or taken away (bars.rs sync), the
 // page's zoom its scale's; an app full screen there looked for at once. The
 // graphics card her pages are drawn on stays the old display's until she is
-// next started (main.rs browser_args).
+// next started (webview.rs browser_args).
 pub fn home_display_changed(sh: &Shared) {
     place(sh);
     sh.log(&format!("island: her home on {:?} (homeDisplay {})", display(sh), sh.setting("homeDisplay")));
@@ -1117,8 +1117,8 @@ fn create(sh: &Arc<Shared>) {
         let built = WebviewWindowBuilder::new(&sh.app, "island", WebviewUrl::App("pet/index.html?role=island".into()))
             .title("wakuwaku island")
             .inner_size(size.0 as f64 / sf, size.1 as f64 / sf)
-            .additional_browser_args(crate::browser_args(&sh))
-            .data_directory(crate::webview_dir(&sh))
+            .additional_browser_args(crate::webview::browser_args(&sh))
+            .data_directory(crate::webview::webview_dir(&sh))
             .transparent(true)
             .decorations(false)
             .resizable(false)
@@ -1740,7 +1740,7 @@ pub fn hover(sh: &Shared, is_over: bool) {
     // The pointer come to her home: the monitor reads what its widget's card
     // shows now, not at its next turn (widgets.rs Watching::looking).
     if came {
-        crate::wake_monitor();
+        crate::loops::wake_monitor();
     }
     // The home opens up to say what happened while hovered, so it counts
     // as seen once the pointer leaves.
@@ -1986,7 +1986,7 @@ pub fn end_hold(sh: &Shared) {
 }
 
 // Take her in from where she is (her middle on the screen, physical); the
-// window stays up for it until she is in (main.rs absorb).
+// window stays up for it until she is in (shared.rs absorb).
 pub fn absorb(sh: &Arc<Shared>, point: (i32, i32)) {
     let sf = {
         let mut isl = sh.island.lock().unwrap();
@@ -2019,7 +2019,7 @@ pub fn open_settings(sh: &Arc<Shared>, tab: Option<&str>) {
     // Mail's agents looked for again while they are open; the monitor's
     // sensors read whole for their list.
     crate::mail::agent::watch(sh);
-    crate::wake_monitor();
+    crate::loops::wake_monitor();
     sh.redraw();
     if ready {
         let _ = sh.app.emit_to("island", "island:settings", json!({ "tab": tab.unwrap_or("") }));

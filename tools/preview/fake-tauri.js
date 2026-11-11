@@ -364,7 +364,7 @@
   const ISLAND_POS = ['left', 'center', 'right']
   const IDLE = { id: '', project: '', agent: 'claude', jump: false, mood: 'idle', detail: null, since: null, took: null, name: '', step: null, stepSince: null, todo: null, files: 0, reply: '', error: null }
 
-  // pet:update, as main.rs payload makes it.
+  // pet:update, as shared.rs payload makes it.
   function payload() {
     const list = world.sessions
     const top = list[0] || IDLE

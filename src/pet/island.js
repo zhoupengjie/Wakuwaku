@@ -263,7 +263,7 @@
   // What the island would have shown by itself: { clip, text, ms, widget,
   // until }, shown as it next opens (takePending), until then.
   let pending = null
-  // An app full screen on her display (pet:full-screen, main.rs look_fullscreen).
+  // An app full screen on her display (pet:full-screen, shared.rs look_fullscreen).
   let fullScreen = false
   // A reaction inside a turn her portrait plays: { clip, until }.
   let reacting = null
@@ -378,7 +378,7 @@
   // so, so she lands in her live portrait and not in the still one.
   let isComingHome = false
   let comingHomeTimer
-  // Her window up on the desktop (main.rs payload herUp): out there she says
+  // Her window up on the desktop (shared.rs payload herUp): out there she says
   // it herself, the prompts over her head too (pet.js, panel.js), and the
   // island does not open for them.
   let herUp = false
@@ -517,11 +517,11 @@
   const isNudging = () => !!nudge && Date.now() < nudge.until
   // The specifics on screen (session names, commands, replies), unless turned off.
   const isDetailed = () => config.details !== false
-  // Neither Claude Code nor Codex connected (main.rs payload, unconnected),
+  // Neither Claude Code nor Codex connected (shared.rs payload, unconnected),
   // and no "don't remind me" (connectHintOff): the island asks for it, and a
   // press on it opens the settings' welcome, where they are connected.
   const isHinting = () => now.unconnected === true && config.connectHintOff !== true
-  // The tools on this computer by name, as one says them (main.rs: with
+  // The tools on this computer by name, as one says them (shared.rs payload: with
   // unconnected): 「Claude Code、Codex 或 Antigravity」.
   const toolNames = () => nameList(lang, now.tools || ['Claude Code', 'Codex', 'Antigravity', 'OpenCode'], 'or')
   // Windows' accent as it reads on the island's ground: its light shade on a
@@ -6174,7 +6174,7 @@
   }
 
   // Only the widgets' words changed (the monitor's readings every couple
-  // of seconds, main.rs redraw_widgets): on the strip, the readings' node
+  // of seconds, shared.rs redraw_widgets): on the strip, the readings' node
   // alone; the island drawn anew where it shows them in its lines, or when
   // another widget's words changed (the capsule shows them in turn).
   window.pet.onDeskAsk(({ what, args } = {}) => {

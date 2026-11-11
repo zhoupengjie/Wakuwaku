@@ -1179,7 +1179,7 @@ pub fn reading_now() -> Value {
 // (lhm.rs), by the source chosen ("monitorSource"; none chosen, decided as
 // it reads, hw::Source::in_effect); whether nobody is at the keyboard, and
 // whether the settings are open (their list of sensors then read whole)
-// (its thread says, main.rs).
+// (its thread says, loops.rs).
 pub struct Watching {
     pub cpu: bool,
     pub memory: bool,

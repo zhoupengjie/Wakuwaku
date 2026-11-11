@@ -282,8 +282,8 @@ pub fn create(sh: &Shared) -> tauri::Result<()> {
     let win = WebviewWindowBuilder::new(&sh.app, "pet", WebviewUrl::App("pet/index.html?role=pet".into()))
         .title("wakuwaku")
         .inner_size(size.0 as f64 / sf, size.1 as f64 / sf)
-        .additional_browser_args(crate::browser_args(sh))
-        .data_directory(crate::webview_dir(sh))
+        .additional_browser_args(crate::webview::browser_args(sh))
+        .data_directory(crate::webview::webview_dir(sh))
         .transparent(true)
         .decorations(false)
         .resizable(false)
@@ -351,7 +351,7 @@ pub fn apply_visibility(sh: &Shared) {
             hide_window(&win);
         }
     }
-    // Hidden, her page heard no updates (main.rs to_pages): the whole state
+    // Hidden, her page heard no updates (shared.rs to_pages): the whole state
     // now, whether quiet with it; and her home told she is up or not (herUp:
     // who holds a prompt), an app full screen changing it as well.
     sh.redraw();
@@ -366,7 +366,7 @@ fn hide_window(win: &WebviewWindow) {
     let _ = win.as_ref().hide();
 }
 
-// Her window on the screen now. Asked from anywhere (main.rs to_pages),
+// Her window on the screen now. Asked from anywhere (shared.rs to_pages),
 // perhaps while the window's state is held: then taken as up.
 pub fn is_up(sh: &Shared) -> bool {
     sh.win.try_lock().map(|w| w.shown).unwrap_or(true)
@@ -724,7 +724,7 @@ pub fn let_go(sh: &Arc<Shared>) {
     if drag.moved {
         // Not into a notch's out-of-sight home by a drag (notch::in_notch).
         if !crate::notch::in_notch() && island::reach(sh, Some(her), true) == island::Reach::Snap {
-            return crate::absorb(sh, her);
+            return crate::shared::absorb(sh, her);
         }
         island::reach(sh, None, false);
     }
@@ -755,7 +755,7 @@ pub fn let_go(sh: &Arc<Shared>) {
                 }
             };
             if let Some(id) = goes {
-                crate::jump_to(&sh, &id);
+                crate::commands::jump_to(&sh, &id);
             }
         });
     }
@@ -814,7 +814,7 @@ fn fly_home(sh: &Arc<Shared>) {
         }
         sh.win.lock().unwrap().flying = false;
         let _ = sh.app.emit_to("pet", "pet:drag-end", ());
-        crate::absorb(&sh, p);
+        crate::shared::absorb(&sh, p);
     });
 }
 

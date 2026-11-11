@@ -9,7 +9,7 @@
 //     settings.json; Claude's desktop app's Code tab runs the same, in the
 //     app's job), omp's extension (the same flag, "omp" and how its session
 //     started after it), and Codex's, Antigravity's, ZCode's and Reasonix's
-//     hook commands at SessionStart (main.rs). DeepSeek Harness's never starts
+//     hook commands at SessionStart (hooks.rs). DeepSeek Harness's never starts
 //     her (she would run in its sandbox); Claude Code's HTTP hooks, its
 //     plugin's and OpenCode's plugin cannot start anything;
 //   - by herself while she runs: an update's new version, or her exe again
@@ -26,7 +26,7 @@ use serde_json::Value;
 
 pub const BY_FLAG: &str = "--wakuwaku-by";
 
-// Her hook commands that start her when she is not up (main.rs).
+// Her hook commands that start her when she is not up (hooks.rs).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Hook {
     // --wakuwaku-ensure-running: run only as a session starts.

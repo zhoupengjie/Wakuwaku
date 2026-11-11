@@ -1,0 +1,52 @@
+# Her tests on every push to main and dev, every release tag and every pull
+# request: the Rust side's (cargo test, the replay tests among them) and the
+# pages' (node --test), on Windows, where she runs. By hand, the same two
+# commands: docs/DEVELOPMENT.md, 构建和运行.
+name: test
+
+on:
+  push:
+    branches: [main, dev]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request stops the run before it.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: src-tauri
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@v4
+      # The image's stable may be weeks behind the one she is built with.
+      - run: rustup update stable --no-self-update && rustup default stable
+      # Tauri's, WebView2's and the windows crates take minutes from cold:
+      # kept between runs, by Cargo.lock and the toolchain.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: cargo test --locked
+
+  pages:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # node --test takes a glob from 21 on.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test "test/*.test.js"

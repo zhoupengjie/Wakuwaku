@@ -115,6 +115,8 @@ cd .. && node --test "test/*.test.js"   # 页面的单元测试
 pwsh scripts/build-release.ps1 [-Out <文件夹>]   # 发布用的 exe：wakuwaku-v<版本>-windows-x64.exe，不带本机路径
 ```
 
+**CI**（`.github/workflows/test.yml`，2026-11-11 起）：推到 `main`、`dev`，打 `v*` 标签，以及每个 pull request，GitHub Actions 在 `windows-latest` 上跑上面两样测试：`cargo test --locked`（Cargo.lock 和 Cargo.toml 对不上就失败；`rustup update stable` 先换成最新的稳定版；依赖和 `target` 用 Swatinem/rust-cache 按 Cargo.lock 缓存），和 Node 24 的 `node --test "test/*.test.js"`。同一个分支或 PR 又推了新的，之前那次还没跑完就取消。检出时换行是 runner 上 Git 的默认（`core.autocrlf=true`，和开发机一样），所以 `.gitattributes` 里要求 LF 的文件照样是 LF。通过 SSH 跑 `cargo test` 时有两个测试必然失败，它们要交互式登录：`logon::tests::this_sessions_logon_reads`（这次登录的时间）和 `mail::tests::a_password_is_kept_and_forgotten`（凭据管理器）；不是回归。整套测试一起跑时，别的测试正在加载模块，`crash::tests::a_held_threads_stack_is_read` 曾经约六次挂一次（`SymInitializeW` 列模块时列表变了，`STATUS_INFO_LENGTH_MISMATCH`），现在 `crash/win.rs` 的 `stack_of` 会重试；之后再有偶尔才挂的测试，先找出它为什么挂，别靠 CI 重跑。
+
 **发布用的 exe 要用 `scripts/build-release.ps1` 编译**，不要直接用 `cargo build --release`。
 
 - **为什么**：Rust 程序里每个可能 panic 的地方（`unwrap`、下标），都会以明文记下源文件路径，供 panic 信息使用；这些是数据不是符号，`strip` 去不掉。她自己的文件记的是仓库里的相对路径，但 crate 记的是 cargo 缓存的整条路径，标准库记的是工具链的整条路径，里面都有用户名；打过补丁的 tiny_http（path 依赖）记的是仓库的整条路径。v0.3.3 里用户名出现了 425 次。另外 `data.rs` 编进了源码目录（从源码运行时数据放在源码树里）。

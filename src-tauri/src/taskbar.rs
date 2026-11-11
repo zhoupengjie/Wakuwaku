@@ -3004,8 +3004,17 @@ mod imp {
     // apart, 16 in 12 s as the displays went from both to the second alone
     // (2026-11-10, zhoupengjie/Wakuwaku#115): none of it counted until
     // TUG_CALM after the last change, the count from nothing then.
-    const TUG_TICKS: u32 = 20;
-    const TUG_TIMES: usize = 8;
+    // And with no change of displays, a burst of some seconds is no tug of
+    // war either: on 2026-11-11 at 20:30 its taskbar showed itself in seven
+    // pairs 0.6 to 0.8 s apart, 5 s in all, for no reason the log tells
+    // (no full screen, no display, no Explorer started again; a window
+    // flashing its button did not do it, tried), and 8 of them within 10 s
+    // made the island her home (#115). A tug of war goes on and on: so many
+    // within 30 s is that, some twelve seconds of #69's or of the timer
+    // seeing it shown at every tick, at most 24 of one showing it once a
+    // second; the screen stutters for those seconds before she gives way.
+    const TUG_TICKS: u32 = 60;
+    const TUG_TIMES: usize = 24;
     const TUG_CALM: u32 = 60;
 
     struct Tug {
@@ -3059,7 +3068,8 @@ mod imp {
             return;
         }
         shell::rehide();
-        log(&format!("Windows' shown again ({how}): put away"));
+        // What is in front: the program that showed it, often enough (#115).
+        log(&format!("Windows' shown again ({how}), {} in front: put away", crate::fullscreen::front()));
         if systray::keep_first() {
             log("tray: Explorer's window had come first; ours put ahead again");
             ask_soon();
@@ -3117,18 +3127,18 @@ mod imp {
         }
 
         // Shown again 7 or 8 times a second all the while (its show events,
-        // #69's): a tug of war, told once, in some four seconds.
+        // #69's): a tug of war, told once, in some twelve seconds.
         #[test]
         fn shown_again_all_the_while_is_a_tug_of_war() {
             let mut tug = Tug::new();
             // Every 130 ms, the tick 500 ms.
             let told: Vec<u32> = (0..100u32).filter(|i| tug.shown(i * 130 / 500)).map(|i| i * 130).collect();
             assert_eq!(told.len(), 1);
-            assert!((3000..=4500).contains(&told[0]), "{told:?}");
+            assert!((11000..=12500).contains(&told[0]), "{told:?}");
         }
 
         // Seen by the timer at every tick, put away and shown again each
-        // time: the TUG_TIMES-th tick (four seconds).
+        // time: the TUG_TIMES-th tick (twelve seconds).
         #[test]
         fn every_tick_is_a_tug_of_war() {
             let mut tug = Tug::new();
@@ -3156,6 +3166,17 @@ mod imp {
             assert!((0..half).all(|i| !tug.shown(TUG_TICKS - half + i)));
             let told: Vec<bool> = (0..half).map(|i| tug.shown(TUG_TICKS + 1 + i)).collect();
             assert_eq!(told.last(), Some(&true));
+        }
+
+        // A burst of some seconds with nothing else to tell why, as on
+        // 2026-11-11 at 20:30 (#115: seven pairs in 5 s, then the timer, by
+        // the tick from the log), and another a minute later: no tug of war.
+        #[test]
+        fn a_few_seconds_of_it_is_nothing() {
+            let mut tug = Tug::new();
+            let burst = [33, 33, 34, 34, 36, 36, 37, 37, 38, 39, 39, 40, 40, 42];
+            assert!(burst.iter().all(|&tick| !tug.shown(tick)));
+            assert!(burst.iter().all(|&tick| !tug.shown(tick + 120)));
         }
 
         // The displays changed: Explorer's taskbar shown again as it lays

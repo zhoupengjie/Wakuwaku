@@ -1263,9 +1263,11 @@ pub fn look_under(sh: &Arc<Shared>) {
     // Kept as it was while it is not up, or nobody is about. Never along
     // the foot of the screen (#105): over Windows' taskbar, or on the work
     // area's foot, no window's top lies under the closed island.
+    // The settings read before the island's lock: never two of Shared's at once.
+    let asked = sh.home() == "island" && sh.flag("islandHideUnder");
     let (rect, wanted) = {
         let isl = sh.island.lock().unwrap();
-        let wanted = sh.home() == "island" && sh.flag("islandHideUnder") && !isl.bottom && isl.strip.is_none();
+        let wanted = asked && !isl.bottom && isl.strip.is_none();
         if wanted && (!isl.shown || sh.is_quiet()) {
             return;
         }

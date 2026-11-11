@@ -266,10 +266,12 @@ fn saved_spot(sh: &Shared) -> (i32, i32) {
 
 pub fn create(sh: &Shared) -> tauri::Result<()> {
     let primary = sh.screens().primary;
+    // Her scale read before the window's lock: never two of Shared's at once.
+    let at_scale = scale(sh);
     {
         let mut w = sh.win.lock().unwrap();
         w.sf = primary.map_or(1.0, |a| a.sf);
-        w.size = w.base_size(scale(sh));
+        w.size = w.base_size(at_scale);
         w.ct.force(Mode::Pass);
     }
     let pos = saved_spot(sh);

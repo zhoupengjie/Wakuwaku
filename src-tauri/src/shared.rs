@@ -521,7 +521,10 @@ impl Shared {
     // when it is nothing to a session she shows.
     pub fn apply_event(&self, ev: &agent_core::event::AgentEvent, chain: Option<state::Chain>) -> bool {
         use agent_core::event::Agent;
-        let out = self.pet.lock().unwrap().apply(ev, chain, now_ms(), self.hold());
+        // How long an ending stays, read before the sessions' lock: as an
+        // argument it was read with that lock held (the settings' inside it).
+        let hold = self.hold();
+        let out = self.pet.lock().unwrap().apply(ev, chain, now_ms(), hold);
         let Some(out) = out else { return false };
         if out.turns > 0 || out.worked_ms > 0 {
             // Reasonix's approvals never come to her, nor

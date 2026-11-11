@@ -11,7 +11,20 @@ src/                      页面，Tauri 直接把整个文件夹打进 exe（ta
     bridge.js             window.pet：页面和 Rust 之间的调用和事件；替页面补发鼠标进出（见"点击穿透"）
     hovers.js             页面进入过、光标已经不在其中的元素：bridge.js 替它们补发 mouseleave（见"点击穿透"第 4 条）
     pet.js                她的动画、空闲时走动和东张西望
-    island.js             灵动岛：几种形状、她在岛里、把她拉出来和放回去
+    island.js             灵动岛的核心：状态和小工具函数、几种形状、她在岛里、窗口大小、编辑任务栏布局和 update、开关、指针；下面这些部分由它在原来的位置调用（见「island.js 和 settings.js 的分块」）：
+      island-plate.js     岛下面的亚克力或更深的底、让开它下面的窗口、告诉 Rust 窗口多大
+      island-right.js     任务栏右边：托盘的框、输入法、大写锁定、网络、音量、电池、麦克风等在用、时钟、前台程序
+      island-layout.js    任务栏的布局（taskbarLayout）：三段、她的座位、条带上的小工具、叠放和轮播
+      island-glide.js     指针沿按钮滑动，程序按钮往上打开的列表（开、关、往列表去的路上不关）
+      island-wpop.js      条带上点开一个小工具的卡片、点开一个叠放
+      island-wmenu.js     小工具的右键菜单：大小、放在哪（岛、任务栏、桌面）、设置、拿掉
+      island-boards.js    桌面工作台（§7）：小工具和叠放送到桌面、收进工作台、送回来
+      island-winlist.js   程序按钮上的窗口列表：画、跟着指针滑、实时缩略图的位置、按、拖、拖文件上来
+      island-ime.js       任务栏上的输入法：布局的字、输入法的模式、Windows 自己的图标、输入法列表
+      island-look.js      任务栏的外观：云母、深浅色和强调色、字的墨色、时钟、托盘、偷看桌面
+      island-keys.js      任务栏的键盘操作（Win+T、Win+B）：方向键走、Enter / 空格按、Shift+F10 菜单
+      island-ring.js      流光提醒（flow.js 说怎么转）：光环、停留、渐隐、接下一个，她的反应和小点
+      island-drop.js      把她从岛里拉出来（墨滴）、伸手够她、吸回去（reach、absorb）
     settings.js           长在岛里的设置（五个页签：通用、Agent、外观、插件、邮件）
     panel.js              确认面板：在岛里，或在设置的横幅里
     sprite.js             图集布局、16 个注视方向
@@ -120,6 +133,17 @@ data/                     从源码运行时她的设置、宠物和日志（不
 pets/                     从源码运行时也会读这里的宠物（不进仓库）
 art/                      美术和调查资料，只在本地（只有 art/README.md 进仓库）
 ```
+
+### island.js 和 settings.js 的分块
+
+两个文件各是一个大闭包，各段共用上百个会变的 `let`，没法原样搬。按职责拆出去的段（`island-*.js`、`settings-*.js`）写成工厂函数 `window.IslandParts.<名字> = function (core) {…}`（settings 的是 `window.SettingsParts`），index.html 只是先载入它们；真正执行还是 island.js / settings.js 在那一段原来的位置同步调用，所以执行顺序和拆之前一样，初始化也还是一口气跑完。调用处传进去的对象说清了这一段用核心的什么：
+
+- 核心的函数和调用处之前已经建好的常量：原样传，段的开头 `const { … } = core` 解构，代码不变。
+- 核心的 `let`（还有调用处之后才建的常量）：传 getter，段要写的再传 setter，段里写成 `core.名字`。
+- 段自己的 `let` 别处也读写的：声明留在核心里（调用处前面），段里同样是 `core.名字`。
+- 段交还给核心的只有函数和常量（调用处解构）。核心在调用处之前（初始化时）不能用到它们：以前靠函数提升可以，现在会是 TDZ。
+
+改这些文件时：段里用到核心的一个新名字，要在调用处的对象里补上，忘了补就是运行时的 ReferenceError（页面的单元测试不加载这些文件，`tools/preview` 的截图会在图底报页面错误）。`core` 这个名字两个文件里都没有别的用处，不要再拿它当局部变量；两个文件里也没有用到 `this`，所以经 `core.f()` 调用和直接调用一样。
 
 ## 构建和运行
 

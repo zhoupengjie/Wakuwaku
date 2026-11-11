@@ -291,6 +291,13 @@ mod imp {
         set(ISLAND, plate, under, fade_ms);
     }
 
+    // Whether the dock's plate is in: shown, wholly, no fade going.
+    pub fn dock_in() -> bool {
+        let all = SHOWN.lock().unwrap();
+        let s = &all[super::DOCK];
+        s.plate.is_some() && s.alpha >= 255.0 && s.fade.is_none()
+    }
+
     // The window shown again: its plate back, as the page last wished.
     pub fn again() {
         let last = *LAST.lock().unwrap();
@@ -395,6 +402,11 @@ mod imp {
                 all = SHOWN.lock().unwrap();
                 all[which].plate = Some(p);
                 fade(hwnd, &mut all[which], from, 255.0, want.fade_ms);
+                // In at once (no fade, or it was in already): said so now.
+                if all[which].fade.is_none() {
+                    drop(all);
+                    super::plate_in(which);
+                }
             }
             None if all[which].plate.is_some() => fade(hwnd, &mut all[which], from, 0.0, want.fade_ms),
             None => {}
@@ -442,6 +454,10 @@ mod imp {
             shown.fade = None;
             // SAFETY: our own window.
             unsafe { KillTimer(hwnd, 1) };
+            if to >= 255.0 {
+                drop(all);
+                super::plate_in(which);
+            }
         }
     }
 
@@ -474,9 +490,12 @@ mod imp {
     pub fn set(_which: usize, _plate: Option<Plate>, _under: isize, _fade_ms: u32) {}
     pub fn wish(_plate: Option<Plate>, _under: isize, _fade_ms: u32, _shown: bool) {}
     pub fn again() {}
+    pub fn dock_in() -> bool {
+        false
+    }
 }
 
-pub use imp::{again, available};
+pub use imp::{again, available, dock_in};
 
 // Her app, for the pages to be drawn anew should the accent be refused.
 static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
@@ -515,6 +534,18 @@ fn refused() {
         sh.redraw();
         // The dock's page told too: the desktop's picture under it instead.
         crate::bars::refresh(&sh);
+    }
+}
+
+// A plate wholly in (faded in, or at once): the dock's page told, which
+// keeps its glass solid till then (bars.rs plate_in, bar.js plateCame).
+#[cfg_attr(not(windows), allow(dead_code))]
+fn plate_in(which: usize) {
+    if which != DOCK {
+        return;
+    }
+    if let Some(app) = APP.get() {
+        crate::bars::plate_in(&crate::shared(app));
     }
 }
 

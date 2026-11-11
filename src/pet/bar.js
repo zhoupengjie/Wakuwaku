@@ -305,7 +305,10 @@
     // Laid out anew: where its glass goes (the acrylic come or gone, or the
     // mode changed, its plate set again once it is still).
     if (isDock()) {
-      if (acrylicWas !== body.classList.contains('b-acrylic') || isLight() !== wasLight) settled = null
+      if (acrylicWas !== body.classList.contains('b-acrylic') || isLight() !== wasLight) {
+        settled = null
+        plateUp = false
+      }
       wasLight = isLight()
       glassMoves()
     }
@@ -570,6 +573,11 @@
   let settleTimer = null
   let sliding = null
   let down = true
+  // Windows' acrylic wholly in under the glass (bars.rs plate_in), and the
+  // wait for it as the glass settles; with none to come (no acrylic), as if in.
+  let plateUp = false
+  let plateWait = null
+  const plateReady = () => state.acrylic !== true || plateUp
   let wasLight = false
   let glassSent = ''
   const boxOf = () => {
@@ -596,7 +604,9 @@
     const g = plateWas ? join(now, plateWas) : now
     glassEl.style.left = `${g.x - now.x}px`
     glassEl.style.width = `${g.w}px`
-    const hole = plateAt && !down ? plateAt : null
+    // The hole only over a plate that is there: opened before, the glass
+    // stood clear while the plate came (plateCame).
+    const hole = plateAt && !down && plateReady() ? plateAt : null
     // From the firm layer's own edge, a pixel in from the glass's (bar.css).
     body.style.setProperty('--hole-l', `${hole ? hole.x - g.x - 1 : 0}px`)
     body.style.setProperty('--hole-r', `${hole ? hole.x + hole.w - g.x - 1 : 0}px`)
@@ -621,6 +631,8 @@
   function glassMoves(to) {
     if (!isDock()) return
     const now = boxOf()
+    clearTimeout(plateWait)
+    plateWait = null
     if (down || sliding || !settled) {
       drawGlass(now)
       sendGlass(now, null, 0)
@@ -659,9 +671,28 @@
     plateWas = null
     clearTimeout(lagTimer)
     sendGlass(drawGlass(now), now, PLATE_IN_MS)
-    body.classList.remove('b-firm')
+    // Solid till the plate is in under it (dock:plate), then the ground
+    // fades out over it; should it never say, after a second all the same.
+    clearTimeout(plateWait)
+    plateWait = null
+    if (plateReady()) body.classList.remove('b-firm')
+    else plateWait = setTimeout(plateCame, 1000)
     sendMins()
   }
+
+  // The plate wholly in under the glass (or waited for long enough): the
+  // ground fades out over it. The hole is cut once that has faded (it only
+  // shows with b-firm, as the glass next moves).
+  function plateCame() {
+    if (down) return
+    plateUp = true
+    if (!plateWait) return
+    clearTimeout(plateWait)
+    plateWait = null
+    if (!isDock() || sliding || !settled) return
+    body.classList.remove('b-firm')
+  }
+  listen('dock:plate', () => plateCame(), { target })
 
   new ResizeObserver(() => {
     glassMoves()
@@ -756,6 +787,10 @@
       const stowed = e.payload?.stowed === true
       down = stowed
       plateAt = plateWas = settled = null
+      // Off as it goes down, and none yet as it comes up.
+      plateUp = false
+      clearTimeout(plateWait)
+      plateWait = null
       clearTimeout(lagTimer)
       clearTimeout(sliding)
       body.classList.add('b-firm')

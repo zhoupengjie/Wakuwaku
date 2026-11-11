@@ -535,6 +535,20 @@ fn outward((ox, oy): (i32, i32), sf: f64, (x, y, w, h): (f64, f64, f64, f64)) ->
 // but for its top) or up (bar.js dock:stow); the pointer going through it
 // meanwhile, its plate and its minimized windows' pictures off as it goes
 // (its page puts them back once it is up and still).
+// The dock's plate of Windows' acrylic wholly in under it (backplate.rs):
+// its page keeps the glass solid over where it goes till then, and only
+// then lets the plate show through. Opened at once, the glass stood clear
+// for a moment as the dock came up, the window behind it seen through it,
+// while the plate (another window, on its own thread) was still coming, the
+// later the busier the computer (the user, 2026-11-11: dock从隐藏到显示的
+// 过程中，透明底会闪一下，然后变成云母).
+pub fn plate_in(sh: &Shared) {
+    let labels: Vec<String> = BARS.lock().unwrap().iter().filter(|b| b.dock && b.shown && !b.hidden && !b.stow.stowed).map(|b| b.label.clone()).collect();
+    for label in labels {
+        let _ = sh.app.emit_to(label.as_str(), "dock:plate", json!({}));
+    }
+}
+
 fn tell_stow(sh: &Shared, label: &str, stowed: bool) {
     // Down, the pointer through it at once; up, as poll finds it next.
     if stowed {
@@ -661,11 +675,14 @@ pub fn dock_glass(app: tauri::AppHandle, window: WebviewWindow, glass: (f64, f64
             b.plate = want;
             want
         });
-        (b.hwnd, plate_now, b.shown)
+        (b.hwnd, plate_now, b.shown, b.plate.is_some())
     };
-    let (hwnd, plate_now, shown) = changed;
+    let (hwnd, plate_now, shown, plated) = changed;
     if let Some(p) = plate_now {
         crate::backplate::dock(&sh, p, hwnd, fade.unwrap_or(0));
+    } else if plated && crate::backplate::dock_in() {
+        // Where it already is, and in: its page told at once (plate_in).
+        let _ = sh.app.emit_to(label.as_str(), "dock:plate", json!({}));
     }
     // Its programs in: it shows now, once.
     if ready == Some(true) && !shown {

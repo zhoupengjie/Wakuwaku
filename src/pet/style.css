@@ -2059,7 +2059,7 @@ body.home-taskbar {
   background: rgba(255, 255, 255, 0.5);
 }
 
-/* The tray's icons, as the programs drew them (taskbar.rs). */
+/* The tray's icons, as the programs drew them (taskbar/). */
 #bar-rest .tray {
   display: flex;
   align-items: center;
@@ -2106,7 +2106,7 @@ body.home-taskbar {
   color: #a1a1a6;
 }
 
-/* The windows' buttons, in the order they came (taskbar.rs): an icon and a
+/* The windows' buttons, in the order they came (taskbar/): an icon and a
    title, a line under it, longer and in Windows' accent colour for the one
    in front; lit amber while one flashes for attention. */
 #bar-rest .wins {
@@ -2695,7 +2695,7 @@ body.home-taskbar {
 }
 
 /* --- The taskbar in Windows' light mode (island.js tb-light: as Windows'
-   own taskbar is, SystemUsesLightTheme, which taskbar.rs sends) ---------------
+   own taskbar is, SystemUsesLightTheme, which taskbar/ sends) ---------------
    The strip and what opens from it light, her island too (a capsule in
    it, island.js isCapsule; its settings too). The programs draw
    their tray icons for the light taskbar themselves. Under the pointer

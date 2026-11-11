@@ -33,7 +33,7 @@
 // do. It also keeps a held Alt from opening the menu bar of the window in
 // front. Sent marked as ours, so the hook lets it by.
 //
-// Only while her taskbar holds the strip (taskbar.rs take, give_back): with
+// Only while her taskbar holds the strip (taskbar/win/hold.rs take, give_back): with
 // her island at the top of the screen, or the taskbar given back, the keys
 // are Windows' own. A window run as administrator in front does not show
 // its keys to a hook of a program that is not (UIPI): there they still go
@@ -596,7 +596,7 @@ mod imp {
         }
     }
 
-    // Her taskbar holds the strip: the keys hers (taskbar.rs take).
+    // Her taskbar holds the strip: the keys hers (taskbar/win/hold.rs take).
     pub fn start(sh: &Arc<Shared>) {
         let mut threads = THREADS.lock().unwrap();
         if threads.is_some() {
@@ -614,7 +614,7 @@ mod imp {
         *threads = Some((hook, work));
     }
 
-    // The strip given back: the keys Windows' own again (taskbar.rs
+    // The strip given back: the keys Windows' own again (taskbar/
     // give_back), its threads waited for two seconds at most.
     pub fn stop() {
         let Some((hook, work)) = THREADS.lock().unwrap().take() else { return };
@@ -690,7 +690,7 @@ mod imp {
         log(&format!("{key}: {name} ({} window(s)): {to:?}", windows.len()));
         match to {
             // Another of it, or as administrator (Win+Ctrl+Shift+digit), as
-            // Ctrl, Shift and a press on its button start one (taskbar.rs
+            // Ctrl, Shift and a press on its button start one (taskbar/
             // app: by the shortcut it was pinned from, Windows asking first).
             Target::Start => {
                 crate::taskbar::app(sh, if how == How::Admin { "admin" } else { "launch" }, &path, id.as_deref());

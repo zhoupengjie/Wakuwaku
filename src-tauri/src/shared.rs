@@ -397,7 +397,7 @@ impl Shared {
         // (backplate.rs): Windows 11, transparency effects on.
         now["plate"] = json!(backplate::available());
         // Windows' mode, for her island's look at the top of the screen (the
-        // taskbar hears it from taskbar.rs, taskbar:look).
+        // taskbar hears it from taskbar/, taskbar:look).
         if self.home() != "taskbar" {
             now["winLight"] = json!(wallpaper::look().0);
             // The side of the top of the screen her island's window is at

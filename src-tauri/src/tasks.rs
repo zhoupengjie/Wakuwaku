@@ -1,4 +1,4 @@
-// The windows the taskbar has buttons for (taskbar.rs): those Windows' own
+// The windows the taskbar has buttons for (taskbar/): those Windows' own
 // taskbar shows, as near as can be told from outside it (shown, not on
 // another desktop, not owned by another, not a tool window; or marked to be
 // on the taskbar). And what a press on a button does: the window to the
@@ -26,13 +26,13 @@ pub struct Keys {
     pub caps: bool,
 }
 
-// The clear taskbar (taskbar.rs fills_display): a window maximized on its
+// The clear taskbar (taskbar/win/buttons.rs fills_display): a window maximized on its
 // display; her island at the top of the screen (island.rs look_over_max):
 // one on its display; and (look_under) one under it.
 pub use imp::{maximized, maximized_on, reaches_into};
 
 // Another program's window as a top bar of hers may have to keep it off
-// itself (taskbar.rs keep_under_bar; its frame as seen: frame): its
+// itself (taskbar/win/work.rs keep_under_bar; its frame as seen: frame): its
 // program (pid, file name), its window's rect (left, top, right, bottom), and
 // whether it is a tool window popped up (not a menu, a tip, an IME's), as a
 // notification's is; Windows' own flyouts (is_shell_flyout) by their program.
@@ -134,7 +134,7 @@ mod imp {
     }
 
     // The app a window is (its AppUserModelID), what Windows' taskbar takes a
-    // button's icon from (taskbar.rs app_png): the one it says (a store app's
+    // button's icon from (taskbar/win/apps.rs app_png): the one it says (a store app's
     // frame says its app's from the moment it shows), else its program's
     // own, a packaged one's (Windows Terminal says nothing on its windows:
     // pinned by its id, its windows went to a button of their own,
@@ -692,7 +692,7 @@ mod imp {
     pub fn raise_top(hwnd: isize) {
         // SAFETY: a window handle and flags; nothing is pointed to.
         unsafe { SetWindowPos(hwnd as Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) };
-        // The live pictures' windows over it again (taskbar.rs thumbs_on_top).
+        // The live pictures' windows over it again (taskbar/win/thumbs.rs thumbs_on_top).
         crate::taskbar::thumbs_on_top();
     }
 
@@ -1087,7 +1087,7 @@ mod imp {
     }
 
     // Ended, as Windows' own taskbar ends a program with End task (its
-    // setting on: taskbar.rs end_task_on): user32's EndTask, forced, on the
+    // setting on: taskbar/win/look.rs end_task_on): user32's EndTask, forced, on the
     // window (Taskbar.dll, read 2026-10-14). Its own process goes at once,
     // unsaved work and all; what it started keeps running (tried: a window
     // that turned its close down went in 3 ms, the program it had started
@@ -1140,7 +1140,7 @@ mod imp {
     }
 
     // The layout, its language and Caps Lock alone: answered within this
-    // process, so asked many times a second (taskbar.rs keys_loop).
+    // process, so asked many times a second (taskbar/win/keys.rs keys_loop).
     pub fn keys_cheap() -> Keys {
         let (hkl, _) = front_ime();
         // SAFETY: a plain query; the low bit is the toggle's.
@@ -1148,7 +1148,7 @@ mod imp {
         Keys { lang: (hkl & 0xffff) as u16, hkl, native: None, caps }
     }
 
-    // A window's title now (taskbar.rs on_shell: a title said to have
+    // A window's title now (taskbar/win/thread.rs on_shell: a title said to have
     // changed, against the one shown).
     pub fn title(hwnd: isize) -> String {
         let mut text = [0u16; 512];
@@ -1159,24 +1159,24 @@ mod imp {
         String::from_utf16_lossy(&text[..n])
     }
 
-    // A window of this process (taskbar.rs on_shell: never a button, never asked).
+    // A window of this process (taskbar/win/thread.rs on_shell: never a button, never asked).
     pub fn is_ours(hwnd: isize) -> bool {
         pid_of(hwnd as Hwnd) == std::process::id()
     }
 
-    // Whether a window would have a button (taskbar.rs on_shell: one just
+    // Whether a window would have a button (taskbar/win/thread.rs on_shell: one just
     // titled, about to have one).
     pub fn is_task_window(hwnd: isize) -> bool {
         is_task(hwnd as Hwnd, std::process::id())
     }
 
-    // Shift held now (taskbar.rs keys_loop: let go, the IME's mark is read again).
+    // Shift held now (taskbar/win/keys.rs keys_loop: let go, the IME's mark is read again).
     pub fn shift_down() -> bool {
         // SAFETY: a plain query; the high bit is the key's state now.
         unsafe { GetAsyncKeyState(VK_SHIFT) as u16 & 0x8000 != 0 }
     }
 
-    // Shift and Ctrl held now (a press on a program's button, taskbar.rs
+    // Shift and Ctrl held now (a press on a program's button, taskbar/
     // taskbar_held).
     pub fn keys_held() -> (bool, bool) {
         const VK_CONTROL: i32 = 0x11;
@@ -1297,7 +1297,7 @@ mod imp {
     // connected under it. Hers was always full (all its arcs) whatever
     // Windows' showed. None: no Wi-Fi with a signal, or not to be asked.
     // Asked of WinRT by hand, as the property store above is of COM, on a
-    // thread with COM (taskbar.rs keys_loop's, multithreaded).
+    // thread with COM (taskbar/win/keys.rs keys_loop's, multithreaded).
     #[link(name = "runtimeobject")]
     extern "system" {
         fn WindowsCreateString(source: *const u16, length: u32, string: *mut *mut c_void) -> i32;
@@ -1643,7 +1643,7 @@ mod imp {
         Some(super::Popup { pid, program: file_name(&path_of(pid)), rect: (r.left, r.top, r.right, r.bottom), tool })
     }
 
-    // Windows' search, in front (taskbar.rs open: pressed again, it closes).
+    // Windows' search, in front (taskbar/win/flyouts.rs open: pressed again, it closes).
     pub fn is_search(hwnd: isize) -> bool {
         file_name(&path_of(pid_of(hwnd as Hwnd))).eq_ignore_ascii_case("searchhost.exe")
     }

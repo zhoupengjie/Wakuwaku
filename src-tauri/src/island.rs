@@ -6,7 +6,7 @@
 //           capsule inside the taskbar itself (islandEmbed, embed.rs), this
 //           window only for what opens from it
 //   taskbar a strip along the bottom in place of Windows' own, which is put
-//           away while it is up, its tray taken over (taskbar.rs); what
+//           away while it is up, its tray taken over (taskbar/); what
 //           opens grows up from it, into room kept above it (appbar.rs)
 // Both stay up while she is out, and do the talking.
 //
@@ -102,7 +102,7 @@ pub struct Island {
     bar: Option<(i32, i32, i32, i32)>,
     bar_for: Option<((i32, i32, i32, i32), i32, &'static str, Edge, bool)>,
     // The strip is a bar of ours Windows knows (appbar.rs), not one laid over
-    // the room Windows' own taskbar keeps (taskbar.rs explorer_room).
+    // the room Windows' own taskbar keeps (taskbar/win/hold.rs explorer_room).
     bar_own: bool,
     // The button held on her (a pull, or carrying her out): the window keeps the pointer.
     holding: bool,
@@ -339,7 +339,7 @@ fn alive(win: &WebviewWindow) -> bool {
 // The taskbar is up whatever hides her (out of sight, do not disturb): it is
 // the person's taskbar; only an app full screen hides it, as Windows' own.
 pub fn is_shown(sh: &Shared) -> bool {
-    // Nor while another copy of her holds the taskbar (taskbar.rs waiting).
+    // Nor while another copy of her holds the taskbar (taskbar/win/hold.rs waiting).
     let up = if sh.home() == "taskbar" { !sh.is_fullscreen() && !taskbar::waiting() } else { sh.is_visible() };
     let isl = sh.island.lock().unwrap();
     // Inside Windows' taskbar (embed.rs) with no room for the capsule: hidden
@@ -431,7 +431,7 @@ fn chosen(sh: &Shared, screens: &crate::screen::Screens) -> Option<Area> {
     screens.by_key(key.as_str().filter(|k| !k.is_empty())?)
 }
 
-// Her display's scale: the chosen one's, else the primary's (taskbar.rs
+// Her display's scale: the chosen one's, else the primary's (taskbar/
 // draws its icons at it). Not where the window is: asked on the taskbar's
 // threads, which the window's own state is not read on.
 pub fn scale(sh: &Shared) -> f64 {
@@ -790,7 +790,7 @@ fn sync_bar(sh: &Shared, keep: bool) {
 // its window: giving the strip back would move every window), given back
 // otherwise. Asked again only when the display, the height, the home or the
 // edge change. It comes with Windows' own put away first and goes with it
-// given back (taskbar.rs).
+// given back (taskbar/).
 fn sync_bar_now(sh: &Shared, keep: bool) {
     let home = sh.home();
     let edge = match home {
@@ -798,7 +798,7 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
         _ => None,
     };
     // Windows' own keeps its room along the foot for a strip there to lie
-    // over, or for the dock kept in it (split); none else (taskbar.rs set_edge).
+    // over, or for the dock kept in it (split); none else (taskbar/win/hold.rs set_edge).
     let room = edge.is_some_and(|(e, _)| e == Edge::Bottom) || dock_keeps_room(sh);
     let want = match (keep, edge) {
         (true, Some((edge, h))) => area(sh).map(|a| (a, edge, (h * a.sf).round() as i32)),
@@ -852,7 +852,7 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
             }
         }
         // Windows' own keeps its room along the bottom for a bottom strip,
-        // and none for another edge, but for the dock kept in it (taskbar.rs set_edge).
+        // and none for another edge, but for the dock kept in it (taskbar/win/hold.rs set_edge).
         taskbar::set_edge(edge, room);
         // Another copy of her holds it: nothing taken (it waits).
         if !taskbar::take(sh, strip) {
@@ -887,7 +887,7 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
         sh.log("island: Windows would not take the bar");
         return;
     }
-    // Asked of Explorer itself, not by the taskbar's window of ours (taskbar.rs claim).
+    // Asked of Explorer itself, not by the taskbar's window of ours (taskbar/win/tray.rs claim).
     let granted = taskbar::claim(|| appbar::place(hwnd, area.mon, edge, height));
     {
         let mut isl = sh.island.lock().unwrap();
@@ -930,8 +930,8 @@ pub fn take_strip_again(sh: &Shared) {
 }
 
 // Explorer set the work area as though the strip were not there
-// (taskbar.rs keep_work): its place told again (ABM_QUERYPOS, ABM_SETPOS,
-// to Explorer itself: taskbar.rs claim), as an app bar is to do when
+// (taskbar/win/work.rs keep_work): its place told again (ABM_QUERYPOS, ABM_SETPOS,
+// to Explorer itself: taskbar/win/tray.rs claim), as an app bar is to do when
 // Explorer says the bars moved (ABN_POSCHANGED, which her home's window, a
 // webview's, does not hear). Explorer had the bar registered but left it
 // out of every work area it worked out: its place, asked by the taskbar's
@@ -1363,7 +1363,7 @@ fn call_look(isl: &mut Island, cursor: (i32, i32), passive: bool, now: std::time
 }
 
 // Whether its page has said it is ready (for /health): never while no
-// window is made for it (another copy holding the taskbar, taskbar.rs).
+// window is made for it (another copy holding the taskbar, taskbar/).
 pub fn is_ready(sh: &Shared) -> bool {
     sh.island.lock().unwrap().ready
 }

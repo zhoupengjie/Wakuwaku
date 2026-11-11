@@ -921,7 +921,7 @@ mod imp {
     }
 
     // Ours put behind Explorer's, and kept there, while a new Explorer
-    // starts (taskbar.rs): out of the topmost band and under every window,
+    // starts (taskbar/): out of the topmost band and under every window,
     // so FindWindow finds Explorer's (topmost) first. Let go, it is put
     // first again by the next keep_first.
     pub fn set_aside(aside: bool) {

@@ -159,7 +159,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
 // A right press on the volume, the network or the clock of her taskbar:
 // the menu Windows' own taskbar has there (SystemTray.dll, read
 // 2026-10-14), its items in its order and words, a native menu as hers on
-// the strip is; each opens what Windows' opens (taskbar.rs open). None for
+// the strip is; each opens what Windows' opens (taskbar/win/flyouts.rs open). None for
 // another part: hers.
 pub fn part_menu(sh: &Shared, part: &str) -> Option<tauri::Result<Menu<Wry>>> {
     let items: &[&str] = match part {

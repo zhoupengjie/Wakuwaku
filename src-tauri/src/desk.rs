@@ -1263,7 +1263,7 @@ pub fn short_key(id: &str) -> String {
     format!("d{:012x}", h & 0xFFFF_FFFF_FFFF)
 }
 
-// Windows' calls declared as the other modules declare them (taskbar.rs,
+// Windows' calls declared as the other modules declare them (taskbar/,
 // backplate.rs, fullscreen.rs: the same shapes, or Rust warns).
 #[cfg(windows)]
 mod imp {

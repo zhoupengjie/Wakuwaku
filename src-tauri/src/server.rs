@@ -464,7 +464,7 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool, hooks: &SyncSender
         },
         ("GET", "/health") => {
             // Her pages up (each told pet_ready), and whether this copy waits
-            // for another holding the taskbar (taskbar.rs: no island made
+            // for another holding the taskbar (taskbar/: no island made
             // meanwhile): what a test waits on after starting a copy, not
             // the port nor a line of the log. One killed or quit a second
             // after it started has no page yet, as one that never gets them

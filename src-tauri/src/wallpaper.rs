@@ -1,4 +1,4 @@
-// The desktop's picture on a display, for the taskbar's Mica (taskbar.rs
+// The desktop's picture on a display, for the taskbar's Mica (taskbar/
 // sends it, mica.js draws it): which file Windows shows there, how it lays
 // it on the display (fill, fit, stretch, center, tile, or one picture across
 // all of them), and the colour round it. Asked of Windows' own
@@ -50,7 +50,7 @@ pub fn look() -> (bool, Option<Accent>) {
 // measured 2026-10-28). Looked at only then, the old picture was seen, and
 // the new one waited for the next look (the taskbar's half minute, 28 s;
 // on the desktop the next change's word), the strip's words light or dark
-// by the old one meanwhile. So who hears it (taskbar.rs, desk.rs) looks
+// by the old one meanwhile. So who hears it (taskbar/, desk.rs) looks
 // again every SETTLE_MS for SETTLE_LOOKS times, five seconds; each new word
 // starts them over.
 #[cfg_attr(not(windows), allow(dead_code))]

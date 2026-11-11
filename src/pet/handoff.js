@@ -1,4 +1,4 @@
-// The handover between Windows' own taskbar and hers (taskbar.rs), so the
+// The handover between Windows' own taskbar and hers (taskbar/), so the
 // foot of the screen is never bare. Starting, a picture of Windows' strip,
 // taken before hers shows, is laid where the strip is, over it (covered:
 // Windows' is hidden under it then, unseen); what is on it, its icons and

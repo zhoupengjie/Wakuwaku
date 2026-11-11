@@ -1,5 +1,5 @@
 // The default speakers' volume and whether they are muted, for the
-// taskbar's volume icon (taskbar.rs keys_loop, island.js showVolume): drawn
+// taskbar's volume icon (taskbar/win/keys.rs keys_loop, island.js showVolume): drawn
 // as Windows' own taskbar draws it, its waves up to the volume. Asked of
 // Windows' Core Audio (IMMDeviceEnumerator, then the default endpoint's
 // IAudioEndpointVolume).
@@ -90,7 +90,7 @@ mod imp {
         }
     }
 
-    // The volume asked for again and again on one thread (taskbar.rs
+    // The volume asked for again and again on one thread (taskbar/
     // keys_loop): the enumerator and the default speakers' volume object are
     // kept between asks (made anew for each one, every ask was a trip to
     // Windows' audio service), the speakers looked up again every so often

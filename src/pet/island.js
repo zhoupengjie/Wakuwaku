@@ -2,7 +2,7 @@
 // Dynamic Island (island; or at a top corner, anchor.js), or a strip along
 // the bottom of the screen in place of Windows' taskbar (taskbar): its left
 // end hers, the other sessions as tags along the rest, with the Start
-// button, the tray's icons (taskbar.rs) and the clock besides. The same element in each, which
+// button, the tray's icons (taskbar/) and the clock besides. The same element in each, which
 // springs between three shapes (below the island; in the taskbar, growing
 // up from it):
 //   compact   her round portrait, where the session is (or whose ending it
@@ -331,7 +331,7 @@
     // The tray's icons where they are drawn now, for the menus they open.
     requestAnimationFrame(sendTrayRects)
   }
-  // Windows' look as taskbar.rs sent it last: its mode (dark, light) and
+  // Windows' look as taskbar/ sent it last: its mode (dark, light) and
   // accent colour; and whether its End task is on (a program's menu offers it).
   let look = { mode: 'dark' }
   let spriteUrl = null
@@ -445,7 +445,7 @@
   // solid nor clear.
   const isMica = () => isOn() && home() === 'taskbar' && !['black', 'clear'].includes(config.taskbarMaterial)
   // The taskbar's strip clear, the desktop itself through it; while a window
-  // is maximized or full screen on its display (taskbar.rs "max") it fills
+  // is maximized or full screen on its display (taskbar/ "max") it fills
   // in, as Mica (its default) or solid, unless it is to stay clear always
   // (taskbarClearWhen).
   const isClear = () => isOn() && home() === 'taskbar' && config.taskbarMaterial === 'clear'
@@ -457,7 +457,7 @@
   // enough for dark words.
   let backdrop = null
   const backdropLight = () => (backdrop ? Mica.wantsDarkInk(backdrop.mean) : null)
-  // The taskbar light, as Windows' own is in its light mode (taskbar.rs):
+  // The taskbar light, as Windows' own is in its light mode (taskbar/):
   // the strip's ground, what opens from it, her island, the settings.
   const isLight = () => isOn() && home() === 'taskbar' && look.mode === 'light'
   // The strip's own words dark (tb-ink-light), what is drawn on it alone:
@@ -1413,7 +1413,7 @@
   // Resized for its room, the window moves the island in the page.
   window.addEventListener('resize', () => plateSent && !plateMove && showPlate(0))
 
-  // Over a maximized window (one on her display, taskbar.rs "max"), a
+  // Over a maximized window (one on her display, taskbar/ "max"), a
   // see-through ground the plate does not blur goes to DEEP_OP while open,
   // over DEEP_MS (at once as it opens), and back as it closes or the window
   // is no longer maximized.
@@ -1632,7 +1632,7 @@
   })
   // As Windows 11's: its mark pressed in under the pointer and springing
   // back; a bounce when Windows' Start menu opens by the Windows key, and
-  // lit while it is open (taskbar.rs taskbar:start). Pressed just now, the
+  // lit while it is open (taskbar/ taskbar:start). Pressed just now, the
   // press was its bounce.
   let startPressedAt = 0
   startButton.addEventListener('pointerdown', e => {
@@ -2328,7 +2328,7 @@
   let trayIcons = []
   let trayDrawn = ''
   let trayRectsSent = ''
-  // The windows' buttons as last sent (taskbar.rs), and as drawn.
+  // The windows' buttons as last sent (taskbar/), and as drawn.
   let taskWindows = []
   let windowsDrawn = ''
   // The programs' buttons drawn once already: a new one after that grows its line in.
@@ -2539,7 +2539,7 @@
     placeSlot()
   })
 
-  // A button for each program (taskbar.rs): those kept on the taskbar
+  // A button for each program (taskbar/): those kept on the taskbar
   // first, then the others as their windows came. Its icon; the title of its
   // one window, or its name and how many; none while it does not run (its
   // name then under the pointer). Icons alone (style.css #bar-rest.icons):
@@ -2719,7 +2719,7 @@
 
   // While the windows' list (or menu) or the folded tray icons are open, a
   // press anywhere else closes them, as Windows' do: told by the host
-  // (taskbar.rs press hook), for ours never take the focus whose loss would.
+  // (taskbar/win/presses.rs press hook), for ours never take the focus whose loss would.
   let watching = false
   // The widget on the taskbar whose card is open (openWidgetPop: its entry,
   // and in a group the widget picked); the stack opened (openStackPop); a
@@ -3543,7 +3543,7 @@
     const rows = []
     if (popFor.kind === 'list') {
       // A card for each: its icon, title and ✕, and room under them for
-      // its live picture (taskbar.rs thumbs).
+      // its live picture (taskbar/mod.rs thumbs).
       for (const w of windows) {
         const card = el('div', w.front ? 'wcard front' : 'wcard')
         card.dataset.win = w.id
@@ -3912,7 +3912,7 @@
   let fileTimer
   window.pet.onFileDrag((type, at, paths) => {
     // Let go of over the strip: programs and shortcuts to them pinned, as
-    // Windows' own taskbar pins one dropped on it (taskbar.rs taskbar_pin_files).
+    // Windows' own taskbar pins one dropped on it (taskbar/mod.rs taskbar_pin_files).
     if (type === 'drop' && at && paths?.length && isOn() && home() === 'taskbar' && !editLayout) {
       const on = document.elementFromPoint(at.x, at.y)
       if (on && (barRest.contains(on) || island.contains(on))) window.pet.taskbar.pinFiles(paths)
@@ -3950,7 +3950,7 @@
     const close = e.target.closest('[data-close]')
     if (close) return window.pet.taskbar.window(close.dataset.close, 'close')
     const row = e.target.closest('[data-win]')
-    // A window picked: to the front, never minimized (taskbar.rs 'front').
+    // A window picked: to the front, never minimized (taskbar/ 'front').
     if (row) {
       closePop()
       return window.pet.taskbar.window(row.dataset.win, 'front')
@@ -3976,7 +3976,7 @@
   }
   // The mode's word in the tip where Windows gives none of its own.
   const MODE_WORDS = { 中: '中文', 英: '英文' }
-  // The input methods' icons (taskbar.rs taskbar:imeIcons), by key: each
+  // The input methods' icons (taskbar/ taskbar:imeIcons), by key: each
   // sent once, named by the keys after it.
   const imeIcons = {}
   let keysNow = null
@@ -4077,7 +4077,7 @@
   // --- The taskbar's look: Mica, light or dark, Windows' accent -------------------------
 
   // Behind the strip's parts: the desktop's picture under it, blurred and
-  // tinted (mica.js) for Windows' mode, as taskbar.rs sent it last; drawn
+  // tinted (mica.js) for Windows' mode, as taskbar/ sent it last; drawn
   // again only when the picture, the mode or the strip's width changes. None
   // on a solid strip. On a clear one (tb-clear) it is drawn too, unseen, if
   // the strip is to fill in as Mica (tb-clear-mica): it fades in at once
@@ -4265,7 +4265,7 @@
     })
   }
 
-  // Windows' mode: as taskbar.rs tells the taskbar (taskbar:look), and in
+  // Windows' mode: as taskbar/ tells the taskbar (taskbar:look), and in
   // pet:update at the top of the screen (winLight), where there is no
   // taskbar to hear it from.
   const modeNow = () => (home() === 'taskbar' ? look.mode : now.winLight === true ? 'light' : 'dark')
@@ -4352,7 +4352,7 @@
     drawMica()
   })
 
-  // Windows' mode and accent colour (taskbar.rs). The accent as its own
+  // Windows' mode and accent colour (taskbar/). The accent as its own
   // taskbar draws with it: a lighter one on the dark strip, a darker one on
   // the light (Mica.accentShade). --win-accent by Windows' mode, for the
   // settings and what opens from the strip; --strip-accent by the strip's
@@ -4409,7 +4409,7 @@
   })
 
   // The time and the date, as Windows' taskbar has them: with the seconds
-  // while Windows' own clock shows them (taskbar.rs seconds_on), the time
+  // while Windows' own clock shows them (taskbar/win/look.rs seconds_on), the time
   // anew at each second's start then, else every five seconds. Its digits
   // as wide as each other (style.css .tclock), so the tray beside it keeps
   // still as they change.
@@ -4594,7 +4594,7 @@
   })
   trayBox.addEventListener('mouseenter', () => clearTimeout(trayCloseTimer))
 
-  // Where each icon is, for the programs that ask (taskbar.rs): a folded
+  // Where each icon is, for the programs that ask (taskbar/): a folded
   // one, while folded, is where ^ is.
   function sendTrayRects() {
     if (home() !== 'taskbar') return
@@ -4617,7 +4617,7 @@
     requestAnimationFrame(sendTrayRects)
   })
 
-  // The icons' pictures kept here: taskbar.rs (send_icons) sends each once,
+  // The icons' pictures kept here: taskbar/ (send_icons) sends each once,
   // and again only when it is another; a list without one's png means the
   // one kept.
   const trayPngs = new Map()

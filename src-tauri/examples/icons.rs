@@ -101,7 +101,7 @@ fn main() {
             let mut r = icons::Rect::default();
             // SAFETY: our own struct, of the size the call writes.
             unsafe { SystemParametersInfoW(0x30, 0, &mut r as *mut icons::Rect as *mut std::ffi::c_void, 0) };
-            // The display less the strip, as taskbar.rs strip_moved; the bottom as it is.
+            // The display less the strip, as taskbar/win/work.rs strip_moved; the bottom as it is.
             let mut r = icons::Rect { left: 0, top: 0, right: 2560, bottom: r.bottom };
             match edge {
                 "left" => r.left = strip.0 + strip.2,

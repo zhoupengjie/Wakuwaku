@@ -1755,7 +1755,7 @@
       'menu.emptyBin': '清空回收站',
       'menu.notifySettings': '通知设置',
       'clock.local': '本地时间',
-      // Another program fighting her over Windows' taskbar (taskbar.rs give_up, #69).
+      // Another program fighting her over Windows' taskbar (taskbar/win/hold.rs give_up, #69).
       'taskbar.tug': '别的程序在管任务栏',
       'taskbar.tugTap': '已切到灵动岛，点一下去外观设置',
       'update.out': '有新版本 v{version}',
@@ -3524,7 +3524,7 @@
       'menu.emptyBin': 'Empty the Recycle Bin',
       'menu.notifySettings': 'Notifications settings',
       'clock.local': 'Local time',
-      // Another program fighting her over Windows' taskbar (taskbar.rs give_up, #69).
+      // Another program fighting her over Windows' taskbar (taskbar/win/hold.rs give_up, #69).
       'taskbar.tug': 'Another app runs the taskbar',
       'taskbar.tugTap': 'Switched to the island · tap for Appearance',
       'update.out': 'A new version: v{version}',

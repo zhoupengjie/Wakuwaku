@@ -241,7 +241,7 @@ mod imp {
         name: *const u16,
     }
 
-    // BITMAPINFOHEADER (BITMAPINFO's colours unused at 32 bits), as taskbar.rs has it.
+    // BITMAPINFOHEADER (BITMAPINFO's colours unused at 32 bits), as taskbar/ has it.
     #[repr(C)]
     struct BitmapInfoHeader {
         size: u32,

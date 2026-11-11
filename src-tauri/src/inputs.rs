@@ -31,7 +31,7 @@
 //
 // On a thread of its own (the switcher calls back on the thread that made
 // it, through its windows' messages), from when the taskbar is taken to
-// when it is given back (taskbar.rs).
+// when it is given back (taskbar/).
 
 #[cfg(windows)]
 mod imp {
@@ -253,7 +253,7 @@ mod imp {
     static METHODS: Mutex<Option<(Vec<Method>, std::time::Instant)>> = Mutex::new(None);
     // Asked to stop before its thread had given out its id (stop).
     static STOPPING: AtomicBool = AtomicBool::new(false);
-    // How an icon is drawn into a PNG (taskbar.rs png_of).
+    // How an icon is drawn into a PNG (taskbar/win/tray.rs png_of).
     type Draw = fn(isize, i32) -> Option<String>;
     static DRAW: Mutex<Option<Draw>> = Mutex::new(None);
 
@@ -702,7 +702,7 @@ mod imp {
         s.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
     }
 
-    // The input method in front read again: told to the page (taskbar.rs
+    // The input method in front read again: told to the page (taskbar/
     // keys_loop) when it changed; which one it was taken for, in the log,
     // when that changed (a person's log then says which way it went: its
     // name, id, icon and Windows' own or not, #26).
@@ -817,7 +817,7 @@ mod imp {
         unsafe { PostMessageW(GetForegroundWindow(), WM_INPUTLANGCHANGEREQUEST, 0, hkl as i32 as isize) };
     }
 
-    // Started with the taskbar's keys (taskbar.rs take): told when the
+    // Started with the taskbar's keys (taskbar/win/hold.rs take): told when the
     // input method in front changed; its log lines.
     pub fn start(draw: Draw, changed: Box<dyn Fn() + Send>, log: Box<dyn Fn(&str) + Send>) {
         let mut thread = THREAD.lock().unwrap();
@@ -833,7 +833,7 @@ mod imp {
         *thread = Some(std::thread::Builder::new().name("taskbar input".into()).spawn(move || run(changed, log)).expect("a thread"));
     }
 
-    // Asked to stop (taskbar.rs give_back): its thread, to be waited for.
+    // Asked to stop (taskbar/win/hold.rs give_back): its thread, to be waited for.
     pub fn stop() -> Option<JoinHandle<()>> {
         let thread = THREAD.lock().unwrap().take()?;
         STOPPING.store(true, Ordering::SeqCst);
@@ -846,7 +846,7 @@ mod imp {
         Some(thread)
     }
 
-    // The keyboard layout in front (taskbar.rs keys_loop, four times a
+    // The keyboard layout in front (taskbar/win/keys.rs keys_loop, four times a
     // second): read again only when it changed.
     pub fn layout(hkl: isize) {
         let hkl = hkl as u32;

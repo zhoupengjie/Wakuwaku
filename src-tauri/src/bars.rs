@@ -51,7 +51,7 @@ struct Bar {
     // What its page was last told.
     sent: Value,
     // Its display's wallpaper, for its Mica (read_papers): as the main
-    // strip's (taskbar.rs look_at_desktop), from its own strip's corner.
+    // strip's (taskbar/win/look.rs look_at_desktop), from its own strip's corner.
     paper: Value,
     // The work area's side on its edge as last set clear of the strip, and
     // when (keep_work); given back as it goes (give_work).
@@ -275,7 +275,7 @@ fn close(sh: &Shared, g: Gone) {
         appbar::remove(g.hwnd);
     }
     if g.dock {
-        // On the main thread, where its pictures' window is (taskbar.rs make_dock_host).
+        // On the main thread, where its pictures' window is (taskbar/win/thumbs.rs make_dock_host).
         let _ = sh.app.run_on_main_thread(taskbar::drop_dock_host);
         crate::backplate::dock(sh, None, 0, 0);
     }
@@ -289,14 +289,14 @@ fn close(sh: &Shared, g: Gone) {
 }
 
 // The work area on its display kept clear of its strip, as hers is on hers
-// (taskbar.rs tick): Windows does not count the app bar, and a window
+// (taskbar/win/thread.rs tick): Windows does not count the app bar, and a window
 // maximized on a display at 175% lay 84 px under a strip along its left,
 // the work area the whole display (the test session, 2026-10-13). Along
 // the bottom the room Windows' own keeps there mostly does it already. Its
 // side on the strip's edge set where the strip starts: at once for a new
 // one, then at most every two seconds should something set it back
 // (Explorer, as app bars come and go); a quarter of a second at Windows'
-// word that the work area changed (eager: taskbar.rs keep_work), Explorer's
+// word that the work area changed (eager: taskbar/win/work.rs keep_work), Explorer's
 // taskbar showing itself having set it to the whole display. Its app bar's
 // place told again first, as hers (island.rs reclaim_bar): Explorer then
 // counts it, and sets the work area itself.
@@ -444,7 +444,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
         crate::tasks::no_transitions(hwnd);
         sh.own_window(&win);
         // The dock asks Windows for no room: Windows' own keeps it, or none is kept.
-        // Its place asked of Explorer itself (taskbar.rs claim).
+        // Its place asked of Explorer itself (taskbar/win/tray.rs claim).
         let granted = if dock { strip } else if hwnd != 0 && appbar::register(hwnd) { taskbar::claim(|| appbar::place(hwnd, area.mon, edge, thick)) } else { strip };
         lay(&win, granted);
         // Zoomed before its page lays out (fit_zoom).
@@ -620,7 +620,7 @@ pub fn dock_thumbs(app: tauri::AppHandle, window: WebviewWindow, items: Vec<(i64
 // room for them, while it is up (not out of the way, nor sliding: off,
 // nor hidden by an app full screen); none else. Their window over the
 // whole dock (its window's rect), their icons over them. Placed on the
-// main thread, their windows' (taskbar.rs make_dock_host), in the order asked.
+// main thread, their windows' (taskbar/win/thumbs.rs make_dock_host), in the order asked.
 fn show_mins(sh: &Shared, off: bool) {
     #[allow(clippy::type_complexity)]
     let (rooms, badges, area): (Vec<(isize, Mon)>, Vec<(isize, Mon)>, Option<Mon>) = {
@@ -739,7 +739,7 @@ pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
             let _ = win.set_ignore_cursor_events(through);
         }
     }
-    // Its minimized windows' pictures kept over it (taskbar.rs dock_thumbs_over).
+    // Its minimized windows' pictures kept over it (taskbar/win/thumbs.rs dock_thumbs_over).
     let pictured = BARS.lock().unwrap().iter().find(|b| b.dock && b.shown && !b.hidden && !b.stow.stowed && !b.mins.is_empty()).map(|b| b.hwnd);
     if let Some(dock) = pictured {
         taskbar::dock_thumbs_over(dock);
@@ -799,7 +799,7 @@ fn stow_look(s: &mut Stow, rect: Mon, mon: Mon, sf: f64, cursor: (i32, i32), kee
 }
 
 // The dock's Recycle Bin: looked at every few seconds (empty or full, as
-// Windows draws it: taskbar.rs recycle_bin), its page told as it changes.
+// Windows draws it: taskbar/win/flyouts.rs recycle_bin), its page told as it changes.
 const BIN_EVERY: Duration = Duration::from_secs(3);
 
 fn look_at_bin(sh: &Shared) {
@@ -835,7 +835,7 @@ pub fn look_under(sh: &Shared) {
     }
 }
 
-// The keyboard, the network and the volume as they change (taskbar.rs
+// The keyboard, the network and the volume as they change (taskbar/
 // keys_loop): told the dock, for quick settings in it (splitKeys dock).
 pub fn keys(sh: &Shared, now: &Value) {
     let docks: Vec<String> = BARS.lock().unwrap().iter().filter(|b| b.dock && b.ready).map(|b| b.label.clone()).collect();
@@ -844,7 +844,7 @@ pub fn keys(sh: &Shared, now: &Value) {
     }
 }
 
-// Windows' Start menu opened or closed (taskbar.rs start_seen): the dock's
+// Windows' Start menu opened or closed (taskbar/win/flyouts.rs start_seen): the dock's
 // Start button lit as it is open, the dock up meanwhile (poll).
 pub fn start_seen(sh: &Shared, open: bool) {
     let docks: Vec<String> = BARS.lock().unwrap().iter().filter(|b| b.dock).map(|b| b.label.clone()).collect();
@@ -876,7 +876,7 @@ pub fn bar_ready(app: tauri::AppHandle, window: WebviewWindow) {
 // Each one's display's wallpaper, for its Mica: which picture Windows shows
 // there and how it lays it (wallpaper.rs, each display's own), where that
 // display and all of them are from the strip's corner, in its px; told
-// with the rest (refresh). With the desktop's look (taskbar.rs
+// with the rest (refresh). With the desktop's look (taskbar/
 // look_at_desktop: as it changes, and every half minute), off the main thread.
 pub fn read_papers(sh: &Shared) {
     let bars: Vec<(String, Mon, f64)> = BARS.lock().unwrap().iter().filter_map(|b| b.strip.map(|s| (b.label.clone(), s, b.sf))).collect();
@@ -982,7 +982,7 @@ pub fn full_screen(sh: &Shared, cover: Option<Mon>) {
 // --- A program's windows or what can be done with it, over its button -----------------
 // As on her own taskbar (island.js openPop): the pointer resting on a
 // running program's button, its windows, each a card with its live picture
-// (Windows draws them, taskbar.rs thumbs); a right press, its menu (another
+// (Windows draws them, taskbar/mod.rs thumbs); a right press, its menu (another
 // window, keep it on the taskbar or no longer, close). A strip there is too
 // thin to hold them: one window of their own (barpop: pet/barpop.html),
 // made the first time, laid against the strip over the button, for any of
@@ -1038,7 +1038,7 @@ pub fn bar_pop(app: tauri::AppHandle, window: WebviewWindow, kind: String, key: 
     // window kept on top, none of a program's can go over them, and the
     // menu opened under Start, hidden by it (the user, 2026-11-08: 展开Win菜单
     // 的时候，对图标按右键，图标的右键菜单会被Win菜单挡住). Off this thread:
-    // closing waits for it to go (taskbar.rs close_flyout, 400 ms at most).
+    // closing waits for it to go (taskbar/win/flyouts.rs close_flyout, 400 ms at most).
     if menu {
         std::thread::spawn(move || {
             taskbar::close_flyout();
@@ -1205,7 +1205,7 @@ fn hide_pop(sh: &Shared) {
     let _ = sh.app.emit_to(was.bar.as_str(), "bar:pop-gone", json!({}));
 }
 
-// A press anywhere (taskbar.rs press hook): off the list and off its strip,
+// A press anywhere (taskbar/win/presses.rs press hook): off the list and off its strip,
 // it goes, as Windows' own; on the strip, its page has the press.
 pub fn pressed(sh: &Shared, (x, y): (i32, i32)) {
     let inside = |r: Mon| x >= r.0 && y >= r.1 && x < r.0 + r.2 && y < r.1 + r.3;
@@ -1238,7 +1238,7 @@ fn spread() -> u32 {
     }
 }
 
-// The buttons a taskbar shows of all (taskbar.rs, each window with the
+// The buttons a taskbar shows of all (taskbar/, each window with the
 // display it is on, mon): on the main display all of them, unless only
 // where open (2); on another display all of them (0), or only those of
 // its own windows (1, 2), the pinned ones then on the main one alone.
@@ -1269,7 +1269,7 @@ pub fn for_main(sh: &Shared, all: &Value) -> Value {
 }
 
 // A window maximized or full screen on this display, not minimized
-// (taskbar.rs fills_display), whichever taskbar has its button: a clear
+// (taskbar/win/buttons.rs fills_display), whichever taskbar has its button: a clear
 // strip here fills in then, as Mica or solid (taskbarClearWhen), as hers
 // does on hers (island.js isFilled).
 fn fills(all: &Value, mon: Mon) -> bool {

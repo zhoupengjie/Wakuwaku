@@ -1,6 +1,6 @@
 // Over a program's button on her taskbar on another display (bars.rs
 // bar_pop): its windows, a card each with its live picture (Windows draws
-// them where the cards leave room, taskbar.rs thumbs), or, on a right
+// them where the cards leave room, taskbar/mod.rs thumbs), or, on a right
 // press, what can be done with it (Windows' End task too while it is on);
 // as her own taskbar's (island.js drawPop).
 // The window is laid against the strip at the size this lays it out at

@@ -19,9 +19,9 @@
 //   pet.rs         her window: size, place, eyes, drags, being carried, walks
 //   island.rs      her home's window (island, taskbar), and the settings
 //   appbar.rs      the taskbar's strip, kept from other windows
-//   taskbar.rs     the taskbar's side of Windows: its own put away (shell.rs),
+//   taskbar/       the taskbar's side of Windows: its own put away (shell.rs),
 //                  the tray taken over (systray.rs), the windows' buttons (tasks.rs),
-//                  the volume (audio.rs)
+//                  the volume (audio.rs); its parts on Windows in taskbar/win/
 //   settings.rs    what the settings show and change
 //   pointer.rs     click-through, for both windows; screen.rs the work areas
 //   asks.rs        prompts answered on her or the island

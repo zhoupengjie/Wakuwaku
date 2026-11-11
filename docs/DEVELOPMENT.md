@@ -25,7 +25,15 @@ src/                      页面，Tauri 直接把整个文件夹打进 exe（ta
       island-keys.js      任务栏的键盘操作（Win+T、Win+B）：方向键走、Enter / 空格按、Shift+F10 菜单
       island-ring.js      流光提醒（flow.js 说怎么转）：光环、停留、渐隐、接下一个，她的反应和小点
       island-drop.js      把她从岛里拉出来（墨滴）、伸手够她、吸回去（reach、absorb）
-    settings.js           长在岛里的设置（五个页签：通用、Agent、外观、插件、邮件）
+    settings.js           长在岛里的设置（五个页签：通用、Agent、外观、插件、邮件）：核心是快照和补丁、页面框架、提醒、绘制、开关、点击和按键；下面这些部分由它在原来的位置调用：
+      settings-look.js    外观页：她的家、岛的外观（预设或自己调）、Windows 的深浅色和强调色、桌面壁纸
+      settings-addons.js  别人的插件和资源包：每个的一行、自己的一页（能做什么）、插件页下面的子页
+      settings-market.js  插件市场：列表、每个的一页、装和更新、卸载、新权限、从文件安装；底部的提示
+      settings-plugins.js 插件页：内置的、她跑的、别人的，各放在哪；监控展开后的传感器（Windows 自己的、CPU 助手、LHM）
+      settings-mail.js    邮件账户：出错的话、像 Thunderbird 那样设置（地址和密码、服务器、代理），收件箱
+      settings-letter.js  写信（新信、回复、转发）和发送、读信、邮件页、网络页（代理、测试）、信和按钮的菜单
+      settings-agents.js  Agent 页（agents.js）：每家一行和展开的内容、连接、修复、移除；通用页的更新、崩溃报告、关于
+      settings-welcome.js 通用页顶上的欢迎：本机找到的 agent、各怎么连、一次连好；屏幕那几行、失败的快捷键；哪个页签画哪页（PAGES）
     panel.js              确认面板：在岛里，或在设置的横幅里
     sprite.js             图集布局、16 个注视方向
     status.js             把一个会话说成话：名字、当前这一步、任务清单进度、结果（岛、设置、她的提示共用）

@@ -142,9 +142,9 @@ pub(super) fn look_at_desktop() {
         "mode": if light { "light" } else { "dark" },
         "accent": accent.map(|a| json!({ "base": a.base, "light": a.light, "dark": a.dark })),
         "flashes": flash_count(),
-        // Whether a program's menu offers End task (island.js drawPop).
+        // Whether a program's menu offers End task (island-winlist.js drawPop).
         "endTask": end_task_on(),
-        // Whether the clock shows the seconds (island.js tickClock, bar.js).
+        // Whether the clock shows the seconds (island-look.js tickClock, bar.js).
         "seconds": seconds_on(),
         // Whether Task View has a button, after Start (island.js, bar.js).
         "taskView": task_view_on(),

@@ -549,7 +549,7 @@
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = api
   else {
-    // The page's own: those installed since it came up (settings.js marks
+    // The page's own: those installed since it came up (settings-mail.js marks
     // them, picker.js shows 新 until placed).
     api.news = makeNews()
     root.AddonUI = api

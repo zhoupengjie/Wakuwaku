@@ -2,7 +2,7 @@
 // bar_pop): its windows, a card each with its live picture (Windows draws
 // them where the cards leave room, taskbar/mod.rs thumbs), or, on a right
 // press, what can be done with it (Windows' End task too while it is on);
-// as her own taskbar's (island.js drawPop).
+// as her own taskbar's (island-winlist.js drawPop).
 // The window is laid against the strip at the size this lays it out at
 // (barpop_place). The windows' list goes once the pointer has been off the
 // button and off it a moment; either goes at a press elsewhere (bars.rs
@@ -70,7 +70,7 @@
     }
     const out = [el('div', 'whead', app.name), item(t(s.lang, windows.length ? 'taskbar.newWindow' : 'taskbar.open'), 'launch'), item(t(s.lang, app.pinned ? 'taskbar.unpin' : 'taskbar.pin'), app.pinned ? 'unpin' : 'pin')]
     // Windows' End task while its setting is on (bars.rs, read as it
-    // opens), but for File Explorer, as on her own taskbar (island.js drawPop).
+    // opens), but for File Explorer, as on her own taskbar (island-winlist.js drawPop).
     if (windows.length && s.endTask && !/(^|[\\/])explorer\.exe$/i.test(app.path || '')) out.push(item(t(s.lang, windows.length > 1 ? 'taskbar.endAll' : 'taskbar.end'), 'end'))
     if (windows.length) out.push(item(t(s.lang, windows.length > 1 ? 'taskbar.closeAll' : 'taskbar.close'), 'close'))
     return out

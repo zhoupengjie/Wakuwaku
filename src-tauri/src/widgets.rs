@@ -1102,7 +1102,7 @@ pub struct Power {
 
 // The battery for the taskbar's quick settings, beside the network and the
 // volume as Windows' own shows it there on a laptop (taskbar/win/keys.rs keys_loop,
-// island.js showBattery), with whether Windows shows its percentage beside
+// island-right.js showBattery), with whether Windows shows its percentage beside
 // it; null without a battery (a desktop), and none is shown.
 pub fn battery_state() -> Value {
     match sys::power() {

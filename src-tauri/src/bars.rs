@@ -980,7 +980,7 @@ pub fn full_screen(sh: &Shared, cover: Option<Mon>) {
 }
 
 // --- A program's windows or what can be done with it, over its button -----------------
-// As on her own taskbar (island.js openPop): the pointer resting on a
+// As on her own taskbar (island-glide.js openPop): the pointer resting on a
 // running program's button, its windows, each a card with its live picture
 // (Windows draws them, taskbar/mod.rs thumbs); a right press, its menu (another
 // window, keep it on the taskbar or no longer, close). A strip there is too

@@ -329,7 +329,7 @@
       's.taskbarButtonsNote': '只显示图标时，鼠标停在上面会列出它的窗口',
       's.taskbarButtonsSide': '侧边任务栏只显示图标',
       's.taskbarEdge': '任务栏位置',
-      // Which display her home is on (settings.js screenRow, #104).
+      // Which display her home is on (settings-welcome.js screenRow, #104).
       's.screen': '屏幕',
       's.screenNote': '她的家在 {n} 号屏（{w}×{h}）；选别的，她整个搬过去',
       's.screenNoteMain': '她的家在 {n} 号屏（{w}×{h}），Windows 的主显示器；选别的，她整个搬过去',
@@ -1522,7 +1522,7 @@
       'hint.off': '不用提醒',
       's.noPetYet': '还没有宠物：在「宠物」页下载一只',
 
-      // Each agent's own words on the Agent page (agents.js words, settings.js agentNotes)
+      // Each agent's own words on the Agent page (agents.js words, settings-agents.js agentNotes)
       's.codexUpgradable': '可以改用后台 hook（Codex 少等）',
       's.codexUpgradeNote': '现在的 hook 都正常。修复会把开始一轮和每一步的 hook 改到后台运行，Codex 每轮、每次改文件各少等约 0.3 秒；改完在 Codex 的 /hooks（桌面版：设置 → 钩子）里信任这 3 个（UserPromptSubmit、PreToolUse、PostToolUse），别的不用再信任。',
       's.agyOff': '在 hooks.json 里被关掉了',
@@ -1572,7 +1572,7 @@
       's.opencodeStale': '需要修复（她的端口变了，或是旧版本装的）',
       's.opencodeUnreadable': '读不了 wakuwaku.js',
 
-      // The Agent page (settings.js pageAgents, agents.js)
+      // The Agent page (settings-agents.js pageAgents, agents.js)
       's.tabAgents': 'Agent',
       'ag.line': '已连接 {n} 个 agent',
       'ag.line1': '已连接 1 个 agent',
@@ -3340,7 +3340,7 @@
       's.opencodeStale': 'Needs a repair (her port changed, or an older version installed it)',
       's.opencodeUnreadable': "Can't read wakuwaku.js",
 
-      // The Agent page (settings.js pageAgents, agents.js)
+      // The Agent page (settings-agents.js pageAgents, agents.js)
       's.tabAgents': 'Agents',
       'ag.line': '{n} agents connected',
       'ag.line1': '1 agent connected',

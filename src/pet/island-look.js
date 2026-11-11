@@ -256,7 +256,7 @@ window.IslandParts.look = function (core) {
     if (edge) island.style.setProperty('--i-edge', edge)
     else island.style.removeProperty('--i-edge')
     // Bare unless said otherwise in the dark mode (the default since
-    // 2026-10-13, settings.js ILOOK_DEFAULT), not in the light.
+    // 2026-10-13, settings-look.js ILOOK_DEFAULT), not in the light.
     body.classList.toggle('island-bare', isCapsule() && (mine.bare ?? core.look.mode === 'dark') === true)
     core.groundLight = bg === null ? null : lightness(bg) > 0.35
     setInk()

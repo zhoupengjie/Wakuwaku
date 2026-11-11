@@ -185,7 +185,7 @@ test("the strip's words' class reaches nothing but the strip", () => {
   assert.ok(style.includes('.tb-light #bar-rest .wpop'))
 })
 
-// Each part dark or light by what is under it alone (island.js inkParts):
+// Each part dark or light by what is under it alone (island-look.js inkParts):
 // nothing on the strip goes by the whole strip's ink any more but the
 // placeholder of a part being dragged, which lies between them.
 test("the strip's parts take their words from their own class", () => {

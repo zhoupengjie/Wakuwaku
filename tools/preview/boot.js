@@ -130,7 +130,7 @@
   // --- Freezing --------------------------------------------------------------------------
   // flow: the flow light's ring held this many ms into its play, from when
   // it began turning: its animations drawn anew since (a blend, the hold's
-  // retimings, island.js animateRing) begin later, their own time less; its
+  // retimings, island-ring.js animateRing) begin later, their own time less; its
   // turning, drawn in steps by timers, set to the step showing then
   // (Island.ringAt).
   function freeze({ flow } = {}) {

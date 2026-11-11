@@ -298,7 +298,7 @@
   }
 
   // The monitor on the strip is its part (its readings in two rows, as the
-  // clock has its two: island.js widgetFaces), never besides a widget put
+  // clock has its two: island-right.js widgetFaces), never besides a widget put
   // there for it (#53, and §7: a widget in one place). One put there alone
   // (a layout of before) becomes the part where it stood; one in a group
   // stays there and the part goes.

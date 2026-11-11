@@ -26,7 +26,7 @@
   const body = document.body
   const start = document.querySelector('.start')
   // Task View after Start, while Windows has its button on (as the main
-  // taskbar's, island.js taskViewButton): Windows' own pictures, else its
+  // taskbar's, island-right.js taskViewButton): Windows' own pictures, else its
   // icon font's glyph (bar.html).
   const taskView = document.querySelector('.tview')
   invoke('taskbar_task_view_icons')
@@ -66,7 +66,7 @@
   // not its tint at once and the picture after.
   const clearMica = () => !isDock() && (state.material || 'clear') === 'clear' && clearWhen() === 'mica'
 
-  // The Start mark, drawn on the screen's own pixels (as the main taskbar's, island.js drawStartMark).
+  // The Start mark, drawn on the screen's own pixels (as the main taskbar's, island-right.js drawStartMark).
   let startScale = 0
   function drawStart() {
     const dpr = devicePixelRatio || 1
@@ -83,7 +83,7 @@
     start.innerHTML = `<svg viewBox="0 0 ${box} ${box}" style="width:${box / dpr}px;height:${box / dpr}px"><defs><linearGradient id="start-blue" gradientUnits="userSpaceOnUse" x1="${at}" y1="${at}" x2="${end}" y2="${end}"><stop class="s0" offset="0"/><stop class="s1" offset="1"/></linearGradient></defs><g fill="url(#start-blue)">${rect(at, at)}${rect(far, at)}${rect(at, far)}${rect(far, far)}</g></svg>`
   }
 
-  // As the main taskbar's (island.js tickClock): with the seconds while
+  // As the main taskbar's (island-look.js tickClock): with the seconds while
   // Windows' own clock shows them, then anew at each second's start, else
   // every five seconds; called again when drawn, which sets the pace anew.
   let clockTick = 0
@@ -221,7 +221,7 @@
   const PER_PX = 0.00875
   let frames = 0
 
-  // A colour's relative lightness (WCAG), 0 to 1 (island.js lightness).
+  // A colour's relative lightness (WCAG), 0 to 1 (island-look.js lightness).
   function lightness(rgb) {
     const [r, g, b] = [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255].map(v => {
       v /= 255
@@ -329,15 +329,15 @@
   }
 
   // Presses: Start and the clock open what Windows' do, the sliver shows the
-  // desktop; a program's button as on the main taskbar (island.js pressApp):
+  // desktop; a program's button as on the main taskbar (island-winlist.js pressApp):
   // one not running starts, one window to the front or minimized, several
   // their list to pick from, pressed again it goes (zhoupengjie/Wakuwaku#34);
   // with the keys and the other buttons as on Windows' own
   // (zhoupengjie/Wakuwaku#36, presses.js pressOf).
   const appOf = key => (state.windows || []).find(a => a.app === key)
-  // The window Ctrl and a press last brought (island.js cycled).
+  // The window Ctrl and a press last brought (island-winlist.js cycled).
   let cycled = null
-  // A window's own menu open: no list on the pointer resting (island.js menuUp).
+  // A window's own menu open: no list on the pointer resting (island-winlist.js menuUp).
   let menuUp = false
   function pressApp(node, app, what) {
     const windows = app.windows || []
@@ -371,7 +371,7 @@
     if (!windows.length) return call('taskbar_app', { path: String(app.path), what: 'launch', id: app.id ? String(app.id) : null })
     call('taskbar_window', { id: Number(windows[0].id), what: 'press' })
   }
-  // Shift and Ctrl as Windows has them at the press (island.js heldAtPress):
+  // Shift and Ctrl as Windows has them at the press (island-winlist.js heldAtPress):
   // this window never takes the keyboard either.
   let heldAtPress = null
   document.addEventListener('pointerdown', e => {
@@ -416,7 +416,7 @@
     invoke('pet_menu', { part: null }).catch(() => {})
   })
 
-  // Over a program's button, as on the main taskbar (island.js openPop): the
+  // Over a program's button, as on the main taskbar (island-glide.js openPop): the
   // pointer resting on a running one, its windows; a right press, its menu.
   // In a window of their own over the strip (bars.rs bar_pop, barpop.js),
   // which goes once the pointer has left both a moment (told it here,
@@ -441,7 +441,7 @@
   // Another's list open: this button's only once the pointer has been on it
   // as long as Windows' own taskbar waits, and not while it is on its way
   // up into the list (aim.js, zhoupengjie/Wakuwaku#56), as on the main
-  // taskbar (island.js aimPop). Where the list's window lies, in this
+  // taskbar (island-winlist.js aimPop). Where the list's window lies, in this
   // page's px, comes once it is laid (bars.rs barpop_place).
   const aim = window.Aim.create()
   listen('bar:pop-at', e => (popAt = e.payload || null), { target })
@@ -489,7 +489,7 @@
   )
 
   // A file dragged from another program and held over a running program's
-  // button half a second, as on the main taskbar (island.js fileHeld): its
+  // button half a second, as on the main taskbar (island-winlist.js fileHeld): its
   // window to the front, or with several their list open (barpop.js: a card
   // there held over as long brings that one). Tauri's drop handler has the
   // window's drags (tauri://drag-*, where it is in physical px), and the
@@ -561,7 +561,7 @@
   const SLIDE_MS = 180
   const PLATE_IN_MS = 150
   // DWM's corners on the plate (8 px) inside the glass's (8): a pixel in
-  // (backplate.rs; island.js plateInset).
+  // (backplate.rs; island-plate.js plateInset).
   const PLATE_INSET = 1
   // Where the glass is as it last settled (its px), where the plate goes
   // meanwhile and where it may still be (its last but one, LAG_MS), whether
@@ -700,7 +700,7 @@
     if (glideOn?.isConnected) glideTo(glideOn, true)
   }).observe(strip)
 
-  // --- The pointer's glide (as the main taskbar's: island.js glideTo) ---------------
+  // --- The pointer's glide (as the main taskbar's: island-glide.js glideTo) ---------------
   // One highlight under the pointer for all its buttons, behind them,
   // sliding from one to the next, its leading edge first and the trailing
   // one after, so it stretches and gathers, a little squashed on the way
@@ -807,11 +807,11 @@
     },
     { target },
   )
-  // Windows' Start menu open: Start lit, as the main taskbar's (island.js startButton).
+  // Windows' Start menu open: Start lit, as the main taskbar's (island-right.js startButton).
   listen('dock:start', e => start.classList.toggle('open', e.payload?.open === true), { target })
 
   // Quick settings in the dock (state.keys): the network's way out and the
-  // volume, as the main taskbar's button draws them (island.js showNet,
+  // volume, as the main taskbar's button draws them (island-right.js showNet,
   // showVolume), from what Windows says (dock:keys, taskbar/win/keys.rs keys_loop);
   // a press opens Windows' own (Win+A), the wheel on it the volume.
   const quick = document.querySelector('.quick')

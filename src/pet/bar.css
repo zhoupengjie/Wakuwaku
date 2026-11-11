@@ -128,7 +128,7 @@ body {
   justify-content: flex-start;
 }
 
-/* Centred on the whole strip, as the main one's are (island.js alignApps),
+/* Centred on the whole strip, as the main one's are (island-layout.js alignApps),
    not on what the clock leaves: as much room before them as the clock and
    the sliver take after (bar.js, --end-w, --end-h). */
 #lead {

@@ -556,7 +556,7 @@
   // (one widget, one place, as Plasma has it: one on the strip or the
   // desktop is not shown there again; the user's call of 2026-10-17). all:
   // the widgets with something to say (on or off); taskbar: her taskbar's
-  // layout as island.js tbLayout makes it whole; capsule: the capsule setting.
+  // layout as island-layout.js tbLayout makes it whole; capsule: the capsule setting.
   function placement({ all = [], home = 'island', taskbar = null, desk = [], pin, capsule } = {}) {
     const C = root.Capsule || (typeof require === 'function' ? require('./capsule') : null)
     const onBar = home === 'taskbar' && taskbar ? Widgets.shownOn(taskbar, all) : new Set()

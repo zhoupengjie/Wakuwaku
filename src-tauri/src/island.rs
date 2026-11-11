@@ -51,7 +51,7 @@ pub const SLIM_H: f64 = 32.0;
 // settingsMax): opening them never moves the window, which would flash.
 const TASKBAR_ROOM: f64 = 640.0;
 // Beside a side bar (taskbarEdge left or right): as wide as the settings
-// ever are (the Mail page in two panes, settings.js WIDE_W), their gap off
+// ever are (the Mail page in two panes, settings-mail.js WIDE_W), their gap off
 // the strip and their shadow, for the same reason.
 const SIDE_ROOM: f64 = 960.0 + 8.0 + 12.0;
 // The middle of her portrait at the taskbar's start (its left end, or a
@@ -215,7 +215,7 @@ impl Side {
 // (embed.rs): its middle on the capsule's, kept on its display (a capsule
 // near the strip's end would have it off the screen); and where the
 // capsule's middle lies in it then (mx, physical px from its left), for the
-// page to lay the island about (island.js placeMid).
+// page to lay the island about (island-layout.js placeMid).
 fn about(area: &Area, cap: (i32, i32, i32, i32), width: i32) -> (i32, i32) {
     let mid = cap.0 + cap.2 / 2;
     let x = (mid - width / 2).clamp(area.x, (area.x + area.w - width).max(area.x));
@@ -223,7 +223,7 @@ fn about(area: &Area, cap: (i32, i32, i32, i32), width: i32) -> (i32, i32) {
 }
 
 // Her island at the top of the screen, up out of the way of the window
-// under it (look_under, call_look; island.js setStow).
+// under it (look_under, call_look; island-plate.js setStow).
 #[derive(Default)]
 struct Stow {
     // The closed island's size as the page has it (logical), and whether
@@ -1210,7 +1210,7 @@ pub fn look_over_max(sh: &Arc<Shared>) {
 // the island took the press. So, unless turned off (islandHideUnder), while
 // a window lies under the closed island the page slides it up out of the
 // way, a sliver left at the screen's edge and every press let through, as
-// long as nothing wants the person (island.js setStow). Here: whether a
+// long as nothing wants the person (island-plate.js setStow). Here: whether a
 // window lies under it, looked at with the full screen's look (every 1.5 s,
 // at once as the pointer comes near or its size changes); and the pointer
 // calling it back down: resting at the screen's edge over it EDGE_MS with

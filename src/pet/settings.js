@@ -429,7 +429,7 @@
       <div class="links"><span class="link" data-site="site">${esc(T('settings.browse'))} ›</span></div>`
   }
 
-  // --- Her island's look (island.js drawIslandLook) ---------------------------------
+  // --- Her island's look (island-look.js drawIslandLook) ---------------------------------
   let ilookOpen = false
   // The mode being set: '' follows Windows' own.
   let ilookMode = ''
@@ -460,7 +460,7 @@
     const s = snap.settings
     // When she has something to tell that needs no answer (a turn's end, a
     // hello, a plugin's nudge): the island open, a ring round it (the flow
-    // light, the default), or the dot alone (island.js cue); its three
+    // light, the default), or the dot alone (island-ring.js cue); its three
     // choices under it, too long beside it.
     const cue = window.Flow.endCue(s)
     const cues = [
@@ -539,7 +539,7 @@
     return { text: `${T('pl.running')} · ${T(`w.ex.${p.id}.note`)}` }
   }
 
-  // Where one is put (island.js placeNow): its place in a quiet word, or,
+  // Where one is put (island-wmenu.js placeNow): its place in a quiet word, or,
   // put nowhere, 添加小工具… (the picker, as her menu opens it, on its card:
   // key, picker.js fromMenu focus).
   const placeOf = (item, on) => window.Island?.placeNow?.(item, on) || { at: on ? 'isle' : null }

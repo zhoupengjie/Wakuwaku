@@ -5,7 +5,7 @@
 // one there on her strip); Win+T and Win+B put the keyboard on its buttons
 // and its tray, unseen, and what was typed after went to them. Now:
 //   - Win+digit: the program in that place on her strip, in her order (as
-//     island.js orderedApps lays them out): started when it does not run;
+//     island-glide.js orderedApps lays them out): started when it does not run;
 //     one window to the front, or minimized when it is in front; several,
 //     the one last in front, then the next of them at each press, as
 //     Windows 11 does. Win+Shift+digit another of it, Win+Ctrl+Shift+digit

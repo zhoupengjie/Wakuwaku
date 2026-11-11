@@ -1662,7 +1662,7 @@ body {
 }
 
 /* The page as big as its window, should Chromium have made it a little
-   bigger (island.js fitPage; 175%: zhoupengjie/Wakuwaku#19). What is laid
+   bigger (island-look.js fitPage; 175%: zhoupengjie/Wakuwaku#19). What is laid
    along its foot or right end, the fixed ones too (contain), along the
    window's. */
 body.home-taskbar {
@@ -1672,7 +1672,7 @@ body.home-taskbar {
   height: calc(100% - var(--page-cut-y, 0px));
 }
 
-/* As thick as the strip lies on the screen (island.js setStrip, --strip-h:
+/* As thick as the strip lies on the screen (island-look.js setStrip, --strip-h:
    its physical px over the scale), its inner edge where the work area stops. */
 .home-taskbar #island-row {
   position: absolute;
@@ -1859,7 +1859,7 @@ body.home-taskbar {
 }
 
 /* On the taskbar a box as its buttons have (the clock's), for the
-   pointer's highlight to light it as it lights them (island.js GLIDE_ON). */
+   pointer's highlight to light it as it lights them (island-glide.js GLIDE_ON). */
 .home-taskbar #bar-rest .mon.rows {
   height: 40px;
   padding: 0 8px;
@@ -1932,7 +1932,7 @@ body.home-taskbar {
 }
 
 /* The volume: all three waves faint, those up to it over them solid; the
-   Wi-Fi as it, its arcs as far as its signal reaches (island.js showNet). */
+   Wi-Fi as it, its arcs as far as its signal reaches (island-right.js showNet). */
 #bar-rest .tquick :is(.vol, .net) {
   position: relative;
 }
@@ -1961,7 +1961,7 @@ body.home-taskbar {
   top: 0;
 }
 
-/* The battery (island.js showBattery): none on a desktop. In Windows' own
+/* The battery (island-right.js showBattery): none on a desktop. In Windows' own
    battery font (.sysbatt), as its taskbar draws it: the outline, and the
    level's fill over it; its percentage beside it, in the size of Windows'
    captions. */
@@ -2027,7 +2027,7 @@ body.home-taskbar {
   color: #1b1b1b;
 }
 
-/* What is using the microphone, the camera, the location (island.js showPrivacy). */
+/* What is using the microphone, the camera, the location (island-right.js showPrivacy). */
 #bar-rest .tpriv {
   flex: none;
   display: flex;
@@ -2145,7 +2145,7 @@ body.home-taskbar {
 /* Its line: a dash while it runs, stretched into a longer pill in the
    accent while its window is in front, springing to each as Windows 11's
    does (the user, 2026-11-04); grown in from nothing as it starts (a new
-   button, fresh: island.js drawWindows) and gone into nothing as it ends
+   button, fresh: island-glide.js drawWindows) and gone into nothing as it ends
    (idle). The button is kept from one drawing to the next for it. */
 #bar-rest .win::after {
   content: '';
@@ -2207,7 +2207,7 @@ body.home-taskbar {
   background: rgba(255, 179, 64, 0.38);
   will-change: opacity;
   animation: win-flash 1.8s ease-in-out var(--flashes, 7) both;
-  /* How far along the flashes already are (island.js drawWindows). */
+  /* How far along the flashes already are (island-glide.js drawWindows). */
   animation-delay: var(--flash-delay, 0ms);
   pointer-events: none;
 }
@@ -2401,7 +2401,7 @@ body.home-taskbar {
   background: #2c2c2e;
 }
 
-/* The keyboard on the taskbar (Win+T, Win+B; island.js keyRing): a ring
+/* The keyboard on the taskbar (Win+T, Win+B; island-keys.js keyRing): a ring
    round what it is on, as Windows draws round what has its keyboard, light
    outside and a dark line inside it (the other way round in Windows' light
    mode); drawn inside the button, as its column may clip what lies outside
@@ -2524,7 +2524,7 @@ body.home-taskbar {
   box-shadow: 0 0 0 1.5px #000;
 }
 
-/* Centred (island.js alignApps), the middle run slides to the middle as programs come and go. */
+/* Centred (island-layout.js alignApps), the middle run slides to the middle as programs come and go. */
 #bar-rest .tz-center {
   transition: margin-left 0.25s ease;
 }
@@ -2550,7 +2550,7 @@ body.home-taskbar {
    between a button and its list the pointer was on nothing, and the list
    closed after 400 ms there. Windows' own stays however long the pointer
    rests between them. 6 px to the strip, 4 more to its buttons' tops. An
-   element of its own (island.js popReach), not ::after: WebView2 left the
+   element of its own (island-glide.js popReach), not ::after: WebView2 left the
    list (mouseleave) as the pointer went from its ::after onto the list
    itself, and it closed under the pointer. */
 #bar-rest .wpop .wreach {
@@ -2701,7 +2701,7 @@ body.home-taskbar {
    their tray icons for the light taskbar themselves. Under the pointer
    and in front: a white wash, as on Windows' own. What is drawn on the
    strip itself (its words, icons, washes) goes by its part's ink-light
-   (each [data-part], island.js inkParts): as tb-light, but on the clear
+   (each [data-part], island-look.js inkParts): as tb-light, but on the clear
    strip as the desktop right under that part wants, so dark words on a
    light picture in Windows' dark mode and light ones on a dark picture in
    its light mode, and the clock on a dark corner light while the programs
@@ -2994,7 +2994,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
   filter: invert(1);
 }
 
-/* --- Start, as Windows 11's (island.js startButton) -------------------------------
+/* --- Start, as Windows 11's (island-right.js startButton) -------------------------------
    Its mark's blues as measured on Windows' own (26200, both modes), light
    at the top left, deep at the bottom right (deeper on the light taskbar);
    pressed in under the pointer and springing back; bouncing once when the
@@ -3044,7 +3044,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
-/* --- Task View, after Start (island.js taskViewButton) -----------------------------
+/* --- Task View, after Start (island-right.js taskViewButton) -----------------------------
    One part with Start. Windows' own pictures as big as Start's mark, the
    one for a light strip on a light one; pressed in as Start is. Where
    Windows has none (Windows 10), its icon font's Task View glyph, as big
@@ -3101,7 +3101,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
   transition: transform 0.42s cubic-bezier(0.3, 1.45, 0.5, 1);
 }
 
-/* --- The pointer's glide (island.js glideTo) --------------------------------------
+/* --- The pointer's glide (island-glide.js glideTo) --------------------------------------
    One highlight under the pointer for all the taskbar's buttons, behind
    them, sliding from one to the next with its edges at their own pace;
    squashed a little on the way, giving a little under a press. Their own
@@ -3229,7 +3229,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
 }
 
 /* Clear: the words already as light or as dark as the desktop under them
-   wants (island.js partLight: each part by what is under it alone), so
+   wants (island-look.js partLight: each part by what is under it alone), so
    only a faint shadow, as over iOS's glass, to lift them off a busy
    picture: white words a soft
    dark one under them, dark words a soft light one round them (the heavy
@@ -3275,7 +3275,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
   text-shadow: none;
 }
 
-/* --- The windows' list moving (island.js slidePop, risePop) --------------------------
+/* --- The windows' list moving (island-winlist.js slidePop, risePop) --------------------------
    From one program's button to the next it slides over and takes its new
    size, as Windows' own does, the new cards coming in from the side it
    moves to; opening, it rises a little into place. The live pictures come
@@ -3315,7 +3315,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
    Its ground as Windows 11's own flyouts have it: their grey in the dark
    mode, their light grey in the light, a hairline round it; black only on
    the black strip, where it is part of it, and at the top of the screen.
-   Set by these (island.js drawIslandLook, from the settings' islandLook, may
+   Set by these (island-look.js drawIslandLook, from the settings' islandLook, may
    put others): --i-bg the ground, --i-blur what is behind it blurred (none:
    solid), --i-edge its edge (a hairline, the session's colour round it, or
    none); island-bare: collapsed, no capsule of its own, part of the strip
@@ -3374,7 +3374,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
     var(--i-edge);
 }
 
-/* Windows' acrylic under her island (island.js sendPlate, plated): the band
+/* Windows' acrylic under her island (island-plate.js sendPlate, plated): the band
    between the island's edge and the acrylic's, set in so DWM's smaller
    corners lie inside the island's (--rim wide), in the ground nearly solid
    (--i-rim: three quarters of the way to solid), fading inwards so it
@@ -3400,7 +3400,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
 }
 
 /* While the island springs to another size, the acrylic further in under
-   it (island.js movePlate), its ground as solid as over a maximized window
+   it (island-plate.js movePlate), its ground as solid as over a maximized window
    (--i-bg-deep, 90 %; solider stays as it is), at once; back once it settles. */
 .isl-firm.home-taskbar.tb-capsule #island:not([data-view='compact']):not([data-view='settings']),
 .isl-firm.home-island #island:not([data-view='settings']) {
@@ -3408,7 +3408,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
 }
 
 /* Open over a maximized window, a see-through ground with nothing to blur
-   what is behind it deepens (island.js setDeep, zhoupengjie/Wakuwaku#20). */
+   what is behind it deepens (island-plate.js setDeep, zhoupengjie/Wakuwaku#20). */
 .isl-deep.home-taskbar.tb-capsule #island:not([data-view='compact']):not([data-view='settings']) {
   background: var(--i-bg-deep, var(--i-bg));
 }
@@ -3430,7 +3430,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
 
 /* --- Her island at the top of the screen (home-island) ---------------------------
    Black as the iPhone's, its faint line, unless the settings give it a look
-   of its own (islandTopLook, island.js drawIslandLook,
+   of its own (islandTopLook, island-look.js drawIslandLook,
    zhoupengjie/Wakuwaku#27): --i-bg, --i-edge as on the taskbar, the line
    dark on a light ground; deeper over a maximized window (isl-deep). No
    blur of the page's: behind it is other programs' windows, only Windows'
@@ -3462,7 +3462,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
   box-shadow: 0 0 0 2px var(--i-bg);
 }
 
-/* Up out of the way of the window under it (island.js setStow,
+/* Up out of the way of the window under it (island-plate.js setStow,
    zhoupengjie/Wakuwaku#49): its foot 2 px into the screen, above it the
    8 px it hangs below the window's top (#island-bar) and its whole height
    (the row's, the island's: so one closing as it goes ends up there too);
@@ -3519,7 +3519,7 @@ body:not(.tb-light) #bar-rest .tfly .ticon[data-mono='dark'] img {
   background: #ffffff;
 }
 
-/* --- The taskbar's layout (island.js tbLayout) --------------------------------------
+/* --- The taskbar's layout (island-layout.js tbLayout) --------------------------------------
    Its parts in three runs: from the left end, in the middle (alignApps
    moves it there by its margin), and up to the right end. Her island lies
    over its slot (placeSlot, --isl-x): first at the left end, at the strip's
@@ -3556,7 +3556,7 @@ body.isl-right.home-taskbar #island[data-view='settings'] {
   right: 8px;
 }
 
-/* In the middle run (the top bar's default, split: island.js placeSlot,
+/* In the middle run (the top bar's default, split: island-layout.js placeSlot,
    isl-mid), about her capsule's middle: its left edge set for each width
    (placeMid, --isl-mx) and moved on the width's own spring, so it grows and
    shrinks about the middle all the way; the settings too, not at an end. */
@@ -3719,7 +3719,7 @@ body.isl-mid.home-taskbar #island {
   color: #fff;
 }
 
-/* --- Widgets on the taskbar (island.js drawEntries) ---------------------------------
+/* --- Widgets on the taskbar (island-layout.js drawEntries) ---------------------------------
    A button as the clock is: S its icon and value, M its value over its
    name (the clock's time over its date); one with nothing to say greyed.
    The spacers: one taking the room left in its run (its run takes the
@@ -3910,7 +3910,7 @@ body.isl-mid.home-taskbar #island {
   cursor: default;
 }
 
-/* --- A widget's card (island.js drawWidgetPop) --------------------------------------
+/* --- A widget's card (island-wpop.js drawWidgetPop) --------------------------------------
    Above it, as the windows' list is above a program's button. */
 #bar-rest .wgpop {
   position: absolute;
@@ -4358,7 +4358,7 @@ html.handoff-wait body.home-taskbar #island-row {
   transform: none;
 }
 
-/* The program in front, as a menu bar names it (island.js drawFront): its
+/* The program in front, as a menu bar names it (island-look.js drawFront): its
    icon and its name, bold; its window's title in its tip. */
 #bar-rest .tfront {
   flex: none;
@@ -4738,7 +4738,7 @@ html.handoff-wait body.home-taskbar #island-row {
   font-size: 12px;
 }
 
-/* With the seconds (island.js tickClock) a size smaller, to fit across it. */
+/* With the seconds (island-look.js tickClock) a size smaller, to fit across it. */
 .tb-side #bar-rest .tclock.secs {
   font-size: 11px;
 }
@@ -4857,7 +4857,7 @@ html.handoff-wait body.home-taskbar #island-row {
   bottom: var(--isl-y, 6px);
 }
 
-/* The settings beside the bar, 8 px off it (island.js placeSideSettings). */
+/* The settings beside the bar, 8 px off it (island-layout.js placeSideSettings). */
 .tb-side.home-taskbar #island[data-view='settings'] {
   top: var(--set-y, 8px);
   bottom: auto;
@@ -4987,7 +4987,7 @@ html.handoff-wait body.home-taskbar #island-row {
   margin: 0;
 }
 
-/* --- What opens from a side bar (island.js besideOrOver) ----------------------------
+/* --- What opens from a side bar (island-winlist.js besideOrOver) ----------------------------
    Beside the bar, 6 px off its inner edge, centred along it on what it
    opens from and kept 8 px from the screen's ends: the windows' list and
    menu, a widget's card, a widget's tools; the tray's folded icons from its
@@ -5071,7 +5071,7 @@ html.handoff-wait body.home-taskbar #island-row {
   right: 54px;
 }
 
-/* The room kept between the middle run and the last (island.js RUNS_APART):
+/* The room kept between the middle run and the last (island-layout.js RUNS_APART):
    crowded, the programs give way first; on a side bar their column then
    scrolls, faded 12 px where more lies past an end. */
 .home-taskbar #bar-rest .grow {
@@ -5245,7 +5245,7 @@ body.hinting #island[data-view='compact'] .hint-dot {
 }
 
 /* Held lit and still after its turns, for as long as the hold setting says
-   (island.js holdRing, zhoupengjie/Wakuwaku#65): nothing of it animated,
+   (island-ring.js holdRing, zhoupengjie/Wakuwaku#65): nothing of it animated,
    its light and its gradient set where they stopped, and no layer kept for
    what does not move. */
 #flow.on.held,
@@ -5589,7 +5589,7 @@ body.has-news #island[data-view='compact'] .news-dot {
   background: rgba(255, 255, 255, 0.5);
 }
 
-/* --- A stack, opened (island.js drawStackPop) -----------------------------------------
+/* --- A stack, opened (island-wpop.js drawStackPop) -----------------------------------------
    300 wide, 8 px over the strip, round 16, 10 in; its head, then a line
    each on a tile (round 11): its glyph in a 30px block of its colour (15%),
    its name, a sentence, its number (18px) and what it counts. Rising in
@@ -5751,7 +5751,7 @@ body.has-news #island[data-view='compact'] .news-dot {
   opacity: 0.6;
 }
 
-/* --- A widget's menu (island.js openMenu) -----------------------------------------------
+/* --- A widget's menu (island-wmenu.js openMenu) -----------------------------------------------
    On the strip over the widget, in the open island at the pointer: its size,
    where it goes, together or apart; one not there greyed, why at its foot. */
 .wmenu {

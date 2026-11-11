@@ -20,7 +20,7 @@ window.SettingsParts.look = function (core) {
   // island itself, so a small one here shows the look (hovered, it opens).
   const ILOOK_DEFAULT = {
     // Bare in the dark mode, a new user's since 2026-10-13 (the person's own
-    // look; island.js drawIslandLook takes it as the default too).
+    // look; island-look.js drawIslandLook takes it as the default too).
     dark: { bg: '#2c2c2c', op: 100, blur: 0, edge: 'line', bare: true },
     light: { bg: '#f3f3f3', op: 100, blur: 0, edge: 'line', bare: false },
   }
@@ -155,7 +155,7 @@ window.SettingsParts.look = function (core) {
   // The island as the look makes it, on a strip over a desktop; big, it
   // opens under the pointer (open, above the strip, the page has nothing
   // behind it to blur: its ground alone, as on the taskbar; blurred where
-  // Windows' acrylic goes under it, island.js placePlate). At the top of
+  // Windows' acrylic goes under it, island-plate.js placePlate). At the top of
   // the screen, a pill at the top of a desktop, opening down; blurred only
   // by that acrylic, open or not.
   function ilookPreview(mode, look, big = false) {
@@ -219,7 +219,7 @@ window.SettingsParts.look = function (core) {
     ilookSave(mode, { ...ilookOf(mode), [key]: value }, keep)
   }
 
-  // The taskbar's layout (island.js tbLayout): a preset, or one dragged
+  // The taskbar's layout (island-layout.js tbLayout): a preset, or one dragged
   // into shape on the strip itself (the button: the settings close for it).
   // Split in two (taskbarEdge split, docs/design/specs/dock-topbar.md): the
   // top bar's thickness, the dock out of the way of windows or in the room
@@ -287,7 +287,7 @@ window.SettingsParts.look = function (core) {
   }
 
   // At the top of the screen, up out of the way while a window lies under
-  // it (island.js setStow, zhoupengjie/Wakuwaku#49): on unless turned off.
+  // it (island-plate.js setStow, zhoupengjie/Wakuwaku#49): on unless turned off.
   // Not on a Mac, where it hangs over the menu bar.
   function hideUnderRow() {
     return row(esc(T('s.islandHideUnder')), esc(T('s.islandHideUnderNote')), sw('islandHideUnder', core.snap.settings.islandHideUnder !== false))

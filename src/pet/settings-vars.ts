@@ -10,6 +10,7 @@
 import type * as AddonUI from './addonui.ts'
 import { initial, type SettingsState } from './settings-state.ts'
 import type { Config } from '../shared/config.ts'
+import type { Widget } from './widgets.ts'
 
 // Her settings as the snapshot has them and a patch changes them
 // (settings.rs settings_set): the config's keys, and the Mail page's that
@@ -17,16 +18,44 @@ import type { Config } from '../shared/config.ts'
 // declare them).
 export type Settings = Config & { mailAgent?: string; mailPanes?: string; mailPictures?: string[] }
 
+// Someone else's plugin (addons.rs view) and a pack (packs.rs view): the
+// Rust side's JSON, these fields read by name, the rest as it comes.
+export interface Addon {
+  id: string
+  name: string
+  settings?: AddonField[]
+  [field: string]: any
+}
+export interface Pack {
+  kind: string
+  id: string
+  name: string
+  [field: string]: any
+}
+// One of a plugin's settings, from its manifest: text, number, flag or
+// choice (its options' own words); as set, else its default.
+export interface AddonField {
+  key: string
+  type?: string
+  label?: string
+  value?: unknown
+  default?: unknown
+  options?: string[]
+  optionLabels?: string[]
+  required?: boolean
+  hint?: string
+}
+
 // What main sends (settings.rs snapshot): her settings, and the lists the
 // pages go through, each entry the Rust side's JSON, as is all the rest.
 export interface Snapshot {
   settings: Settings
   pets: any[]
   sessions?: any[]
-  packs?: any[]
-  widgets?: any[]
+  packs?: Pack[]
+  widgets?: Widget[]
   plugins?: any[]
-  addons?: any[]
+  addons?: Addon[]
   addonsBroken?: any[]
   marketUpdates?: any[]
   mail?: any[]

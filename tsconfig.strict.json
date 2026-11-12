@@ -58,6 +58,7 @@
     "src/pet/picker.ts",
     "src/pet/placing.ts",
     "src/pet/presses.ts",
+    "src/pet/settings-addons.ts",
     "src/pet/settings-look.ts",
     "src/pet/sprite.ts",
     "src/pet/status.ts",

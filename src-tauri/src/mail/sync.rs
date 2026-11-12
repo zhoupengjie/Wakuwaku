@@ -26,7 +26,7 @@
 // it came: the look between downloads, or the inbox synced again after IDLE.
 use std::collections::HashSet;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use io_imap::types::mailbox::Mailbox;
@@ -38,6 +38,7 @@ use super::store::{self, Entry, Folder, Offline, Store};
 use super::{password_of, show, Account, Watch, CONNECT, IDLE_FOR, POLL};
 use crate::{now_ms, Shared};
 use crate::config;
+use crate::lock::Lock;
 
 // The header fields a letter is kept by.
 pub const FIELDS: [&str; 9] = ["FROM", "TO", "CC", "SUBJECT", "DATE", "MESSAGE-ID", "IN-REPLY-TO", "REFERENCES", "CONTENT-TYPE"];
@@ -174,14 +175,14 @@ fn now() -> i64 {
     now_ms() as i64
 }
 
-fn save(st: &Mutex<Store>) {
+fn save(st: &Lock<Store>) {
     st.lock().unwrap().save();
 }
 
 // The account's widget and its line in the settings, from the store: the
 // unread, the newest unread letter (new mail opens the island, once the
 // first sync is done: `newest_seen` known), how much is kept whole.
-fn tell(sh: &Shared, account: &Account, watch: &Watch, st: &Mutex<Store>, state: &str, newest_seen: &mut Option<u32>) {
+fn tell(sh: &Shared, account: &Account, watch: &Watch, st: &Lock<Store>, state: &str, newest_seen: &mut Option<u32>) {
     let (unread, newest, letters, offline) = {
         let s = st.lock().unwrap();
         let unseen: Vec<&Entry> = s.inbox.letters.values().filter(|e| !e.seen).collect();
@@ -208,7 +209,7 @@ fn tell(sh: &Shared, account: &Account, watch: &Watch, st: &Mutex<Store>, state:
 }
 
 // A folder made as the server has it (see the top).
-fn sync_folder(sh: &Shared, conn: &mut Session, st: &Mutex<Store>, folder: Folder, mailbox: Mailbox<'static>) -> Result<(), Fail> {
+fn sync_folder(sh: &Shared, conn: &mut Session, st: &Lock<Store>, folder: Folder, mailbox: Mailbox<'static>) -> Result<(), Fail> {
     let name = imap::name_of(&mailbox);
     let opened = conn.folder(mailbox, false)?;
     {
@@ -227,7 +228,7 @@ fn sync_folder(sh: &Shared, conn: &mut Session, st: &Mutex<Store>, folder: Folde
 }
 
 // Letters not kept yet, by their header fields, a hundred at a time.
-fn heads(sh: &Shared, conn: &mut Session, st: &Mutex<Store>, folder: Folder, uids: &[u32]) -> Result<(), Fail> {
+fn heads(sh: &Shared, conn: &mut Session, st: &Lock<Store>, folder: Folder, uids: &[u32]) -> Result<(), Fail> {
     for chunk in uids.chunks(HEADS_AT_ONCE) {
         let set = chunk.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
         let got = conn.heads(&set, true, &FIELDS)?;
@@ -244,7 +245,7 @@ fn heads(sh: &Shared, conn: &mut Session, st: &Mutex<Store>, folder: Folder, uid
 
 // The Sent folder, found (SPECIAL-USE, else by its name) and made as the
 // server has it; none, and none is kept.
-fn sync_sent(sh: &Shared, conn: &mut Session, st: &Mutex<Store>) -> Result<(), Fail> {
+fn sync_sent(sh: &Shared, conn: &mut Session, st: &Lock<Store>) -> Result<(), Fail> {
     match conn.sent_box()? {
         Some(mailbox) => sync_folder(sh, conn, st, Folder::Sent, mailbox),
         None => {
@@ -260,7 +261,7 @@ fn sync_sent(sh: &Shared, conn: &mut Session, st: &Mutex<Store>) -> Result<(), F
 
 // Letters kept whole, newest first, for a while (or until stopped or
 // kicked); how many are still to come.
-fn download(sh: &Shared, conn: &mut Session, st: &Mutex<Store>, watch: &Watch, skip: &mut HashSet<(Folder, u32)>) -> Result<usize, Fail> {
+fn download(sh: &Shared, conn: &mut Session, st: &Lock<Store>, watch: &Watch, skip: &mut HashSet<(Folder, u32)>) -> Result<usize, Fail> {
     let todo: Vec<(Folder, u32)> = st.lock().unwrap().missing(offline(sh), now()).into_iter().filter(|x| !skip.contains(x)).collect();
     let started = Instant::now();
     let mut open: Option<Folder> = None;
@@ -289,7 +290,7 @@ fn download(sh: &Shared, conn: &mut Session, st: &Mutex<Store>, watch: &Watch, s
 
 // New mail in the inbox since the newest kept (UID SEARCH UID n:*), by its
 // header fields; whether there was any.
-fn look_new(sh: &Shared, conn: &mut Session, st: &Mutex<Store>) -> Result<bool, Fail> {
+fn look_new(sh: &Shared, conn: &mut Session, st: &Lock<Store>) -> Result<bool, Fail> {
     conn.folder(Mailbox::Inbox, false)?;
     let newest = st.lock().unwrap().inbox.letters.keys().next_back().copied().unwrap_or(0);
     let mut new = conn.newer(newest)?;

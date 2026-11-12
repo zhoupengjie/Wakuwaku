@@ -35,6 +35,10 @@ mod data {
 }
 // The tray as the pet has it; what only the pet uses of it (the icons only
 // Explorer's tray holds, Windows' placement of them) left unused here.
+// Its locks are lock.rs Locks.
+#[path = "../src/lock.rs"]
+#[allow(dead_code)]
+mod lock;
 #[path = "../src/systray.rs"]
 #[allow(dead_code)]
 mod systray;

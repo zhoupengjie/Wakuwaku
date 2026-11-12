@@ -53,13 +53,14 @@ pub mod web;
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar};
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
 use crate::Shared;
 use crate::config;
+use crate::lock::Lock;
 
 // --- What a plugin is ------------------------------------------------------------------
 
@@ -375,12 +376,13 @@ impl Runner {
 
 // Taken while a widget of theirs is posted and while sync stops one, so a
 // turn ending after its plugin stopped never shows what it found. Taken
-// before any of Shared's locks, and never while one is held.
-static POSTING: Mutex<()> = Mutex::new(());
-static WAKE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+// before any of Shared's locks, and never while one is held: an outer lock
+// (lock.rs), on the plugins' and the widgets' threads.
+static POSTING: Lock<()> = Lock::ranked("plugins::POSTING", crate::lock::OUTER, ());
+static WAKE: (Lock<bool>, Condvar) = (Lock::new("plugins::WAKE", false), Condvar::new());
 // The plugins that asked for a turn at once (poke), taken up by the thread
 // that keeps their turns.
-static POKED: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+static POKED: Lock<Vec<&'static str>> = Lock::new("plugins::POKED", Vec::new());
 
 // The turns looked at again now: a plugin changed, someone back, her back in sight.
 pub fn wake() {
@@ -426,8 +428,8 @@ fn wait_for(d: Option<Duration>) {
     let (woken, cv) = &WAKE;
     let guard = woken.lock().unwrap_or_else(|e| e.into_inner());
     let mut guard = match d {
-        Some(d) => cv.wait_timeout_while(guard, d, |w| !*w).map(|(g, _)| g).unwrap_or_else(|e| e.into_inner().0),
-        None => cv.wait_while(guard, |w| !*w).unwrap_or_else(|e| e.into_inner()),
+        Some(d) => guard.wait_timeout_while(cv, d, |w| !*w).map(|(g, _)| g).unwrap_or_else(|e| e.into_inner().0),
+        None => guard.wait_while(cv, |w| !*w).unwrap_or_else(|e| e.into_inner()),
     };
     *guard = false;
 }

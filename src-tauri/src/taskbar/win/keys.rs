@@ -72,7 +72,7 @@ pub(super) fn keys_loop(sh: Arc<Shared>) {
         let nap = Duration::from_millis(if sh.is_quiet() { 2000 } else { 250 });
         let (woken, cv) = &KEYS_WAKE;
         let guard = woken.lock().unwrap();
-        let (mut guard, _) = cv.wait_timeout_while(guard, nap, |w| !*w && !TASKS_STOP.load(Ordering::SeqCst)).unwrap();
+        let (mut guard, _) = guard.wait_timeout_while(cv, nap, |w| !*w && !TASKS_STOP.load(Ordering::SeqCst)).unwrap();
         *guard = false;
     }
 }

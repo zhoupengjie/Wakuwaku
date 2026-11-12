@@ -204,9 +204,9 @@ fn nim_name(message: u32) -> &'static str {
 
 #[cfg(windows)]
 mod imp {
+    use crate::lock::Lock;
     use std::ffi::c_void;
     use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, Ordering};
-    use std::sync::Mutex;
 
     use super::{asked, battery_said, explorers_battery, file_name, guid_bytes, holds, icon_name, nim_name, path_in, Holds, Press, Shown, EXPLORERS_BATTERY};
 
@@ -409,19 +409,24 @@ mod imp {
 
     static OURS: AtomicIsize = AtomicIsize::new(0);
     // Where each shown icon is on the screen (key, left, top, right, bottom), from the host.
-    static RECTS: Mutex<Vec<(u64, (i32, i32, i32, i32))>> = Mutex::new(Vec::new());
+    // Read inside ICONS (answer_rect): ranked above it (lock.rs).
+    static RECTS: Lock<Vec<(u64, (i32, i32, i32, i32))>> = Lock::ranked("systray::RECTS", INSIDE_ICONS, Vec::new());
     static RAW_NOTED: AtomicU32 = AtomicU32::new(0);
     // When programs were last asked for their icons.
-    static ASKED: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+    static ASKED: Lock<Option<std::time::Instant>> = Lock::new("systray::ASKED", None);
     static NOTIFY: AtomicIsize = AtomicIsize::new(0);
     static NOTIFY_MSG: AtomicU32 = AtomicU32::new(0);
     static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
-    static ICONS: Mutex<Vec<Icon>> = Mutex::new(Vec::new());
+    static ICONS: Lock<Vec<Icon>> = Lock::new("systray::ICONS", Vec::new());
     // Icons Explorer's tray holds that never came to ours (scan_held).
-    static HELD: Mutex<Vec<HeldIcon>> = Mutex::new(Vec::new());
+    // Taken inside ICONS too (new_icon, on_icon), never the other way about.
+    static HELD: Lock<Vec<HeldIcon>> = Lock::ranked("systray::HELD", INSIDE_ICONS, Vec::new());
     // What came, for the log: (kind, count).
-    static SEEN: Mutex<Vec<(String, u32)>> = Mutex::new(Vec::new());
-    static NOTES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    // What to say, and the next two: the log's, taken inside the others
+    // (a note of what ICONS or HELD holds) and nothing inside them.
+    static SEEN: Lock<Vec<(String, u32)>> = Lock::ranked("systray::SEEN", crate::lock::LEAF, Vec::new());
+    static NOTES: Lock<Vec<String>> = Lock::ranked("systray::NOTES", crate::lock::LEAF, Vec::new());
+    const INSIDE_ICONS: u8 = crate::lock::PLAIN + 10;
     // The Explorer whose battery icon was last noted as left to it; how
     // many of its battery's messages have been told the log (the first
     // few of each Explorer's), and how many it refused in all (each told,
@@ -601,7 +606,7 @@ mod imp {
     // A program's tip noted in the log at most every ten seconds: Task
     // Manager's changes every second.
     fn tip_note_due(exe: &str) -> bool {
-        static NOTED: Mutex<Option<std::collections::HashMap<String, std::time::Instant>>> = Mutex::new(None);
+        static NOTED: Lock<Option<std::collections::HashMap<String, std::time::Instant>>> = Lock::ranked("systray::NOTED", crate::lock::LEAF, None);
         let mut noted = NOTED.lock().unwrap();
         let noted = noted.get_or_insert_with(std::collections::HashMap::new);
         let now = std::time::Instant::now();

@@ -1,6 +1,7 @@
 // An app's name and icon as Windows' taskbar shows them, asked of the shell
 // by the app's id (its Apps folder's item).
 use super::*;
+use crate::lock::Lock;
 
 // An app's icon as Windows' taskbar shows it, asked of the shell by the
 // app's id (tasks::app_id): its Apps folder's item, drawn by the shell at
@@ -52,7 +53,7 @@ pub(super) const FOLDERID_APPS: KnownGuid = KnownGuid(0x1E87_508D, 0x89C2, 0x42F
 pub(super) const IID_IMAGE_FACTORY: KnownGuid = KnownGuid(0xBCC1_8B79, 0xBA16, 0x442F, [0x80, 0xC4, 0x8A, 0x59, 0xC3, 0x0C, 0x46, 0x3B]);
 pub(super) const SIIGBF_ICONONLY: i32 = 0x4;
 
-pub(super) static APP_PNGS: Mutex<Option<HashMap<(String, i32), Option<String>>>> = Mutex::new(None);
+pub(super) static APP_PNGS: Lock<Option<HashMap<(String, i32), Option<String>>>> = Lock::new("taskbar::win::apps::APP_PNGS", None);
 
 // IShellItem's table, as far as its name.
 #[repr(C)]

@@ -16,7 +16,7 @@
 // Settings: "mailCodes": true (the default) | false.
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serde_json::{json, Value};
 
@@ -27,6 +27,7 @@ use super::Account;
 use crate::{now_ms, Shared};
 use tauri::Emitter;
 use crate::config;
+use crate::lock::Lock;
 
 // --- Finding one ------------------------------------------------------------------------
 
@@ -534,14 +535,14 @@ struct Notice {
     copied: bool,
 }
 
-static NOTICES: Mutex<Vec<Notice>> = Mutex::new(Vec::new());
+static NOTICES: Lock<Vec<Notice>> = Lock::new("mail::codes::NOTICES", Vec::new());
 // Apart from the prompts' (agent-core's count from 1).
 static NEXT: AtomicU64 = AtomicU64::new(1 << 40);
 // Up this long unless answered; "Copied" this long once copied.
 const SHOWN_MS: u64 = 60_000;
 const COPIED_MS: u64 = 1_500;
 
-fn notices() -> std::sync::MutexGuard<'static, Vec<Notice>> {
+fn notices() -> crate::lock::Guard<'static, Vec<Notice>> {
     NOTICES.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -641,7 +642,7 @@ const AT_ONCE: usize = 3;
 // The letters come since the newest unread seen (`since`: None before the
 // first sync, when nothing is new), newest first, each read once
 // (`looked`, kept across connections), for a code or a link.
-pub fn look(sh: &Arc<Shared>, conn: &mut Session, st: &Mutex<Store>, account: &Account, since: Option<u32>, looked: &mut HashSet<u32>) {
+pub fn look(sh: &Arc<Shared>, conn: &mut Session, st: &Lock<Store>, account: &Account, since: Option<u32>, looked: &mut HashSet<u32>) {
     let Some(since) = since else { return };
     if sh.setting(config::MAIL_CODES) == false {
         return;

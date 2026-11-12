@@ -16,6 +16,7 @@
 // on their behalf.
 
 use super::*;
+use crate::lock::Lock;
 
 pub const CODEX_FLAG: &str = "--wakuwaku-codex-hook";
 pub const CODEX_PROMPT_TIMEOUT: u64 = 300;
@@ -89,7 +90,7 @@ fn ask_codex_version() -> Option<Version> {
 // Codex's version, None when there is no `codex` to ask (the desktop app
 // alone). Asked at most once a minute.
 pub fn codex_version() -> Option<Version> {
-    static KNOWN: Mutex<Option<(Instant, Option<Version>)>> = Mutex::new(None);
+    static KNOWN: Lock<Option<(Instant, Option<Version>)>> = Lock::new("connection::codex::KNOWN", None);
     let mut known = KNOWN.lock().unwrap();
     match *known {
         Some((at, version)) if at.elapsed() < Duration::from_secs(60) => version,

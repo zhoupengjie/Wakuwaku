@@ -32,6 +32,7 @@ use std::path::{Path, PathBuf};
 
 #[cfg(windows)]
 use serde_json::{json, Value};
+use crate::lock::Lock;
 
 // The file her icons' places are kept in, in her data folder.
 pub fn file(data: &Path) -> PathBuf {
@@ -515,7 +516,7 @@ pub use imp::{describe, desktop, with_com, Item, Point, Rect};
 
 // One at a time, and each but a moment: quitting waits on it (hold, given_back).
 #[cfg(windows)]
-static BUSY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+static BUSY: Lock<()> = Lock::new("icons::BUSY", ());
 
 // Bumped as the strip is given back (hold, given_back): a later look at the
 // icons for a strip taken before is not taken any more.

@@ -13,12 +13,12 @@
 // zhoupengjie/Wakuwaku#68): Windows' (the default), one typed in, or none;
 // mail follows it unless its page or an account says otherwise.
 
-use std::sync::Mutex;
 use std::time::Duration;
 
 use serde_json::{json, Value};
 use ureq::config::ConfigBuilder;
 use ureq::typestate::AgentScope;
+use crate::lock::Lock;
 
 // How a proxy is spoken to: HTTP's CONNECT, or SOCKS5.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -228,7 +228,7 @@ pub fn web_system_view() -> Value {
 // PowerShell, which ran the plugins before, went Windows' way.
 
 // netProxy as last set (set_web: as she starts, and when it is changed).
-static WEB: Mutex<Via> = Mutex::new(Via::System);
+static WEB: Lock<Via> = Lock::new("proxy::WEB", Via::System);
 
 pub fn set_web(v: &Value) {
     *WEB.lock().unwrap() = Via::of(v).unwrap_or_default();

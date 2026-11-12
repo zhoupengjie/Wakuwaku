@@ -147,9 +147,10 @@ pub struct Laid {
 
 #[cfg(windows)]
 mod imp {
+    use crate::lock::Lock;
     use std::ffi::c_void;
     use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
-    use std::sync::{Arc, Condvar, Mutex};
+    use std::sync::{Arc, Condvar};
     use std::time::{Duration, Instant};
 
     use serde_json::{json, Value};
@@ -328,11 +329,11 @@ mod imp {
         restarting: bool,
     }
 
-    static EMBED: Mutex<Embed> = Mutex::new(Embed { hwnd: 0, tray: 0, parented: false, owned: false, child: None, layered: false, laid: Laid { cap: None, room: 0, embedded: false }, basis: None, said: String::new(), restarting: false });
-    static WAKE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+    static EMBED: Lock<Embed> = Lock::new("embed::EMBED", Embed { hwnd: 0, tray: 0, parented: false, owned: false, child: None, layered: false, laid: Laid { cap: None, room: 0, embedded: false }, basis: None, said: String::new(), restarting: false });
+    static WAKE: (Lock<bool>, Condvar) = (Lock::new("embed::WAKE", false), Condvar::new());
     // One apply at a time (the pointer's thread and the page's command both
     // call it): two at once both saw the window out and both put it in.
-    static APPLYING: Mutex<()> = Mutex::new(());
+    static APPLYING: Lock<()> = Lock::new("embed::APPLYING", ());
     static STARTED: AtomicBool = AtomicBool::new(false);
     // Moves into the taskbar or out of it failing in a row (tried again at
     // every look at the pointer): since when, how many, and when last told.
@@ -346,7 +347,7 @@ mod imp {
         tries: u32,
         told: Option<Instant>,
     }
-    static FAILS: Mutex<Option<Fails>> = Mutex::new(None);
+    static FAILS: Lock<Option<Fails>> = Lock::new("embed::FAILS", None);
     const FAILS_TOLD_EVERY: Duration = Duration::from_secs(30);
 
     // A move that failed: `line` says what (made only when it is logged).
@@ -438,7 +439,7 @@ mod imp {
                 {
                     let (woken, cv) = &WAKE;
                     let guard = woken.lock().unwrap();
-                    let (mut guard, _) = cv.wait_timeout_while(guard, EVERY, |w| !*w).unwrap();
+                    let (mut guard, _) = guard.wait_timeout_while(cv, EVERY, |w| !*w).unwrap();
                     *guard = false;
                 }
                 if QUITTING.load(Ordering::SeqCst) {

@@ -69,13 +69,14 @@
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::{zip, Shared};
+use crate::lock::Lock;
 
 const LATEST: &str = "https://api.github.com/repos/LibreHardwareMonitor/LibreHardwareMonitor/releases/latest";
 const DOWNLOADS: &str = "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases/download/";
@@ -555,7 +556,7 @@ struct State {
     pushed: Option<Instant>,
 }
 
-static STATE: Mutex<Option<State>> = Mutex::new(None);
+static STATE: Lock<Option<State>> = Lock::new("lhm_setup::STATE", None);
 
 fn with<T>(f: impl FnOnce(&mut State) -> T) -> T {
     let mut s = STATE.lock().unwrap();

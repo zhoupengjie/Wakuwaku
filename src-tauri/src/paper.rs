@@ -18,8 +18,8 @@ pub const EVERY: [u32; 6] = [60_000, 600_000, 1_800_000, 3_600_000, 21_600_000, 
 
 #[cfg(windows)]
 mod imp {
+    use crate::lock::Lock;
     use std::ffi::c_void;
-    use std::sync::Mutex;
 
     use serde_json::{json, Value};
 
@@ -190,7 +190,7 @@ mod imp {
     }
 
     // What the calls did, for the log (settings.rs takes them after each).
-    static NOTES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    static NOTES: Lock<Vec<String>> = Lock::new("paper::NOTES", Vec::new());
 
     fn note(line: String) {
         NOTES.lock().unwrap().push(line);
@@ -221,7 +221,7 @@ mod imp {
     // The desktop as read within the last second, for the settings'
     // snapshot (now): made up to four times a second while they are open,
     // and each read is six calls into Explorer's wallpaper object.
-    static LATELY: Mutex<Option<(std::time::Instant, Option<State>)>> = Mutex::new(None);
+    static LATELY: Lock<Option<(std::time::Instant, Option<State>)>> = Lock::new("paper::LATELY", None);
 
     fn state_lately() -> Option<State> {
         let mut lately = LATELY.lock().unwrap_or_else(|e| e.into_inner());
@@ -238,8 +238,8 @@ mod imp {
     // The desktop as it was before each change made here, the latest last:
     // undo walks back through them. And the slideshow's pictures as seen,
     // for stepping back should Windows not.
-    static BEFORE: Mutex<Vec<State>> = Mutex::new(Vec::new());
-    static SEEN: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    static BEFORE: Lock<Vec<State>> = Lock::new("paper::BEFORE", Vec::new());
+    static SEEN: Lock<Vec<String>> = Lock::new("paper::SEEN", Vec::new());
 
     fn seen(file: &str) {
         let mut seen = SEEN.lock().unwrap();

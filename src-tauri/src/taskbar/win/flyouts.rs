@@ -3,6 +3,7 @@
 // volume, Start opened and seen, the desktop shown, and the Recycle Bin for
 // the dock.
 use super::*;
+use crate::lock::Lock;
 
 // Windows' own Start (or search, the notifications, the quick settings)
 // in front: closed first, as a press on Windows' taskbar closes it. Ours
@@ -213,7 +214,7 @@ pub fn recycle_bin() -> Value {
     const SIID_RECYCLER: i32 = 31;
     const SIID_RECYCLERFULL: i32 = 32;
     const SHGSI_ICON: u32 = 0x100;
-    static BIN_PNGS: Mutex<[Option<String>; 2]> = Mutex::new([None, None]);
+    static BIN_PNGS: Lock<[Option<String>; 2]> = Lock::new("taskbar::win::flyouts::BIN_PNGS", [None, None]);
     let mut info = BinInfo { size: std::mem::size_of::<BinInfo>() as u32, bytes: 0, items: 0 };
     // SAFETY: our own struct, of the size it says; null: every drive's bin.
     let full = unsafe { SHQueryRecycleBinW(std::ptr::null(), &mut info) } == 0 && info.items > 0;

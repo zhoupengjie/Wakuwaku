@@ -2,17 +2,18 @@
 // setup): the pointer's, the widgets', the monitor's, full screen's and the
 // ticker's; and the waits of the pointer's and the monitor's, woken before
 // their time (wake_pointer, wake_monitor).
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
 use crate::{bars, desk, fullscreen, hw, island, lhm, mail, now_ms, pet, plugins, power, screen, settings, spawn_named, tokens, widgets, Shared};
 use crate::config;
+use crate::lock::Lock;
 
 // The monitor's thread woken from its wait (setup): its settings changed
 // (Shared::change), the quiet began or ended (Shared::check_quiet).
-static MONITOR_WAKE: (Mutex<bool>, std::sync::Condvar) = (Mutex::new(false), std::sync::Condvar::new());
+static MONITOR_WAKE: (Lock<bool>, std::sync::Condvar) = (Lock::new("loops::MONITOR_WAKE", false), std::sync::Condvar::new());
 
 pub(crate) fn wake_monitor() {
     let (woken, cv) = &MONITOR_WAKE;
@@ -175,7 +176,7 @@ pub fn monitor(sh: &Arc<Shared>) {
             let wait = if on { next.saturating_duration_since(std::time::Instant::now()) } else { Duration::from_secs(3600) };
             let (woken, cv) = &MONITOR_WAKE;
             let guard = woken.lock().unwrap();
-            let (mut guard, _) = cv.wait_timeout_while(guard, wait, |w| !*w).unwrap();
+            let (mut guard, _) = guard.wait_timeout_while(cv, wait, |w| !*w).unwrap();
             *guard = false;
         }
     });

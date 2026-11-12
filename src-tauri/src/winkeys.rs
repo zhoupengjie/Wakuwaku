@@ -241,9 +241,10 @@ fn said(act: Act) -> String {
 
 #[cfg(windows)]
 mod imp {
+    use crate::lock::Lock;
     use std::ffi::c_void;
     use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU16, AtomicU32, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc};
     use std::thread::JoinHandle;
     use std::time::{Duration, Instant};
 
@@ -376,12 +377,13 @@ mod imp {
     static HOOK: AtomicIsize = AtomicIsize::new(0);
     static HOOK_THREAD: AtomicU32 = AtomicU32::new(0);
     static WORK_THREAD: AtomicU32 = AtomicU32::new(0);
-    static THREADS: Mutex<Option<(JoinHandle<()>, JoinHandle<()>)>> = Mutex::new(None);
+    static THREADS: Lock<Option<(JoinHandle<()>, JoinHandle<()>)>> = Lock::new("winkeys::THREADS", None);
     // Our keys held down after their press was taken (decide), on the hook's thread alone.
     static HELD: AtomicU16 = AtomicU16::new(0);
     // A late key told already (one is enough until the hook is in again).
     static LATE_TOLD: AtomicBool = AtomicBool::new(false);
-    static SH: Mutex<Option<Arc<Shared>>> = Mutex::new(None);
+    // Only ever cloned out (log), so taken inside any lock, nothing inside it.
+    static SH: Lock<Option<Arc<Shared>>> = Lock::ranked("winkeys::SH", crate::lock::LEAF, None);
 
     fn log(line: &str) {
         if let Some(sh) = SH.lock().unwrap().clone() {

@@ -27,7 +27,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use mail_parser::{Message, MimeHeaders};
@@ -40,6 +40,7 @@ use super::{account, widget_id, Account};
 use crate::scripts::job::Job;
 use crate::{shared, Shared};
 use crate::config;
+use crate::lock::Lock;
 
 // The longest a turn of a talk may take, the most one may ask at once
 // (characters), and the most of an attachment (and of them all) kept beside
@@ -387,7 +388,7 @@ const WATCH_EVERY: Duration = Duration::from_secs(5);
 // found before by a look at its file (still there, found), only the others
 // in every folder (some 50 of them, four names in each).
 pub fn available() -> Value {
-    static SEEN: Mutex<Option<(Instant, Vec<Option<PathBuf>>)>> = Mutex::new(None);
+    static SEEN: Lock<Option<(Instant, Vec<Option<PathBuf>>)>> = Lock::new("mail::agent::available SEEN", None);
     let mut seen = SEEN.lock().unwrap();
     if seen.as_ref().is_none_or(|(at, _)| at.elapsed() >= LOOK_AGAIN) {
         let before = seen.take().map(|(_, found)| found).unwrap_or_default();
@@ -850,7 +851,7 @@ fn hooks_file(sh: &Shared) -> PathBuf {
 // (the latest of each), Codex's from its own list (models_cache.json), each
 // with the efforts it takes; Antigravity's as agy lists them.
 pub fn models(sh: &Shared) -> Value {
-    static SEEN: Mutex<Option<(Instant, Value)>> = Mutex::new(None);
+    static SEEN: Lock<Option<(Instant, Value)>> = Lock::new("mail::agent::models SEEN", None);
     let mut seen = SEEN.lock().unwrap();
     let mut v = match seen.as_ref().filter(|(at, _)| at.elapsed() < Duration::from_secs(30)) {
         Some((_, v)) => v.clone(),
@@ -875,7 +876,7 @@ const AGY_MODELS_AGAIN: Duration = Duration::from_secs(2 * 60);
 // most every half hour, and the page told when they came; none until then.
 fn agy_models(sh: &Shared) -> Vec<Value> {
     // When to ask next; what it said last.
-    static KNOWN: Mutex<(Option<Instant>, Vec<Value>)> = Mutex::new((None, Vec::new()));
+    static KNOWN: Lock<(Option<Instant>, Vec<Value>)> = Lock::new("mail::agent::KNOWN", (None, Vec::new()));
     let mut known = KNOWN.lock().unwrap();
     if known.0.is_none_or(|next| Instant::now() >= next) {
         known.0 = Some(Instant::now() + AGY_MODELS_EVERY);
@@ -1167,7 +1168,7 @@ fn run_turn(sh: &Arc<Shared>, key: String, exe: &Path, args: Vec<String>, stdin:
         }
         text
     });
-    let child = Arc::new(Mutex::new(child));
+    let child = Arc::new(Lock::new("mail::agent::child", child));
     let over = Arc::new(AtomicBool::new(false));
     let timed_out = Arc::new(AtomicBool::new(false));
     {

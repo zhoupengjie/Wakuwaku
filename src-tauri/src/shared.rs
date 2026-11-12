@@ -10,7 +10,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Map, Value};
@@ -249,7 +249,7 @@ impl Shared {
     // come (a list's, the dock's) and Chromium setting a hidden page's lower.
     // Off this thread (the pointer's): it looks through every process.
     fn keep_brisk(&self, quiet: bool) {
-        static AT: Mutex<(Option<bool>, Option<Instant>)> = Mutex::new((None, None));
+        static AT: Lock<(Option<bool>, Option<Instant>)> = Lock::new("shared::AT", (None, None));
         let want = !quiet && !self.is_fullscreen();
         let changed = {
             let mut at = AT.lock().unwrap();
@@ -353,7 +353,9 @@ impl Shared {
         // into each other (2026-10-11, the quit's steps). The file is kept
         // open (it was opened and closed for every line); opened again
         // should a write fail (the file taken away).
-        static LOG: Mutex<Option<std::fs::File>> = Mutex::new(None);
+        // Taken inside other locks (a line is said from anywhere), nothing
+        // inside it: ranked so (lock.rs).
+        static LOG: Lock<Option<std::fs::File>> = Lock::ranked("shared::LOG", crate::lock::LEAF, None);
         let mut log = LOG.lock().unwrap_or_else(|e| e.into_inner());
         let written = log.as_mut().is_some_and(|f| f.write_all(whole.as_bytes()).is_ok());
         if !written {
@@ -730,7 +732,7 @@ impl Shared {
     // (hideInFullscreen off) still plays no flow light's ring over it
     // (island.ts), told so as it changes (pet:full-screen).
     pub fn look_fullscreen(self: &Arc<Self>, asked: Option<Instant>) {
-        static CHANGED: Mutex<Option<Instant>> = Mutex::new(None);
+        static CHANGED: Lock<Option<Instant>> = Lock::new("shared::CHANGED", None);
         let watching = fullscreen::AVAILABLE;
         let own = self.own_windows();
         let cover = if watching { fullscreen::covering(&own) } else { Some(None) };

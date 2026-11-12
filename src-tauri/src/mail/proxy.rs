@@ -350,6 +350,7 @@ impl ureq::unversioned::transport::Transport for Tunnel {
 
 #[cfg(test)]
 mod tests {
+    use crate::lock::Lock;
     use super::*;
     use crate::mail::imap::Session;
     use crate::mail::smtp::Smtp;
@@ -596,7 +597,7 @@ mod tests {
     // The little of an IMAP server an IDLE needs: its greeting (IDLE among
     // what it can do), IDLE and DONE, LOGOUT; the IDLEs counted.
     static IDLES: AtomicUsize = AtomicUsize::new(0);
-    static IDLE_TAG: Mutex<String> = Mutex::new(String::new());
+    static IDLE_TAG: Lock<String> = Lock::new("mail::proxy::IDLE_TAG", String::new());
 
     fn imap() -> u16 {
         server("* OK [CAPABILITY IMAP4rev1 IDLE] ready\r\n", |line| {

@@ -3,7 +3,7 @@
 // Listens for global hotkeys via Windows RegisterHotKey in a dedicated message-pump
 // thread and informs the island (island:hotkey), allowing the island's own state
 // machine to decide whether to answer or expand safely.
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 #[cfg(windows)]
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 #[cfg(windows)]
@@ -15,13 +15,14 @@ use serde_json::json;
 use tauri::Emitter;
 
 use crate::Shared;
+use crate::lock::Lock;
 
 const MOD_ALT: u32 = 0x0001;
 const MOD_CONTROL: u32 = 0x0002;
 const MOD_SHIFT: u32 = 0x0004;
 const MOD_NOREPEAT: u32 = 0x4000;
 
-static FAILED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static FAILED: Lock<Vec<String>> = Lock::new("shortcuts::FAILED", Vec::new());
 
 pub fn failed() -> Vec<String> {
     FAILED.lock().unwrap().clone()

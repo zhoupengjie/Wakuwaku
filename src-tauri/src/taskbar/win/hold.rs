@@ -6,6 +6,7 @@
 // that will not stop showing it (the tug, #69); its picture for the
 // handover (strip_picture).
 use super::*;
+use crate::lock::Lock;
 
 // The edge her strip is along: Windows' own taskbar keeps its room along
 // the bottom for a bottom strip to lie over, and hides itself (keeping
@@ -234,7 +235,7 @@ impl Restarts {
     }
 }
 
-pub(super) static RESTARTS: Mutex<Restarts> = Mutex::new(Restarts::new());
+pub(super) static RESTARTS: Lock<Restarts> = Lock::new("taskbar::win::hold::RESTARTS", Restarts::new());
 // Explorer's taskbar's process as last seen while hers is up (0: none yet).
 pub(super) static EXPLORER_PID: AtomicU32 = AtomicU32::new(0);
 
@@ -585,7 +586,7 @@ impl Tug {
     }
 }
 
-pub(super) static TUG: Mutex<Tug> = Mutex::new(Tug::new());
+pub(super) static TUG: Lock<Tug> = Lock::new("taskbar::win::hold::TUG", Tug::new());
 
 // Said once for each time her guard shows Windows' taskbar for a hang.
 static LEFT_FOR_HANG: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

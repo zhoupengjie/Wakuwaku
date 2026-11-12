@@ -44,6 +44,7 @@
 // (WS_EX_LAYERED), or the taskbar's XAML takes every pointer meant for it:
 // kept so the same way (keep_layered), as tao writes its style back.
 use std::ffi::c_void;
+use crate::lock::Lock;
 
 type Hwnd = *mut c_void;
 type Subclass = unsafe extern "system" fn(Hwnd, u32, usize, isize, usize, usize) -> isize;
@@ -156,10 +157,10 @@ fn as_tool_window(style_ex: u32) -> u32 {
 }
 
 // Windows of hers minimized now, for their surface to be wiped once given back.
-static MINIMIZED: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec::new());
+static MINIMIZED: Lock<Vec<isize>> = Lock::new("frameless::MINIMIZED", Vec::new());
 // Windows of hers kept layered (embed.rs): the bit put back as tao writes
 // its own extended style.
-static LAYERED: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec::new());
+static LAYERED: Lock<Vec<isize>> = Lock::new("frameless::LAYERED", Vec::new());
 
 fn kept_layered(hwnd: isize) -> bool {
     LAYERED.lock().unwrap_or_else(|e| e.into_inner()).contains(&hwnd)

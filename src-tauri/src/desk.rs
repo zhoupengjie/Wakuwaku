@@ -34,13 +34,14 @@
 // keeps what it changed (desk_keep, merged with the rest), and her island's
 // page puts widgets on and off the desktop (island-wmenu.ts placeWidget).
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 
 use serde_json::{json, Value};
 use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::{screen::Area, Shared};
 use crate::config;
+use crate::lock::Lock;
 
 type Mon = (i32, i32, i32, i32);
 
@@ -80,7 +81,7 @@ struct Desk {
     views_on: Option<bool>,
 }
 
-static DESKS: Mutex<Vec<Desk>> = Mutex::new(Vec::new());
+static DESKS: Lock<Vec<Desk>> = Lock::new("desk::DESKS", Vec::new());
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static SHARED: OnceLock<Arc<Shared>> = OnceLock::new();
 
@@ -231,7 +232,7 @@ fn sprite_url(sh: &Shared) -> Value {
 
 // Windows' mode and accent ({ base, light, dark }, or null), as last read
 // (read again as Windows says its colours changed).
-static LOOK: Mutex<Option<(bool, Value)>> = Mutex::new(None);
+static LOOK: Lock<Option<(bool, Value)>> = Lock::new("desk::LOOK", None);
 fn look_now() -> (bool, Value) {
     LOOK.lock().unwrap().get_or_insert_with(look_read).clone()
 }
@@ -370,7 +371,7 @@ pub fn shows_more(sh: &Shared, id: &str) -> bool {
 // Each display's desktop seen or not: nothing maximized or full screen over
 // it, or the desktop brought over the windows (Win+D). Looked at once a
 // second at most (a window list: some 400 windows, a fraction of a ms).
-static SEEN: Mutex<Option<(std::time::Instant, Vec<(Mon, bool)>)>> = Mutex::new(None);
+static SEEN: Lock<Option<(std::time::Instant, Vec<(Mon, bool)>)>> = Lock::new("desk::SEEN", None);
 fn seen_now(sh: &Shared, mon: Mon) -> bool {
     if let Some((at, list)) = SEEN.lock().unwrap().as_ref() {
         if at.elapsed() < std::time::Duration::from_secs(1) {
@@ -681,7 +682,7 @@ static COMMANDS: AtomicU64 = AtomicU64::new(0);
 static PLACED: AtomicU64 = AtomicU64::new(0);
 static LOOKS: AtomicU64 = AtomicU64::new(0);
 static THREAD_MSGS: AtomicU64 = AtomicU64::new(0);
-static TRACE: Mutex<Option<Vec<(u32, bool, bool, u64)>>> = Mutex::new(None);
+static TRACE: Lock<Option<Vec<(u32, bool, bool, u64)>>> = Lock::new("desk::TRACE", None);
 
 fn count(c: &AtomicU64) {
     c.fetch_add(1, Ordering::Relaxed);
@@ -975,7 +976,7 @@ struct Drag {
     // for the turn it was asked at only.
     turn: u64,
 }
-static DRAG: Mutex<Drag> = Mutex::new(Drag { keep: Vec::new(), over: None, preview: None, drop: None, turn: 0 });
+static DRAG: Lock<Drag> = Lock::new("desk::DRAG", Drag { keep: Vec::new(), over: None, preview: None, drop: None, turn: 0 });
 static RAISED: AtomicBool = AtomicBool::new(false);
 
 // Where a point of her home's page is: the display under it (its key), and
@@ -1234,7 +1235,7 @@ fn look_again() {
 // number Windows gives the display this time), shortened: "d" and 12 hex
 // digits. Without it, its device name (\\.\DISPLAY1), and without that its
 // size and place.
-static KEYS: Mutex<Vec<(Mon, String)>> = Mutex::new(Vec::new());
+static KEYS: Lock<Vec<(Mon, String)>> = Lock::new("desk::KEYS", Vec::new());
 pub fn key_of(sh: &Shared, mon: Mon) -> String {
     if let Some((_, k)) = KEYS.lock().unwrap().iter().find(|(m, _)| *m == mon) {
         return k.clone();

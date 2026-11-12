@@ -16,7 +16,7 @@
 //
 // Sizes here are logical (the page's) unless they say physical.
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 
 use serde_json::{json, Value};
 use tauri::utils::config::BackgroundThrottlingPolicy;
@@ -27,6 +27,7 @@ use crate::screen::Area;
 use crate::appbar::Edge;
 use crate::{appbar, taskbar, Shared};
 use crate::config;
+use crate::lock::Lock;
 
 // The window without extra room, by home (island.ts BASE): the island as
 // wide as pulling her out needs, so it only ever grows down. A window whose
@@ -1499,7 +1500,7 @@ fn show_or_hide(sh: &Arc<Shared>) {
 // goes. Each answer of the page's (covered, bare, done) waited for so long
 // at most: neither side can hold the other. Not on the main thread: its
 // events reach the page through the main thread.
-static HANDOFF: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static HANDOFF: Lock<Vec<String>> = Lock::new("island::HANDOFF", Vec::new());
 static HANDOFF_SAID: std::sync::Condvar = std::sync::Condvar::new();
 
 // What the page answers (taskbar_handoff).
@@ -1517,7 +1518,7 @@ fn handoff_ask(sh: &Shared, step: Value) {
 // An answer, within ms at most: true once it came.
 fn handoff_wait(what: &str, ms: u64) -> bool {
     let said = HANDOFF.lock().unwrap();
-    let (said, _) = HANDOFF_SAID.wait_timeout_while(said, std::time::Duration::from_millis(ms), |s| !s.iter().any(|x| x == what)).unwrap();
+    let (said, _) = said.wait_timeout_while(&HANDOFF_SAID, std::time::Duration::from_millis(ms), |s| !s.iter().any(|x| x == what)).unwrap();
     said.iter().any(|x| x == what)
 }
 

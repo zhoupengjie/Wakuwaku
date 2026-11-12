@@ -41,6 +41,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use serde_json::{json, Value};
+use crate::lock::Lock;
 
 pub const ICONS: [&str; 26] = [
     "cpu", "weather", "note", "calendar", "bell", "stock", "today", "clock", "mail", "music", "code", "star", "dot", "chart", "battery", "timer", "flag", "server",
@@ -1150,7 +1151,7 @@ pub fn reading_now() -> Value {
         bytes: Option<(u64, u64)>,
         net: sys::Net,
     }
-    static LAST: std::sync::Mutex<Option<Last>> = std::sync::Mutex::new(None);
+    static LAST: Lock<Option<Last>> = Lock::new("widgets::LAST", None);
     let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
     // (times, bytes, whether the adapters counted changed, when).
     let take = |net: &mut sys::Net| {

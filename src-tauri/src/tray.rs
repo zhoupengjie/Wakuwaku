@@ -1,7 +1,7 @@
 // The tray icon, whose face shows her mood, and the menu it shares with a
 // right-click on her or the island. The faces are drawn by
 // scripts/make-icons.js (icons/tray).
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 
 use serde_json::json;
 use tauri::image::Image;
@@ -11,6 +11,7 @@ use tauri::{Emitter, Wry};
 
 use crate::{data, i18n, now_ms, pet, Shared};
 use crate::config;
+use crate::lock::Lock;
 
 const TRAY_ID: &str = "main";
 
@@ -293,7 +294,7 @@ pub fn create(sh: &Shared) -> tauri::Result<()> {
     Ok(())
 }
 
-static SHOWN_MOOD: Mutex<String> = Mutex::new(String::new());
+static SHOWN_MOOD: Lock<String> = Lock::new("tray::SHOWN_MOOD", String::new());
 
 // The tray icon is only ever reached on the main thread: Tauri's
 // tray_by_id hands back a clone of the icon, and the icon is counted by an
@@ -329,7 +330,7 @@ fn refresh_here(sh: &Shared) {
     };
     // Set only as it changes: setting it is a message to the tray (ours, and
     // on to Explorer's) on every redraw.
-    static TIP: Mutex<String> = Mutex::new(String::new());
+    static TIP: Lock<String> = Lock::new("tray::TIP", String::new());
     let tip = format!("Wakuwaku{}{status}", if lang == "zh" { "：" } else { ": " });
     if *TIP.lock().unwrap() != tip {
         let _ = tray.set_tooltip(Some(tip.clone()));

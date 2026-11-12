@@ -2,6 +2,7 @@
 // taskbar and the dock, in windows of their own; the dock's badges drawn over
 // its icons.
 use super::*;
+use crate::lock::Lock;
 
 // The live pictures' window as the cards round it are: dark, or light in
 // Windows' light mode (style.css .wpop, its ground #1c1c1e or #f9f9f9).
@@ -50,7 +51,7 @@ pub fn dock_thumbs(items: Vec<(isize, (i32, i32, i32, i32))>, area: Option<(i32,
 // 不需要占那么大位置). Each window's icon read once from what the taskbar
 // last sent (its program's png), kept while the window is in the dock.
 pub(super) static DOCK_BADGES: AtomicIsize = AtomicIsize::new(0);
-pub(super) static BADGE_ICONS: Mutex<Vec<(isize, (u32, u32, Vec<u8>))>> = Mutex::new(Vec::new());
+pub(super) static BADGE_ICONS: Lock<Vec<(isize, (u32, u32, Vec<u8>))>> = Lock::new("taskbar::win::thumbs::BADGE_ICONS", Vec::new());
 
 pub fn dock_badges(items: Vec<(isize, (i32, i32, i32, i32))>) {
     let host = DOCK_BADGES.load(Ordering::SeqCst) as Hwnd;
@@ -328,7 +329,7 @@ pub fn dock_thumbs_over(dock: isize) {
             if at as isize == dock {
                 SetWindowPos(host as Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
                 // Said at most every few seconds, should something keep at it.
-                static SAID: Mutex<Option<Instant>> = Mutex::new(None);
+                static SAID: Lock<Option<Instant>> = Lock::new("taskbar::win::thumbs::SAID", None);
                 let mut said = SAID.lock().unwrap();
                 if said.is_none_or(|at| at.elapsed() >= Duration::from_secs(5)) {
                     *said = Some(Instant::now());

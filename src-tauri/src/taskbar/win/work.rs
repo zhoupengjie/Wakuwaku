@@ -3,6 +3,7 @@
 // a program moves it (the self-heal), the desktop's icons out from under it,
 // the strip taken again, and windows kept from under a strip at the top.
 use super::*;
+use crate::lock::Lock;
 
 // Where the strip is now (physical): ours of the taskbar's class goes
 // there too, for those who ask the taskbar's window where it is.
@@ -170,8 +171,8 @@ pub(super) fn set_work_area(mut r: Rect) {
 // Every move of every window comes here (moved): its frame looked at
 // first, its program only for one over the strip, or Windows' flyout at
 // the foot as it opens (shown, to the front; known by its window after).
-pub(super) static UNDER_BAR: Mutex<Vec<(isize, u32, Instant)>> = Mutex::new(Vec::new());
-pub(super) static FLYOUTS: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+pub(super) static UNDER_BAR: Lock<Vec<(isize, u32, Instant)>> = Lock::new("taskbar::win::work::UNDER_BAR", Vec::new());
+pub(super) static FLYOUTS: Lock<Vec<isize>> = Lock::new("taskbar::win::work::FLYOUTS", Vec::new());
 
 pub(super) fn keep_under_bar(hwnd: isize, moved: bool) {
     const SWP_NOSIZE: u32 = 0x1;
@@ -258,7 +259,7 @@ pub(super) fn work_after_still(hwnd: Hwnd) {
 
 pub(super) const EAGER_TIMES: usize = 6;
 pub(super) const EAGER_WITHIN: Duration = Duration::from_secs(10);
-pub(super) static EAGER: Mutex<Vec<Instant>> = Mutex::new(Vec::new());
+pub(super) static EAGER: Lock<Vec<Instant>> = Lock::new("taskbar::win::work::EAGER", Vec::new());
 
 pub(super) fn eager_allowed() -> bool {
     let mut times = EAGER.lock().unwrap();

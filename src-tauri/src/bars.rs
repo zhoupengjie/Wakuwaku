@@ -26,7 +26,7 @@
 // at a time, its page came a frame late each time and shook (the user,
 // 2026-11-04: "not as smooth as the island").
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
@@ -35,6 +35,7 @@ use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, Webvie
 use crate::appbar::{self, Edge};
 use crate::{island, screen::Area, taskbar, Shared};
 use crate::config;
+use crate::lock::Lock;
 
 type Mon = (i32, i32, i32, i32);
 
@@ -119,13 +120,13 @@ const DOCK_EDGE_MS: u128 = 150;
 const DOCK_BAND: f64 = 12.0;
 const DOCK_LEAVE_MS: u128 = 600;
 
-static BARS: Mutex<Vec<Bar>> = Mutex::new(Vec::new());
+static BARS: Lock<Vec<Bar>> = Lock::new("bars::BARS", Vec::new());
 
 // The strips' pages and their list's as the main taskbar's (island.rs
 // fit_zoom): zoomed so that Windows' text size is taken out of their scale,
 // each laid out at 48 of its px as thick as Windows' (zhoupengjie/Wakuwaku#90).
 // The text size as her island's page has it; each once its page is up.
-static POP_ZOOM: Mutex<f64> = Mutex::new(1.0);
+static POP_ZOOM: Lock<f64> = Lock::new("bars::POP_ZOOM", 1.0);
 
 pub fn fit_zoom(sh: &Shared) {
     let want = 1.0 / island::text_size(sh);
@@ -159,7 +160,7 @@ pub fn fit_zoom(sh: &Shared) {
 }
 static NEXT: AtomicU32 = AtomicU32::new(1);
 // The displays without a strip of hers whose work area was last made whole, and when (keep_work).
-static BARE_AT: Mutex<Vec<(Mon, Instant)>> = Mutex::new(Vec::new());
+static BARE_AT: Lock<Vec<(Mon, Instant)>> = Lock::new("bars::BARE_AT", Vec::new());
 
 // Her taskbar wanted on every display: her home the taskbar, and set so.
 pub fn wanted(sh: &Shared) -> bool {
@@ -1010,7 +1011,7 @@ fn page_scale(dpr: Option<f64>, sf: f64) -> f64 {
     crate::island::valid_scale(dpr).unwrap_or(sf)
 }
 
-static OPEN: Mutex<Option<Pop>> = Mutex::new(None);
+static OPEN: Lock<Option<Pop>> = Lock::new("bars::OPEN", None);
 static POP_MADE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static POP_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

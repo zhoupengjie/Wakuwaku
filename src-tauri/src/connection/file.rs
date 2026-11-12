@@ -3,6 +3,7 @@
 // given back with our part taken out; and this program, as they run it.
 
 use super::*;
+use crate::lock::Lock;
 
 // The copy write_json keeps of a settings file (made once, beside it).
 pub fn backup_of(file: &Path) -> PathBuf {
@@ -24,7 +25,7 @@ pub fn shown_path(file: &Path) -> String {
 // Claude Code's settings.json three times and Codex's hooks.json twice,
 // up to four times a second while the settings are open (2026-10-13).
 type Stamp = Option<(u64, std::time::SystemTime)>;
-static READ: Mutex<Option<std::collections::HashMap<PathBuf, (Stamp, Result<Value, String>)>>> = Mutex::new(None);
+static READ: Lock<Option<std::collections::HashMap<PathBuf, (Stamp, Result<Value, String>)>>> = Lock::new("connection::file::READ", None);
 
 pub(super) fn read_json(file: &Path) -> Result<Value, String> {
     let stamp: Stamp = fs::metadata(file).ok().map(|m| (m.len(), m.modified().unwrap_or(std::time::UNIX_EPOCH)));

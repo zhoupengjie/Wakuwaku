@@ -34,7 +34,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
 use std::time::SystemTime;
 
 use serde_json::{json, Value};
@@ -43,6 +42,7 @@ use tauri::Manager;
 use crate::addons::{self, refused, FromMarket, Kind, Manifest, Package, Perms, Refused, Words};
 use crate::{now_ms, shared, zip, Shared};
 use crate::config;
+use crate::lock::Lock;
 
 // Her mark in a pack's folder.
 const MARK: &str = "pack.json";
@@ -184,7 +184,7 @@ fn mark_of(folder: &Path, kind: Kind) -> Option<Pack> {
 // The packs here, pets first, each kind by id: as last found, until a
 // kind's folder changes (one put in or taken away moves its time) or she
 // writes one (PUT), as data.rs keeps her pets.
-static FOUND: Mutex<Option<(PathBuf, u64, Vec<Option<SystemTime>>, Vec<Pack>)>> = Mutex::new(None);
+static FOUND: Lock<Option<(PathBuf, u64, Vec<Option<SystemTime>>, Vec<Pack>)>> = Lock::new("packs::FOUND", None);
 static PUT: AtomicU64 = AtomicU64::new(0);
 
 pub fn list(dir: &Path) -> Vec<Pack> {

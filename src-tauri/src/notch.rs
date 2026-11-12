@@ -5,11 +5,11 @@
 // is covered. Elsewhere nothing: the island stays under the screen's top.
 
 use crate::Shared;
-use std::sync::Mutex;
+use crate::lock::Lock;
 
 // The band last told (height, notch width), so the log has a line only when
 // it changes, and so it is known whether her island sits in a notch.
-static TOLD: Mutex<Option<(f64, f64)>> = Mutex::new(None);
+static TOLD: Lock<Option<(f64, f64)>> = Lock::new("notch::TOLD", None);
 
 // Her island is in a notch, where it is out of the way (island.ts aside):
 // her home there is out of sight, so she is never sent into it by a gesture

@@ -4,6 +4,7 @@
 // program started, a window brought up, minimized or closed, its menu.
 use super::*;
 use crate::config;
+use crate::lock::Lock;
 
 pub(super) fn wake_tasks() {
     let (dirty, cv) = &WAKE;
@@ -26,7 +27,7 @@ pub fn wake() {
 // change while making the buttons, its wake was cleared after, and it
 // waited two seconds more before it looked (a quit for an update,
 // 2026-10-11). What it is doing, for the log should it not stop.
-pub(super) static TASKS_DOING: Mutex<&'static str> = Mutex::new("");
+pub(super) static TASKS_DOING: Lock<&'static str> = Lock::new("taskbar::win::buttons::TASKS_DOING", "");
 
 // Not easy on the power for good (power.rs thread_eco), as the loops
 // that only look now and then are: the buttons it makes are seen as
@@ -46,7 +47,7 @@ pub(super) fn tasks_loop(sh: Arc<Shared>) {
             // an icon changed alone); quiet (nobody at the keyboard),
             // every twenty, woken as it ends.
             let every = Duration::from_secs(if sh.is_quiet() { 20 } else { 5 });
-            let (mut guard, _) = cv.wait_timeout_while(guard, every, |d| !*d && !stopping()).unwrap();
+            let (mut guard, _) = guard.wait_timeout_while(cv, every, |d| !*d && !stopping()).unwrap();
             *guard = false;
         }
         if stopping() {
@@ -190,7 +191,7 @@ pub(super) fn hosts(path: &str) -> bool {
 
 // Windows' plain program icon, drawn once at this size (plain_program_icon).
 pub(super) fn plain_png(size: i32) -> String {
-    static PLAIN: Mutex<Option<(i32, String)>> = Mutex::new(None);
+    static PLAIN: Lock<Option<(i32, String)>> = Lock::new("taskbar::win::buttons::PLAIN", None);
     let mut plain = PLAIN.lock().unwrap();
     if let Some((_, png)) = plain.as_ref().filter(|(at, _)| *at == size) {
         return png.clone();

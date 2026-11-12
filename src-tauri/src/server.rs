@@ -39,7 +39,7 @@
 use std::io::Read;
 use std::path::Path;
 use std::sync::mpsc::SyncSender;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serde_json::{json, Value};
 use tauri::Manager;
@@ -169,7 +169,7 @@ pub fn serve(sh: Arc<Shared>, server: Server) {
     // (vendor/tiny_http/README.md), or of its accept thread ending, into her
     // log. Each thing is said once: a socket that a network filter will not
     // let her split fails so for every hook, and would fill the log.
-    let (said, teller) = (Mutex::new(Vec::new()), sh.clone());
+    let (said, teller) = (crate::lock::Lock::new("server::http said", Vec::new()), sh.clone());
     tiny_http::tell_failures(move |line| {
         if first_time(&mut said.lock().unwrap_or_else(|e| e.into_inner()), line) {
             teller.log(&format!("http: {line}"));

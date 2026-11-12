@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use super::letters::{parse, text};
 use super::{Account, Server};
 use crate::Shared;
+use crate::lock::Lock;
 
 // A flag changed here is the one shown until the server has had time to
 // take it (a sync in between may still see the old one).
@@ -447,7 +448,7 @@ fn write_whole(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 // while the mail runner's is taken.)
 #[derive(Default)]
 pub struct Stores {
-    by_account: HashMap<String, (String, Arc<Mutex<Store>>)>,
+    by_account: HashMap<String, (String, Arc<Lock<Store>>)>,
 }
 
 // Under the data folder, wherever that is (a test copy's own).
@@ -456,7 +457,7 @@ fn dir_of(sh: &Shared, id: &str) -> PathBuf {
 }
 
 // An account's store (its server's letters; another server's are gone).
-pub fn of(sh: &Shared, account: &Account) -> Arc<Mutex<Store>> {
+pub fn of(sh: &Shared, account: &Account) -> Arc<Lock<Store>> {
     let mut r = sh.mail.lock().unwrap();
     let key = server_key(&account.server);
     if let Some((k, s)) = r.stores.by_account.get(&account.id) {
@@ -464,7 +465,7 @@ pub fn of(sh: &Shared, account: &Account) -> Arc<Mutex<Store>> {
             return s.clone();
         }
     }
-    let s = Arc::new(Mutex::new(Store::load(dir_of(sh, &account.id), &account.server)));
+    let s = Arc::new(Lock::new("mail::store::Store", Store::load(dir_of(sh, &account.id), &account.server)));
     r.stores.by_account.insert(account.id.clone(), (key, s.clone()));
     s
 }

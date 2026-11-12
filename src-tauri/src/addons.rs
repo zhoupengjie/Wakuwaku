@@ -39,7 +39,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, LazyLock, Mutex, RwLock};
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, SystemTime};
 
 use serde_json::{json, Map, Value};
@@ -48,6 +48,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 use crate::{now_ms, shared, zip, Shared};
 use crate::config;
+use crate::lock::Lock;
 
 // Her scheme for their files, and where her pages find it (WebView2 serves
 // a scheme of the app's own at <scheme>.localhost).
@@ -913,17 +914,20 @@ pub struct Registry {
     records: Map<String, Value>,
 }
 
-static REGISTRY: LazyLock<RwLock<Registry>> = LazyLock::new(|| RwLock::new(Registry::default()));
+static REGISTRY: LazyLock<crate::lock::RwLock<Registry>> = LazyLock::new(|| crate::lock::RwLock::new("addons::REGISTRY", Registry::default()));
 
 // One lock per package id, held for the whole of an install, update or
 // uninstall of it (finding 8): a file install, a market install or update,
 // a pack install, and an uninstall of the same id never run at once and
 // leave its folder or record half-written. Keyed by id alone across kinds:
-// conservative, so even a pet and a plugin of one id do not race.
-static LOCKS: LazyLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+// conservative, so even a pet and a plugin of one id do not race. Each
+// is taken first, with no other lock held, and is held around work that
+// takes ordinary ones (the registry, Shared's): ranked below them (lock.rs).
+// Never two at once: no install holds one id's and waits for another's.
+static LOCKS: LazyLock<Lock<HashMap<String, Arc<Lock<()>>>>> = LazyLock::new(|| Lock::new("addons::LOCKS", HashMap::new()));
 
 pub(crate) fn with_id_lock<T>(id: &str, f: impl FnOnce() -> T) -> T {
-    let lock = LOCKS.lock().unwrap_or_else(|e| e.into_inner()).entry(id.to_string()).or_default().clone();
+    let lock = LOCKS.lock().unwrap_or_else(|e| e.into_inner()).entry(id.to_string()).or_insert_with(|| Arc::new(Lock::ranked("addons::LOCKS id", crate::lock::OUTER, ()))).clone();
     let _held = lock.lock().unwrap_or_else(|e| e.into_inner());
     f()
 }
@@ -1260,9 +1264,9 @@ struct Stopped {
     times: u64,
 }
 
-static RUN: LazyLock<Mutex<Run>> = LazyLock::new(|| Mutex::new(Run::default()));
+static RUN: LazyLock<Lock<Run>> = LazyLock::new(|| Lock::new("addons::RUN", Run::default()));
 
-fn run() -> std::sync::MutexGuard<'static, Run> {
+fn run() -> crate::lock::Guard<'static, Run> {
     RUN.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -2020,9 +2024,9 @@ pub fn uninstall(sh: &Shared, id: &str) -> Result<(), String> {
 
 // --- Storage -----------------------------------------------------------------------------
 
-static STORES: LazyLock<Mutex<HashMap<PathBuf, Map<String, Value>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static STORES: LazyLock<Lock<HashMap<PathBuf, Map<String, Value>>>> = LazyLock::new(|| Lock::new("addons::STORES", HashMap::new()));
 
-fn stores() -> std::sync::MutexGuard<'static, HashMap<PathBuf, Map<String, Value>>> {
+fn stores() -> crate::lock::Guard<'static, HashMap<PathBuf, Map<String, Value>>> {
     STORES.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -2280,7 +2284,7 @@ pub fn guard_frames(sh: &Arc<Shared>, window: &WebviewWindow, main: bool) {
         // SAFETY: WebView2's own objects, on its thread, as it hands them.
         unsafe {
             let Ok(core) = view.controller().CoreWebView2() else { return };
-            let said = Mutex::new(None::<std::time::Instant>);
+            let said = Lock::new("addons::navigation said", None::<std::time::Instant>);
             let handler = NavigationStartingEventHandler::create(Box::new(move |_, args: Option<ICoreWebView2NavigationStartingEventArgs>| {
                 let Some(args) = args else { return Ok(()) };
                 let mut uri = windows_core::PWSTR::null();

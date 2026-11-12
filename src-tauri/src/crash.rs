@@ -51,13 +51,14 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use serde_json::{json, Map, Value};
 
 use crate::Shared;
 use crate::config;
+use crate::lock::Lock;
 pub use redact::Redactor;
 
 // The relays: in front of GitHub's issues (Cloudflare, the Worker
@@ -92,7 +93,9 @@ pub fn folder(data: &Path) -> PathBuf {
 
 // --- Her log, always ------------------------------------------------------------------
 
-static TAIL: Mutex<Option<(fs::File, u64)>> = Mutex::new(None);
+// Taken inside other locks (her log is written from anywhere: Shared::log)
+// and nothing taken inside it.
+static TAIL: Lock<Option<(fs::File, u64)>> = Lock::ranked("crash::TAIL", crate::lock::LEAF, None);
 
 // A line of her log ("<ms> [tauri] …") into recent.log, its breaks as ⏎;
 // the file started anew past 256 KB, the one before kept.
@@ -568,7 +571,7 @@ struct Status {
     next_at: u64,
 }
 
-static STATUS: Mutex<Status> = Mutex::new(Status { sending: false, error: None, next_at: 0 });
+static STATUS: Lock<Status> = Lock::new("crash::STATUS", Status { sending: false, error: None, next_at: 0 });
 
 // Those waiting sent (five at a time), each claimed first (renamed
 // .sending) so the guard and she never send one twice. Whether all went.
@@ -866,7 +869,7 @@ pub fn answer(sh: &Arc<Shared>, yes: bool) {
 // file at the same time: the view is made for every settings snapshot (up
 // to four a second while they are open), and a report holds five minutes
 // of log.
-static VIEWED: Mutex<Option<std::collections::HashMap<&'static str, (PathBuf, Option<u64>, Value)>>> = Mutex::new(None);
+static VIEWED: Lock<Option<std::collections::HashMap<&'static str, (PathBuf, Option<u64>, Value)>>> = Lock::new("crash::VIEWED", None);
 
 fn viewed(which: &'static str, path: Option<&Path>, read: impl FnOnce(&Path) -> Option<Value>) -> Option<Value> {
     let path = path?;
@@ -954,7 +957,7 @@ pub fn webview_failed(sh: &Arc<Shared>, label: &str, kind: i32, reason: i32, cod
     let reason_name = REASONS.get(reason as usize).copied().unwrap_or("other");
     sh.log(&format!("webview: {label}: {kind_name} ({reason_name}), exit 0x{:X}", code as u32));
     let reportable = webview_crash(kind, reason, code) || (matches!(kind, 0..=2) && testing_webview());
-    static LAST: Mutex<u64> = Mutex::new(0);
+    static LAST: Lock<u64> = Lock::new("crash::LAST", 0);
     let now = crate::now_ms();
     let again = {
         let mut last = LAST.lock().unwrap();

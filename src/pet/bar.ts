@@ -20,6 +20,33 @@ import * as Presses from './presses.ts'
 import { CELL_W, CELL_H, CLIPS } from './sprite.ts'
 import { t } from '../shared/i18n.ts'
 
+// A program's button as taskbar/ sends it (taskbar/win/buttons.rs), with its
+// windows on this display: what the strip and its list (barpop.ts) read of it.
+export interface TaskWindow {
+  id: number
+  title: string
+  png: string
+  front: boolean
+  min: boolean
+  flash: boolean
+}
+export interface TaskApp {
+  app: string
+  path: string
+  id: string | null
+  name: string
+  pinned: boolean
+  png: string
+  windows: TaskWindow[]
+}
+// Windows' look (taskbar/win/look.rs look_at_desktop).
+export interface TaskLook {
+  mode?: string
+  seconds?: boolean
+  taskView?: boolean
+  accent?: { base: string; light: string; dark: string } | null
+}
+
 // Her taskbar's page on another display (bar.html): made by bar-main.ts.
 export function barPage() {
   const { invoke } = window.__TAURI__.core
@@ -29,26 +56,26 @@ export function barPage() {
   const target: TauriTarget = { kind: 'WebviewWindow', label: LABEL }
 
   const body = document.body
-  const start = document.querySelector('.start')
+  const start = document.querySelector('.start')!
   // Task View after Start, while Windows has its button on (as the main
   // taskbar's, island-right.ts taskViewButton): Windows' own pictures, else its
   // icon font's glyph (bar.html).
-  const taskView = document.querySelector('.tview')
+  const taskView = document.querySelector('.tview')!
   invoke('taskbar_task_view_icons')
     .then(icons => {
       if (!icons?.light || !icons?.dark) return
-      const img = (svg, cls) => `<img class="${cls}" alt="" draggable="false" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}">`
+      const img = (svg: string, cls: string) => `<img class="${cls}" alt="" draggable="false" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}">`
       taskView.innerHTML = img(icons.light, 'tv-light') + img(icons.dark, 'tv-dark')
     })
     .catch(() => {})
-  const wins = document.getElementById('wins')
-  const clock = document.querySelector('.clock')
+  const wins = document.getElementById('wins')!
+  const clock = document.querySelector('.clock')!
   // What bar:state brings (bars.rs refresh): the programs and windows on this
   // display, Windows' look, where the strip is and of what; in the dock its
   // glass's acrylic, quick settings and the Recycle Bin; a prompt waiting.
   interface BarState {
-    windows: any[]
-    look: { mode?: string; seconds?: boolean; taskView?: boolean; accent?: { base?: string; light?: string; dark?: string } }
+    windows: TaskApp[]
+    look: TaskLook
     edge: string
     align: string
     material: string
@@ -68,7 +95,7 @@ export function barPage() {
   }
   let state: BarState = { windows: [], look: {}, edge: 'bottom', align: 'center', material: 'clear', lang: 'zh' }
 
-  const el = (tag, cls?, text?) => {
+  const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string | null) => {
     const n = document.createElement(tag)
     if (cls) n.className = cls
     if (text != null) n.textContent = text
@@ -79,7 +106,7 @@ export function barPage() {
   const isLight = () => state.look?.mode === 'light'
   // How a clear strip fills in (taskbarClearWhen), as island.ts reads it: as
   // Mica (the default) or solid, or never.
-  const clearWhen = () => (['solid', 'always'].includes(state.clearWhen) ? state.clearWhen : 'mica')
+  const clearWhen = () => (['solid', 'always'].includes(state.clearWhen as string) ? state.clearWhen : 'mica')
   // Its ground: the material; clear, while a window is maximized or full
   // screen on this display (bars.rs fills) it fills in as Mica or solid,
   // unless it is to stay clear always, as hers does on hers (island.ts isFilled).
@@ -107,7 +134,7 @@ export function barPage() {
     const far = at + pane + gap
     const end = far + pane
     const r = Math.max(0.5, 0.8 * dpr).toFixed(2)
-    const rect = (x, y) => `<rect x="${x}" y="${y}" width="${pane}" height="${pane}" rx="${r}"/>`
+    const rect = (x: number, y: number) => `<rect x="${x}" y="${y}" width="${pane}" height="${pane}" rx="${r}"/>`
     start.innerHTML = `<svg viewBox="0 0 ${box} ${box}" style="width:${box / dpr}px;height:${box / dpr}px"><defs><linearGradient id="start-blue" gradientUnits="userSpaceOnUse" x1="${at}" y1="${at}" x2="${end}" y2="${end}"><stop class="s0" offset="0"/><stop class="s1" offset="1"/></linearGradient></defs><g fill="url(#start-blue)">${rect(at, at)}${rect(far, at)}${rect(at, far)}${rect(far, far)}</g></svg>`
   }
 
@@ -166,7 +193,7 @@ export function barPage() {
   function drawWindows() {
     const list = state.windows || []
     const old = new Map([...(wins.children as HTMLCollectionOf<HTMLElement>)].filter(b => b.dataset.app != null).map(b => [b.dataset.app, b]))
-    const fresh = []
+    const fresh: HTMLElement[] = []
     const animate = isDock() && buttonsDrawn
     const buttons = list.map(app => {
       const windows = app.windows || []
@@ -189,7 +216,7 @@ export function barPage() {
       b.classList.toggle('flash', windows.some(w => w.flash))
       if (!windows.length) b.title = app.name || ''
       else b.removeAttribute('title')
-      const img = b.querySelector<HTMLImageElement>(':scope > img')
+      const img = b.querySelector<HTMLImageElement>(':scope > img')!
       if (img.getAttribute('src') !== (app.png || '')) img.src = app.png || ''
       let count = b.querySelector(':scope > .count')
       if (windows.length > 1) {
@@ -227,7 +254,7 @@ export function barPage() {
 
   // Start and the programs centred on the whole strip: as much room before
   // them as the clock and the sliver take after (bar.css #lead).
-  const end = document.getElementById('end')
+  const end = document.getElementById('end')!
   new ResizeObserver(() => {
     body.style.setProperty('--end-w', `${end.offsetWidth}px`)
     body.style.setProperty('--end-h', `${end.offsetHeight}px`)
@@ -240,17 +267,17 @@ export function barPage() {
   // settings have it for Windows' mode (islandLook: bg, op, blur, edge,
   // bare), Windows' flyout grey by default; bare, none, its words haloed as
   // the clear strip's are; on the black strip, none either (it is black).
-  const her = document.getElementById('her')
-  const film = her.querySelector('.film')
-  const sheet = her.querySelector('.sheet')
-  const words = her.querySelector('.words')
+  const her = document.getElementById('her')!
+  const film = her.querySelector('.film')!
+  const sheet = her.querySelector('.sheet')!
+  const words = her.querySelector('.words')!
   const WAITING = { dark: '#ffb340', light: '#b25e00' }
   const FACE = 30
   const PER_PX = 0.00875
   let frames: Timer = 0
 
   // A colour's relative lightness (WCAG), 0 to 1 (island-look.ts lightness).
-  function lightness(rgb) {
+  function lightness(rgb: number) {
     const [r, g, b] = [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255].map(v => {
       v /= 255
       return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
@@ -284,7 +311,7 @@ export function barPage() {
     her.style.setProperty('--h-bg', bg === null ? (isLight() ? '#f3f3f3' : '#2c2c2c') : `rgba(${(bg >> 16) & 255}, ${(bg >> 8) & 255}, ${bg & 255}, ${op})`)
     her.style.setProperty('--h-blur', blur ? `blur(${blur}px) saturate(1.25)` : 'none')
     const line = inkLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.1)'
-    const edge = { ring: `0 0 0 1.5px ${ring}, 0 0 12px color-mix(in srgb, ${ring} 35%, transparent)`, none: '0 0 0 0 transparent' }[mine.edge]
+    const edge = { ring: `0 0 0 1.5px ${ring}, 0 0 12px color-mix(in srgb, ${ring} 35%, transparent)`, none: '0 0 0 0 transparent' }[mine.edge as 'ring' | 'none']
     her.style.setProperty('--h-edge', edge || `0 0 0 1px ${line}`)
     const said = t(state.lang, asks.kind === 'answer' ? 'bar.answer' : 'bar.approve', { n: asks.n })
     // Along a side, upright: her portrait and the number; the words in its tip.
@@ -348,7 +375,7 @@ export function barPage() {
   // Mica: this display's own wallpaper under the strip, blurred and tinted
   // as the main strip's (mica.ts; bars.rs read_papers sends where it lies);
   // its tint (style.css) until the picture comes.
-  const mica = Mica.mount(document.getElementById('mica'))
+  const mica = Mica.mount(document.getElementById('mica')!)
   function drawMica() {
     // Windows' acrylic under the dock: no picture of its own.
     const under = (ground() === 'mica' || clearMica()) && !(isDock() && state.acrylic === true)
@@ -362,12 +389,12 @@ export function barPage() {
   // their list to pick from, pressed again it goes (zhoupengjie/Wakuwaku#34);
   // with the keys and the other buttons as on Windows' own
   // (zhoupengjie/Wakuwaku#36, presses.ts pressOf).
-  const appOf = key => (state.windows || []).find(a => a.app === key)
+  const appOf = (key: unknown) => (state.windows || []).find(a => a.app === key)
   // The window Ctrl and a press last brought (island-winlist.ts cycled).
-  let cycled = null
+  let cycled: { app: string; id: number; at: number } | null = null
   // A window's own menu open: no list on the pointer resting (island-winlist.ts menuUp).
   let menuUp = false
-  function pressApp(node, app, what) {
+  function pressApp(node: HTMLElement, app: TaskApp, what: string | null) {
     const windows = app.windows || []
     if (!what) return
     clearTimeout(popTimer)
@@ -384,15 +411,17 @@ export function barPage() {
     if (what === 'next') {
       closePop()
       const last = cycled?.app === app.app && Date.now() - cycled.at < Presses.CYCLED_MS ? cycled.id : null
-      const next = Presses.nextWindow(windows, last)
+      // There is one: pressOf says next only with several windows.
+      const next = Presses.nextWindow(windows, last)!
       cycled = { app: app.app, id: next.id, at: Date.now() }
       return call('taskbar_window', { id: Number(next.id), what: 'front' })
     }
     if (windows.length > 1) {
       const listed = popFor?.kind === 'list' && popFor.app === app.app
-      if (listed && popFor.pressed) return closePop()
+      // Listed, or just opened: popFor is this one.
+      if (listed && popFor!.pressed) return closePop()
       if (!listed) openPop(node, 'list')
-      popFor.pressed = true
+      popFor!.pressed = true
       return
     }
     closePop()
@@ -401,11 +430,11 @@ export function barPage() {
   }
   // Shift and Ctrl as Windows has them at the press (island-winlist.ts heldAtPress):
   // this window never takes the keyboard either.
-  let heldAtPress = null
+  let heldAtPress: Promise<{ shift?: boolean; ctrl?: boolean } | null> | null = null
   document.addEventListener('pointerdown', e => {
     if ((e.target as HTMLElement).closest('[data-app]')) heldAtPress = invoke('taskbar_held').catch(() => null)
   })
-  function pressAt(e, node) {
+  function pressAt(e: MouseEvent, node: HTMLElement) {
     const press = { type: e.type, button: e.button }
     const own = { shift: e.shiftKey, ctrl: e.ctrlKey }
     const held = heldAtPress
@@ -449,12 +478,12 @@ export function barPage() {
   // In a window of their own over the strip (bars.rs bar_pop, barpop.ts),
   // which goes once the pointer has left both a moment (told it here,
   // bar_pop_over) or at a press elsewhere. { app, kind } while open.
-  let popFor = null
-  let popTimer
+  let popFor: { app: string | undefined; kind: string; pressed?: boolean } | null = null
+  let popTimer: Timer | undefined
   // Where the list's window lies (aimPop), in this page's px, while it shows.
-  let popAt = null
-  const call = (cmd, args?) => invoke(cmd, args).catch(() => {})
-  function openPop(node, kind) {
+  let popAt: { left: number; top: number; right: number; bottom: number } | null = null
+  const call = (cmd: string, args?: Record<string, unknown>) => invoke(cmd, args).catch(() => {})
+  function openPop(node: HTMLElement, kind: string) {
     const b = node.getBoundingClientRect()
     popFor = { app: node.dataset.app, kind }
     call('bar_pop', { kind, key: node.dataset.app, at: [b.left, b.top, b.width, b.height], dpr: devicePixelRatio || 1 })
@@ -482,7 +511,7 @@ export function barPage() {
     if (!app || menuUp || popFor?.kind === 'menu' || !(app.windows || []).length) return
     const wait = aim.due(aimList(), performance.now())
     if (wait === null) return
-    if (wait === 0) return openPop(node, 'list')
+    if (wait === 0) return openPop(node!, 'list')
     popTimer = setTimeout(aimPop, wait)
   }
   wins.addEventListener('mousemove', e => aim.move(e.clientX, e.clientY, performance.now()))
@@ -523,8 +552,8 @@ export function barPage() {
   // window's drags (tauri://drag-*, where it is in physical px), and the
   // page hears no mouse meanwhile: the list's window is told when the drag
   // is on the buttons or off them, as for the pointer (bar_pop_over).
-  let fileHeld = null
-  let fileTimer
+  let fileHeld: string | null = null
+  let fileTimer: Timer | undefined
   let fileOnWins = false
   for (const type of ['enter', 'over', 'leave', 'drop']) {
     listen(
@@ -553,7 +582,7 @@ export function barPage() {
           if (windows.length === 1) {
             closePop()
             call('taskbar_window', { id: Number(windows[0].id), what: 'drag' })
-          } else if (windows.length > 1 && !(popFor?.kind === 'list' && popFor.app === app.app)) {
+          } else if (windows.length > 1 && !(popFor?.kind === 'list' && popFor.app === app!.app)) {
             openPop(button, 'list')
           }
         }, Presses.DRAG_HOLD_MS)
@@ -581,9 +610,9 @@ export function barPage() {
   // sized a frame at a time instead, its page came a frame behind each time
   // and shook (the user, 2026-11-04). Ready once its programs are in: its
   // window shows then, all at once (bars.rs reveal), not with Start alone.
-  const strip = document.getElementById('bar')
-  const glassEl = document.getElementById('glass')
-  const micaEl = document.getElementById('mica')
+  const strip = document.getElementById('bar')!
+  const glassEl = document.getElementById('glass')!
+  const micaEl = document.getElementById('mica')!
   const SETTLE_MS = 80
   const LAG_MS = 60
   const SLIDE_MS = 180
@@ -591,44 +620,53 @@ export function barPage() {
   // DWM's corners on the plate (8 px) inside the glass's (8): a pixel in
   // (backplate.rs; island-plate.ts plateInset).
   const PLATE_INSET = 1
+  // A box in the page's px.
+  interface Rect {
+    x: number
+    y: number
+    w: number
+    h: number
+  }
   // Where the glass is as it last settled (its px), where the plate goes
   // meanwhile and where it may still be (its last but one, LAG_MS), whether
-  // the glass is down (till bars.rs says: it comes up from there).
-  let settled = null
-  let plateAt = null
-  let plateWas = null
-  let lagTimer = null
-  let settleTimer = null
-  let sliding = null
+  // the glass is down (till bars.rs says: it comes up from there). The
+  // timers are null till set: clearTimeout takes that, though the DOM's
+  // type says not, so they are cleared as Timers.
+  let settled: Rect | null = null
+  let plateAt: Rect | null = null
+  let plateWas: Rect | null = null
+  let lagTimer: Timer | null = null
+  let settleTimer: Timer | null = null
+  let sliding: Timer | null = null
   let down = true
   // Windows' acrylic wholly in under the glass (bars.rs plate_in), and the
   // wait for it as the glass settles; with none to come (no acrylic), as if in.
   let plateUp = false
-  let plateWait = null
+  let plateWait: Timer | null = null
   const plateReady = () => state.acrylic !== true || plateUp
   let wasLight = false
   let glassSent = ''
-  const boxOf = () => {
+  const boxOf = (): Rect => {
     const r = strip.getBoundingClientRect()
     return { x: r.left, y: strip.offsetTop, w: r.width, h: r.height }
   }
-  const meet = (a, b) => {
+  const meet = (a: Rect, b: Rect): Rect => {
     const x = Math.max(a.x, b.x)
     const y = Math.max(a.y, b.y)
     return { x, y, w: Math.max(0, Math.min(a.x + a.w, b.x + b.w) - x), h: Math.max(0, Math.min(a.y + a.h, b.y + b.h) - y) }
   }
-  const join = (a, b) => {
+  const join = (a: Rect, b: Rect): Rect => {
     const x = Math.min(a.x, b.x)
     const y = Math.min(a.y, b.y)
     return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y }
   }
-  const within = (a, b) => a.x >= b.x - 0.5 && a.x + a.w <= b.x + b.w + 0.5
-  const same = (a, b) => (a && b ? Math.abs(a.x - b.x) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.h - b.h) < 0.5 : a === b)
-  const arr = b => [b.x, b.y, b.w, b.h].map(v => Math.round(v * 100) / 100)
+  const within = (a: Rect, b: Rect) => a.x >= b.x - 0.5 && a.x + a.w <= b.x + b.w + 0.5
+  const same = (a: Rect | null, b: Rect | null) => (a && b ? Math.abs(a.x - b.x) < 0.5 && Math.abs(a.w - b.w) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.h - b.h) < 0.5 : a === b)
+  const arr = (b: Rect) => [b.x, b.y, b.w, b.h].map(v => Math.round(v * 100) / 100)
 
   // The glass drawn round what is in it (now) and over where the plate may
   // still be; the firm ground's hole and the picture's cut where the plate goes.
-  function drawGlass(now) {
+  function drawGlass(now: Rect) {
     const g = plateWas ? join(now, plateWas) : now
     glassEl.style.left = `${g.x - now.x}px`
     glassEl.style.width = `${g.w}px`
@@ -642,7 +680,7 @@ export function barPage() {
     return g
   }
 
-  function sendGlass(g, plate, fade) {
+  function sendGlass(g: Rect, plate: Rect | null, fade: number) {
     const p = plate && state.acrylic === true && plate.w > 2 * PLATE_INSET && plate.h > 2 * PLATE_INSET ? { x: plate.x + PLATE_INSET, y: plate.y + PLATE_INSET, w: plate.w - 2 * PLATE_INSET, h: plate.h - 2 * PLATE_INSET } : null
     // Pressed and drawn down to the window's foot: the gap under the glass
     // is its own, and so is its top, all that is left of it out of the way.
@@ -656,10 +694,10 @@ export function barPage() {
 
   // Its glass changed size, or is about to (to: where it goes, should it be
   // narrower than now).
-  function glassMoves(to?) {
+  function glassMoves(to?: Rect) {
     if (!isDock()) return
     const now = boxOf()
-    clearTimeout(plateWait)
+    clearTimeout(plateWait as Timer)
     plateWait = null
     if (down || sliding || !settled) {
       drawGlass(now)
@@ -672,7 +710,7 @@ export function barPage() {
       // Shrinking, the glass kept over where the plate is until it has gone.
       if (plateAt && !within(plateAt, next)) {
         plateWas = plateWas ? join(plateWas, plateAt) : plateAt
-        clearTimeout(lagTimer)
+        clearTimeout(lagTimer as Timer)
         lagTimer = setTimeout(() => {
           plateWas = null
           if (isDock()) sendGlass(drawGlass(boxOf()), plateAt, 0)
@@ -686,7 +724,7 @@ export function barPage() {
   }
 
   function settleSoon() {
-    clearTimeout(settleTimer)
+    clearTimeout(settleTimer as Timer)
     settleTimer = setTimeout(settle, SETTLE_MS)
   }
 
@@ -697,11 +735,11 @@ export function barPage() {
     const now = boxOf()
     settled = plateAt = now
     plateWas = null
-    clearTimeout(lagTimer)
+    clearTimeout(lagTimer as Timer)
     sendGlass(drawGlass(now), now, PLATE_IN_MS)
     // Solid till the plate is in under it (dock:plate), then the ground
     // fades out over it; should it never say, after a second all the same.
-    clearTimeout(plateWait)
+    clearTimeout(plateWait as Timer)
     plateWait = null
     if (plateReady()) body.classList.remove('b-firm')
     else plateWait = setTimeout(plateCame, 1000)
@@ -740,26 +778,28 @@ export function barPage() {
   // 2026-11-08: 窗口第一次最小化到dock后，背景会有一个高亮亮块).
   const GLIDE_ON = '.start, .tview, .win:not(.mini), .quick, .clock'
   const GLIDE_FAR = 360
+  // Its ends and sizes, set in its style.
+  type Sides = 'left' | 'right' | 'top' | 'bottom' | 'width' | 'height'
   const glide = el('span', 'hdrop')
   strip.insertBefore(glide, glassEl.nextSibling)
-  let glideOn = null
-  let glideTimer
+  let glideOn: HTMLElement | null = null
+  let glideTimer: Timer | undefined
 
-  function glideTo(node, still = false) {
+  function glideTo(node: HTMLElement, still = false) {
     clearTimeout(glideTimer)
     const side = isSide()
     const bar = strip.getBoundingClientRect()
     const r = node.getBoundingClientRect()
     // Along the strip its two ends slide (left and right, or a side
     // strip's top and bottom); across it, as the button is.
-    const [from, to, crossFrom, crossSize] = side ? ['top', 'bottom', 'left', 'width'] : ['left', 'right', 'top', 'height']
-    const lo = b => (side ? b.top : b.left)
-    const hi = b => (side ? b.bottom : b.right)
+    const [from, to, crossFrom, crossSize]: Sides[] = side ? ['top', 'bottom', 'left', 'width'] : ['left', 'right', 'top', 'height']
+    const lo = (b: DOMRect) => (side ? b.top : b.left)
+    const hi = (b: DOMRect) => (side ? b.bottom : b.right)
     const left = lo(r) - lo(bar)
     const right = hi(bar) - hi(r)
     const was = glideOn && glide.classList.contains('on') && glide.dataset.axis === from ? parseFloat(glide.style[from]) : null
     if (glide.dataset.axis !== from) {
-      for (const p of ['left', 'right', 'top', 'bottom', 'width', 'height']) glide.style[p] = ''
+      for (const p of ['left', 'right', 'top', 'bottom', 'width', 'height'] as const) glide.style[p] = ''
       glide.dataset.axis = from
     }
     glide.style[crossFrom] = `${side ? r.left - bar.left : r.top - bar.top}px`
@@ -792,9 +832,9 @@ export function barPage() {
     }, 90)
   }
 
-  const isGlideOn = node => node?.matches?.(GLIDE_ON) && !node.hidden
-  strip.addEventListener('mouseenter', e => isGlideOn(e.target) && glideTo(e.target), true)
-  strip.addEventListener('mouseleave', e => (e.target === strip || isGlideOn(e.target)) && glideOff(), true)
+  const isGlideOn = (node: HTMLElement | null) => node?.matches?.(GLIDE_ON) && !node.hidden
+  strip.addEventListener('mouseenter', e => isGlideOn(e.target as HTMLElement) && glideTo(e.target as HTMLElement), true)
+  strip.addEventListener('mouseleave', e => (e.target === strip || isGlideOn(e.target as HTMLElement)) && glideOff(), true)
   strip.addEventListener('pointerdown', e => {
     if (e.button === 0 && glideOn && (e.target as HTMLElement).closest(GLIDE_ON) === glideOn) glide.classList.add('down')
   })
@@ -817,10 +857,10 @@ export function barPage() {
       plateAt = plateWas = settled = null
       // Off as it goes down, and none yet as it comes up.
       plateUp = false
-      clearTimeout(plateWait)
+      clearTimeout(plateWait as Timer)
       plateWait = null
-      clearTimeout(lagTimer)
-      clearTimeout(sliding)
+      clearTimeout(lagTimer as Timer)
+      clearTimeout(sliding as Timer)
       body.classList.add('b-firm')
       body.classList.toggle('b-down', stowed)
       sending.mins = ''
@@ -842,15 +882,17 @@ export function barPage() {
   // volume, as the main taskbar's button draws them (island-right.ts showNet,
   // showVolume), from what Windows says (dock:keys, taskbar/win/keys.rs keys_loop);
   // a press opens Windows' own (Win+A), the wheel on it the volume.
-  const quick = document.querySelector('.quick')
+  const quick = document.querySelector('.quick')!
   const [netBack, netFront] = quick.querySelectorAll('.net span')
   const [volBack, volFront] = quick.querySelectorAll('.vol span')
   const NET = { wired: '', wifi: '', other: '', none: '' }
   const WIFI = ['', '', '', '']
-  function showKeys(k) {
+  // k: what Windows says ({ net, bars, volume: [level, muted] }), loose JSON
+  // from Rust, each part checked as it is read.
+  function showKeys(k: any) {
     const kind = k?.net || 'other'
     const level = kind === 'wifi' && Number.isInteger(k?.bars) ? Math.min(Math.max(k.bars, 1), 4) : 0
-    netFront.textContent = level ? WIFI[level - 1] : NET[kind] || NET.other
+    netFront.textContent = level ? WIFI[level - 1] : NET[kind as keyof typeof NET] || NET.other
     netBack.textContent = level ? NET.wifi : ''
     netBack.hidden = !level
     const [vol, muted] = Array.isArray(k?.volume) ? k.volume : [null, false]
@@ -882,8 +924,8 @@ export function barPage() {
   // 2026-11-02: they came and went at once), the plate told at once where
   // the glass goes. The live pictures off meanwhile, back where the rooms
   // are once it is still (settle).
-  const mins = document.getElementById('mins')
-  const minSep = document.getElementById('minsep')
+  const mins = document.getElementById('mins')!
+  const minSep = document.getElementById('minsep')!
   const MIN_W = 50
   const MIN_MS = 220
   let minMoving = 0
@@ -895,7 +937,7 @@ export function barPage() {
     mins.dataset.drawn = drawn
     const want = new Set(list.map(({ w }) => String(w.id)))
     for (const b of [...mins.querySelectorAll('[data-min]')]) {
-      if (want.has(b.dataset.min)) continue
+      if (want.has(b.dataset.min!)) continue
       // Brought back: no longer pressed as it goes; its picture shrinks with it.
       b.dataset.going = b.dataset.min
       delete b.dataset.min
@@ -904,19 +946,20 @@ export function barPage() {
         minSep.hidden = !mins.querySelector('[data-min]')
       })
     }
-    let after = null
+    let after: HTMLElement | null = null
     for (const { app, w } of list) {
       let b = mins.querySelector(`[data-min="${CSS.escape(String(w.id))}"]`)
       if (!b) {
         b = el('div', 'win mini')
-        b.dataset.min = w.id
+        // A number: the page keeps it as a string.
+        b.dataset.min = w.id as unknown as string
         b.append(el('span', 'room'), Object.assign(el('img', 'badge'), { alt: '', draggable: false }))
         if (after) after.after(b)
         else mins.prepend(b)
         if (!first) moveMin(b, true)
       }
       b.title = w.title || app.name || ''
-      const badge = b.querySelector<HTMLImageElement>('.badge')
+      const badge = b.querySelector<HTMLImageElement>('.badge')!
       if (badge.getAttribute('src') !== (app.png || '')) badge.src = app.png || ''
       after = b
     }
@@ -929,7 +972,7 @@ export function barPage() {
   // (follow). Its own width (a program's 40, a minimized window's 50), and
   // the gap beside it going with it, so nothing jumps as it is taken out at
   // the end. Going, the glass as it will be without it, first (glassMoves).
-  function moveMin(b, coming) {
+  function moveMin(b: HTMLElement, coming: boolean) {
     minMoving++
     follow()
     if (!coming) {
@@ -939,7 +982,8 @@ export function barPage() {
       b.style.display = was
       glassMoves(to)
     }
-    const gap = parseFloat(getComputedStyle(b.parentElement).columnGap) || 0
+    // Still in its row: taken out only once this has played.
+    const gap = parseFloat(getComputedStyle(b.parentElement!).columnGap) || 0
     const w = b.getBoundingClientRect().width || MIN_W
     const out = { width: '0px', marginRight: `${-gap}px`, opacity: 0, transform: 'scale(0.5)' }
     const shown = { width: `${w}px`, marginRight: '0px', opacity: 1, transform: 'none' }
@@ -958,12 +1002,12 @@ export function barPage() {
   const sending = { mins: '' }
   function roomsNow() {
     return [...mins.querySelectorAll('[data-min], [data-going]')].map(b => {
-      const r = b.querySelector('.room').getBoundingClientRect()
-      const i = b.querySelector('.badge').getBoundingClientRect()
+      const r = b.querySelector('.room')!.getBoundingClientRect()
+      const i = b.querySelector('.badge')!.getBoundingClientRect()
       return [Number(b.dataset.min ?? b.dataset.going), r.left, r.top, r.width, r.height, i.width > 0 ? [i.left, i.top, i.width, i.height] : null]
     })
   }
-  function sendRooms(items) {
+  function sendRooms(items: unknown[]) {
     const sent = JSON.stringify(items)
     if (sent === sending.mins) return
     sending.mins = sent
@@ -998,12 +1042,12 @@ export function barPage() {
 
   // The Recycle Bin, last in the dock (split): Windows' own picture of it,
   // empty or full (bars.rs look_at_bin); a press opens it.
-  const bin = document.querySelector('.bin')
-  const binSep = document.getElementById('binsep')
-  function drawBin(b) {
+  const bin = document.querySelector('.bin')!
+  const binSep = document.getElementById('binsep')!
+  function drawBin(b: BarState['bin']) {
     bin.hidden = binSep.hidden = !isDock()
     if (!isDock()) return
-    const img = bin.querySelector<HTMLImageElement>('img')
+    const img = bin.querySelector<HTMLImageElement>('img')!
     if (b?.png && img.getAttribute('src') !== b.png) img.src = b.png
     img.hidden = !b?.png
     bin.classList.toggle('full', b?.full === true)

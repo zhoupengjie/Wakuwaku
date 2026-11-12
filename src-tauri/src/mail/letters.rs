@@ -297,20 +297,23 @@ fn decode_for_scheme(val: &str) -> String {
                     continue;
                 }
             } else {
-                let lower_rest = rest.to_ascii_lowercase();
-                for (entity, replacement) in [("colon", Some(':')), ("tab", None), ("newline", None)] {
-                    if lower_rest.starts_with(entity) {
-                        if let Some(ch) = replacement {
-                            out.push(ch);
-                        }
-                        i += 1 + entity.len();
-                        if i < bytes.len() && bytes[i] == b';' {
-                            i += 1;
-                        }
-                        break;
+                // One of the names a scheme can be hidden with, matched on the
+                // bytes after '&' (no copy of the rest of the address for each
+                // '&': a link may have thousands). Any other '&' is itself, and
+                // read as any character below: it once left `i` where it was,
+                // and a link with "?a=1&b=2" or "&amp;" in it held the letter's
+                // opening for ever.
+                let named = [("colon", Some(':')), ("tab", None), ("newline", None)]
+                    .into_iter()
+                    .find(|(entity, _)| rest.as_bytes().get(..entity.len()).is_some_and(|b| b.eq_ignore_ascii_case(entity.as_bytes())));
+                if let Some((entity, replacement)) = named {
+                    if let Some(ch) = replacement {
+                        out.push(ch);
                     }
-                }
-                if i > 0 && bytes.get(i - 1) != Some(&b'&') {
+                    i += 1 + entity.len();
+                    if i < bytes.len() && bytes[i] == b';' {
+                        i += 1;
+                    }
                     continue;
                 }
             }
@@ -421,7 +424,9 @@ fn clean_tag_into(res: &mut String, tag_name: &str, tag_str: &str) {
             continue;
         }
 
-        const ADDRESS_ATTRS: [&str; 6] = ["href", "src", "action", "formaction", "poster", "background"];
+        // xlink:href: an SVG link's or picture's address, which a letter's
+        // <svg> may carry as well as href.
+        const ADDRESS_ATTRS: [&str; 7] = ["href", "src", "action", "formaction", "poster", "background", "xlink:href"];
         if ADDRESS_ATTRS.contains(&lower_name.as_str()) && is_dangerous_address(attr_value) {
             res.push(' ');
             res.push_str(&lower_name);
@@ -780,6 +785,33 @@ mod tests {
         // Unclosed script at EOF dropped
         let h = sanitize_html("<script>fetch('evil')");
         assert!(!h.contains("evil"), "unclosed script dropped: {h}");
+    }
+
+    // A link with '&' in it (a query, bare or written &amp;) is kept as it is
+    // and comes back at once: such an '&' once held the scheme's check where
+    // it was, for ever, and the letter never opened. An SVG link's
+    // xlink:href is checked as href is.
+    #[test]
+    fn links_with_ampersands_are_kept_and_svg_links_checked() {
+        let kept = [
+            r#"<a href="https://e.test/?a=1&amp;b=2">x</a>"#,
+            r#"<a href="https://e.test/?a=1&b=2&c">x</a>"#,
+            r#"<img src="https://img.test/p.gif?u=1&t=2">"#,
+            r#"<a href="https://e.test/&#x26;&lt;&">x</a>"#,
+            r#"<a href="https://e.test/?q=1&r=javascript&colon;x">x</a>"#,
+        ];
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(kept.map(sanitize_html));
+        });
+        let got = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("read at once, not held");
+        for (h, was) in got.iter().zip(kept) {
+            assert_eq!(h, was, "kept as it was");
+        }
+        let h = sanitize_html(r#"<svg><a xlink:href="javascript:alert(1)"><text>x</text></a></svg>"#);
+        assert!(h.contains(r#"xlink:href="about:blank""#) && !h.contains("javascript"), "{h}");
+        let h = sanitize_html(r#"<a href="java&#x09;script&colon;alert(1)&amp;x">x</a>"#);
+        assert!(h.contains("about:blank"), "{h}");
     }
 
     #[test]

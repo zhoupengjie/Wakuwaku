@@ -73,12 +73,12 @@ src-tauri/
     taskbar/              任务栏模式的 Windows 一侧：mod.rs 是对外的函数、页面能调的 taskbar_* 命令、启动时补还（recover），非 Windows 上什么都不做（imp）；Windows 上的各部分在 win/，共用的 Win32 声明、常量和日志在 win/mod.rs，各部分的状态在各自的文件里（mod.rs 用 use 引回来给别的文件用）：
       win/thread.rs       自己的线程：隐藏窗口和消息循环（run、wndproc）、WinEvent 和 shell 钩子（on_event、on_shell）、每半秒的 tick、资源管理器重启（on_created）
       win/hold.rs         把 Windows 的任务栏藏起来、还回去（take、give_back）；另一份她拿着时等它放手；资源管理器启动完才接管（#85）；被别的程序反复叫出来时让开（#69 的拉锯）；交接用的截图（strip_picture）
-      win/work.rs         工作区自愈：条带的位置、工作区贴着条带设（set_work_area、keep_work）、桌面图标让开、重新占条带、顶栏下面的窗口挪开（keep_under_bar）
+      win/work.rs         工作区自愈：条带的位置、工作区贴着条带设（set_work_area、keep_work）、桌面图标让开、重新占条带、顶栏下面的窗口挪开（keep_under_bar）；条带在哪条边、在哪由岛说了算，合在一起发布（PLACE），工作区为谁设过、自愈的计数只归任务栏线程（Work，thread_local），条带挪了用 WM_STRIP_MOVED 告诉它
       win/tray.rs         接管托盘：图标画成 PNG 发给页面（画好的图只归任务栏线程，新页面要整份时发 WM_RESEND_TRAY 给它）、Windows 记着哪些放在外面、点击转给程序、请程序重新交图标（claim、ask_soon）
       win/buttons.rs      窗口按钮：列表在自己的线程上重算再发（taskbar:windows），带上各窗口里的会话；算列表用的状态只归这个线程（Own，thread_local），任务栏线程看到窗口闪烁、激活、重绘、增减时用 Note 通过通道告诉它；启动程序、窗口的操作和右键菜单
-      win/thumbs.rs       缩略图（DWM thumbnail）：任务栏和 dock 列表上的实时画面，dock 图标上的角标
-      win/keys.rs         键盘指示：布局、输入法、大写锁定，音量、网络、电池、麦克风/摄像头/位置在用（keys_loop）
-      win/look.rs         桌面壁纸和 Windows 的外观（深浅色、强调色、结束任务、秒、任务视图），给条带的云母
+      win/thumbs.rs       缩略图（DWM thumbnail）：任务栏和 dock 列表上的实时画面，dock 图标上的角标；每个画面窗口由它所属的线程摆：列表的归任务栏线程（只留最后一次请求，发 WM_THUMBS），dock 的归主线程，谁也不同步等别人的窗口
+      win/keys.rs         键盘指示：布局、输入法、大写锁定，音量、网络、电池、麦克风/摄像头/位置在用（keys_loop）；别处用 Ask 通过通道叫它马上看，它发过的整份以 Arc 发布（SENT_KEYS）
+      win/look.rs         桌面壁纸和 Windows 的外观（深浅色、强调色、结束任务、秒、任务视图），给条带的云母；一条常驻的线程一次看一回，发过的只归它，以 Arc 发布（LOOK、PAPER），交还时叫它忘掉（LookAsk::Forget）
       win/flyouts.rs      Windows 自己的弹出面板（快速设置、日历……）、音量、开始菜单、显示桌面、回收站（dock 用）
       win/presses.rs      列表开着时看别处的点击（低级鼠标钩子），点外面就关
       win/apps.rs         按应用 id 向 shell 要应用的名字和图标
@@ -1008,7 +1008,7 @@ CPU 主要花在 GPU 进程和渲染进程上，两边几乎一样（页面是�
 - **监听要先注册好**：`listen()` 本身也是一次 IPC，是异步的。bridge 等所有监听注册完再发 `pet_ready`，Rust 收到后才开始推状态。
 - **新窗口要写进 capability**：`capabilities/default.json` 的 `windows` 里没有 `island` 时，岛的页面调 `listen()` 会被拒绝，页面永远等不到 `pet_ready`。
 - **调用要排队**：每次 `invoke` 都是独立请求，async 命令的执行顺序没有保证。拉她出来时页面依次发 holding、release、drop，顺序乱了就会出错，所以 bridge 把调用排成队一个个发（`walk` 除外，它要等走完才回复）。
-- **锁和窗口 getter**：Tauri 的 getter（`outer_position`、`cursor_position` 等）要等主线程回复，菜单回调又在主线程上拿锁。所以拿着锁时绝不调 getter，同一时间也不拿两把锁；页面的命令一律写成 async，不在主线程上跑。两条都由 `lock.rs` 查（2026-11-12 起包括各模块的静态锁，见「目录」的 lock.rs）：同一线程拿第二把，测试里就 panic，调试版写进日志；getter、建窗口、建菜单都从 `main_wait.rs` 过，调之前手里有锁也一样报。确实要嵌套的写成锁等级（`Lock::ranked`），只从低往高拿。注意临时值活到哪里：`match`、`if let`（含 else）、`for` 的条件里拿的锁一直拿到整个块结束（`if let Some(t) = X.lock().unwrap().take() { 等线程 }` 就是拿着 X 等），函数和方法的参数里拿的锁活到这条语句结束（`a.lock().unwrap().f(sh.config().dnd)` 就是两把），`if` 的条件、`&&`、`||` 的每一边自己结束；要用的先读到局部变量里，再拿下一把。别的线程的窗口也一样：对它 `SetWindowPos`、`ShowWindow`、`SetParent` 会等那个线程处理完，拿着锁时不要做，别的程序的窗口用 `SWP_ASYNCWINDOWPOS`（appbar.rs `refit_maximized`）。
+- **锁和窗口 getter**：Tauri 的 getter（`outer_position`、`cursor_position` 等）要等主线程回复，菜单回调又在主线程上拿锁。所以拿着锁时绝不调 getter，同一时间也不拿两把锁；页面的命令一律写成 async，不在主线程上跑。两条都由 `lock.rs` 查（2026-11-12 起包括各模块的静态锁，见「目录」的 lock.rs）：同一线程拿第二把，测试里就 panic，调试版写进日志；getter、建窗口、建菜单都从 `main_wait.rs` 过，调之前手里有锁也一样报。确实要嵌套的写成锁等级（`Lock::ranked`），只从低往高拿。注意临时值活到哪里：`match`、`if let`（含 else）、`for` 的条件里拿的锁一直拿到整个块结束（`if let Some(t) = X.lock().unwrap().take() { 等线程 }` 就是拿着 X 等），函数和方法的参数里拿的锁活到这条语句结束（`a.lock().unwrap().f(sh.config().dnd)` 就是两把），`if` 的条件、`&&`、`||` 的每一边自己结束；要用的先读到局部变量里，再拿下一把。别的线程的窗口也一样：对它 `SetWindowPos`、`ShowWindow`、`SetParent` 会等那个线程处理完，拿着锁时不要做，别的程序的窗口用 `SWP_ASYNCWINDOWPOS`（appbar.rs `refit_maximized`）。她自己的窗口归哪个线程，就交给那个线程去摆：发消息（`PostMessageW`）或 `run_on_main_thread`，不同步等。以前缩略图就是反的：主线程上的同步命令去摆任务栏线程的缩略图窗口，等它；任务栏线程结束时又去藏主线程的 dock 缩略图，等主线程，而退出时主线程正等它结束，卡满两秒才放弃（2026-11-12 改成各摆各的，taskbar/win/thumbs.rs）。
 - **在主线程上建窗口会卡死**：菜单回调在主线程上，第一次建岛的窗口要放到另一个线程去建。
 - **路径里不能有 `..`**：asset 协议的允许范围按路径匹配，带 `..` 的路径匹配不上（`data.rs` 的 `in_tree`）。
 - **16 位 PNG**：Tauri 的 PNG 解码只要 8 位 RGBA，托盘和窗口图标都用 8 位（`make-icons.js` 加了 `-depth 8`）。

@@ -32,6 +32,7 @@
     "src/pet/capsule.ts",
     "src/pet/deskgrid.ts",
     "src/pet/flow.ts",
+    "src/pet/handoff.ts",
     "src/pet/hovers.ts",
     "src/pet/mica.ts",
     "src/pet/placing.ts",

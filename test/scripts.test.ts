@@ -93,13 +93,15 @@ test('each page loads its entry alone, and only the entries put faces on window'
 
 // The files that pass tsc with strict on (tsconfig.strict.json, checked by
 // npm run typecheck): the list only grows. These were on it by 2026-11-12
-// (the new state and entry files, then the small pure modules); a file
+// (the new state and entry files, the small pure modules, then the shared
+// ones every page imports and the plugins' SDK); a file
 // taken off would fail here (one added need not be named here).
 test('the strict list keeps every file it had, and each is there', () => {
   const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'tsconfig.strict.json'), 'utf8')
   const config = JSON.parse(text.split(/\r?\n/).filter(line => !/^\s*\/\//.test(line)).join('\n'))
   const kept = [
     ...['src/window.d.ts', 'src/pet/entry.ts', 'src/pet/main.ts', 'src/pet/desk-main.ts', 'src/pet/bar-main.ts', 'src/pet/barpop-main.ts'],
+    ...['src/addon/sdk.ts', 'src/shared/config.ts', 'src/shared/i18n.ts', 'src/pet/bridge.ts'],
     ...['island-state', 'island-vars', 'settings-state', 'settings-vars'].map(f => `src/pet/${f}.ts`),
     ...['addonui', 'agents', 'aim', 'anchor', 'capsule', 'deskgrid', 'flow', 'hovers', 'mica', 'placing', 'presses', 'sprite', 'status', 'views', 'wcards', 'wdesk', 'widgets'].map(f => `src/pet/${f}.ts`),
   ]

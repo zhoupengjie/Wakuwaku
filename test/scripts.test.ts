@@ -90,3 +90,15 @@ test('each page loads its entry alone, and only the entries put faces on window'
   const found = scripts.filter(file => puts.test(fs.readFileSync(path.join(import.meta.dirname, '..', file), 'utf8'))).map(f => path.basename(f))
   assert.deepEqual(found.sort(), ['desk-main.ts', 'entry.ts', 'main.ts'])
 })
+
+// The files that pass tsc with strict on (tsconfig.strict.json, checked by
+// npm run typecheck): the list only grows. These were on it first; a file
+// taken off would fail here (one added need not be named here).
+test('the strict list keeps every file it had, and each is there', () => {
+  const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'tsconfig.strict.json'), 'utf8')
+  const config = JSON.parse(text.split(/\r?\n/).filter(line => !/^\s*\/\//.test(line)).join('\n'))
+  const first = ['src/window.d.ts', 'src/pet/entry.ts', 'src/pet/main.ts', 'src/pet/desk-main.ts', 'src/pet/bar-main.ts', 'src/pet/barpop-main.ts', 'src/pet/island-state.ts', 'src/pet/island-vars.ts', 'src/pet/settings-state.ts', 'src/pet/settings-vars.ts']
+  for (const f of first) assert.ok(config.include.includes(f), `${f} stays on the strict list`)
+  for (const f of config.include) assert.ok(fs.existsSync(path.join(import.meta.dirname, '..', f)), `${f} is there`)
+  assert.equal(config.compilerOptions.strict, true)
+})

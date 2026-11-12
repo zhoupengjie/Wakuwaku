@@ -143,6 +143,7 @@ integrations/omp/         omp 的扩展 wakuwaku.ts（connection/omp.rs 填上�
 scripts/build-pages.mjs  把 src/ 写进 dist/：.ts 去掉类型（Node 自带的，行列不变）、import 的 .ts 改成 .js，别的原样复制；build.rs 每次构建前跑（见「页面的模块和类型」）
 dist/                     scripts/build-pages.mjs 的输出，tauri.conf.json 的 frontendDist，exe 带的和预览显示的都是它（不进仓库）
 package.json, tsconfig.json  页面的类型检查（TypeScript，npm run typecheck）和测试命令；package-lock.json 定版本
+tsconfig.strict.json      已经通过 strict 的页面文件的名单（只增不减）；scripts/typecheck-strict.mjs 用它跑 tsc，只算名单上文件自己的错（见「页面的模块和类型」）
 scripts/make-icons.js     画图标（node + ImageMagick），输出提交在 src-tauri/icons
 scripts/build-release.ps1 编译发布用的 exe，不带本机路径（见「构建和运行」）；scripts/gitee-release.ps1 把发布复制到 Gitee
 test/                     页面的单元测试（.ts，node --test 直接跑，不需要 npm install；tsconfig.json 带 Node 的类型，stripped.ts 是取页面文件去掉类型后的样子）；fake-imap.cjs、fake-smtp.cjs 是试邮件用的假 IMAP、SMTP 服务器；fake-relay.cjs 是假的崩溃报告中转；fake-lhm.cjs 是假的 LibreHardwareMonitor 网页服务器
@@ -167,6 +168,7 @@ art/                      美术和调查资料，只在本地（只有 art/READ
 - **每部分单独建**（entry.ts 的 `made`）：一部分抛错，像没接住的错一样报出来（控制台和 debug.log），它是 null，后面的照样建，和以前各是一个脚本时一样。
 - **window 上的只给外面看**：入口用 `expose`（entry.ts）把各部分交回的接口放到 window 上（`window.Island.isOpen()`、`window.Settings.close('test')`、`window.Desk`……），给预览的场景和试玩页、/debug/eval、测试虚拟机的脚本；`window.pet` 是 bridge.ts 自己放的。页面自己的脚本不读 window 上的这些。`test/scripts.test.ts` 查三件事：没有页面脚本读它们，只有入口往 window 上放，每个页面只加载它的入口。
 - **类型**：`npm ci` 一次，然后 `npm run typecheck`（`tsc -p .` 查 src/，`tsc -p test` 查测试，TypeScript 7，几秒）。还不是 strict：没写类型的参数是 any（noImplicitAny 关），null 在每个类型里（strictNullChecks 关）。每个文件导出什么、几个大脚本的接口（`IslandFace`、`SettingsFace`……从各自工厂函数的返回值推出来，`ReturnType<typeof settingsPage>`）、设置（`Config`）、各部分的 `core` 都有类型，一个文件对另一个要的东西写错了 tsc 就报。
+- **strict 的名单**（`tsconfig.strict.json`，2026-11-12 起）：已经通过 strict（noImplicitAny、strictNullChecks……全开）的文件列在它的 `include` 里，`npm run typecheck` 的最后一步 `node scripts/typecheck-strict.mjs` 用它跑 tsc，CI 也就跑它。名单上的文件 import 的别的文件也会被 tsc 一起查（tsc 没法只查一个文件），那些文件里的错先不算，名单上的文件自己的错一个也不许有。名单只增不减：`test/scripts.test.ts` 记着最早的那一批，拿掉一个就失败。现在在名单上的：两个状态机（`island-state.ts`、`settings-state.ts`）、两个记着的东西（`island-vars.ts`、`settings-vars.ts`）、四个入口和 `entry.ts`、`window.d.ts`。island.ts、settings.ts 和它们的各部分还差得远（只开 strictNullChecks 就有几百个错），一个文件改干净了就加进去。
 - **只用去掉类型后就是 JavaScript 的写法**（tsconfig 的 `erasableSyntaxOnly`、`verbatimModuleSyntax`）：构建只是把类型换成空格，不转换别的；所以不能用 enum、namespace、构造函数参数属性，只为类型的 import 要写 `import type`（不然会留在页面里，去 import 一个不存在的导出）。
 - **构建**：`scripts/build-pages.mjs`（Node 22.13 起自带的 `stripTypeScriptTypes`，不需要 npm 包）把 src/ 写进 dist/：类型换成空格，行列和源码一样，所以 WebView2 控制台里报错的位置就是 .ts 里的位置；import 的 `./x.ts` 改成 `./x.js`，并检查每个相对 import 指向的文件存在。`build.rs` 在每次构建前跑它（src/ 变了才重跑），所以 `cargo build`、`build-release.ps1` 带的页面总是最新的；没有 Node（或版本太低）构建就停下并说明。类型不对不挡构建，挡 CI。
 - **测试**直接跑 .ts（Node 22.18 起自带去掉类型）：`node --test "test/*.test.ts"`。读页面源码文本再执行一段的测试（pointer-scale、SDK 的），先经 `test/stripped.ts` 去掉类型。

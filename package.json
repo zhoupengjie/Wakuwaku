@@ -7,7 +7,7 @@
   },
   "scripts": {
     "build": "node scripts/build-pages.mjs",
-    "typecheck": "tsc -p . && tsc -p test",
+    "typecheck": "tsc -p . && tsc -p test && node scripts/typecheck-strict.mjs",
     "test": "node --test \"test/*.test.ts\""
   },
   "devDependencies": {

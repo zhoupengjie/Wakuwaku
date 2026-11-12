@@ -1,0 +1,23 @@
+// The pages' files that pass tsc with strict on (npm run typecheck, CI):
+// each listed file's own code. tsc takes what they import into the check
+// too (it has no other way), and scripts/typecheck-strict.mjs leaves out
+// the errors in those until they are listed here as well. The list only
+// grows: a file on it stays on it, and a file made strict is added.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true
+  },
+  "include": [
+    "src/window.d.ts",
+    "src/pet/entry.ts",
+    "src/pet/main.ts",
+    "src/pet/desk-main.ts",
+    "src/pet/bar-main.ts",
+    "src/pet/barpop-main.ts",
+    "src/pet/island-state.ts",
+    "src/pet/island-vars.ts",
+    "src/pet/settings-state.ts",
+    "src/pet/settings-vars.ts"
+  ]
+}

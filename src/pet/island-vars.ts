@@ -48,6 +48,13 @@ export interface Look {
   taskView?: boolean
 }
 
+// A Mac's screen top as notch.rs says it (island:top): the band's height
+// and the notch's width (0 without one).
+export interface ScreenTop {
+  height: number
+  notch: number
+}
+
 // A program's button as taskbar/ sends it (taskbar:windows, buttons.rs):
 // its key, its path and app id, its name, whether it is kept on the
 // taskbar, its icon, and its windows.
@@ -70,6 +77,19 @@ export interface TaskWindow {
   min?: boolean
   max?: boolean
   flash?: boolean
+}
+
+// A tray icon as taskbar/ sends it (taskbar:tray, tray.rs): its key, its
+// picture (sent once: kept by the page, island-look.ts), tip, program and
+// name, kept out on the taskbar by Windows, reached by a press.
+export interface TrayIcon {
+  key: number
+  png: string
+  tip?: string
+  exe?: string
+  name: string
+  windowsOut?: boolean
+  reach?: boolean
 }
 
 // A widget or a plugin she runs, as one is put somewhere (island-wmenu.ts
@@ -127,7 +147,7 @@ export interface IslandVars extends IslandState {
   // notch's width (0 without one); null elsewhere. With a notch the compact
   // island wraps round it: her in the ear at its left, the clock in the ear at
   // its right, the words (which the notch would hide) left out.
-  screenTop: { height: number; notch: number } | null
+  screenTop: ScreenTop | null
   // At the top of the screen, the side island.rs placed her window at
   // (pet:update islandAt: left, center, right; zhoupengjie/Wakuwaku#59): the
   // island laid out at that side of it (isl-at-left, isl-at-right), and all
@@ -276,7 +296,7 @@ export interface IslandVars extends IslandState {
   slotMiddle: number | null
   // The tray's icons as last sent ({ key, png, tip, exe }), as drawn, and
   // their places as last told; its overflow open.
-  trayIcons: any[]
+  trayIcons: TrayIcon[]
   trayDrawn: string
   trayRectsSent: string
   trayOpen: boolean

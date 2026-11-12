@@ -2,41 +2,58 @@
 // again on a thread of its own as windows come, go and change, and sent
 // (taskbar:windows), each with the sessions that run in it (jump.rs); a
 // program started, a window brought up, minimized or closed, its menu.
+//
+// What the buttons are made from is that thread's alone (Own, a
+// thread_local): no lock, and gone with the thread when Windows' taskbar
+// is given back. Others tell it what they saw (tell: a Note over a
+// channel): the taskbar's thread a window flashing, activated, redrawn
+// or come and gone. What it made last (SENT_WINDOWS) is read by others.
+use std::cell::{Cell, RefCell};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+
 use super::*;
 use crate::lock::Lock;
 
-// The buttons: woken when windows change; their order (as they came);
-// the windows flashing; each window's icon drawn (its handle, its PNG);
-// the sessions in each window.
-pub(super) static WAKE: (Lock<bool>, std::sync::Condvar) = (Lock::new("taskbar::win::buttons::WAKE", false), std::sync::Condvar::new());
 pub(super) static TASKS_STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-pub(super) static ORDER: Lock<Vec<isize>> = Lock::new("taskbar::win::buttons::ORDER", Vec::new());
-pub(super) static FLASHING: Lock<Vec<isize>> = Lock::new("taskbar::win::buttons::FLASHING", Vec::new());
-pub(super) static WIN_PNGS: Lock<Option<HashMap<isize, (isize, String)>>> = Lock::new("taskbar::win::buttons::WIN_PNGS", None);
-pub(super) static MARKS: Lock<Option<HashMap<isize, Vec<Value>>>> = Lock::new("taskbar::win::buttons::MARKS", None);
-// Each session's window as found (mark_sessions): its handle and
-// process, and when; looked for again only when gone or after a while.
-// Sessions without one, when they were last looked for.
-pub(super) static SESSION_WINDOWS: Lock<Option<HashMap<String, (isize, u32, Instant)>>> = Lock::new("taskbar::win::buttons::SESSION_WINDOWS", None);
-pub(super) static SESSION_LOOKED: Lock<Option<HashMap<String, Instant>>> = Lock::new("taskbar::win::buttons::SESSION_LOOKED", None);
-// Per window, kept while it has a button (send_windows): the app it
-// says it is (never changes), its icon's handle and when it was asked
-// (asked again when the shell says the window was redrawn, else every
-// ten seconds), and its title as shown (on_shell: a redraw with the
-// same title wakes nothing).
-pub(super) static APP_IDS: Lock<Option<HashMap<isize, Option<String>>>> = Lock::new("taskbar::win::buttons::APP_IDS", None);
-pub(super) static ICONS: Lock<Option<HashMap<isize, (isize, Instant)>>> = Lock::new("taskbar::win::buttons::ICONS", None);
-pub(super) static TITLES: Lock<Option<HashMap<isize, String>>> = Lock::new("taskbar::win::buttons::TITLES", None);
-pub(super) static REDRAWN: Lock<Vec<isize>> = Lock::new("taskbar::win::buttons::REDRAWN", Vec::new());
+// The buttons as sent last (bars.rs, thumbs.rs and a new page read it).
 pub(super) static SENT_WINDOWS: Lock<Value> = Lock::new("taskbar::win::buttons::SENT_WINDOWS", Value::Null);
-// Each program's name (tasks::app_name), and its file's icon drawn, by its path.
-pub(super) static APP_NAMES: Lock<Option<HashMap<String, String>>> = Lock::new("taskbar::win::buttons::APP_NAMES", None);
-pub(super) static FILE_PNGS: Lock<Option<HashMap<String, String>>> = Lock::new("taskbar::win::buttons::FILE_PNGS", None);
+
+// What the buttons' thread is told.
+pub(super) enum Note {
+    // Something changed: the buttons made again (a moment on).
+    Wake,
+    // A window flashing for attention, until it is in front.
+    Flash(isize),
+    Activated(isize),
+    // Its title or icon changed: its icon asked for again at the next
+    // look; the buttons made again now only for a window whose title is
+    // another, or one just titled that is about to have a button.
+    Redrawn(isize),
+}
+
+// The way to the buttons' thread while it runs (notes: set by hold.rs take
+// before it starts it, dropped by give_back). Only ever cloned out.
+static TO_BUTTONS: Lock<Option<Sender<Note>>> = Lock::ranked("taskbar::win::buttons::TO_BUTTONS", crate::lock::LEAF, None);
+
+pub(super) fn notes() -> Receiver<Note> {
+    let (to, from) = std::sync::mpsc::channel();
+    *TO_BUTTONS.lock().unwrap() = Some(to);
+    from
+}
+
+pub(super) fn no_more_notes() {
+    *TO_BUTTONS.lock().unwrap() = None;
+}
+
+pub(super) fn tell(note: Note) {
+    let to = TO_BUTTONS.lock().unwrap().clone();
+    if let Some(to) = to {
+        let _ = to.send(note);
+    }
+}
 
 pub(super) fn wake_tasks() {
-    let (dirty, cv) = &WAKE;
-    *dirty.lock().unwrap() = true;
-    cv.notify_one();
+    tell(Note::Wake);
 }
 
 // From outside: the quiet over (shared.rs check_quiet), the buttons and
@@ -44,6 +61,73 @@ pub(super) fn wake_tasks() {
 pub fn wake() {
     wake_tasks();
     wake_keys();
+}
+
+// The buttons' thread's own: their order (as the windows came); the
+// windows flashing; the titles as shown, and which windows were redrawn
+// since the last look. Per window, kept while it has a button: the app
+// it says it is (never changes), its icon's handle and when it was asked
+// (asked again when the shell says the window was redrawn, else every ten
+// seconds), its icon drawn (its handle, its PNG), the sessions in it.
+// Each session's window as found (mark_sessions): its handle and process,
+// and when; looked for again only when gone or after a while; sessions
+// without one, when they were last looked for. Each program's name
+// (tasks::app_name) and its file's icon drawn, by its path; Windows' plain
+// program icon drawn at a size.
+#[derive(Default)]
+struct Own {
+    order: Vec<isize>,
+    flashing: Vec<isize>,
+    titles: HashMap<isize, String>,
+    redrawn: Vec<isize>,
+    app_ids: HashMap<isize, Option<String>>,
+    icons: HashMap<isize, (isize, Instant)>,
+    win_pngs: HashMap<isize, (isize, String)>,
+    marks: HashMap<isize, Vec<Value>>,
+    session_windows: HashMap<String, (isize, u32, Instant)>,
+    session_looked: HashMap<String, Instant>,
+    app_names: HashMap<String, String>,
+    file_pngs: HashMap<String, String>,
+    plain: Option<(i32, String)>,
+}
+
+thread_local! {
+    static OWN: RefCell<Own> = RefCell::new(Own::default());
+    static ON_BUTTONS: Cell<bool> = const { Cell::new(false) };
+}
+
+// The thread's own, for f. Never from inside another own(): each borrow
+// is let go before what comes next asks for it.
+fn own<R>(f: impl FnOnce(&mut Own) -> R) -> R {
+    debug_assert!(ON_BUTTONS.with(Cell::get), "the buttons' own state, off the buttons' thread");
+    OWN.with(|o| f(&mut o.borrow_mut()))
+}
+
+// A note taken in: whether it asks for the buttons now.
+fn take_note(note: Note) -> bool {
+    match note {
+        Note::Wake => true,
+        Note::Flash(hwnd) => own(|o| {
+            if !o.flashing.contains(&hwnd) {
+                o.flashing.push(hwnd);
+            }
+            true
+        }),
+        Note::Activated(hwnd) => own(|o| {
+            o.flashing.retain(|h| *h != hwnd);
+            true
+        }),
+        Note::Redrawn(hwnd) => {
+            let shown = own(|o| {
+                o.redrawn.push(hwnd);
+                o.titles.get(&hwnd).cloned()
+            });
+            match shown {
+                Some(title) => title != tasks::title(hwnd),
+                None => tasks::is_task_window(hwnd),
+            }
+        }
+    }
 }
 
 // The buttons' list kept: made again when windows change (a moment
@@ -61,27 +145,36 @@ pub(super) static TASKS_DOING: Lock<&'static str> = Lock::new("taskbar::win::but
 // windows come and go, and with the CPU busy they came late (the user,
 // 2026-11-08: 高负载的情况下整个界面很容易卡死). Slowed with the process
 // while nobody is about (shared.rs check_quiet).
-pub(super) fn tasks_loop(sh: Arc<Shared>) {
+pub(super) fn tasks_loop(sh: Arc<Shared>, notes: Receiver<Note>) {
+    ON_BUTTONS.with(|on| on.set(true));
     let doing = |what: &'static str| *TASKS_DOING.lock().unwrap() = what;
     let stopping = || TASKS_STOP.load(Ordering::SeqCst);
     let mut marked_at = Instant::now() - Duration::from_secs(10);
+    let mut wanted = false;
     loop {
         doing("waiting");
-        {
-            let (dirty, cv) = &WAKE;
-            let guard = dirty.lock().unwrap();
-            // Looked at anyway every five seconds (what the hooks miss:
-            // an icon changed alone); quiet (nobody at the keyboard),
-            // every twenty, woken as it ends.
-            let every = Duration::from_secs(if sh.is_quiet() { 20 } else { 5 });
-            let (mut guard, _) = guard.wait_timeout_while(cv, every, |d| !*d && !stopping()).unwrap();
-            *guard = false;
+        // Looked at anyway every five seconds (what the hooks miss: an
+        // icon changed alone); quiet (nobody at the keyboard), every
+        // twenty, woken as it ends.
+        let every = Duration::from_secs(if sh.is_quiet() { 20 } else { 5 });
+        let until = Instant::now() + every;
+        while !wanted && !stopping() {
+            match notes.recv_timeout(until.saturating_duration_since(Instant::now())) {
+                Ok(note) => wanted = take_note(note),
+                Err(RecvTimeoutError::Timeout) => break,
+                // Given back: nobody tells it anything any more.
+                Err(RecvTimeoutError::Disconnected) => return,
+            }
         }
         if stopping() {
             return;
         }
         std::thread::sleep(Duration::from_millis(120));
-        *WAKE.0.lock().unwrap() = false;
+        // What came meanwhile is taken in; its wake is this look's.
+        while let Ok(note) = notes.try_recv() {
+            take_note(note);
+        }
+        wanted = false;
         if stopping() {
             return;
         }
@@ -118,11 +211,9 @@ pub(super) fn mark_sessions(sh: &Shared) {
     // Found before and still there: kept, looked for anew after a
     // minute (a session may move to another window); not found before:
     // looked for again after a while (many have no window of their own).
-    // Taken out while the windows are looked for (jump.rs takes its own
-    // lock, and walks every process) and put back after: this thread's
-    // alone, none of them held over another (lock.rs).
-    let mut found = SESSION_WINDOWS.lock().unwrap().take().unwrap_or_default();
-    let mut looked = SESSION_LOOKED.lock().unwrap().take().unwrap_or_default();
+    // This thread's own, taken out while the windows are looked for and
+    // put back after.
+    let (mut found, mut looked) = own(|o| (std::mem::take(&mut o.session_windows), std::mem::take(&mut o.session_looked)));
     found.retain(|id, _| targets.iter().any(|t| t.0 == *id));
     looked.retain(|id, _| targets.iter().any(|t| t.0 == *id));
     let retry = Duration::from_secs(if sh.is_quiet() { 60 } else { 15 });
@@ -151,27 +242,31 @@ pub(super) fn mark_sessions(sh: &Shared) {
             marks.entry(hwnd).or_default().push(json!({ "id": id, "mood": mood }));
         }
     }
-    *SESSION_WINDOWS.lock().unwrap() = Some(found);
-    *SESSION_LOOKED.lock().unwrap() = Some(looked);
-    *MARKS.lock().unwrap() = Some(marks);
+    own(|o| {
+        o.session_windows = found;
+        o.session_looked = looked;
+        o.marks = marks;
+    });
 }
 
 // A window's app id, asked once (tasks::app_id goes through COM).
 pub(super) fn app_id_of(hwnd: isize) -> Option<String> {
-    let mut ids = APP_IDS.lock().unwrap();
-    ids.get_or_insert_with(HashMap::new).entry(hwnd).or_insert_with(|| tasks::app_id(hwnd)).clone()
+    if let Some(id) = own(|o| o.app_ids.get(&hwnd).cloned()) {
+        return id;
+    }
+    let id = tasks::app_id(hwnd);
+    own(|o| o.app_ids.entry(hwnd).or_insert(id).clone())
 }
 
 // A window's icon handle, asked of the window (three messages to its
 // process) only when the shell said it was redrawn, or every ten seconds.
 pub(super) fn icon_of(hwnd: isize, redrawn: &[isize]) -> isize {
-    let mut icons = ICONS.lock().unwrap();
-    let icons = icons.get_or_insert_with(HashMap::new);
-    match icons.get(&hwnd) {
-        Some(&(icon, at)) if !redrawn.contains(&hwnd) && at.elapsed() < Duration::from_secs(10) => icon,
+    let known = own(|o| o.icons.get(&hwnd).copied());
+    match known {
+        Some((icon, at)) if !redrawn.contains(&hwnd) && at.elapsed() < Duration::from_secs(10) => icon,
         _ => {
             let icon = tasks::icon_of(hwnd);
-            icons.insert(hwnd, (icon, Instant::now()));
+            own(|o| o.icons.insert(hwnd, (icon, Instant::now())));
             icon
         }
     }
@@ -221,15 +316,13 @@ pub(super) fn hosts(path: &str) -> bool {
 
 // Windows' plain program icon, drawn once at this size (plain_program_icon).
 pub(super) fn plain_png(size: i32) -> String {
-    static PLAIN: Lock<Option<(i32, String)>> = Lock::new("taskbar::win::buttons::PLAIN", None);
-    let mut plain = PLAIN.lock().unwrap();
-    if let Some((_, png)) = plain.as_ref().filter(|(at, _)| *at == size) {
-        return png.clone();
+    if let Some(png) = own(|o| o.plain.as_ref().filter(|(at, _)| *at == size).map(|(_, png)| png.clone())) {
+        return png;
     }
     let icon = tasks::plain_program_icon();
     let png = if icon == 0 { String::new() } else { png_of(icon, size).unwrap_or_default() };
     tasks::destroy_icon(icon);
-    *plain = Some((size, png.clone()));
+    own(|o| o.plain = Some((size, png.clone())));
     png
 }
 
@@ -242,31 +335,26 @@ pub(super) fn plain_png(size: i32) -> String {
 pub(super) fn send_windows(sh: &Shared) {
     let found = tasks::list();
     let front = tasks::front();
-    let order: Vec<isize> = {
-        let mut order = ORDER.lock().unwrap();
-        order.retain(|h| found.iter().any(|t| t.hwnd == *h));
+    // Their order; what is kept per window goes with the window; the
+    // titles as shown now; which windows the shell said were redrawn
+    // since the last look; those flashing.
+    let (order, redrawn, flashing, marks) = own(|o| {
+        o.order.retain(|h| found.iter().any(|t| t.hwnd == *h));
         for t in &found {
-            if !order.contains(&t.hwnd) {
-                order.push(t.hwnd);
+            if !o.order.contains(&t.hwnd) {
+                o.order.push(t.hwnd);
             }
         }
-        order.clone()
-    };
-    // What is kept per window goes with the window; the titles as shown
-    // now; which windows the shell said were redrawn since the last look.
-    APP_IDS.lock().unwrap().get_or_insert_with(HashMap::new).retain(|h, _| order.contains(h));
-    ICONS.lock().unwrap().get_or_insert_with(HashMap::new).retain(|h, _| order.contains(h));
-    *TITLES.lock().unwrap() = Some(found.iter().map(|t| (t.hwnd, t.title.clone())).collect());
-    let redrawn: Vec<isize> = std::mem::take(&mut *REDRAWN.lock().unwrap());
-    let flashing = {
-        let mut flashing = FLASHING.lock().unwrap();
-        flashing.retain(|h| *h != front && tasks::alive(*h));
-        flashing.clone()
-    };
+        let order = o.order.clone();
+        o.app_ids.retain(|h, _| order.contains(h));
+        o.icons.retain(|h, _| order.contains(h));
+        o.titles = found.iter().map(|t| (t.hwnd, t.title.clone())).collect();
+        o.flashing.retain(|h| *h != front && tasks::alive(*h));
+        (order, std::mem::take(&mut o.redrawn), o.flashing.clone(), o.marks.clone())
+    });
     // As big as the buttons show them alone (island.ts, 24px); smaller
     // with their titles, and in the lists above them.
     let size = (24.0 * crate::island::scale(sh)).round() as i32;
-    let marks = MARKS.lock().unwrap().clone().unwrap_or_default();
     // Kept on the taskbar: its path, and the app id of one Windows only
     // starts by it (a store app: Settings, Calculator).
     let pinned: Vec<(String, Option<String>)> = sh
@@ -291,13 +379,10 @@ pub(super) fn send_windows(sh: &Shared) {
         }
     }
     let list: Vec<Value> = {
-        // This thread's caches, taken out while the list is made (each
-        // window asked for its icon, the other caches read) and put back
-        // after: none of them held over another (lock.rs).
-        let mut pngs = WIN_PNGS.lock().unwrap().take().unwrap_or_default();
+        // This thread's own, taken out while the list is made (each window
+        // asked for its icon, its app's: own() again) and put back after.
+        let (mut pngs, mut names, mut file_pngs) = own(|o| (std::mem::take(&mut o.win_pngs), std::mem::take(&mut o.app_names), std::mem::take(&mut o.file_pngs)));
         pngs.retain(|h, _| order.contains(h));
-        let mut names = APP_NAMES.lock().unwrap().take().unwrap_or_default();
-        let mut file_pngs = FILE_PNGS.lock().unwrap().take().unwrap_or_default();
         let list = apps
             .iter()
             .map(|(key, path, id, is_pinned, windows)| {
@@ -370,9 +455,11 @@ pub(super) fn send_windows(sh: &Shared) {
                 json!({ "app": key, "path": path, "id": id, "name": name, "pinned": is_pinned, "png": png, "windows": windows })
             })
             .collect();
-        *WIN_PNGS.lock().unwrap() = Some(pngs);
-        *APP_NAMES.lock().unwrap() = Some(names);
-        *FILE_PNGS.lock().unwrap() = Some(file_pngs);
+        own(|o| {
+            o.win_pngs = pngs;
+            o.app_names = names;
+            o.file_pngs = file_pngs;
+        });
         list
     };
     let list = Value::Array(list);

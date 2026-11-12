@@ -9,22 +9,32 @@ use super::*;
 pub(super) static ASK_AT: AtomicU32 = AtomicU32::new(0);
 pub(super) static LAST_ASK: AtomicU32 = AtomicU32::new(0);
 pub(super) static QUICK_ASKS: AtomicU32 = AtomicU32::new(0);
-// Each icon drawn: (key, its handle) to its PNG; the list sent last.
-pub(super) static PNGS: Lock<Option<HashMap<u64, (isize, String)>>> = Lock::new("taskbar::win::tray::PNGS", None);
+// The list sent last (a new page is sent it whole: resend).
 pub(super) static SENT: Lock<Value> = Lock::new("taskbar::win::tray::SENT", Value::Null);
-// Which picture (its handle) the page has for each icon: sent again
-// only when it is another one (send_icons).
-pub(super) static PNG_SENT: Lock<Option<HashMap<u64, isize>>> = Lock::new("taskbar::win::tray::PNG_SENT", None);
+
+// The icons' pictures, the taskbar's thread's alone (send_icons runs there,
+// on WM_TRAY_CHANGED; a new page's resend asks it, WM_RESEND_TRAY), gone
+// with it: each icon drawn, (key, its handle) to its PNG; which picture
+// (its handle) the page has for each, sent again only when it is another.
+#[derive(Default)]
+struct Pictures {
+    pngs: HashMap<u64, (isize, String)>,
+    sent: HashMap<u64, isize>,
+}
+
+thread_local! {
+    static PICTURES: std::cell::RefCell<Pictures> = std::cell::RefCell::new(Pictures::default());
+}
 // Windows' own record of the tray icons it keeps out (windows_kept), read once.
 pub(super) static KEPT: Lock<Option<Vec<Kept>>> = Lock::new("taskbar::win::tray::KEPT", None);
 
 // The tray's icons and the buttons as last sent, for a page that has just come up.
 pub fn resend(sh: &Shared) {
-    let sent = SENT.lock().unwrap().clone();
-    if !sent.is_null() {
-        // The whole list, pictures and all: the page is new and keeps none.
-        *PNG_SENT.lock().unwrap() = None;
-        let _ = sh.app.emit_to("island", "taskbar:tray", sent);
+    // The tray's by its thread, whose its pictures are.
+    let ours = OURS.load(Ordering::SeqCst);
+    if ours != 0 {
+        // SAFETY: the thread's own window; a posted message, no pointers.
+        unsafe { PostMessageW(ours as Hwnd, WM_RESEND_TRAY, 0, 0) };
     }
     let windows = SENT_WINDOWS.lock().unwrap().clone();
     if !windows.is_null() {
@@ -169,6 +179,17 @@ mod kept_tests {
 }
 
 // The icons as the page draws them: each drawn once per handle, and sent
+// The whole list, pictures and all, to a page just come up (resend): it
+// keeps none yet. On the taskbar's thread.
+pub(super) fn resend_tray() {
+    let Some(sh) = sh() else { return };
+    let sent = SENT.lock().unwrap().clone();
+    if !sent.is_null() {
+        PICTURES.with(|p| p.borrow_mut().sent.clear());
+        let _ = sh.app.emit_to("island", "taskbar:tray", sent);
+    }
+}
+
 // to the page once per handle too (the page keeps them, island.ts
 // onTray): a tip changing (Task Manager's every second) sends the tips,
 // not every picture again.
@@ -181,13 +202,10 @@ pub(super) fn send_icons() {
     let shown = systray::shown();
     let kept = windows_kept();
     let (whole, light): (Vec<Value>, Vec<Value>) = {
-        // The pictures (this thread's alone) taken out and put back after,
-        // so only PNG_SENT is held over the list (lock.rs); PNG_SENT stays
-        // in place, a page come up (resend) emptying it meanwhile.
-        let mut pngs = PNGS.lock().unwrap().take().unwrap_or_default();
+        // This thread's own (no lock); drawing takes none of hers.
+        let mut pictures = PICTURES.with(|p| std::mem::take(&mut *p.borrow_mut()));
+        let Pictures { pngs, sent } = &mut pictures;
         pngs.retain(|k, _| shown.iter().any(|s| s.key == *k));
-        let mut sent_now = PNG_SENT.lock().unwrap();
-        let sent = sent_now.get_or_insert_with(HashMap::new);
         sent.retain(|k, _| shown.iter().any(|s| s.key == *k));
         let made = shown
             .iter()
@@ -219,8 +237,7 @@ pub(super) fn send_icons() {
                 (item, lite)
             })
             .unzip();
-        drop(sent_now);
-        *PNGS.lock().unwrap() = Some(pngs);
+        PICTURES.with(|p| *p.borrow_mut() = pictures);
         made
     };
     *SENT.lock().unwrap() = Value::Array(whole);

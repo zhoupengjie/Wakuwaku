@@ -122,7 +122,6 @@ pub(super) fn run(strip: (i32, i32, i32, i32), ready: std::sync::mpsc::Sender<is
         }
         DestroyWindow(hwnd);
         OURS.store(0, Ordering::SeqCst);
-        *PNGS.lock().unwrap() = None;
     }
 }
 
@@ -182,38 +181,23 @@ pub(super) extern "system" fn on_event(_hook: isize, event: u32, hwnd: Hwnd, obj
 
 // The shell hook: a window flashing for attention (until it is in
 // front), one activated.
+// Each told to the buttons' thread (buttons.rs Note), whose they are.
 pub(super) fn on_shell(what: usize, hwnd: isize) {
     match what {
-        HSHELL_FLASH => {
-            let mut flashing = FLASHING.lock().unwrap();
-            if !flashing.contains(&hwnd) {
-                flashing.push(hwnd);
-            }
-        }
-        HSHELL_WINDOWACTIVATED | HSHELL_RUDEAPPACTIVATED => FLASHING.lock().unwrap().retain(|h| *h != hwnd),
-        // A title or an icon changed. The buttons are made again now
-        // only for a window with a button whose title is another, or
-        // for one just titled that is about to have one; the rest (a
-        // title the same, an icon alone, a window with no button) wait
-        // for the next look, which asks that window's icon again.
+        HSHELL_FLASH => tell(Note::Flash(hwnd)),
+        HSHELL_WINDOWACTIVATED | HSHELL_RUDEAPPACTIVATED => tell(Note::Activated(hwnd)),
+        // A title or an icon changed: the buttons' thread says whether
+        // that makes the buttons again now (buttons.rs take_note).
         HSHELL_REDRAW => {
             // Never ours (no button; and asking our own window's title
-            // from here would wait on the main thread).
-            if tasks::is_ours(hwnd) {
-                return;
-            }
-            REDRAWN.lock().unwrap().push(hwnd);
-            let shown = TITLES.lock().unwrap().as_ref().and_then(|t| t.get(&hwnd).cloned());
-            match shown {
-                Some(title) if title == tasks::title(hwnd) => return,
-                None if !tasks::is_task_window(hwnd) => return,
-                _ => {}
+            // would wait on the main thread).
+            if !tasks::is_ours(hwnd) {
+                tell(Note::Redrawn(hwnd));
             }
         }
-        HSHELL_WINDOWCREATED | HSHELL_WINDOWDESTROYED => {}
-        _ => return,
+        HSHELL_WINDOWCREATED | HSHELL_WINDOWDESTROYED => wake_tasks(),
+        _ => {}
     }
-    wake_tasks();
 }
 
 pub(super) fn tick() {
@@ -325,6 +309,7 @@ pub(super) extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lpara
         }
         WM_DISPLAYCHANGE => displays_changed(wparam, lparam),
         WM_TRAY_CHANGED => send_icons(),
+        WM_RESEND_TRAY => resend_tray(),
         WM_PAPER => send_look(),
         WM_SETTINGCHANGE if wparam == SPI_SETWORKAREA as usize => {
             work_after_still(hwnd);

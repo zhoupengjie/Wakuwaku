@@ -431,7 +431,9 @@ pub fn take(sh: &Shared, strip: (i32, i32, i32, i32)) -> bool {
     TASKS_STOP.store(false, Ordering::SeqCst);
     let sh = crate::shared(&sh.app);
     let (keys_sh, input_sh) = (sh.clone(), sh.clone());
-    *TASKS.lock().unwrap() = Some(crate::spawn_named("taskbar buttons", move || tasks_loop(sh)));
+    // Its way in first: what the taskbar's thread sees from now on reaches it.
+    let notes = notes();
+    *TASKS.lock().unwrap() = Some(crate::spawn_named("taskbar buttons", move || tasks_loop(sh, notes)));
     // Which input method is in front, told by Windows' input switcher
     // (inputs.rs): its mark read again at once when it changes.
     crate::inputs::set_size(icon_px(&keys_sh));
@@ -475,6 +477,8 @@ pub fn give_back(sh: &Shared) {
     let tasks = TASKS.lock().unwrap().take();
     if let Some(thread) = tasks {
         wake_tasks();
+        // Nothing more told it: its wait ends (and its own state goes with it).
+        no_more_notes();
         if !stop_within("the buttons' thread", thread) {
             let doing = *TASKS_DOING.lock().unwrap();
             log(&format!("giving back: the buttons' thread was {doing}"));
@@ -525,10 +529,6 @@ pub fn give_back(sh: &Shared) {
     *LOOK.lock().unwrap() = Value::Null;
     START_OPEN.store(false, Ordering::SeqCst);
     *STRIP.lock().unwrap() = None;
-    ORDER.lock().unwrap().clear();
-    FLASHING.lock().unwrap().clear();
-    *WIN_PNGS.lock().unwrap() = None;
-    *MARKS.lock().unwrap() = None;
 }
 
 // Windows' taskbar shown again as fast as she puts it away: another

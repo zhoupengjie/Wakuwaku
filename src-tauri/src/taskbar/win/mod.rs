@@ -229,6 +229,8 @@ const WM_TIMER: u32 = 0x0113;
 const WM_TASKBAR_SHOWN: u32 = 0x8001;
 const WM_TRAY_CHANGED: u32 = 0x8002;
 const WM_STOP: u32 = 0x8003;
+// A new page wants the tray's icons whole (tray.rs resend): its pictures are this thread's.
+const WM_RESEND_TRAY: u32 = 0x8007;
 // The strip moved: the desktop's picture under it looked at again (so
 // too when a setting or Windows' colours change). The picture changed
 // by her own settings: looked at until it is in place (settle).
@@ -299,13 +301,13 @@ const SETTLE_TICKS: u32 = 3;
 
 // The state each part keeps is in its own file, beside the code that
 // keeps it; named here for the others (each file has `use super::*`).
-use buttons::{TASKS_STOP, ORDER, FLASHING, WIN_PNGS, MARKS, TITLES, REDRAWN, SENT_WINDOWS};
+use buttons::{TASKS_STOP, SENT_WINDOWS};
 use flyouts::START_OPEN;
 use keys::{KEYS_NOW, SENT_KEYS};
 use look::{PAPER, LOOK, LOOKS_LEFT};
 use thread::{OURS, TICKS};
 use thumbs::THUMB_HOST;
-use tray::{ASK_AT, LAST_ASK, PNGS, SENT};
+use tray::{ASK_AT, LAST_ASK, SENT};
 use work::{EDGE, WORK_EDGE, STRIP, WORK_SIDE};
 // Her Shared, for the threads here: only ever cloned out (sh()), so taken
 // inside any lock and nothing inside it.

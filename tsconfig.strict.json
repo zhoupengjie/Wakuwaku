@@ -10,6 +10,7 @@
   },
   "include": [
     "src/window.d.ts",
+    "src/addon/sdk.ts",
     "src/shared/config.ts",
     "src/shared/i18n.ts",
     "src/pet/entry.ts",

@@ -11,6 +11,15 @@
 import * as State from './island-state.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
+import type { Pull } from './island-state.ts'
+
+// Her middle on the screen, from her own window (main: island:reach,
+// island:absorb); snap: let go now and she is back.
+interface At {
+  x: number
+  y: number
+  snap?: boolean
+}
 
 export function dropPart(core: IslandCore) {
   const {
@@ -20,7 +29,7 @@ export function dropPart(core: IslandCore) {
   } = core
   const { hidePlate, setStow } = pieces.plate
 
-  function pullDown(e) {
+  function pullDown(e: PointerEvent) {
     console.log('pointerdown on her in the island, button', e.button)
     if (e.button !== 0 || !isHome() || st.view === 'ask' || isSetting() || st.isAbsorbing) return
     // No mouse events follow, so the island does not take this for a click.
@@ -39,7 +48,7 @@ export function dropPart(core: IslandCore) {
     } catch {}
   }
 
-  function pullMove(e) {
+  function pullMove(e: PointerEvent) {
     if (st.pull?.started) st.pulledAt = Date.now()
     if (!st.pull || st.pull.carrying) return
     if (!st.pull.started) {
@@ -78,13 +87,13 @@ export function dropPart(core: IslandCore) {
   // Where a neck leaves her home: the point of its edge nearest (x, y), so a
   // drop below the island hangs from its lower edge, and one above the
   // taskbar stands on its upper edge.
-  function edgeNear(r, x, y) {
+  function edgeNear(r: DOMRect, x: number, y: number) {
     const [ix, iy] = isSide() ? [14, 24] : [24, 14]
     return [Math.min(Math.max(x, r.left + ix), r.right - ix), Math.min(Math.max(y, r.top + iy), r.bottom - iy)]
   }
 
   // Her seat in her home, in the page: where she springs back to.
-  function seatIn(r) {
+  function seatIn(r: DOMRect) {
     if (home() === 'taskbar' && isSide()) return [r.left + r.width / 2, r.top + r.width / 2]
     if (home() === 'taskbar') return [r.left + r.height / 2, r.top + r.height / 2]
     return [r.left + 18, r.top + 18]
@@ -92,7 +101,7 @@ export function dropPart(core: IslandCore) {
 
   // The home's double, a neck from it to (cx, cy), and a drop there; the
   // filter melts them into one shape. A neck of 0 leaves the drop on its own.
-  function drawGoo(cx, cy, { neck, radius = DROP_R }) {
+  function drawGoo(cx: number, cy: number, { neck, radius = DROP_R }: { neck: number; radius?: number }) {
     const r = island.getBoundingClientRect()
     const [ax, ay] = edgeNear(r, cx, cy)
     Object.assign(gooIsland.style, {
@@ -117,7 +126,7 @@ export function dropPart(core: IslandCore) {
 
   // You hold her by the head: her middle hangs below the cursor. The neck
   // thins as it stretches, and pinches off past BREAK_PX.
-  function stretch(x, y) {
+  function stretch(x: number, y: number) {
     const r = island.getBoundingClientRect()
     // From the top of the screen (her island, a top bar) she can only come
     // down, from a bottom bar (or her island along the foot, #105) only up,
@@ -128,17 +137,19 @@ export function dropPart(core: IslandCore) {
     const [ax, ay] = edgeNear(r, cx, cy)
     const dist = Math.hypot(cx - ax, cy - ay)
     go({ type: 'stretch', broken: dist > BREAK_PX, at: { cx, cy } })
-    drawGoo(cx, cy, { neck: st.pull.broken ? 0 : Math.max(8, 34 - dist * 0.22) })
+    // Stretched, so pulled (pullMove).
+    drawGoo(cx, cy, { neck: st.pull!.broken ? 0 : Math.max(8, 34 - dist * 0.22) })
     Object.assign(dropHer.style, { left: `${cx - BODY_W / 2}px`, top: `${cy - BODY_H / 2}px` })
   }
 
   // The drop let go of her: her window takes her where she is, and the island
   // wobbles back with her seat empty.
-  function handOff(e) {
+  // Pinched off: stretched to where the drop has her (st.pull.at).
+  function handOff(e: PointerEvent) {
     console.log('hand-off')
     go({ type: 'carry' })
     clearTimeout(st.dropTimer)
-    pet.releaseHer({ dx: st.pull.at.cx - e.clientX, dy: st.pull.at.cy - e.clientY })
+    pet.releaseHer({ dx: st.pull!.at!.cx - e.clientX, dy: st.pull!.at!.cy - e.clientY })
     body.classList.remove('pulling')
     wobble()
     st.herClip = null
@@ -152,7 +163,7 @@ export function dropPart(core: IslandCore) {
     setTimeout(() => body.classList.remove('wobble'), 520)
   }
 
-  function pullUp(e) {
+  function pullUp(e?: PointerEvent) {
     console.log('pull up:', e?.type, st.pull ? (st.pull.carrying ? 'carrying' : st.pull.started ? 'pulling' : 'pressed') : 'no pull')
     window.removeEventListener('pointermove', pullMove)
     window.removeEventListener('pointerup', pullUp)
@@ -190,7 +201,7 @@ export function dropPart(core: IslandCore) {
   }
 
   // Into her seat from where the drop has her: the drop and she spring back.
-  function settleBack(at) {
+  function settleBack(at: Pull['at']) {
     const r = island.getBoundingClientRect()
     const [tx, ty] = seatIn(r)
     if (at) drawGoo(at.cx, at.cy, { neck: 26 })
@@ -215,7 +226,7 @@ export function dropPart(core: IslandCore) {
 
   // Run fn once the window has its room to reach in: drawn before, the
   // island would move under the drawing as the window grows around it.
-  function whenRoomy(fn) {
+  function whenRoomy(fn: () => void) {
     setRoom(PULL_ROOM)
     if (innerWidth >= PULL_ROOM.width - 2 && innerHeight >= PULL_ROOM.height - 2) return fn()
     const go = () => {
@@ -229,7 +240,7 @@ export function dropPart(core: IslandCore) {
 
   // Her middle on the screen as she is moved near (snap: let go now and she
   // is back), or null when she has gone off again.
-  function reach(at) {
+  function reach(at: At | null) {
     if (!isOn() || st.isAbsorbing) return
     clearTimeout(st.retractTimer)
     if (!at) {
@@ -268,7 +279,7 @@ export function dropPart(core: IslandCore) {
 
   // She was let go close enough: from her window's spot into the drop, and
   // the drop back into the island.
-  function absorb(at) {
+  function absorb(at: At | null) {
     if (!isOn() || !at) return
     clearTimeout(st.retractTimer)
     go({ type: 'absorb' })

@@ -39,6 +39,7 @@
     "src/pet/handoff.ts",
     "src/pet/hovers.ts",
     "src/pet/island-boards.ts",
+    "src/pet/island-drop.ts",
     "src/pet/island-glide.ts",
     "src/pet/island-ime.ts",
     "src/pet/island-keys.ts",

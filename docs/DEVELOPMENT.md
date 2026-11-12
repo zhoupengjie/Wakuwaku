@@ -9,12 +9,16 @@ src/                      页面的源码：TypeScript、HTML、CSS（见「页�
   package.json            只有 "type": "module"：Node 把这里的 .ts 当 ES 模块
   window.d.ts             页面在 window 上用到的、不是自己脚本做的：Tauri 的（__TAURI__）、/debug/eval 的；按选择器找到的元素当 HTMLElement
   pet/
-    index.html            她的窗口（?role=pet）和灵动岛的窗口（?role=island）共用的页面
-    pages.ts              几个大脚本给别的脚本用的接口（Island、Isle、Settings、Picker、CapsulePanel、HerTalk、Desk）：各自跑完时交进来，用的地方读；顺带放到 window 上，只给外面看（预览、/debug/eval）
+    index.html            她的窗口（?role=pet）和灵动岛的窗口（?role=island）共用的页面：只加载 main.ts
+    main.ts               index.html 的入口（组合根，见「页面的模块和类型」）：按顺序建她、岛、选择器和胶囊面板、交接、插件、设置、确认面板，把各自要用的交给它，把交回的接口（Island、Isle、Settings、Picker、CapsulePanel、HerTalk）放到 window 上，只给外面看（预览、/debug/eval、测试虚拟机）
+    desk-main.ts, bar-main.ts, barpop-main.ts  desk.html、bar.html、barpop.html 的入口（Desk 放到 window 上）
+    entry.ts              几个入口共用的：made（每部分单独建，一部分出错不拦住别的）、expose（放到 window 上）
     bridge.ts             pet：页面和 Rust 之间的调用和事件；替页面补发鼠标进出（见"点击穿透"）
     hovers.ts             页面进入过、光标已经不在其中的元素：bridge.ts 替它们补发 mouseleave（见"点击穿透"第 4 条）
     pet.ts                她的动画、空闲时走动和东张西望
-    island.ts             灵动岛的核心：状态和小工具函数、几种形状、她在岛里、窗口大小、编辑任务栏布局和 update、开关、指针；下面这些部分由它在原来的位置调用（见「island.ts 和 settings.ts 的分块」）：
+    island.ts             灵动岛的核心（islandPage）：小工具函数、几种形状、她在岛里、窗口大小、编辑任务栏布局和 update、开关、指针；给各部分的 core（IslandCore）；下面这些部分由它在原来的位置调用（见「island.ts 和 settings.ts 的分块」）：
+      island-vars.ts      岛记着的一切（IslandVars）：每个会变的值的类型、说明和初值，核心建一次（st），每部分都拿它
+      island-state.ts     岛的形状和交互的状态机（IslandState、事件、next）：纯函数，不碰页面和计时器，测试直接调
       island-plate.ts     岛下面的亚克力或更深的底、让开它下面的窗口、告诉 Rust 窗口多大
       island-right.ts     任务栏右边：托盘的框、输入法、大写锁定、网络、音量、电池、麦克风等在用、时钟、前台程序
       island-layout.ts    任务栏的布局（taskbarLayout）：三段、她的座位、条带上的小工具、叠放和轮播
@@ -46,7 +50,7 @@ src/                      页面的源码：TypeScript、HTML、CSS（见「页�
     wcards.ts             小工具按大小画（2026-10-16 的小工具设计）：任务栏上的小档、中档，胶囊里的行和点开的卡片，叠放展开后的一行；每种的颜色、Windows 自己的图标、曲线、圆环、柱子
     agents.ts             她跟的 agent 一张表：名字、怎么连、写在哪、她能替它做的五件事、要注意的；从设置的快照算出每个的状态和按钮（Agent 页、欢迎卡片、「通用」那一行、邮件页的 agent 都从这里画）
     mica.ts               任务栏的云母：把桌面壁纸按 Windows 的摆法画到条带下面，模糊、调色；桌面小工具的玻璃也从它取（glassPaper）
-    desk.html, desk.ts, desk.css  桌面上的小工具（每块屏一个窗口）：画、拖动、贴网格、叠放、工作台、右键菜单
+    desk.html, desk.ts, desk.css  桌面上的小工具（每块屏一个窗口，deskPage）：画、拖动、贴网格、叠放、工作台、右键菜单；desk-drop.ts 是从小工具库拖过来放下
     deskgrid.ts           桌面小工具的布局：72px 网格、放下时让开图标和别的小工具、每块屏记住位置、叠放的增减和翻页、工作台里的格子
     wdesk.ts              桌面小工具按大小画（小 156×156、中 324×156、大 324×324），设计第 4 节每种每档放什么
     presses.ts            程序按钮上的按法：中键、Shift、Ctrl、Shift+右键各做什么，Ctrl+单击轮到哪个窗口（主屏和副屏的任务栏共用）
@@ -156,9 +160,11 @@ art/                      美术和调查资料，只在本地（只有 art/READ
 页面的脚本都是 TypeScript 的 ES 模块（2026-11-12 起；之前是 IIFE，各自把接口挂在 window 上，靠 `<script>` 的顺序互相调用）：
 
 - **互相引用靠 import**：小的模块（`flow.ts`、`widgets.ts`、`wcards.ts`……）导出函数和常量，用的地方 `import * as Flow from './flow.ts'`，调用还是 `Flow.cueFor(…)`；Rust 那边的调用都经 `bridge.ts` 导出的 `pet`。import 写 `.ts`，构建时改成 `.js`。
-- **页面还是按 HTML 里 `<script type="module">` 的顺序跑**。一个脚本要用排在它后面的大脚本（岛用设置的、选择器用胶囊面板的），不能直接 import 那个文件（import 会让它先跑，改了顺序），所以经 `pages.ts`：大脚本跑完时 `provide('Settings', …)` 交进来，别处 `import { Settings } from './pages.ts'`，用的时候读（ES 模块的绑定是活的）。`provide` 也把它放到 window 上，只给外面看：预览的场景和试玩页、/debug/eval；页面自己的脚本不读 window 上的这些。
-- **只在某种页面上跑的脚本**（设置、选择器、胶囊面板、handoff、桌面的拖放）整个包在一个函数里，在自己的页面上才调用；模块顶层不能 `return`。
-- **类型**：`npm ci` 一次，然后 `npm run typecheck`（`tsc -p .` 查 src/，`tsc -p test` 查测试，TypeScript 7，几秒）。还不是 strict：没写类型的参数是 any（noImplicitAny 关），null 在每个类型里（strictNullChecks 关）。每个文件导出什么、几个大脚本的接口（pages.ts 的 `IslandFace`、`SettingsFace`……按各自文件推出来）、设置（`Config`）、各部分的 `core` 都有类型，一个文件对另一个要的东西写错了 tsc 就报。
+- **每个页面只加载一个脚本：它的入口**（组合根，2026-11-12 起；之前 index.html 按顺序列着 47 个 `<script type="module">`，后面的大脚本经 pages.ts 交出接口）。index.html 是 `main.ts`（她的窗口和岛的窗口两个角色共用），desk.html、bar.html、barpop.html 是 `desk-main.ts`、`bar-main.ts`、`barpop-main.ts`。大脚本都是工厂函数，import 时什么都不做：`herPage`（pet.ts）、`islandPage`、`pickerPage`、`capsulePanel`、`handoff`、`addonsPage`、`settingsPage`、`panelPage`、`deskPage`、`deskDrop`、`barPage`、`barpopPage`。入口按原来 `<script>` 的顺序一个个建（各自的监听也就按原来的顺序加上），把它要用的作为参数交给它，拿回它的接口（`Island`、`Isle`、`Settings`、`Picker`、`CapsulePanel`、`HerTalk`、`Desk`）。加一部分：写成工厂函数，在入口里排在它要用的东西后面建；只在某种页面、某个角色上建的，条件写在入口里。
+- **先建的要用后建的**：岛要用设置和选择器，它们又要用岛的接口，所以岛先建，拿到一个 `IslandLater`（`{ Settings, Picker }`，开始都是 null），入口建好它们时填进去，岛和它的部分用的时候读（`later.Settings?.isOpen()`）；选择器和胶囊面板一样（`PickerLater`）。和以前 pages.ts 的绑定一样，建好之前是 null。
+- **每部分单独建**（entry.ts 的 `made`）：一部分抛错，像没接住的错一样报出来（控制台和 debug.log），它是 null，后面的照样建，和以前各是一个脚本时一样。
+- **window 上的只给外面看**：入口用 `expose`（entry.ts）把各部分交回的接口放到 window 上（`window.Island.isOpen()`、`window.Settings.close('test')`、`window.Desk`……），给预览的场景和试玩页、/debug/eval、测试虚拟机的脚本；`window.pet` 是 bridge.ts 自己放的。页面自己的脚本不读 window 上的这些。`test/scripts.test.ts` 查三件事：没有页面脚本读它们，只有入口往 window 上放，每个页面只加载它的入口。
+- **类型**：`npm ci` 一次，然后 `npm run typecheck`（`tsc -p .` 查 src/，`tsc -p test` 查测试，TypeScript 7，几秒）。还不是 strict：没写类型的参数是 any（noImplicitAny 关），null 在每个类型里（strictNullChecks 关）。每个文件导出什么、几个大脚本的接口（`IslandFace`、`SettingsFace`……从各自工厂函数的返回值推出来，`ReturnType<typeof settingsPage>`）、设置（`Config`）、各部分的 `core` 都有类型，一个文件对另一个要的东西写错了 tsc 就报。
 - **只用去掉类型后就是 JavaScript 的写法**（tsconfig 的 `erasableSyntaxOnly`、`verbatimModuleSyntax`）：构建只是把类型换成空格，不转换别的；所以不能用 enum、namespace、构造函数参数属性，只为类型的 import 要写 `import type`（不然会留在页面里，去 import 一个不存在的导出）。
 - **构建**：`scripts/build-pages.mjs`（Node 22.13 起自带的 `stripTypeScriptTypes`，不需要 npm 包）把 src/ 写进 dist/：类型换成空格，行列和源码一样，所以 WebView2 控制台里报错的位置就是 .ts 里的位置；import 的 `./x.ts` 改成 `./x.js`，并检查每个相对 import 指向的文件存在。`build.rs` 在每次构建前跑它（src/ 变了才重跑），所以 `cargo build`、`build-release.ps1` 带的页面总是最新的；没有 Node（或版本太低）构建就停下并说明。类型不对不挡构建，挡 CI。
 - **测试**直接跑 .ts（Node 22.18 起自带去掉类型）：`node --test "test/*.test.ts"`。读页面源码文本再执行一段的测试（pointer-scale、SDK 的），先经 `test/stripped.ts` 去掉类型。
@@ -166,14 +172,24 @@ art/                      美术和调查资料，只在本地（只有 art/READ
 
 ### island.ts 和 settings.ts 的分块
 
-两个文件的核心各有上百个会变的 `let`，按职责拆出去的段（`island-*.ts`、`settings-*.ts`）写成导出的工厂函数 `export function <名字>Part(core) {…}`，核心 import 它们，在那一段原来的位置同步调用，所以执行顺序和拆之前一样，初始化也还是一口气跑完。调用处传进去的对象说清了这一段用核心的什么：
+两个文件的核心（`islandPage`、`settingsPage`）按职责拆出去的段（`island-*.ts`、`settings-*.ts`）写成导出的工厂函数 `export function <名字>Part(core) {…}`，核心 import 它们，在那一段原来的位置同步调用，所以执行顺序和拆之前一样，初始化也还是一口气跑完。段交还给核心的是函数和常量（调用处解构）；核心在调用处之前（初始化时）不能用到它们：会是 TDZ。
+
+**岛**（2026-11-12 起）：
+
+- **岛记着的都在一个对象里**：`island-vars.ts` 的 `IslandVars`（每个会变的值的类型和说明）和 `islandVars()`（初值）。核心建一次（`st`），经 core 交给每一段，核心和段里都写 `st.名字`。加一个要记的值：加到 `IslandVars` 和初值里，不在核心或段里另起 `let`（段自己用、别处不读的局部 `let` 照旧）。
+- **形状和交互走状态机**：`island-state.ts` 的 `IslandState`（`view`、`isHover`、`dismissed`、`peek`、`nudge`、`pull`、`isReaching`、`isAbsorbing`、`isComingHome`）、事件 `IslandEvent` 和纯函数 `next(state, event)`，像 flow.ts 那样不碰页面和计时器，`test/island-state.test.ts` 直接调。`IslandVars` 扩展它，这几个字段是 readonly，只能经核心的 `go(event)` 改，别处直接写 tsc 就报；计时器和画页面留在核心和段里。改形状或交互的规则，改 `next` 并加测试。
+- **一个 core**：核心在第一段之前建 `core`：`st`、`go`、`later`（建好后才有的设置和选择器）、`pieces`，和各段要用的核心自己的常量、函数。它的类型 `IslandCore` 在 island.ts 里一个个写明：`islandPage` 里面的东西从外面推不出类型，用工厂的返回值推又会经各段绕回自己（TS2502）。tsc 拿核心建的 core 对照它，段里用到不在里面的名字也报。段要用核心的一个新名字：加到 core 里，也加到 `IslandCore` 里。
+- **段之间**：每段建好，交回的东西放进 `pieces.<名字>`（`IslandParts`）。段开头从 `core` 解构核心的，从 `pieces.<名字>` 解构它之前建好的段的；要用它之后才建的段的函数，调用时写 `pieces.<名字>.<函数>()`（那时整页已经建好；以前这些是 getter）。登记处叫 `pieces` 不叫 parts：wmenu 里有个局部的 `parts`（菜单项），任务栏也有它自己的 parts。
+
+**设置**（还是拆分时的写法）：调用处传进去的对象说清了这一段用核心的什么：
 
 - 核心的函数和调用处之前已经建好的常量：原样传，段的开头 `const { … } = core` 解构，代码不变。
 - 核心的 `let`（还有调用处之后才建的常量）：传 getter，段要写的再传 setter，段里写成 `core.名字`。
 - 段自己的 `let` 别处也读写的：声明留在核心里（调用处前面），段里同样是 `core.名字`。
-- 段交还给核心的只有函数和常量（调用处解构）。核心在调用处之前（初始化时）不能用到它们：会是 TDZ。
 
-`core` 的类型：岛的在 island.ts 里先建成常量（`const plateCore = {…}`），`export type PlateCore = typeof plateCore`，段的参数就是它；设置的段在 `settingsPage()` 里建，外面拿不到它的类型，所以每段自己写一个接口（`LookCore`……），列出它读的名字。段里用到核心的一个新名字、调用处忘了补上，现在 tsc 就报（以前是运行时的 ReferenceError）。`core` 这个名字两个文件里都没有别的用处，不要再拿它当局部变量；两个文件里也没有用到 `this`，所以经 `core.f()` 调用和直接调用一样。
+设置的段在 `settingsPage()` 里建，外面拿不到它的类型，所以每段自己写一个接口（`LookCore`……），列出它读的名字。段里用到核心的一个新名字、调用处忘了补上，tsc 就报。
+
+`core` 这个名字两个文件里都没有别的用处，不要再拿它当局部变量；两个文件里也没有用到 `this`，所以经 `core.f()` 调用和直接调用一样。
 
 ## 构建和运行
 

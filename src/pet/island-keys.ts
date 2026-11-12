@@ -407,7 +407,7 @@ export function keysPart(core: IslandCore) {
     if ((e.target as HTMLElement).closest('[data-bar="ime"]')) return st.imeOpen ? closeImeList() : openImeList()
     const mark = quickBox.contains(e.target as Node) ? quickMarkAt(e.clientX, e.clientY) : null
     // None: her own menu (null is none to pet.menu too, which says undefined).
-    pet.menu(mark === volMark ? 'volume' : mark === netMark ? 'network' : clockBox.contains(e.target as Node) ? 'clock' : null as unknown as undefined)
+    pet.menu(mark === volMark ? 'volume' : mark === netMark ? 'network' : clockBox.contains(e.target as Node) ? 'clock' : null)
   })
   // Which of the quick settings' marks a press on its button is for: the
   // nearest along the strip, each having the button's height (its width

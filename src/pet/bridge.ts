@@ -89,7 +89,7 @@ function bridge() {
     dragEnd: () => send('pet_drag_end'),
     // Her menu; on the volume, the network or the clock of her taskbar
     // (part), the one Windows' own taskbar has there.
-    menu: (part?: string) => send('pet_menu', { part: part || null }),
+    menu: (part?: string | null) => send('pet_menu', { part: part || null }),
     doubleClick: () => send('pet_double_click'),
     // Out of the queue: it answers when the walk is over.
     walk: (dx: number, ms: number) => invoke('pet_walk', { dx, ms }).catch(() => false),

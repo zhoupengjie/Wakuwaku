@@ -94,18 +94,26 @@ test('each page loads its entry alone, and only the entries put faces on window'
 // The files that pass tsc with strict on (tsconfig.strict.json, checked by
 // npm run typecheck): the list only grows. These were on it by 2026-11-12
 // (the new state and entry files, the small pure modules, then the shared
-// ones every page imports and the plugins' SDK); a file
-// taken off would fail here (one added need not be named here).
+// ones every page imports and the plugins' SDK, then the big pages and
+// their parts); a file taken off would fail here. By then every file in
+// src/ was on it, and one added since must be too (it need not be named
+// here).
 test('the strict list keeps every file it had, and each is there', () => {
   const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'tsconfig.strict.json'), 'utf8')
   const config = JSON.parse(text.split(/\r?\n/).filter(line => !/^\s*\/\//.test(line)).join('\n'))
   const kept = [
     ...['src/window.d.ts', 'src/pet/entry.ts', 'src/pet/main.ts', 'src/pet/desk-main.ts', 'src/pet/bar-main.ts', 'src/pet/barpop-main.ts'],
     ...['src/addon/sdk.ts', 'src/shared/config.ts', 'src/shared/i18n.ts', 'src/pet/bridge.ts'],
+    ...['addons', 'bar', 'barpop', 'capsule-panel', 'desk', 'desk-drop', 'handoff', 'panel', 'pet', 'picker'].map(f => `src/pet/${f}.ts`),
+    ...['', '-boards', '-drop', '-glide', '-ime', '-keys', '-layout', '-look', '-plate', '-right', '-ring', '-winlist', '-wmenu', '-wpop'].map(f => `src/pet/island${f}.ts`),
+    ...['', '-addons', '-agents', '-letter', '-look', '-mail', '-market', '-plugins', '-welcome'].map(f => `src/pet/settings${f}.ts`),
     ...['island-state', 'island-vars', 'settings-state', 'settings-vars'].map(f => `src/pet/${f}.ts`),
     ...['addonui', 'agents', 'aim', 'anchor', 'capsule', 'deskgrid', 'flow', 'hovers', 'mica', 'placing', 'presses', 'sprite', 'status', 'views', 'wcards', 'wdesk', 'widgets'].map(f => `src/pet/${f}.ts`),
   ]
   for (const f of kept) assert.ok(config.include.includes(f), `${f} stays on the strict list`)
   for (const f of config.include) assert.ok(fs.existsSync(path.join(import.meta.dirname, '..', f)), `${f} is there`)
   assert.equal(config.compilerOptions.strict, true)
+  // Every page file is on it: one added to src/ goes on it too.
+  const all = (dir: string): string[] => fs.readdirSync(path.join(import.meta.dirname, '..', dir), { withFileTypes: true }).flatMap(e => (e.isDirectory() ? all(`${dir}/${e.name}`) : e.name.endsWith('.ts') ? [`${dir}/${e.name}`] : []))
+  for (const f of all('src')) assert.ok(config.include.includes(f), `${f} is on the strict list`)
 })

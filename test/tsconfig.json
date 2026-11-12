@@ -1,0 +1,9 @@
+// The pages' tests: what they test is src/ (tsconfig.json there), and they
+// run in Node (node --test, its own type stripping), with its types.
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["*.ts", "../src"]
+}

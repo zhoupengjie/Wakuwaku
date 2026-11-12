@@ -1184,7 +1184,7 @@ mod tests {
     // her strings in both languages.
     #[test]
     fn its_words_are_in_both_languages() {
-        let strings = include_str!("../../src/shared/i18n.js");
+        let strings = include_str!("../../src/shared/i18n.ts");
         let mut keys = vec!["hw.cpuTemp", "hw.cpuPower", "sensors.title", "sensors.note", "sensors.settingUp", "sensors.running", "sensors.pawnioMissing", "sensors.notAnswering", "sensors.needsUpdate", "sensors.removeNote"];
         keys.extend(CCD_LABELS);
         for key in keys {

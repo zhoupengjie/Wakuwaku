@@ -1,7 +1,7 @@
 # Her tests on every push to main and dev, every release tag and every pull
 # request: the Rust side's (cargo test, the replay tests among them) and the
-# pages' (node --test), on Windows, where she runs. By hand, the same two
-# commands: docs/DEVELOPMENT.md, 构建和运行.
+# pages' (their types, tsc; their tests, node --test), on Windows, where she
+# runs. By hand, the same commands: docs/DEVELOPMENT.md, 构建和运行.
 name: test
 
 on:
@@ -31,6 +31,11 @@ jobs:
       RUST_BACKTRACE: 1
     steps:
       - uses: actions/checkout@v4
+      # build.rs builds her pages (scripts/build-pages.mjs) with Node's own
+      # type stripping, 22.13 or later; the image's may be older.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       # The image's stable may be weeks behind the one she is built with.
       - run: rustup update stable --no-self-update && rustup default stable
       # Tauri's, WebView2's and the windows crates take minutes from cold:
@@ -45,8 +50,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      # node --test takes a glob from 21 on.
+      # Node runs the .ts tests itself (type stripping, 22.18 on); --test
+      # takes a glob from 21 on. TypeScript itself from package-lock.json.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: node --test "test/*.test.js"
+      - run: npm ci
+      - run: node --test "test/*.test.ts"

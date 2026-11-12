@@ -2100,8 +2100,9 @@ fn content_type(ext: &str) -> &'static str {
     }
 }
 
-// The SDK, the waku object of main.js (docs/PLUGINS.md).
-const SDK: &str = include_str!("../../src/addon/sdk.js");
+// The SDK, the waku object of main.js (docs/PLUGINS.md): src/addon/sdk.ts
+// as scripts/build-pages.mjs writes it (build.rs runs it first).
+const SDK: &str = include_str!("../../dist/addon/sdk.js");
 
 // A plugin frame's first page: the SDK alone, which then loads its main.
 fn host_page(id: &str) -> String {

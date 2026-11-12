@@ -26,17 +26,18 @@
 // so the taskbar's time, the sessions' clocks and her frames are the same
 // each run; ?clock=real, and in the playground, the real one.
 //
-// Where things are: in the repo (tools/preview beside src/ and pets/), or as
-// the playground is published (preview/ beside pet/, shared/, pets/, assets/).
+// Where things are: in the repo (tools/preview beside dist/, her pages as
+// scripts/build-pages.mjs writes them from src/, and pets/), or as the
+// playground is published (preview/ beside pet/, shared/, pets/, assets/).
 ;(function () {
   const HERE = new URL('.', document.currentScript.src).href
   const IN_REPO = /\/tools\/preview\/$/.test(new URL(HERE).pathname)
   const ROOT = new URL(IN_REPO ? '../../' : '../', HERE).href
-  const PAGES = new URL(IN_REPO ? 'src/pet/' : 'pet/', ROOT).href
+  const PAGES = new URL(IN_REPO ? 'dist/pet/' : 'pet/', ROOT).href
   const ASSETS = IN_REPO ? new URL('assets/', HERE).href : new URL('assets/', ROOT).href
   // The example plugins' folders (their views) and her SDK, as published.
   const PLUGIN_FILES = new URL(IN_REPO ? 'examples/plugins/' : 'plugins/', ROOT).href
-  const SDK_FILE = new URL(IN_REPO ? 'src/addon/sdk.js' : 'addon/sdk.js', ROOT).href
+  const SDK_FILE = new URL(IN_REPO ? 'dist/addon/sdk.js' : 'addon/sdk.js', ROOT).href
   const Q = new URLSearchParams(location.search)
   const HOST_PAGE = window.WAKU_HOST_PAGE === true
   const host = (() => {

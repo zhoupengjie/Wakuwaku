@@ -1842,7 +1842,7 @@ mod tests {
     // both languages.
     #[test]
     fn its_words_are_in_both_languages() {
-        let strings = include_str!("../../src/shared/i18n.js");
+        let strings = include_str!("../../src/shared/i18n.ts");
         let keys = ["hw.load", "hw.clock", "hw.fastest", "hw.temp", "hw.coreClock", "hw.vram", "hw.shared", "hw.fan", "hw.inUseShare", "hw.inUse", "hw.available", "hw.cached", "hw.committed", "hw.active", "hw.read", "hw.write", "hw.down", "hw.up", "hw.charge", "hw.charging", "hw.cores", "hw.vramTotal", "hw.memTotal"];
         for key in keys {
             assert_eq!(strings.matches(&format!("'{key}':")).count(), 2, "{key}");

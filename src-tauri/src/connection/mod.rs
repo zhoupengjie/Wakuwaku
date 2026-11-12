@@ -293,7 +293,7 @@ mod tests {
     // stale (dsh_view): those two count, and are among its own.
     #[test]
     fn connected_as_the_page_counts_it() {
-        let page = include_str!("../../../src/pet/agents.js");
+        let page = include_str!("../../../src/pet/agents.ts");
         let mut ins: Vec<(Agent, Vec<String>)> = Vec::new();
         for part in page.split("\n    id: '").skip(1) {
             let id = &part[..part.find('\'').unwrap()];

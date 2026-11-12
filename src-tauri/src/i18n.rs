@@ -78,7 +78,7 @@ mod tests {
         }
         assert!(asked.len() > 50, "found only {}: the scan is broken", asked.len());
         for key in asked {
-            assert!(WORDS.binary_search_by(|(k, ..)| (*k).cmp(key.as_str())).is_ok(), "{key}: not in src/shared/i18n.js");
+            assert!(WORDS.binary_search_by(|(k, ..)| (*k).cmp(key.as_str())).is_ok(), "{key}: not in src/shared/i18n.ts");
         }
     }
 

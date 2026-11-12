@@ -36,6 +36,9 @@ const REPO = path.join(HERE, '..', '..')
 // Her code, as a side has it; and the harness that draws it.
 const PRODUCT = ['src/pet', 'src/shared', 'src/addon', 'examples/plugins', 'pets/claude-chan']
 const HARNESS = 'tools/preview'
+// What builds her pages (src/ into dist/, render.ps1 runs it), this checkout's
+// for both sides: an older side's src/ is JavaScript, copied as it is.
+const BUILD = 'scripts/build-pages.mjs'
 // A channel differing by more than this is a change; fewer pixels than NOISE changed is none.
 const TOLERANCE = 24
 const NOISE = 8
@@ -157,6 +160,11 @@ function archive(ref, paths, into) {
   const tar = git('archive', '--format=tar', ref, '--', ...want)
   const r = spawnSync('tar', ['-xf', '-'], { cwd: into, input: tar, maxBuffer: 1 << 30 })
   if (r.status !== 0) throw new Error(`tar: ${r.stderr}`)
+}
+
+function copyFile(from, to) {
+  fs.mkdirSync(path.dirname(to), { recursive: true })
+  fs.copyFileSync(from, to)
 }
 
 function copyDir(from, to) {
@@ -282,11 +290,13 @@ function main() {
     if (o.head) {
       afterRoot = path.join(temp, 'after')
       archive(o.head, [...PRODUCT, HARNESS], afterRoot)
+      copyFile(path.join(REPO, BUILD), path.join(afterRoot, BUILD))
     }
     // Before: the base's code, drawn by the after side's harness.
     const beforeRoot = path.join(temp, 'before')
     archive(o.base, PRODUCT, beforeRoot)
     copyDir(path.join(afterRoot, HARNESS), path.join(beforeRoot, HARNESS))
+    copyFile(path.join(REPO, BUILD), path.join(beforeRoot, BUILD))
 
     const shots = { before: path.join(out, 'before'), after: path.join(out, 'after') }
     for (const side of ['before', 'after']) {

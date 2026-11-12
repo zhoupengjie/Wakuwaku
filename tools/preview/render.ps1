@@ -7,7 +7,7 @@
 #   pwsh tools/preview/render.ps1 -Open     # the live gallery in Edge; nothing shot
 #
 # Each scene is shot.html?scene=<id>&mode=<mode> at its view's size: her
-# real page (src/pet) in a frame, run with the stand-in for Tauri, frozen
+# real page (dist/pet, built from src/pet first) in a frame, run with the stand-in for Tauri, frozen
 # before the shot (boot.js). A shot taken before the page froze has a
 # magenta square at its top-left corner, one whose page had errors a red
 # band at its foot: both are reported at the end (and the exit code is 1).
@@ -28,6 +28,10 @@ $here = $PSScriptRoot
 # -Only a,b as one word too (pwsh -File passes it so).
 $Only = @($Only | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 if (-not (Test-Path -LiteralPath $Edge)) { throw "Edge not found at $Edge (-Edge <msedge.exe>)" }
+
+# Her pages as they run (dist/), from src/ as it is now: what the frames load.
+& node (Join-Path $here '..\..\scripts\build-pages.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'her pages did not build (scripts/build-pages.mjs)' }
 
 # The live gallery, in an Edge of its own that may read her pages over file://.
 if ($Open) {

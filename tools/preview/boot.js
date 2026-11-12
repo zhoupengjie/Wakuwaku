@@ -5,7 +5,7 @@
 // transitions at their end there too, for headless shots). In the head of
 // page.html, after fake-tauri.js, fixtures.js and scenes.js:
 //
-// 1. The page's own file (src/pet/index.html, desk.html) is read and written
+// 1. The page's own file (dist/pet/index.html, desk.html) is read and written
 //    into this document as it is, but for its Content-Security-Policy, its
 //    links made absolute, and a style that holds transitions at their end
 //    (headless Edge leaves them at their start). Its scripts run as they

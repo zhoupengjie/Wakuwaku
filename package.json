@@ -1,0 +1,17 @@
+{
+  "name": "wakuwaku-pages",
+  "private": true,
+  "description": "Her pages' types, build and tests: the exe itself is built by cargo (docs/DEVELOPMENT.md)",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "node scripts/build-pages.mjs",
+    "typecheck": "tsc -p . && tsc -p test",
+    "test": "node --test \"test/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "typescript": "7.0.2"
+  }
+}

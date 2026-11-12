@@ -598,7 +598,11 @@ pub(super) fn put_away_again(how: &str) {
     // till the guard says she answers; then the timer finds it shown.
     if shown_for_hang() {
         if !LEFT_FOR_HANG.swap(true, Ordering::SeqCst) {
-            log(&format!("Windows' shown by her guard while she did not answer ({how}): left up till she does"));
+            // As the person had it (shell.rs hang_state): one she set to hide
+            // itself would stay slid away. This thread answers: its tray
+            // hands the message on, as rehide's.
+            let state = sh().is_some_and(|sh| shell::hang_state(&sh.dir.join("taskbar.json")));
+            log(&format!("Windows' shown by her guard while she did not answer ({how}): left up till she does{}", if state { ", as it was before her" } else { "" }));
         }
         return;
     }

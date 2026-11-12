@@ -491,6 +491,32 @@ mod imp {
         read(&hang_mark(file)).and_then(|v| v["pid"].as_u64()) == Some(u64::from(std::process::id()))
     }
 
+    // Windows' taskbar as the person had it before she took it (its state in
+    // the file: hidden by itself or not): she sets it to hide itself for a
+    // strip along another edge than the bottom and for the top bar and dock
+    // out of the way (rehide), and shown so it would stay slid away. Asked of
+    // the first Shell_TrayWnd (SHAppBarMessage): her own taskbar's thread
+    // asks it when it is the one answering (taskbar/win/hold.rs), the guard
+    // only once that window is Explorer's, never hers.
+    pub fn hang_state(file: &Path) -> bool {
+        let Some(state) = read(file).and_then(|v| v["state"].as_u64()) else { return false };
+        let main = explorer_tray();
+        if main == 0 {
+            return false;
+        }
+        appbar::set_taskbar_state(main, state as u32);
+        true
+    }
+
+    // Whether the first Shell_TrayWnd (the one a message to the taskbar
+    // reaches) is Explorer's.
+    fn explorers_first() -> bool {
+        // SAFETY: a plain lookup; our own out-parameter.
+        let first = unsafe { FindWindowW(wide("Shell_TrayWnd").as_ptr(), std::ptr::null()) };
+        let mut pid = 0;
+        !first.is_null() && unsafe { GetWindowThreadProcessId(first, &mut pid) } != 0 && is_explorer(pid)
+    }
+
     // Windows' taskbars shown and set over hers, the mark written first; none
     // when hers does not hold the strip or Explorer has no taskbar. Neither
     // call waits on Explorer (async), nor anything on her.
@@ -520,6 +546,8 @@ mod imp {
     pub struct HangBack {
         since: Option<std::time::Instant>,
         shown: bool,
+        // Its own state given back meanwhile (hang_state).
+        state_back: bool,
     }
 
     // What a look comes to (HangBack::next).
@@ -538,10 +566,18 @@ mod imp {
                     say(&format!("pid {pid}: not answering ten seconds and more while her taskbar holds the strip: Windows' shown again over it till she answers (taskbar.json kept)"));
                 }
                 Next::Answered => {
+                    self.state_back = false;
                     let _ = std::fs::remove_file(hang_mark(file));
                     say(&format!("pid {pid}: answering again: Windows' taskbar left for her to put away"));
                 }
                 _ => {}
+            }
+            // Shown, and the taskbar's first window Explorer's now (set over
+            // hers, which answers nothing meanwhile): its own state back, so
+            // that one set to stay slid away comes up whole.
+            if self.shown && hung && !self.state_back && explorers_first() && hang_state(file) {
+                self.state_back = true;
+                say(&format!("pid {pid}: Windows' taskbar as it was before her (its own auto-hide or not)"));
             }
         }
 
@@ -715,6 +751,9 @@ mod imp {
     pub fn shown_for_hang(_file: &Path) -> bool {
         false
     }
+    pub fn hang_state(_file: &Path) -> bool {
+        false
+    }
     pub fn lone_win() -> super::LoneWin {
         super::LoneWin { taskman: None, shell: None, tray: None }
     }
@@ -729,7 +768,7 @@ mod imp {
     }
 }
 
-pub use imp::{desktop_up, explorer_pid, explorer_tray, guard, hide, shown_for_hang, HangBack, keep_room, kept_room, lone_win, recover, rehide, restore, room, running_for, show_bars, shown_bar, shown_room, spawn_guard, started, taskbar_created, taskbars, visible};
+pub use imp::{desktop_up, explorer_pid, explorer_tray, guard, hang_state, hide, shown_for_hang, HangBack, keep_room, kept_room, lone_win, recover, rehide, restore, room, running_for, show_bars, shown_bar, shown_room, spawn_guard, started, taskbar_created, taskbars, visible};
 
 // The shell's windows Win pressed alone may go by, none of them hers
 // (zhoupengjie/Wakuwaku#54, where it opened no Start after she was quit,

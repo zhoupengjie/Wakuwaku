@@ -1127,6 +1127,18 @@ mod tests {
         }
     }
 
+    // A hung thread named by its best window: the main thread's tao target
+    // over the dock's pictures' window seen first, any over an IME's.
+    #[cfg(windows)]
+    #[test]
+    fn a_hung_thread_named_by_its_best_window() {
+        use super::win::rank;
+        assert!(rank("Tao Thread Event Target") > rank("WakuwakuDockThumbs"));
+        assert!(rank("WakuwakuTaskbarHost") > rank("WakuwakuDockThumbs"));
+        assert!(rank("WakuwakuDockThumbs") > rank("IME"));
+        assert!(rank("MSCTFIME UI") == rank("IME"));
+    }
+
     // A thread of this test's own process, held, its stack read as the
     // guard reads hers: Windows' frames on top, this exe's under them.
     #[cfg(all(windows, target_arch = "x86_64"))]

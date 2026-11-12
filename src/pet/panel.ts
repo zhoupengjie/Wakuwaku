@@ -18,8 +18,48 @@ import type { HerTalkFace } from './pet.ts'
 import type { IslandFace } from './island.ts'
 import type { Config } from '../shared/config.ts'
 
+// A prompt as the panel is given it (agent-core's asks.rs view_of; a code
+// or a link come by mail, mail/codes.rs views): loose JSON from Rust, each
+// kind with fields of its own, read as its kind has them. What every kind
+// has, and what tells them apart, is typed.
+export interface Ask {
+  id: number
+  kind: string
+  session?: string
+  from?: string
+  copied?: boolean
+  canAnswer?: boolean
+  [field: string]: any
+}
+// What "always" would allow (asks.rs describe_always).
+interface Always {
+  rules: string[]
+  dirs: string[]
+  modes: string[]
+  where: string[]
+}
+// One of a question prompt's questions (asks.rs question_view): a choice,
+// text or a number, the number's own fields only on it.
+interface Question {
+  kind: string
+  header: string
+  question: string
+  description: string
+  multiSelect: boolean
+  options: { label: string; description: string }[]
+  placeholder?: string
+  min?: number
+  max?: number
+  step?: number
+  defaultValue?: number
+  unit?: string
+}
+// A question's answer: the labels picked, or what is typed, or a number.
+type Picked = string[] | { text: string } | { number: number }
+
 // The other agents a prompt may come from, named on it (Claude Code's: none).
 const FROM = { codex: 'Codex', agy: 'Antigravity', opencode: 'OpenCode', omp: 'omp', zcode: 'ZCode', dsh: 'DeepSeek Harness' }
+type From = keyof typeof FROM
 // Apps whose own dialog stays open meanwhile: a prompt is handled there.
 const IN_APP = new Set(['zcode', 'dsh'])
 
@@ -31,20 +71,23 @@ const STEP_ARM_MS = 150
 // (zcode, dsh), whose own dialog closes as the answer reaches it
 // (zhoupengjie/Wakuwaku#97). A code come by mail: approve copies it,
 // deny lets it go (until it says it is copied).
-const isMail = ask => !!ask && (ask.kind === 'mailCode' || ask.kind === 'mailLink')
-const canAnswerWithHotkey = ask => !!ask && (ask.kind === 'permission' || ask.kind === 'plan' || (isMail(ask) && !ask.copied)) && ask.canAnswer !== false
+const isMail = (ask: Ask | null | undefined) => !!ask && (ask.kind === 'mailCode' || ask.kind === 'mailLink')
+const canAnswerWithHotkey = (ask: Ask | null | undefined) => !!ask && (ask.kind === 'permission' || ask.kind === 'plan' || (isMail(ask) && !ask.copied)) && ask.canAnswer !== false
 
 // Hers while she is out and her window up (her page not put away with
 // it), else the island's: one of the two, so a prompt shows in one place.
-function holderOf({ role, out, herUp, hidden }) {
+function holderOf({ role, out, herUp, hidden }: { role: string; out: boolean; herUp: boolean; hidden: boolean }) {
   const hers = out && herUp
   return role === 'island' ? !hers : hers && !hidden
 }
 
-function decideHotkeyAction({ which, ask, shownId, isArmed, islandOpen }) {
+// A key pressed (which: allow, deny or island), the prompt in front, the
+// one shown, its buttons awake, the island open.
+function decideHotkeyAction({ which, ask, shownId, isArmed, islandOpen }: { which?: string; ask: Ask | null | undefined; shownId: unknown; isArmed: boolean; islandOpen: boolean }) {
   if (which === 'island') return { type: 'toggle' }
   if (which !== 'allow' && which !== 'deny') return { type: 'ignore' }
-  if (canAnswerWithHotkey(ask) && isArmed && shownId && ask.id === shownId && islandOpen) {
+  // (An ask there: none cannot be answered.)
+  if (canAnswerWithHotkey(ask) && isArmed && shownId && ask!.id === shownId && islandOpen) {
     return { type: 'answer', which, id: shownId }
   }
   return { type: 'open' }
@@ -57,25 +100,27 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
   const panel = typeof document !== 'undefined' ? document.getElementById('panel') : null
   let lang = 'en'
   let config: Config = {}
-  let asks = []
-  const keyHintOf = (key, ask) => (canAnswerWithHotkey(ask) && config.shortcutsEnabled && config[key] ? config[key] : '')
-  let shownId = null
+  let asks: Ask[] = []
+  const keyHintOf = (key: 'shortcutApprove' | 'shortcutDeny', ask: Ask) => (canAnswerWithHotkey(ask) && config.shortcutsEnabled && config[key] ? config[key] : '')
+  let shownId: number | null = null
   let step = 0
   // Per question: ['label', ...] picked, { text } typed, or { number }.
-  let picks = []
+  let picks: Picked[] = []
   // What is typed in the current question's box, kept across redraws.
   let typed = ''
-  let armTimer
+  let armTimer: Timer | undefined
   let hasKeyboard = false
 
-  const T = (key, vars?) => t(lang, key, vars)
+  const T = (key: string, vars?: Record<string, unknown>) => t(lang, key, vars)
 
-  function el(tag, props, ...children) {
+  // props: the element's own, by name (onclick, disabled, value…), any as
+  // they are set as given; class and data- ones as attributes.
+  function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, any> | null, ...children: (Node | string | null | undefined | false)[]) {
     const node = document.createElement(tag)
     for (const [key, value] of Object.entries(props || {})) {
       if (key === 'class') node.className = value
       else if (key.startsWith('data-')) node.setAttribute(key, value)
-      else node[key] = value
+      else (node as any)[key] = value
     }
     for (const child of children) {
       if (child === null || child === undefined || child === false) continue
@@ -84,13 +129,13 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
     return node
   }
 
-  function button(label, action, onClick, kind = '', keyHint = '') {
+  function button(label: string, action: string, onClick: () => void, kind = '', keyHint = '') {
     const hint = keyHint ? el('span', { class: 'hk-hint' }, keyHint) : null
     return el('button', { class: `btn ${kind}`, 'data-action': action, disabled: true, onclick: onClick }, label, hint)
   }
 
   // A box to type in. The window takes the keyboard only once you click it.
-  function input(props, onEnter) {
+  function input(props: Record<string, unknown>, onEnter: () => void) {
     const box = el('input', { class: 'input', 'data-input': 'answer', value: typed, ...props })
     box.addEventListener('mousedown', () => {
       if (!hasKeyboard) {
@@ -116,33 +161,36 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
     }
   }
 
-  function arm(ms) {
+  // (panel! here, in refreshConfirm and in report: they are reached only
+  // from render(), which looks first, and from what it put in the panel.)
+  function arm(ms: number) {
     clearTimeout(armTimer)
     armTimer = setTimeout(() => {
-      for (const b of panel.querySelectorAll<HTMLButtonElement>('button')) b.disabled = false
+      for (const b of panel!.querySelectorAll<HTMLButtonElement>('button')) b.disabled = false
       refreshConfirm()
     }, ms)
   }
 
-  const answer = choice => pet.answer(shownId, choice)
+  // Only the shown ask's buttons and keys answer or dismiss: shownId is set.
+  const answer = (choice: Record<string, unknown>) => pet.answer(shownId!, choice)
   // To the terminal: the prompt is its again, and its window comes to the front.
   const dismiss = () => {
     const session = asks.find(a => a.id === shownId)?.session
-    pet.dismiss(shownId)
+    pet.dismiss(shownId!)
     if (session) pet.jump(session)
   }
 
-  function header(title, ask) {
+  function header(title: string, ask: Ask) {
     return el(
       'div',
       { class: 'head' },
       el('span', { class: 'title' }, title),
-      FROM[ask.from] ? el('span', { class: 'chip' }, FROM[ask.from]) : null,
+      FROM[ask.from as From] ? el('span', { class: 'chip' }, FROM[ask.from as From]) : null,
       ask.project ? el('span', { class: 'chip' }, ask.project) : null,
     )
   }
 
-  function alwaysNote(always) {
+  function alwaysNote(always: Always) {
     const rules = [
       ...always.rules,
       ...(always.dirs.length ? [T('rule.directories', { dirs: always.dirs.join(', ') })] : []),
@@ -154,12 +202,12 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
 
   // Why the app asks (DeepSeek Harness's: a sandbox to widen, and why), in
   // her language when it gave both.
-  function reasonNote(reason) {
+  function reasonNote(reason: string | Record<string, string>) {
     const text = typeof reason === 'string' ? reason : reason[lang] || reason.en || ''
     return text ? el('div', { class: 'note' }, text) : null
   }
 
-  function permissionBody(ask) {
+  function permissionBody(ask: Ask) {
     return [
       header(T('panel.needsApproval', { tool: ask.tool }), ask),
       el('pre', { class: 'code' }, ask.summary || ''),
@@ -179,7 +227,7 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
   // click on it copies it too) or where the link goes, and Copy, Open (a
   // link), Ignore. The clipboard is written by main (the island never has
   // the focus a page's own copy needs); copied, it says so and goes.
-  function mailBody(ask) {
+  function mailBody(ask: Ask) {
     const isCode = ask.kind === 'mailCode'
     const copy = () => answer({ action: 'allow' })
     const copyBtn = button(T(ask.copied ? 'panel.copied' : 'panel.copy'), 'allow', copy, 'primary', keyHintOf('shortcutApprove', ask))
@@ -208,7 +256,7 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
     ]
   }
 
-  function planBody(ask) {
+  function planBody(ask: Ask) {
     return [
       header(T('panel.planTitle'), ask),
       el('pre', { class: 'code plan' }, ask.summary || T('panel.emptyPlan')),
@@ -222,23 +270,24 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
   }
 
   // The current question's answer from what is picked and typed, or null.
-  function currentAnswer(q) {
+  function currentAnswer(q: Question): Picked | null {
     const text = typed.trim()
     if (q.kind === 'text') return text ? { text } : null
     if (q.kind === 'number') {
       const n = Number(typed)
-      return typed !== '' && Number.isFinite(n) && n >= q.min && n <= q.max ? { number: n } : null
+      // Its bounds there: one with none cannot be answered here (canAnswer), and has no box.
+      return typed !== '' && Number.isFinite(n) && n >= q.min! && n <= q.max! ? { number: n } : null
     }
-    const labels = Array.isArray(picks[step]) ? picks[step] : []
+    const labels = Array.isArray(picks[step]) ? picks[step] as string[] : []
     if (text) return { text: [...labels, text].join(', ') }
     return labels.length ? labels : null
   }
 
   function refreshConfirm() {
     const ask = asks[0]
-    const confirm = panel.querySelector<HTMLButtonElement>('button[data-action="confirm"]')
+    const confirm = panel!.querySelector<HTMLButtonElement>('button[data-action="confirm"]')
     if (!ask || ask.kind !== 'question' || !confirm || armTimer === undefined) return
-    if (!panel.querySelector<HTMLButtonElement>('button[data-action="dismiss"]')?.disabled) {
+    if (!panel!.querySelector<HTMLButtonElement>('button[data-action="dismiss"]')?.disabled) {
       confirm.disabled = currentAnswer(ask.questions[step]) === null
     }
   }
@@ -258,14 +307,14 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
     }
   }
 
-  function questionBody(ask) {
+  function questionBody(ask: Ask) {
     // Another app's question is named as its (Claude Code's: as Claude's).
-    const title = ask.title || (FROM[ask.from] ? T('panel.questionFrom', { app: FROM[ask.from] }) : T('panel.questionTitle'))
+    const title = ask.title || (FROM[ask.from as From] ? T('panel.questionFrom', { app: FROM[ask.from as From] }) : T('panel.questionTitle'))
     if (!ask.canAnswer) {
       return [header(title, ask), el('div', { class: 'text' }, T('panel.cannotAnswer'))]
     }
 
-    const q = ask.questions[step]
+    const q: Question = ask.questions[step]
     const isLast = step === ask.questions.length - 1
     const count = ask.questions.length > 1 ? ` (${step + 1}/${ask.questions.length})` : ''
     const confirm = () => button(isLast ? T('panel.confirm') : T('panel.next'), 'confirm', next, 'primary')
@@ -296,7 +345,7 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
       return parts
     }
 
-    const picked = Array.isArray(picks[step]) ? picks[step] : []
+    const picked = Array.isArray(picks[step]) ? picks[step] as string[] : []
     const options = q.options.map(o =>
       el(
         'button',
@@ -336,7 +385,7 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
     if (Island?.isOn()) return Island.changed()
     if (HerTalk) return HerTalk.room()
     requestAnimationFrame(() => {
-      pet.panel(panel.hidden ? null : { width: panel.offsetWidth + 16, height: panel.offsetHeight + 10 })
+      pet.panel(panel!.hidden ? null : { width: panel!.offsetWidth + 16, height: panel!.offsetHeight + 10 })
     })
   }
 
@@ -381,7 +430,7 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
     const body = isMail(ask) ? mailBody(ask) : ask.kind === 'question' ? questionBody(ask) : ask.kind === 'plan' ? planBody(ask) : permissionBody(ask)
     const more = asks.length > 1 ? el('span', { class: 'more' }, T('panel.more', { n: asks.length - 1 })) : null
     panel.append(
-      ...body.filter(Boolean),
+      ...body.filter(Boolean) as HTMLElement[],
       // A code come by mail has no terminal to go back to: its Ignore is in its row.
       ...(isMail(ask)
         ? more
@@ -392,7 +441,7 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
               'div',
               { class: 'foot' },
               // An app's prompt (ZCode's, DSH's dialog stays open meanwhile) is handled there.
-              button(ask.kind === 'question' && !ask.canAnswer ? T('panel.gotIt') : IN_APP.has(ask.from) ? T('panel.toApp', { app: FROM[ask.from] }) : T('panel.toTerminal'), 'dismiss', dismiss, 'ghost'),
+              button(ask.kind === 'question' && !ask.canAnswer ? T('panel.gotIt') : IN_APP.has(ask.from!) ? T('panel.toApp', { app: FROM[ask.from as From] }) : T('panel.toTerminal'), 'dismiss', dismiss, 'ghost'),
               more,
             ),
           ]),

@@ -10,13 +10,16 @@ pub(super) fn shared_of(app: &tauri::AppHandle) -> Arc<Shared> {
 pub async fn desk_ready(app: tauri::AppHandle, window: WebviewWindow) {
     count(&COMMANDS);
     let sh = shared_of(&app);
-    let key = DESKS.lock().unwrap().iter_mut().find(|d| d.label == window.label()).map(|d| {
-        d.ready = true;
-        d.sent = Value::Null;
-        d.paper = Value::Null;
-        d.views_on = None;
-        d.key.clone()
+    let key = edit(|desks| {
+        desks.iter_mut().find(|d| d.label == window.label()).map(|d| {
+            d.ready = true;
+            d.key.clone()
+        })
     });
+    // A page come up (again: reloaded) has been told nothing.
+    if key.is_some() {
+        told(window.label(), |t| *t = Told { label: t.label.clone(), ..Told::default() });
+    }
     refresh(&sh);
     push_widgets(&sh);
     // Made for a widget dragged over it: where it is, or its drop.
@@ -31,28 +34,31 @@ pub async fn desk_ready(app: tauri::AppHandle, window: WebviewWindow) {
 pub fn desk_shapes(window: WebviewWindow, shapes: Vec<[f64; 5]>) {
     count(&COMMANDS);
     let menu = shapes.iter().any(|s| s[4] == 12.0);
-    if let Some(d) = DESKS.lock().unwrap().iter_mut().find(|d| d.label == window.label()) {
-        d.shapes = shapes.into_iter().take(64).collect();
-        d.menu = menu;
-    }
+    edit(|desks| {
+        if let Some(d) = desks.iter_mut().find(|d| d.label == window.label()) {
+            d.shapes = shapes.into_iter().take(64).collect();
+            d.menu = menu;
+        }
+    });
 }
 
-// A press held (a drag): the window keeps the mouse till it is let go.
+// A press held (a drag): the window keeps the mouse till it is let go (the
+// pointer's next look sees it held; let go, it looks as ever).
 #[tauri::command]
 pub fn desk_hold(window: WebviewWindow, on: bool) {
     count(&COMMANDS);
-    let (was, hwnd) = {
-        let mut desks = DESKS.lock().unwrap();
-        let Some(d) = desks.iter_mut().find(|d| d.label == window.label()) else { return };
-        d.held = on;
-        let was = d.catching;
-        if on {
-            d.catching = true;
-        }
-        (was, d.hwnd)
+    let Some(hwnd) = edit(|desks| {
+        desks.iter_mut().find(|d| d.label == window.label()).map(|d| {
+            d.held = on;
+            d.hwnd
+        })
+    }) else {
+        return;
     };
-    // (A command without async runs on the main thread: set here.)
-    if on && !was {
+    // Taken at once, not at the pointer's next look (set_through does
+    // nothing to a window that already takes it). A command without async
+    // runs on the main thread, the window's: set here.
+    if on {
         imp::set_through(hwnd, false);
     }
 }
@@ -127,7 +133,7 @@ pub fn merge(old: &[Value], given: Vec<Value>, gone: &[String]) -> Value {
 #[tauri::command]
 pub async fn desk_icons(app: tauri::AppHandle, window: WebviewWindow) -> Option<Vec<[f64; 4]>> {
     count(&COMMANDS);
-    let (mon, sf) = DESKS.lock().unwrap().iter().find(|d| d.label == window.label()).map(|d| (d.mon, d.sf))?;
+    let (mon, sf) = desks().iter().find(|d| d.label == window.label()).map(|d| (d.mon, d.sf))?;
     let _ = app;
     let icons = tauri::async_runtime::spawn_blocking(move || imp::icons(mon, sf)).await.ok().flatten();
     // Kept for the pointer's look too: Ctrl over an icon is Explorer's.
@@ -145,7 +151,7 @@ pub async fn desk_icons(app: tauri::AppHandle, window: WebviewWindow) -> Option<
 #[tauri::command]
 pub fn desk_wheel(window: WebviewWindow, x: f64, y: f64, delta: i32) {
     count(&COMMANDS);
-    let Some((mon, sf)) = DESKS.lock().unwrap().iter().find(|d| d.label == window.label()).map(|d| (d.mon, d.sf)) else { return };
+    let Some((mon, sf)) = desks().iter().find(|d| d.label == window.label()).map(|d| (d.mon, d.sf)) else { return };
     if !(x.is_finite() && y.is_finite()) || delta == 0 {
         return;
     }
@@ -157,9 +163,11 @@ pub fn desk_wheel(window: WebviewWindow, x: f64, y: f64, delta: i32) {
 #[tauri::command]
 pub fn desk_picked(window: WebviewWindow, on: bool) {
     count(&COMMANDS);
-    if let Some(d) = DESKS.lock().unwrap().iter_mut().find(|d| d.label == window.label()) {
-        d.picked = on;
-    }
+    edit(|desks| {
+        if let Some(d) = desks.iter_mut().find(|d| d.label == window.label()) {
+            d.picked = on;
+        }
+    });
 }
 
 // The icons' rects (x, y, w, h: the screen's px) that lie on a display, in
@@ -179,7 +187,7 @@ pub(super) fn blocks_on(rects: &[(i32, i32, i32, i32)], mon: Mon, sf: f64) -> Ve
 pub async fn desk_where(app: tauri::AppHandle, window: WebviewWindow, x: f64, y: f64) -> Value {
     count(&COMMANDS);
     let sh = shared_of(&app);
-    let Some((mon, sf)) = DESKS.lock().unwrap().iter().find(|d| d.label == window.label()).map(|d| (d.mon, d.sf)) else { return Value::Null };
+    let Some((mon, sf)) = desks().iter().find(|d| d.label == window.label()).map(|d| (d.mon, d.sf)) else { return Value::Null };
     let (px, py) = (mon.0 + (x * sf).round() as i32, mon.1 + (y * sf).round() as i32);
     let Some(a) = sh.screens().areas.into_iter().find(|a| px >= a.mon.0 && px < a.mon.0 + a.mon.2 && py >= a.mon.1 && py < a.mon.1 + a.mon.3) else { return Value::Null };
     json!({

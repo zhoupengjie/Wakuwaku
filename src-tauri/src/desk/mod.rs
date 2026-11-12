@@ -33,6 +33,15 @@
 // The layout is the settings' deskLayout (settings.rs is_desk_layout); a page
 // keeps what it changed (desk_keep, merged with the rest), and her island's
 // page puts widgets on and off the desktop (island-wmenu.ts placeWidget).
+//
+// Its state, by who has it. What is known of each window and what its page
+// said of it (Desk) is published whole (DESKS): each change is made on a
+// copy under the lock and the list put back, so the pointer's look reads
+// it with one Arc taken, never waiting on a page's command (the main
+// thread's) mid-change. What each page was told (Told) is kept apart, for
+// those that tell it. Whether each window takes the mouse now, and whether
+// a button was down at the last look, are the pointer's thread's alone
+// (pointer.rs Catch), as is Ctrl at the last look.
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
@@ -44,6 +53,7 @@ use crate::lock::Lock;
 
 type Mon = (i32, i32, i32, i32);
 
+#[derive(Clone)]
 struct Desk {
     label: String,
     key: String,
@@ -51,17 +61,11 @@ struct Desk {
     sf: f64,
     hwnd: isize,
     ready: bool,
-    // What its page was last told.
-    sent: Value,
-    paper: Value,
     // Where its widgets are (the page's px: x, y, w, h, radius), and an
     // open menu among them.
     shapes: Vec<[f64; 5]>,
     menu: bool,
     held: bool,
-    // The window takes the mouse.
-    catching: bool,
-    was_down: bool,
     // Some of its widgets picked with Ctrl (desk_picked): a press off them
     // goes on to Explorer, and the page hears of it (desk:outside).
     picked: bool,
@@ -69,19 +73,60 @@ struct Desk {
     // (desk_icons; its px), and when: Ctrl over one of them is Explorer's.
     icons: Vec<[f64; 4]>,
     icons_at: Option<std::time::Instant>,
+    // Its work area (physical): the display less its taskbar's strip.
+    work: Mon,
+}
+
+impl Desk {
+    fn new(label: String, key: String, a: &Area) -> Desk {
+        Desk { label, key, mon: a.mon, sf: a.sf, hwnd: 0, ready: false, shapes: Vec::new(), menu: false, held: false, picked: false, icons: Vec::new(), icons_at: None, work: (a.x, a.y, a.w, a.h) }
+    }
+}
+
+// What each page was told, by its window's label.
+#[derive(Default)]
+struct Told {
+    label: String,
+    // Its state and its display's picture as last sent.
+    sent: Value,
+    paper: Value,
     // The entries it shows (refresh), and words not sent it while its
     // desktop was not seen (push_widgets).
     entries: Vec<Value>,
     stale: bool,
-    // Its work area (physical): the display less its taskbar's strip.
-    work: Mon,
     // Whether its cards' plugin views may show, as its page was last told
     // (views; none told: they may).
     views_on: Option<bool>,
 }
 
-static DESKS: Lock<Vec<Desk>> = Lock::new("desk::DESKS", Vec::new());
+static DESKS: Lock<Option<Arc<Vec<Desk>>>> = Lock::ranked("desk::DESKS", crate::lock::LEAF, None);
+static TOLD: Lock<Vec<Told>> = Lock::ranked("desk::TOLD", crate::lock::LEAF, Vec::new());
 static NEXT: AtomicU32 = AtomicU32::new(1);
+
+// The windows as last published: taken whole, read with no lock held.
+fn desks() -> Arc<Vec<Desk>> {
+    DESKS.lock().unwrap().clone().unwrap_or_default()
+}
+
+// A change to them: made on a copy (unless none is reading the last one),
+// then published. Short, calling nothing out.
+fn edit<R>(f: impl FnOnce(&mut Vec<Desk>) -> R) -> R {
+    let mut slot = DESKS.lock().unwrap();
+    f(Arc::make_mut(slot.get_or_insert_with(Default::default)))
+}
+
+// What a page was told, kept or changed; a page not known yet starts with nothing told.
+fn told<R>(label: &str, f: impl FnOnce(&mut Told) -> R) -> R {
+    let mut all = TOLD.lock().unwrap();
+    let at = match all.iter().position(|t| t.label == label) {
+        Some(at) => at,
+        None => {
+            all.push(Told { label: label.to_string(), ..Told::default() });
+            all.len() - 1
+        }
+    };
+    f(&mut all[at])
+}
 static SHARED: OnceLock<Arc<Shared>> = OnceLock::new();
 
 // The pointer this close to a widget (the page's px): looked at often.
@@ -121,8 +166,7 @@ fn shown_on(e: &Value, key: &str, primary: bool, keys: &[&str]) -> bool {
 pub fn sync(sh: &Arc<Shared>) {
     let _ = SHARED.set(sh.clone());
     let want = wanted(sh);
-    let (gone, made) = {
-        let mut desks = DESKS.lock().unwrap();
+    let (gone, made) = edit(|desks| {
         let mut gone = Vec::new();
         desks.retain(|d| {
             let keep = want.iter().any(|(a, key, _)| *key == d.key && a.mon == d.mon && a.sf == d.sf);
@@ -135,29 +179,33 @@ pub fn sync(sh: &Arc<Shared>) {
         for (a, key, _) in &want {
             if !desks.iter().any(|d| d.key == *key) {
                 let label = format!("desk-{}", NEXT.fetch_add(1, Ordering::SeqCst));
-                desks.push(Desk { label: label.clone(), key: key.clone(), mon: a.mon, sf: a.sf, hwnd: 0, ready: false, sent: Value::Null, paper: Value::Null, shapes: Vec::new(), menu: false, held: false, catching: false, was_down: false, picked: false, icons: Vec::new(), icons_at: None, entries: Vec::new(), stale: false, work: (a.x, a.y, a.w, a.h), views_on: None });
+                desks.push(Desk::new(label.clone(), key.clone(), a));
                 made.push((label, *a));
             }
         }
         (gone, made)
-    };
+    });
+    // What was told a page whose window is gone, forgotten (one told of
+    // just as it went, too).
+    let live = desks();
+    TOLD.lock().unwrap().retain(|t| live.iter().any(|d| d.label == t.label));
     for (label, _) in &gone {
         if let Some(win) = sh.app.get_webview_window(label) {
             let _ = win.destroy();
         }
         sh.log(&format!("desk: {label} gone"));
     }
-    {
-        let mut desks = DESKS.lock().unwrap();
+    let none_left = edit(|desks| {
         for d in desks.iter_mut() {
             if let Some((a, _, _)) = want.iter().find(|(a, _, _)| a.mon == d.mon) {
                 d.work = (a.x, a.y, a.w, a.h);
             }
         }
-        // None left: nothing of the desktop's runs (no thread, no hook, no timer).
-        if desks.is_empty() && !gone.is_empty() {
-            imp::stop();
-        }
+        desks.is_empty()
+    });
+    // None left: nothing of the desktop's runs (no thread, no hook, no timer).
+    if none_left && !gone.is_empty() {
+        imp::stop();
     }
     for (label, area) in made {
         create(sh, label, area);
@@ -168,7 +216,7 @@ pub fn sync(sh: &Arc<Shared>) {
 // Each page told what it shows, when that changed: its display, her
 // language, Windows' mode, the specifics, her home, her sheet, the layout.
 pub fn refresh(sh: &Shared) {
-    let ready: Vec<(String, String, Mon, f64)> = DESKS.lock().unwrap().iter().filter(|d| d.ready).map(|d| (d.label.clone(), d.key.clone(), d.mon, d.sf)).collect();
+    let ready: Vec<(String, String, Mon, f64)> = desks().iter().filter(|d| d.ready).map(|d| (d.label.clone(), d.key.clone(), d.mon, d.sf)).collect();
     if ready.is_empty() {
         return;
     }
@@ -202,20 +250,14 @@ pub fn refresh(sh: &Shared) {
         let key_refs: Vec<&str> = keys.iter().map(String::as_str).collect();
         let primary = screens.primary.is_some_and(|p| p.mon == mon);
         let here: Vec<Value> = layout.as_array().into_iter().flatten().filter(|e| shown_on(e, &key, primary, &key_refs)).cloned().collect();
-        let changed = {
-            let mut desks = DESKS.lock().unwrap();
-            match desks.iter_mut().find(|d| d.label == label) {
-                Some(d) => {
-                    d.entries = here;
-                    let changed = d.sent != state;
-                    if changed {
-                        d.sent = state.clone();
-                    }
-                    changed
-                }
-                None => false,
+        let changed = told(&label, |t| {
+            t.entries = here;
+            let changed = t.sent != state;
+            if changed {
+                t.sent = state.clone();
             }
-        };
+            changed
+        });
         if changed {
             emit(sh, &label, "desk:state", state);
         }
@@ -245,7 +287,7 @@ fn look_read() -> (bool, Value) {
 // screen over it: the design session, 2026-10-16), which is told them once
 // it is seen again (catch_up).
 pub fn push_widgets(sh: &Shared) {
-    let desks: Vec<(String, Mon)> = DESKS.lock().unwrap().iter().filter(|d| d.ready).map(|d| (d.label.clone(), d.mon)).collect();
+    let desks: Vec<(String, Mon)> = desks().iter().filter(|d| d.ready).map(|d| (d.label.clone(), d.mon)).collect();
     if desks.is_empty() {
         return;
     }
@@ -254,10 +296,8 @@ pub fn push_widgets(sh: &Shared) {
     let mut waits = false;
     for (label, mon) in desks {
         let seen = seen_now(sh, mon);
-        if let Some(d) = DESKS.lock().unwrap().iter_mut().find(|d| d.label == label) {
-            waits |= !seen && !d.stale;
-            d.stale = !seen;
-        }
+        let was_stale = told(&label, |t| std::mem::replace(&mut t.stale, !seen));
+        waits |= !seen && !was_stale;
         if seen {
             count(&SENT);
             let w = widgets.get_or_insert_with(|| json!({ "widgets": sh.widgets_said() }));
@@ -276,7 +316,7 @@ pub fn push_widgets(sh: &Shared) {
 // waits.
 pub fn catch_up(sh: &Shared) {
     *SEEN.lock().unwrap() = None;
-    let stale: Vec<Mon> = DESKS.lock().unwrap().iter().filter(|d| d.ready && d.stale).map(|d| d.mon).collect();
+    let stale: Vec<Mon> = desks().iter().filter(|d| d.ready && told(&d.label, |t| t.stale)).map(|d| d.mon).collect();
     if stale.iter().any(|&mon| seen_now(sh, mon)) {
         push_widgets(sh);
         crate::loops::wake_monitor();
@@ -295,14 +335,12 @@ pub fn views(sh: &Shared) {
     if !crate::addons::views_running() {
         return;
     }
-    let desks: Vec<(String, Mon, bool)> = DESKS.lock().unwrap().iter().filter(|d| d.ready).map(|d| (d.label.clone(), d.mon, d.views_on.unwrap_or(true))).collect();
+    let desks: Vec<(String, Mon)> = desks().iter().filter(|d| d.ready).map(|d| (d.label.clone(), d.mon)).collect();
     let away = sh.is_quiet() || crate::addons::views_paused();
-    for (label, mon, told) in desks {
+    for (label, mon) in desks {
         let on = !away && seen_now(sh, mon);
-        if let Some(d) = DESKS.lock().unwrap().iter_mut().find(|d| d.label == label) {
-            d.views_on = Some(on);
-        }
-        if on != told {
+        let was = told(&label, |t| t.views_on.replace(on).unwrap_or(true));
+        if on != was {
             emit(sh, &label, "desk:views", json!({ "on": on }));
         }
     }
@@ -311,18 +349,18 @@ pub fn views(sh: &Shared) {
 // The pages' open menus closed, those picked with Ctrl let go (another
 // window came to the front: a press on it, or on the desktop's own).
 fn close_menus(sh: &Shared) {
-    let open: Vec<String> = DESKS.lock().unwrap().iter().filter(|d| d.menu || d.picked).map(|d| d.label.clone()).collect();
+    let open: Vec<String> = desks().iter().filter(|d| d.menu || d.picked).map(|d| d.label.clone()).collect();
     for label in open {
         emit(sh, &label, "desk:outside", Value::Null);
     }
 }
 
 fn any_stale() -> bool {
-    DESKS.lock().unwrap().iter().any(|d| d.stale)
+    TOLD.lock().unwrap().iter().any(|t| t.stale)
 }
 
 pub fn any() -> bool {
-    !DESKS.lock().unwrap().is_empty()
+    !desks().is_empty()
 }
 
 // Whether an entry shows a widget: put there by itself, or its plugin's;
@@ -352,7 +390,7 @@ fn entry_shows_at(e: &Value, id: &str, owner: Option<&str>, big: bool) -> bool {
 fn seen_with(sh: &Shared, id: &str, big: bool) -> bool {
     let owner = crate::plugins::owner_of(id);
     let owner = owner.as_deref();
-    let desks: Vec<(Mon, bool)> = DESKS.lock().unwrap().iter().filter(|d| d.ready).map(|d| (d.mon, d.entries.iter().any(|e| entry_shows_at(e, id, owner, big)))).collect();
+    let desks: Vec<(Mon, bool)> = desks().iter().filter(|d| d.ready).map(|d| (d.mon, told(&d.label, |t| t.entries.iter().any(|e| entry_shows_at(e, id, owner, big))))).collect();
     desks.into_iter().any(|(mon, has)| has && seen_now(sh, mon))
 }
 
@@ -383,7 +421,7 @@ fn seen_now(sh: &Shared, mon: Mon) -> bool {
     let own = sh.own_windows();
     let shown = imp::desktop_shown(&own);
     let full = crate::fullscreen::covering(&own).flatten();
-    let mons: Vec<Mon> = DESKS.lock().unwrap().iter().map(|d| d.mon).collect();
+    let mons: Vec<Mon> = desks().iter().map(|d| d.mon).collect();
     let list: Vec<(Mon, bool)> = mons.into_iter().map(|m| (m, shown || !(full == Some(m) || crate::tasks::maximized_on(m)))).collect();
     let s = list.iter().find(|(m, _)| *m == mon).map_or(true, |(_, s)| *s);
     *SEEN.lock().unwrap() = Some((std::time::Instant::now(), list));
@@ -436,16 +474,13 @@ fn create(sh: &Arc<Shared>, label: String, area: Area) {
         crate::addons::guard_frames(&sh, &win, false);
         lay(&win, rect);
         let _ = win.set_ignore_cursor_events(true);
-        let gone = {
-            let mut desks = DESKS.lock().unwrap();
-            match desks.iter_mut().find(|d| d.label == label) {
-                Some(d) => {
-                    d.hwnd = hwnd;
-                    false
-                }
-                None => true,
+        let gone = edit(|desks| match desks.iter_mut().find(|d| d.label == label) {
+            Some(d) => {
+                d.hwnd = hwnd;
+                false
             }
-        };
+            None => true,
+        });
         if gone {
             let _ = win.destroy();
             return;
@@ -526,7 +561,7 @@ mod tests {
     // pointer's look and the widgets' push turn back at once.
     #[test]
     fn with_no_desktop_widget_nothing_runs() {
-        assert!(DESKS.lock().unwrap().is_empty());
+        assert!(desks().is_empty());
         assert!(!any());
         assert!(!any_stale());
         assert!(!looks_wanted(false, 0));

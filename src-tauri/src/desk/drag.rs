@@ -47,7 +47,7 @@ pub(super) fn drag_target(sh: &Shared, x: f64, y: f64) -> Option<(String, (f64, 
     let area = sh.screens().areas.into_iter().find(|a| contains(a.mon, p))?;
     let key = key_of(sh, area.mon);
     // A window there (made at another scale until the displays settle): its own.
-    let (mon, dsf) = DESKS.lock().unwrap().iter().find(|d| d.key == key).map_or((area.mon, area.sf), |d| (d.mon, d.sf));
+    let (mon, dsf) = desks().iter().find(|d| d.key == key).map_or((area.mon, area.sf), |d| (d.mon, d.sf));
     let at = ((p.0 - mon.0) as f64 / dsf, (p.1 - mon.1) as f64 / dsf);
     Some((key, at))
 }
@@ -66,7 +66,7 @@ pub(super) fn drag_to(sh: &Arc<Shared>, mut payload: Value, drop: bool) {
     payload["x"] = json!(dx);
     payload["y"] = json!(dy);
     let event = if drop { "desk:drop" } else { "desk:drag-preview" };
-    let here = DESKS.lock().unwrap().iter().find(|d| d.key == key).map(|d| (d.label.clone(), d.ready));
+    let here = desks().iter().find(|d| d.key == key).map(|d| (d.label.clone(), d.ready));
     let (left, make) = {
         let mut drag = DRAG.lock().unwrap();
         drag.turn += 1;
@@ -116,7 +116,7 @@ pub(super) fn drag_off(sh: &Arc<Shared>, dropped: bool) {
         drag.turn
     };
     if !dropped {
-        let labels: Vec<String> = DESKS.lock().unwrap().iter().filter(|d| d.ready).map(|d| d.label.clone()).collect();
+        let labels: Vec<String> = desks().iter().filter(|d| d.ready).map(|d| d.label.clone()).collect();
         for label in labels {
             emit(sh, &label, "desk:drag-preview", Value::Null);
         }

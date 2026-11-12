@@ -5,7 +5,7 @@ use super::*;
 // protocol), how it is laid, the colour round it, the display and all of
 // them from the window's corner (the window is the display), its scale.
 pub fn read_papers(sh: &Shared) {
-    let desks: Vec<(String, Mon, f64)> = DESKS.lock().unwrap().iter().filter(|d| d.ready).map(|d| (d.label.clone(), d.mon, d.sf)).collect();
+    let desks: Vec<(String, Mon, f64)> = desks().iter().filter(|d| d.ready).map(|d| (d.label.clone(), d.mon, d.sf)).collect();
     if desks.is_empty() {
         return;
     }
@@ -22,16 +22,16 @@ pub fn read_papers(sh: &Shared) {
         let rel = |(x, y, w, h): Mon| json!([(x - mon.0) as f64 / sf, (y - mon.1) as f64 / sf, w as f64 / sf, h as f64 / sf]);
         let url = paper.file.as_ref().map(|f| format!("{}?v={}", crate::data::asset_url(f), paper.stamp));
         let now = json!({ "url": url, "position": paper.position, "color": paper.color, "mon": rel(mon), "screen": rel((left, top, right - left, bottom - top)), "sf": sf });
-        let changed = {
-            let mut desks = DESKS.lock().unwrap();
-            match desks.iter_mut().find(|d| d.label == label) {
-                Some(d) if d.paper != now => {
-                    d.paper = now.clone();
-                    true
+        // Not for a window gone meanwhile.
+        let here = super::desks().iter().any(|d| d.label == label);
+        let changed = here
+            && told(&label, |t| {
+                let changed = t.paper != now;
+                if changed {
+                    t.paper = now.clone();
                 }
-                _ => false,
-            }
-        };
+                changed
+            });
         if changed {
             sh.log(&format!("desk: {label} wallpaper {:?}, {}, {}", paper.file, paper.position, paper.color));
             emit(sh, &label, "desk:paper", now);

@@ -4,7 +4,7 @@
 use std::ffi::c_void;
 use std::sync::Arc;
 
-use super::DESKS;
+use super::desks;
 use crate::Shared;
 
 type Hwnd = *mut c_void;
@@ -320,7 +320,7 @@ pub fn desktop_shown(own: &[isize]) -> bool {
 // windows, right under her home's (the top of those kept on top, then
 // after hers).
 pub fn keep_all_low() {
-    let mine: Vec<isize> = DESKS.lock().unwrap().iter().map(|d| d.hwnd).filter(|&h| h != 0).collect();
+    let mine: Vec<isize> = desks().iter().map(|d| d.hwnd).filter(|&h| h != 0).collect();
     if super::RAISED.load(std::sync::atomic::Ordering::SeqCst) {
         let home = super::SHARED.get().map_or(0, |sh| crate::island::hwnd(sh));
         let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;

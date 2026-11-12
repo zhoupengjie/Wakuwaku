@@ -13,6 +13,7 @@ import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
+import type { TbLayout } from './island-vars.ts'
 
 export function wmenuPart(core: IslandCore) {
   const {
@@ -243,12 +244,13 @@ export function wmenuPart(core: IslandCore) {
       }
       case 'group': {
         const next = entry && neighbourOf(entry.id)
-        return next && keepLayout(Widgets.groupWith(tbLayout(), next.id, entry.id, v, newId))
+        // A whole layout (groupWith gives back what it is given, as Runs).
+        return next && keepLayout(Widgets.groupWith(tbLayout(), next.id, entry.id, v, newId) as TbLayout)
       }
       // Into the group beside it, as its last; its kind kept.
       case 'join': {
         const next = entry && neighbourOf(entry.id)
-        return next && Widgets.isGroup(next) && keepLayout(Widgets.groupWith(tbLayout(), entry.id, next.id, next.type, newId))
+        return next && Widgets.isGroup(next) && keepLayout(Widgets.groupWith(tbLayout(), entry.id, next.id, next.type, newId) as TbLayout)
       }
       case 'regroup':
         return entry && keepLayout(Widgets.regroup(tbLayout(), entry.id, v))

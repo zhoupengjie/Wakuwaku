@@ -70,6 +70,7 @@ import type { Config } from '../shared/config.ts'
 import type { IslandVars, TbLayout } from './island-vars.ts'
 import type { IslandEvent } from './island-state.ts'
 import type { Widget } from './widgets.ts'
+import type { WidgetItem } from './island-vars.ts'
 import type { PickerFace } from './picker.ts'
 import type { SettingsFace } from './settings.ts'
 
@@ -102,6 +103,10 @@ export interface IslandLater {
 // One of her sheet's rows (sprite.ts CLIPS), by a name the code may not
 // know (a mood's, a reaction's): its row, frames and each one's ms.
 export type Clip = (typeof CLIPS)[keyof typeof CLIPS]
+// The names they are found by here: a mood's, a clip's (one the code may
+// not know finds none).
+type Mood = keyof typeof MOOD_CLIP
+type ClipName = keyof typeof CLIPS
 
 // A size the window or the island is given, in the page's px.
 export interface Room {
@@ -268,7 +273,7 @@ export function islandPage(later: IslandLater) {
   const stripInk = (colour?: string) => deeper(colour, isStripLight())
 
   // What she plays when the island opens by itself for each mood.
-  const NUDGE_CLIP = { waiting: 'waiting', done: 'waving', review: 'review', error: 'failed' }
+  const NUDGE_CLIP: Record<string, string> = { waiting: 'waiting', done: 'waving', review: 'review', error: 'failed' }
 
   // How long the island stays open when something happens (longer with
   // Claude's words to read): a prompt, a new version; what the 「她有事告诉
@@ -284,7 +289,7 @@ export function islandPage(later: IslandLater) {
   // The compact island's width, as set (narrow, normal, wide): the same
   // whatever it holds, so it keeps its size while the words change and the
   // widgets take turns. Just her (MIN_W) when there is nothing to say.
-  const WIDTHS = { narrow: 240, normal: 300, wide: 380 }
+  const WIDTHS: Record<string, number> = { narrow: 240, normal: 300, wide: 380 }
   // On a Mac with a notch (st.screenTop) the compact island wraps round it:
   // her in the ear at its left, the clock in the ear at its right, the words
   // (which the notch would hide) left out. An ear this wide.
@@ -345,7 +350,7 @@ export function islandPage(later: IslandLater) {
   // Within the room the capsule has in Windows' taskbar (roomPx; 0: no
   // limit): as set, else narrow, else 0, her portrait alone (anchor.ts
   // capsuleWidth; isTight, TIGHT_W: a round capsule).
-  const slotWidth = () => (st.screenTop?.notch ? st.screenTop.notch + 2 * EAR : Anchor.capsuleWidth(WIDTHS[st.config.islandWidth] || WIDTHS.normal, roomPx(), WIDTHS))
+  const slotWidth = () => (st.screenTop?.notch ? st.screenTop.notch + 2 * EAR : Anchor.capsuleWidth(WIDTHS[st.config.islandWidth as string] || WIDTHS.normal, roomPx(), WIDTHS))
   const TIGHT_W = 36
   const isTight = () => !st.screenTop?.notch && slotWidth() === 0
   // The window without extra room (main's ISLAND), and the island's distance
@@ -516,13 +521,14 @@ export function islandPage(later: IslandLater) {
   // A strip across the screen (the taskbar): the other sessions have tags in it.
   // The taskbar's strip the desktop's picture through (mica.ts), neither
   // solid nor clear.
-  const isMica = () => isOn() && home() === 'taskbar' && !['black', 'clear'].includes(st.config.taskbarMaterial)
+  // (A setting not given is none of those named: looked for as a string.)
+  const isMica = () => isOn() && home() === 'taskbar' && !['black', 'clear'].includes(st.config.taskbarMaterial as string)
   // The taskbar's strip clear, the desktop itself through it; while a window
   // is maximized or full screen on its display (taskbar/ "max") it fills
   // in, as Mica (its default) or solid, unless it is to stay clear always
   // (taskbarClearWhen).
   const isClear = () => isOn() && home() === 'taskbar' && st.config.taskbarMaterial === 'clear'
-  const clearWhen = () => (['solid', 'always'].includes(st.config.taskbarClearWhen) ? st.config.taskbarClearWhen : 'mica')
+  const clearWhen = () => (['solid', 'always'].includes(st.config.taskbarClearWhen as string) ? st.config.taskbarClearWhen! : 'mica')
   const isFilled = () => isClear() && clearWhen() !== 'always' && st.taskWindows.some(a => (a.windows || []).some(w => w.max && !w.min))
   // How light the desktop under the clear strip is (st.backdrop, mica.ts
   // lightness), the strip's as a whole, by its mean: true light enough for
@@ -546,7 +552,7 @@ export function islandPage(later: IslandLater) {
   // The screen's edge the taskbar is along (taskbarEdge): bottom, as
   // Windows' own, or top, left, right. Its look turns with it (style.css
   // tb-top, tb-left, tb-right).
-  const tbEdge = () => (isSplit() ? 'top' : home() === 'taskbar' && ['top', 'left', 'right'].includes(st.config.taskbarEdge) ? st.config.taskbarEdge : 'bottom')
+  const tbEdge = () => (isSplit() ? 'top' : home() === 'taskbar' && ['top', 'left', 'right'].includes(st.config.taskbarEdge as string) ? st.config.taskbarEdge! : 'bottom')
   // The top bar and the dock (display split, a home of its own beside the
   // island and the taskbar): the strip is a top bar, Start and the programs
   // in the dock at the foot (bars.rs, bar.ts), not on it.
@@ -573,7 +579,7 @@ export function islandPage(later: IslandLater) {
   // round end, her session's clock under it, no words (the tooltip and the
   // open island have them): a circle with no clock.
   const SIDE_CLOCK = 4 + 13 + 7
-  function sideCapsule(timed) {
+  function sideCapsule(timed: boolean) {
     const width = isCapsule() ? TASKBAR_H - 2 * CAPSULE_Y : TASKBAR_H
     const inset = (width - TASK_HEAD) / 2
     return { width, height: timed ? inset + TASK_HEAD + SIDE_CLOCK : width }
@@ -633,11 +639,11 @@ export function islandPage(later: IslandLater) {
     const node = el('span', 'still-her')
     node.style.cssText = `width:${px}px;height:${px}px;box-shadow:0 0 0 1.5px ${hue()[st.now.mood] || hue().idle}`
     const sheet = el('span', 'sheet')
-    const clip = MOOD_CLIP[st.now.mood]
+    const clip = MOOD_CLIP[st.now.mood as Mood]
     sheet.dataset.clip = clip
     sheet.style.cssText = `transform:translate(${-(CELL_W * scale - px) / 2}px, -2px) scale(${scale})`
     sheetImage(sheet, st.spriteUrl)
-    showFrame(sheet, CLIPS[clip].row, frameNow(CLIPS[clip]))
+    showFrame(sheet, CLIPS[clip as ClipName].row, frameNow(CLIPS[clip as ClipName]))
     node.append(sheet)
     playPortraits()
     return node
@@ -656,12 +662,13 @@ export function islandPage(later: IslandLater) {
     st.portraitTimer = setInterval(() => {
       const sheets = document.querySelectorAll('.still-her .sheet[data-clip]')
       if (!sheets.length || !isOn() || document.hidden || st.quiet) {
-        clearInterval(st.portraitTimer)
+        // (Its own interval: set.)
+        clearInterval(st.portraitTimer!)
         st.portraitTimer = null
         return
       }
       for (const sheet of sheets) {
-        const clip = CLIPS[sheet.dataset.clip]
+        const clip = CLIPS[sheet.dataset.clip as ClipName]
         if (clip) showFrame(sheet, clip.row, frameNow(clip))
       }
     }, 60)
@@ -673,7 +680,7 @@ export function islandPage(later: IslandLater) {
   function filmOf(sheet: HTMLElement): HTMLElement {
     let film = sheet.querySelector('.film')
     if (!film) {
-      film = el('span', 'film')
+      film = el('span', 'film') as HTMLSpanElement
       sheet.append(film)
     }
     return film
@@ -775,7 +782,7 @@ export function islandPage(later: IslandLater) {
     const tucked = !!st.screenTop?.notch
     body.classList.toggle('tucked', tucked)
     compact.style.width = tucked
-      ? `${st.screenTop.notch}px`
+      ? `${st.screenTop!.notch}px`
       : tight
         ? `${TIGHT_W}px`
         : isBare && !st.screenTop?.notch
@@ -802,7 +809,7 @@ export function islandPage(later: IslandLater) {
 
   // A pin at the capsule's end: its glyph and value; the monitor its
   // readings, or (short of room) its glyph alone.
-  function pinHTML(w) {
+  function pinHTML(w: Widget) {
     const color = ink(w.color) || hue().idle
     if (Widgets.partsOf(w)) return `<span class="wpin wmon"><span class="wmfull">${Widgets.partsHTML(w)}</span><span class="wmico" style="color:${color}">${Widgets.iconHTML(w, st.lang)}</span></span>`
     return `<span class="wpin" style="color:${color}">${Widgets.iconHTML(w, st.lang)}<b>${WCards.esc(WCards.briefOf(w, { lang: st.lang, light: st.inkLight, detailed: isDetailed() }).value)}</b></span>`
@@ -812,8 +819,8 @@ export function islandPage(later: IslandLater) {
   // shows how (the values going from the left first, the monitor's
   // readings last, then the others' that fit back; then the leftmost out,
   // a "+k" before the rest, their names in its tip).
-  function fitPinned(pinned, room) {
-    const nodes = [...pinned.children]
+  function fitPinned(pinned: HTMLElement, room: number) {
+    const nodes = [...pinned.children as HTMLCollectionOf<HTMLElement>]
     const sizes = nodes.map(n => {
       const full = n.offsetWidth
       n.classList.add('short')
@@ -842,7 +849,7 @@ export function islandPage(later: IslandLater) {
   // middle run where it is centred (her capsule before it), else the free
   // room between the runs (growNode, and the middle's margin where nothing
   // is centred). head: what the capsule takes besides its pins.
-  function pinRoom(head) {
+  function pinRoom(head: number) {
     if (home() !== 'taskbar') return BASE.width - 48 - head
     if (isSide() || !st.taskbarBuilt) return Infinity
     const pad = isCapsule() ? CAPSULE_X : 0
@@ -904,7 +911,7 @@ export function islandPage(later: IslandLater) {
   // until the view is ready, and whenever views may not show (nobody about,
   // animations off, the watchdog's while; and where this page cannot keep a
   // frame loaded as it draws its lines anew each second: moveBefore).
-  const islandStyle = name => getComputedStyle(island).getPropertyValue(name).trim()
+  const islandStyle = (name: string) => getComputedStyle(island).getPropertyValue(name).trim()
   const islandViews =
     ROLE === 'island'
       ? Views.boot({
@@ -919,7 +926,7 @@ export function islandPage(later: IslandLater) {
         })
       : null
 
-  function widgetRow(widget, isShown) {
+  function widgetRow(widget: Widget, isShown: boolean) {
     const ctx = isleCtx()
     const card = WCards.hasCard(widget)
     const open = card && st.cardFor === widget.id
@@ -949,7 +956,8 @@ export function islandPage(later: IslandLater) {
   function fillExpanded() {
     const detailed = isDetailed()
     const name = Status.nameOf(st.now, detailed)
-    const title = (isNudging() && st.nudge.text) || (detailed && name) || t(st.lang, `mood.${st.now.mood}`)
+    // (Open by itself: st.nudge is there, State.nudging.)
+    const title = (isNudging() && st.nudge!.text) || (detailed && name) || t(st.lang, `mood.${st.now.mood}`)
     const sub = detailed
       ? [Status.status(st.lang, st.now), name !== st.now.project ? st.now.project : '']
       : [st.now.project, say(st.lang, st.now.detail)]
@@ -998,10 +1006,10 @@ export function islandPage(later: IslandLater) {
         const row = el('span', 'other')
         canJump(row, x)
         const dot = el('i', 'dot')
-        dot.style.background = hue()[x.mood] || hue().idle
+        dot.style.background = hue()[x.mood as string] || hue().idle
         const what = detailed ? Status.status(st.lang, x, { withClock: false }) : t(st.lang, `island.${x.mood}`)
         const when = el('span', 'when', Status.time(x))
-        when.style.color = hue()[x.mood] || hue().idle
+        when.style.color = hue()[x.mood as string] || hue().idle
         row.append(dot, el('span', 'who', Status.nameOf(x, detailed)), el('span', 'what', what), when)
         list.append(row)
       }
@@ -1012,15 +1020,15 @@ export function islandPage(later: IslandLater) {
     // work not all the island says (2026-10-10). Her capsule's members in
     // their order (deskgrid.ts placement); those on the taskbar or the
     // desktop are there, not here again (one widget, one place).
-    if (st.listedNow.length && !(isNudging() && st.nudge.widget)) {
+    if (st.listedNow.length && !(isNudging() && st.nudge!.widget)) {
       const list = el('span', 'wlist')
       const shown = shownWidget()
       for (const w of st.listedNow) list.append(widgetRow(w, w === shown))
       lines.append(list)
     }
     // A widget that asked to open the island: what it says, over all else.
-    if (isNudging() && st.nudge.widget) {
-      const w = st.nudge.widget
+    if (isNudging() && st.nudge!.widget) {
+      const w = st.nudge!.widget
       const { label, value: bare, detail } = Widgets.words(st.lang, w, isDetailed())
       // Its detail after the value, as in its line (the weather's range).
       const value = [bare, detail].filter(Boolean).join(' · ')
@@ -1048,9 +1056,10 @@ export function islandPage(later: IslandLater) {
     if (old && st.view === 'expanded') st.linesTop = old.scrollTop
     lines.style.maxHeight = Number.isFinite(most) ? `${Math.max(60, Math.floor(most - EXPANDED_PAD_Y))}px` : ''
     // A card's plugin view kept loaded as its card is drawn anew (views.ts park, mount).
-    islandViews?.park()
+    // (Views.boot gives both, park and mount.)
+    islandViews?.park!()
     expanded.replaceChildren(...(isHome() ? [] : [stillHer(48)]), lines)
-    islandViews?.mount()
+    islandViews?.mount!()
     // A card unfolded: the island at its widest, the card as wide as its
     // lines; a widget's menu open in it: as tall as the menu needs.
     expanded.classList.toggle('has-card', !!expanded.querySelector('.icard'))
@@ -1064,19 +1073,21 @@ export function islandPage(later: IslandLater) {
       requestAnimationFrame(() => {
         const now = expanded.querySelector(':scope > .lines')
         const card = now?.querySelector('.icard')
-        if (!card || now.scrollHeight <= now.clientHeight + 1) return
-        const below = card.getBoundingClientRect().top + card.offsetHeight + 4 - now.getBoundingClientRect().bottom
-        if (below > 1) now.scrollTop += below
-        st.linesTop = now.scrollTop
+        // A card found in them: they are there.
+        if (!card || now!.scrollHeight <= now!.clientHeight + 1) return
+        const below = card.getBoundingClientRect().top + card.offsetHeight + 4 - now!.getBoundingClientRect().bottom
+        if (below > 1) now!.scrollTop += below
+        st.linesTop = now!.scrollTop
       })
     }
   }
 
   // On to the next widget (or back), and its turn starts over.
-  function turnWidget(step) {
+  function turnWidget(step: number) {
     if (st.widgets.length < 2) return
     st.widgetAt = (st.widgetAt + step + st.widgets.length) % st.widgets.length
-    clearTimeout(st.spinTimer)
+    // (None: clears nothing.)
+    clearTimeout(st.spinTimer as Timer)
     st.spinTimer = null
     update()
   }
@@ -1088,7 +1099,7 @@ export function islandPage(later: IslandLater) {
   function spin() {
     const sec = Number(st.config.widgetSpin ?? 8)
     if (!(isQuiet() && !st.quiet && st.widgets.length > 1 && sec > 0 && st.view === 'compact')) {
-      clearTimeout(st.spinTimer)
+      clearTimeout(st.spinTimer as Timer)
       st.spinTimer = null
       return
     }
@@ -1102,16 +1113,16 @@ export function islandPage(later: IslandLater) {
   }
 
   // A session with a window to go to: clicking it there goes there.
-  function canJump(node, session) {
+  function canJump(node: HTMLElement, session: { id?: string; jump?: unknown }) {
     if (!session.jump || !session.id) return
     node.dataset.jump = session.id
     node.title = t(st.lang, 'jump.hint')
   }
 
   // To a session's window; when it has none any more, the island says so.
-  function jumpTo(id) {
+  function jumpTo(id: string) {
     pet.jump(id).then(went => {
-      if (!went) nudgeFor(MOOD_CLIP[st.now.mood], t(st.lang, 'jump.notFound'), 2200)
+      if (!went) nudgeFor(MOOD_CLIP[st.now.mood as Mood], t(st.lang, 'jump.notFound'), 2200)
     })
   }
 
@@ -1124,7 +1135,7 @@ export function islandPage(later: IslandLater) {
   function placeHer({ width, height }: Room) {
     if (!isHome()) return
     const s = her.style
-    const portrait = (px, scale, left, top) => {
+    const portrait = (px: number, scale: number, left: number, top: number) => {
       Object.assign(s, { left: `${left}px`, top: `${top}px`, width: `${px}px`, height: `${px}px`, borderRadius: `${px / 2}px` })
       s.setProperty('--ring', hue()[st.now.mood])
       herSheet.style.transform = `translate(${-(CELL_W * scale - px) / 2}px, -2px) scale(${scale})`
@@ -1165,12 +1176,12 @@ export function islandPage(later: IslandLater) {
     // Quiet (nobody at the keyboard or mouse): still, on her mood's first frame.
     // A reaction inside a turn (playReaction) over her mood while it plays.
     const reacts = st.reacting && Date.now() < st.reacting.until
-    const name = st.quiet ? '' : st.view === 'ask' ? 'waiting' : isNudging() ? st.nudge.clip : reacts ? st.reacting.clip : MOOD_CLIP[st.now.mood]
+    const name = st.quiet ? '' : st.view === 'ask' ? 'waiting' : isNudging() ? st.nudge!.clip : reacts ? st.reacting!.clip : MOOD_CLIP[st.now.mood as Mood]
     if (name && name === st.herClip) return
     clearTimeout(st.herTimer)
     st.herClip = name
-    if (!name) return showFrame(herSheet, CLIPS[MOOD_CLIP[st.now.mood]].row, 0)
-    const { row, frames, ms } = CLIPS[name]
+    if (!name) return showFrame(herSheet, CLIPS[MOOD_CLIP[st.now.mood as Mood] as ClipName].row, 0)
+    const { row, frames, ms } = CLIPS[name as ClipName]
     let frame = 0
     const step = () => {
       showFrame(herSheet, row, frame)
@@ -1345,7 +1356,8 @@ export function islandPage(later: IslandLater) {
 
   function sizeOf(name: string): Room {
     const withHer = isHome()
-    if (name === 'settings') return { width: later.Settings.layer.offsetWidth || SETTINGS_W, height: later.Settings.layer.offsetHeight }
+    // Open: the settings' whole face (her own window's stand-in never is).
+    if (name === 'settings') return { width: later.Settings!.layer!.offsetWidth || SETTINGS_W, height: later.Settings!.layer!.offsetHeight }
     if (name === 'ask') {
       return {
         width: panel.offsetWidth + 28 + (withHer ? 108 : 0),
@@ -1449,7 +1461,7 @@ export function islandPage(later: IslandLater) {
   // panel are picker.ts's: the strip's presses go there while editing. The
   // parts' own presses are held back meanwhile; her island lets the pointer
   // through to its slot, to be dragged by it.
-  const editBar = el('div', 'tbedit')
+  const editBar: HTMLDivElement = el('div', 'tbedit')
 
   // A new widget's id, as settings.rs takes it: "w" and up to 15 of a-z 0-9.
   function newId() {
@@ -1498,14 +1510,14 @@ export function islandPage(later: IslandLater) {
     e => {
       const pressed = st.pressedHere
       st.pressedHere = false
-      const what = !pressed && e.button === 0 && st.editLayout && editBar.contains(e.target) && (e.target as HTMLElement).closest('[data-edit]')?.dataset.edit
+      const what = !pressed && e.button === 0 && st.editLayout && editBar.contains(e.target as Node) && (e.target as HTMLElement).closest('[data-edit]')?.dataset.edit
       if (what) editAct(what)
     },
     true,
   )
 
   // opts.picker: from her menu's 添加小工具…, the picker open with it.
-  function editTaskbar(opts?) {
+  function editTaskbar(opts?: { picker?: boolean } | null) {
     if (home() !== 'taskbar') return
     if (st.editLayout) return opts?.picker && later.Picker?.open()
     if (isSetting()) later.Settings?.close?.('edit')
@@ -1537,7 +1549,7 @@ export function islandPage(later: IslandLater) {
   // Its words (editing the taskbar, kept as it goes), 添加小工具 (pressed
   // while the picker is open) and 完成.
   function drawEditBar() {
-    const button = (what, label) => {
+    const button = (what: string, label: string) => {
       const b = el('button', `tbe tbe-${what}`, label)
       b.type = 'button'
       b.dataset.edit = what
@@ -1587,10 +1599,10 @@ export function islandPage(later: IslandLater) {
     update()
   }
 
-  editBar.addEventListener('click', e => editAct(e.target.closest('[data-edit]')?.dataset.edit))
+  editBar.addEventListener('click', e => editAct((e.target as HTMLElement).closest('[data-edit]')?.dataset.edit))
 
   // One of the bar's buttons, pressed (a click, or a release alone: above).
-  function editAct(what) {
+  function editAct(what?: string) {
     if (what === 'done') endEdit(true)
     else if (what === 'add') later.Picker?.toggle()
   }
@@ -1676,7 +1688,7 @@ export function islandPage(later: IslandLater) {
     if (st.screenTop?.notch && st.view === 'settings' && !st.settingsUsed) {
       st.settingsIdleTimer ||= setTimeout(() => {
         st.settingsIdleTimer = 0
-        if (!st.settingsUsed && isSetting()) later.Settings?.close('unused')
+        if (!st.settingsUsed && isSetting()) later.Settings?.close!('unused')
       }, PEEK_MS)
     } else if (st.view !== 'settings') {
       clearTimeout(st.settingsIdleTimer)
@@ -1763,7 +1775,7 @@ export function islandPage(later: IslandLater) {
   function tickTimes() {
     if (st.view !== 'compact') return update()
     let resized = false
-    const put = (node, text) => {
+    const put = (node: HTMLElement | null, text: string) => {
       if (!node || node.textContent === text) return
       if (node.textContent.length !== text.length) resized = true
       node.textContent = text
@@ -1878,7 +1890,7 @@ export function islandPage(later: IslandLater) {
     // the picker and its toasts about it too (picker.css --isl-cx).
     body.classList.toggle('isl-embed', isEmbedded())
     if (home() !== 'taskbar') {
-      st.slotMiddle = isEmbedded() && Number.isFinite(st.islandMx) ? st.islandMx / (devicePixelRatio || 1) : null
+      st.slotMiddle = isEmbedded() && Number.isFinite(st.islandMx) ? st.islandMx! / (devicePixelRatio || 1) : null
       if (st.slotMiddle != null) root.setProperty('--isl-cx', `${onPixels(st.slotMiddle)}px`)
       else root.removeProperty('--isl-cx')
       placeMid()
@@ -1889,7 +1901,8 @@ export function islandPage(later: IslandLater) {
   // settings while they are open), above the pet otherwise.
   function seatPanel() {
     if (!isOn()) return
-    const seat = isSetting() ? later.Settings.askSlot : island
+    // Open: the settings' whole face, their banner's place in it.
+    const seat = isSetting() ? later.Settings!.askSlot! : island
     if (panel.parentElement !== seat) seat.append(panel)
   }
 
@@ -1970,7 +1983,8 @@ export function islandPage(later: IslandLater) {
     const next = Flow.release(st.flowState, performance.now())
     if (next === st.flowState) return
     st.flowState = next
-    animateRing(next.ring)
+    // A new state from release: its ring let go.
+    animateRing(next.ring!)
   }
 
   // Only the widgets' words changed (the monitor's readings every couple
@@ -1984,7 +1998,7 @@ export function islandPage(later: IslandLater) {
     }
     if (what === 'place') deskPlace(args)
     // A board took them from the library: off the taskbar (one place).
-    if (what === 'unbar' && Array.isArray(args?.items)) offBar(args.items.filter(it => it && (typeof it.id === 'string' || typeof it.plugin === 'string')).slice(0, 8))
+    if (what === 'unbar' && Array.isArray(args?.items)) offBar(args.items.filter((it: WidgetItem | null) => it && (typeof it.id === 'string' || typeof it.plugin === 'string')).slice(0, 8))
   })
 
   pet.onWidgets(({ widgets: all }) => {
@@ -2084,7 +2098,7 @@ export function islandPage(later: IslandLater) {
         // left, as a notch app's does: the settings too, unless a field in
         // them is being typed in (the user's call, 2026-10-14).
         const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')
-        if (st.screenTop?.notch && isSetting() && !typing) later.Settings?.close('left')
+        if (st.screenTop?.notch && isSetting() && !typing) later.Settings?.close!('left')
         if (st.peek) setPeek(false)
         else update()
       }, HOVER_CLOSE_MS)
@@ -2168,7 +2182,7 @@ export function islandPage(later: IslandLater) {
     )
     target.addEventListener('pointerdown', e => {
       const session = e.button === 0 && st.view === 'expanded' && (e.target as HTMLElement).closest('[data-jump]')
-      st.pressed = { id: session ? session.dataset.jump : '', at: Date.now() }
+      st.pressed = { id: session ? session.dataset.jump! : '', at: Date.now() }
     })
     target.addEventListener('contextmenu', e => {
       if ((e.target as HTMLElement).matches('input, textarea')) return
@@ -2307,7 +2321,7 @@ export function islandPage(later: IslandLater) {
   }
   // The preview's gallery (tools/preview boot.js freeze): the ring drawn as
   // it is ms into its turning (the step showing then), its steps stopped.
-  function ringAt(ms) {
+  function ringAt(ms: number) {
     const r = st.flowState.ring
     const s = r?.turnings?.[r.turnings.length - 1]
     if (!s || !isRinging()) return
@@ -2315,7 +2329,7 @@ export function islandPage(later: IslandLater) {
     const angle = Flow.stepsOf(r, s.t0 + ms)[0]?.angle ?? Flow.angleAt(r, s.t0 + ms)
     for (const sp of spins) sp.style.transform = `rotate(${angle}deg)`
   }
-  const islandFace = { accent: () => st.look.accent || null, isOn, isOpen: () => isOn() && st.view !== 'compact' && !body.classList.contains('isl-stowed'), peek: (on?: boolean) => setPeek(typeof on === 'boolean' ? on : st.view === 'compact'), changed: update, reach, absorb, settingsMax, tbPresets: TB_PRESETS, tbPreset: () => presetOf(st.config.taskbarLayout), tbWithPreset: name => TB_PRESETS[name] && Widgets.withParts(TB_PRESETS[name], tbLayout(st.config.taskbarLayout)), editTaskbar, whereOf, placeWidget, placeNow, anchor, notched: () => !!st.screenTop?.notch, ringAt, views: islandViews }
+  const islandFace = { accent: () => st.look.accent || null, isOn, isOpen: () => isOn() && st.view !== 'compact' && !body.classList.contains('isl-stowed'), peek: (on?: boolean) => setPeek(typeof on === 'boolean' ? on : st.view === 'compact'), changed: update, reach, absorb, settingsMax, tbPresets: TB_PRESETS, tbPreset: () => presetOf(st.config.taskbarLayout), tbWithPreset: (name: string) => TB_PRESETS[name] && Widgets.withParts(TB_PRESETS[name], tbLayout(st.config.taskbarLayout)), editTaskbar, whereOf, placeWidget, placeNow, anchor, notched: () => !!st.screenTop?.notch, ringAt, views: islandViews }
 
   return { face: islandFace, isle }
 }

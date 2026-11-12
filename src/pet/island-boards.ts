@@ -10,6 +10,9 @@ import * as DeskGrid from './deskgrid.ts'
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
+import type { WidgetItem } from './island-vars.ts'
+import type { Board, Entry as DeskEntry } from './deskgrid.ts'
+import type { Entry, Widget } from './widgets.ts'
 
 export function boardsPart(core: IslandCore) {
   const {
@@ -22,25 +25,26 @@ export function boardsPart(core: IslandCore) {
   // Their names as the desktop's pages give them: their own, else 工作台,
   // numbered when several have none.
   const deskBoards = () => (Array.isArray(st.config.deskLayout) ? st.config.deskLayout : []).filter(DeskGrid.isBoard)
-  function boardName(b) {
+  function boardName(b: Board) {
     if (b.name) return b.name
     const unnamed = deskBoards().filter(x => !x.name)
     return unnamed.length > 1 ? t(st.lang, 'desk.boardN', { n: unnamed.findIndex(x => x.id === b.id) + 1 }) : t(st.lang, 'desk.board')
   }
   // The size a widget takes in a board: small where it has it.
-  function boardSize(item) {
+  function boardSize(item: WidgetItem) {
     const m = item.plugin ? { type: 'plugin', of: item.plugin } : { type: 'widget', of: item.id }
     const sizes = DeskGrid.sizesOfEntry(m, st.allWidgets)
     return sizes.includes('s') ? 's' : sizes[0] || 's'
   }
   // Into a board (its first empty cell), or a new board with it: off the
   // taskbar and wherever else it was on the desktop first (one place).
-  function toBoard(item, boardId) {
+  function toBoard(item: WidgetItem, boardId: string) {
     const old = Array.isArray(st.config.deskLayout) ? st.config.deskLayout : []
-    const m = item.plugin ? { type: 'plugin', of: item.plugin } : { type: 'widget', of: item.id }
+    // An item is its plugin's, else its own by its id.
+    const m = item.plugin ? { type: 'plugin', of: item.plugin } : { type: 'widget', of: item.id! }
     const size = boardSize(item)
     const board = old.find(e => e.id === boardId && DeskGrid.isBoard(e))
-    let next
+    let next: DeskEntry[]
     if (board) {
       const spot = DeskGrid.boardFirst(board, size)
       if (!spot) return
@@ -53,7 +57,7 @@ export function boardsPart(core: IslandCore) {
   }
   // A whole desktop layout kept as what changed in it (desk.rs desk_keep
   // merges it with the pages'; a new board goes to the pointer's display).
-  function keepDeskLayout(next) {
+  function keepDeskLayout(next: DeskEntry[]) {
     const old = Array.isArray(st.config.deskLayout) ? st.config.deskLayout : []
     const was = new Map(old.map(e => [e.id, JSON.stringify(e)]))
     const ids = new Set(next.map(e => e.id))
@@ -69,7 +73,7 @@ export function boardsPart(core: IslandCore) {
   // On the desktop (desk.rs, deskgrid.ts): medium where it has it; where it
   // stands the desktop's page says (the display the pointer is on, the top
   // right, clear of the icons).
-  function putOnDesk(item) {
+  function putOnDesk(item: WidgetItem) {
     if (DeskGrid.has(st.config.deskLayout, item)) return
     const w = item.plugin ? st.allWidgets.find(x => x.plugin === item.plugin) : st.allWidgets.find(x => x.id === item.id)
     const sizes = w ? Widgets.sizesOf(w) : ['s', 'm']
@@ -78,13 +82,13 @@ export function boardsPart(core: IslandCore) {
     const icon = (w?.icon || item.icon) in Widgets.ICONS ? { icon: w?.icon || item.icon } : {}
     keepDesk([{ id: newId(), ...source, size: sizes.includes('m') ? 'm' : 's', ...icon, ...(label ? { name: label } : {}) }])
   }
-  function keepDesk(entries) {
+  function keepDesk(entries: DeskEntry[]) {
     st.config.deskLayout = [...(Array.isArray(st.config.deskLayout) ? st.config.deskLayout : []), ...entries]
     pet.desk.keep(entries, [])
     takeWidgets(st.allWidgets)
     update()
   }
-  function deskOff(items) {
+  function deskOff(items: WidgetItem[]) {
     let next = Array.isArray(st.config.deskLayout) ? st.config.deskLayout : []
     for (const it of items) next = DeskGrid.without(next, it, newId)
     st.config.deskLayout = next
@@ -92,7 +96,7 @@ export function boardsPart(core: IslandCore) {
   }
   // From the strip or the capsule to the desktop: a group as a stack there
   // (medium where all of it has that), one alone as itself.
-  function toDesk(w, entry, member) {
+  function toDesk(w: Widget | null, entry: Entry | null, member: number) {
     if (entry && Widgets.isGroup(entry) && member < 0) {
       const items = entry.items.map(m => ({ type: m.type, of: m.of, ...(m.name ? { name: m.name } : {}), ...(m.icon ? { icon: m.icon } : {}) }))
       const sizes = DeskGrid.sizesOfEntry({ type: 'stack', items }, st.allWidgets)
@@ -107,7 +111,8 @@ export function boardsPart(core: IslandCore) {
   // A desktop page's asking (desk.rs desk_ask): a widget's settings, or
   // widgets put elsewhere; a stack onto the taskbar as a stack there.
   function deskPlace({ items = [], where, stack }: { items?: { id?: string; plugin?: string }[]; where?: string; stack?: boolean } = {}) {
-    if (!['bar', 'isle'].includes(where) || !items.length) return
+    // None is in neither.
+    if (!['bar', 'isle'].includes(where as string) || !items.length) return
     if (where === 'bar' && home() !== 'taskbar') return
     if (where === 'bar' && stack && items.length >= 2) {
       deskOff(items)
@@ -116,15 +121,15 @@ export function boardsPart(core: IslandCore) {
       layout.right.unshift({ id: newId(), type: 'stack', items: members })
       return keepLayout(layout)
     }
-    for (const it of items) placeWidget(it, where)
+    for (const it of items) placeWidget(it, where!)
   }
 
   // Back in the island: off the strip (out of its group), and on there.
-  function backToIsland(w, entry, member) {
+  function backToIsland(w: Widget | null, entry: Entry, member: number) {
     if (Widgets.isGroup(entry) && member >= 0) removeMember(entry.id, member)
     else removeEntry(entry.id)
     const id = w?.id || (entry.type === 'widget' ? entry.of : null)
-    if (id && (st.config.widgetsOff || []).includes(id)) pet.settings.set({ widgetsOff: st.config.widgetsOff.filter(x => x !== id) })
+    if (id && (st.config.widgetsOff || []).includes(id)) pet.settings.set({ widgetsOff: st.config.widgetsOff!.filter(x => x !== id) })
   }
 
   return { backToIsland, boardName, boardSize, deskBoards, deskOff, deskPlace, keepDesk, keepDeskLayout, putOnDesk, toBoard, toDesk }

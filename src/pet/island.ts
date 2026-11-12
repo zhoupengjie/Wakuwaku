@@ -66,8 +66,10 @@ import { keysPart } from './island-keys.ts'
 import { ringPart } from './island-ring.ts'
 import { dropPart } from './island-drop.ts'
 import { islandVars, MIN_W } from './island-vars.ts'
+import * as State from './island-state.ts'
 import type { Config } from '../shared/config.ts'
 import type { TbLayout } from './island-vars.ts'
+import type { IslandEvent } from './island-state.ts'
 
 // The island's parts as each is made (island.ts, in its section's place):
 // what each hands back, reached by a part made before it (pieces.<name>), or
@@ -90,6 +92,11 @@ export interface IslandParts {
 // What the page remembers, all of it (island-vars.ts): st.<name> here and
 // in every part.
 const st = islandVars(Flow.idle())
+// Its shape and what is being done with it (st.view, st.isHover, st.nudge,
+// st.pull...: island-state.ts) move on here alone, by what happened.
+function go(e: IslandEvent) {
+  Object.assign(st, State.next(State.stateOf(st), e))
+}
 
 // Brighter than the pet's colours: these sit on black. On the light
 // taskbar (Windows' light mode) the same, deep enough to read on white.
@@ -442,7 +449,7 @@ const isHome = () => !!st.spriteUrl && (st.config.out !== true || st.isComingHom
 const isAsking = () => isOn() && !panel.hidden
 // The settings open in the island (settings.ts).
 const isSetting = () => isOn() && !!Settings?.isOpen()
-const isNudging = () => !!st.nudge && Date.now() < st.nudge.until
+const isNudging = () => State.nudging(st, Date.now())
 // The specifics on screen (session names, commands, replies), unless turned off.
 const isDetailed = () => st.config.details !== false
 // Neither Claude Code nor Codex connected (shared.rs payload, unconnected),
@@ -1177,7 +1184,7 @@ function fadeGround() {
 // is up). A part takes from it what it uses.
 const pieces = {} as IslandParts
 const core = {
-  st, pieces, ANCHORED, Anchor, BODY_H, BODY_W, BREAK_PX, CAPSULE_X, CELL_W, CLIPS, DROP_R, Flow, MOOD_CLIP,
+  st, pieces, go, ANCHORED, Anchor, BODY_H, BODY_W, BREAK_PX, CAPSULE_X, CELL_W, CLIPS, DROP_R, Flow, MOOD_CLIP,
   PEEK_MS, PER_PX, PULL_ROOM, REACH_R, REACH_SHARE, REACTIONS, TASKBAR_GAP, TASKBAR_H, Widgets, across,
   afterSpring, along, anchor, animateHer, atBottom, body, clearWhen, compact, crossHi, crossLo, dropHer,
   dropSheet, el, endEdit, endNudge, face, flow, gooDrop, gooIsland, gooNeck, her, herTalks, hi, hintAccent,
@@ -1374,7 +1381,7 @@ function editTaskbar(opts?) {
   // Closed, should it have been open under the pointer (its menu came
   // from it): it lets the pointer through now, and would hear no leaving.
   clearTimeout(st.hoverTimer)
-  st.isHover = false
+  go({ type: 'hover', on: false })
   body.classList.add('tb-editing')
   drawEditBar()
   document.body.append(editBar)
@@ -1498,11 +1505,10 @@ barRest.addEventListener(
 function update() {
   clearInterval(st.clockTimer)
   // While she is being pulled out, the pull has the island.
-  if (!isOn() || (st.pull?.started && !st.pull.carrying) || st.isAbsorbing) return
-  // A prompt answered: the island closes rather than lingering open.
-  if (st.view === 'ask' && !isAsking()) st.nudge = null
+  if (!isOn() || State.held(st)) return
+  // Its shape (a prompt answered: the island closes rather than lingering open).
   const was = st.view
-  st.view = isSetting() ? 'settings' : isAsking() ? 'ask' : st.isHover || isNudging() || st.peek ? 'expanded' : 'compact'
+  go({ type: 'draw', settings: isSetting(), asking: isAsking(), now: Date.now() })
   // Open, for whatever reason: what happened has been seen (its dot and
   // its ring go), and what the island would have shown by itself is in it.
   if (st.view !== 'compact') {
@@ -1637,7 +1643,7 @@ function nudgeFor(clip, text, ms = NUDGE_MS, widget = null, { kind = null, after
   // In the notch nothing opens by itself (done, failed, a hello, a widget):
   // only a prompt, which Claude waits on (the user's call, 2026-10-14).
   if (st.screenTop?.notch) return update()
-  st.nudge = { until: Date.now() + ms, clip, text, widget, kind, after: Number.isFinite(after) ? after : NUDGE_MS }
+  go({ type: 'nudge', nudge: { until: Date.now() + ms, clip, text, widget, kind, after: Number.isFinite(after) ? after : NUDGE_MS } })
   clearTimeout(st.nudgeTimer)
   if (Number.isFinite(ms)) st.nudgeTimer = setTimeout(endNudgeLater, ms)
   update()
@@ -1645,7 +1651,7 @@ function nudgeFor(clip, text, ms = NUDGE_MS, widget = null, { kind = null, after
 
 // Its time up.
 function endNudgeLater() {
-  st.nudge = null
+  go({ type: 'unnudge' })
   update()
 }
 
@@ -1655,14 +1661,14 @@ function endNudgeLater() {
 // across has seen it too (main counts it so: island.rs hover).
 function seenNudge() {
   if (!st.nudge || Number.isFinite(st.nudge.until)) return
-  st.nudge.until = Date.now() + st.nudge.after
+  go({ type: 'seen', now: Date.now() })
   clearTimeout(st.nudgeTimer)
   st.nudgeTimer = setTimeout(endNudgeLater, st.nudge.after)
 }
 
 // Open by itself no more: what opened it has been seen.
 function endNudge() {
-  st.nudge = null
+  go({ type: 'unnudge' })
   clearTimeout(st.nudgeTimer)
 }
 
@@ -1688,8 +1694,7 @@ function pressNudge() {
 function dismiss() {
   endNudge()
   clearTimeout(st.hoverTimer)
-  st.isHover = false
-  st.dismissed = true
+  go({ type: 'dismiss' })
   update()
 }
 
@@ -1765,12 +1770,9 @@ function place() {
     clearTimeout(st.dropTimer)
     clearTimeout(st.roomTimer)
     body.classList.remove('pulling', 'settling', 'reaching', 'has-her', 'compact-her')
-    st.pull = null
-    st.isReaching = false
-    st.isAbsorbing = false
+    go({ type: 'off' })
     st.herClip = null
     st.room = null
-    st.view = ''
     st.herShown = false
   }
 }
@@ -1784,7 +1786,7 @@ pet.onUpdate(data => {
     st.oledOn = !!st.config.oledShift
     oledShift()
   }
-  if (st.config.out !== true) st.isComingHome = false
+  if (st.config.out !== true) go({ type: 'homecoming-over' })
   st.herUp = data.herUp === true
   st.spriteUrl = data.sprite
   st.second = data.second || null
@@ -1921,7 +1923,7 @@ for (const target of [island]) {
     st.hoverTimer = setTimeout(() => {
       // Closed by a press under this pointer (dismiss): not opened by it again.
       if (st.dismissed) return
-      st.isHover = true
+      go({ type: 'rest' })
       update()
     }, HOVER_OPEN_MS)
   })
@@ -1929,15 +1931,17 @@ for (const target of [island]) {
     // Pulling her out keeps the window's pointer, wherever it goes.
     if (!st.pull?.started) pet.hover(false)
     // Off the island it was closed under: coming back is a new hover.
-    st.dismissed = false
+    go({ type: 'leave' })
     clearTimeout(st.hoverTimer)
     st.hoverTimer = setTimeout(() => {
       // Open by itself, rested on and left: it has been seen (as Rust
       // counts it once the pointer leaves, island.rs hover), so it closes
       // now, not when its time is up. Only passed across, the hover never
       // taken, it stays open.
-      if (st.isHover && isNudging()) endNudge()
-      st.isHover = false
+      const had = st.nudge
+      go({ type: 'gone', now: Date.now() })
+      // Closed so: its time stops with it (as endNudge's).
+      if (had && !st.nudge) clearTimeout(st.nudgeTimer)
       // In the notch, whatever was open goes back once the pointer has
       // left, as a notch app's does: the settings too, unless a field in
       // them is being typed in (the user's call, 2026-10-14).
@@ -1996,7 +2000,7 @@ for (const target of [island]) {
       // (one at a time); the island stays open for it.
       if (w && WCards.hasCard(w)) {
         if (isNudging()) endNudge()
-        st.isHover = true
+        go({ type: 'hover', on: true })
         return showCard(st.cardFor === w.id ? null : w.id)
       }
       if (at >= 0) turnWidget(at - (st.widgetAt % st.widgets.length))

@@ -14,7 +14,7 @@ import type { IslandCore } from './island.ts'
 
 export function lookPart(core: IslandCore) {
   const {
-    st, pieces, PEEK_MS, TASKBAR_H, body, clearWhen, el, endNudge, home, isCapsule, isClear, isFilled,
+    st, pieces, go, PEEK_MS, TASKBAR_H, body, clearWhen, el, endNudge, home, isCapsule, isClear, isFilled,
     isLight, isMica, isOn, isSide, isSlim, isStripLight, island, islandViews, placeAnchor, sendSolid, stripH,
     t, update,
   } = core
@@ -60,7 +60,7 @@ export function lookPart(core: IslandCore) {
   function setPeek(on) {
     if (on !== st.peek) console.log(`island: peek ${on ? 'open' : 'closed'}`)
     if (!on) endNudge()
-    st.peek = on
+    go({ type: 'peek', on })
     clearTimeout(st.peekTimer)
     if (st.peek) st.peekTimer = setTimeout(() => !st.isHover && setPeek(false), PEEK_MS)
     update()

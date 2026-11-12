@@ -12,7 +12,7 @@ import type { IslandCore } from './island.ts'
 
 export function ringPart(core: IslandCore) {
   const {
-    st, pieces, ANCHORED, CLIPS, Flow, REACTIONS, animateHer, body, compact, flow, her, herTalks, hintAccent,
+    st, pieces, go, ANCHORED, CLIPS, Flow, REACTIONS, animateHer, body, compact, flow, her, herTalks, hintAccent,
     home, hue, ink, isCapsule, isHinting, isHome, isNudging, isOn, isRinging, isSide, island, newsDot,
     nudgeFor, spins, taskHead, update,
   } = core
@@ -332,10 +332,10 @@ export function ringPart(core: IslandCore) {
     const p = st.pending
     st.pending = null
     if (Date.now() > p.until) return
-    st.nudge = { until: Date.now() + p.ms, clip: p.clip, text: p.text, widget: p.widget }
+    go({ type: 'nudge', nudge: { until: Date.now() + p.ms, clip: p.clip, text: p.text, widget: p.widget } })
     clearTimeout(st.nudgeTimer)
     st.nudgeTimer = setTimeout(() => {
-      st.nudge = null
+      go({ type: 'unnudge' })
       update()
     }, p.ms)
   }

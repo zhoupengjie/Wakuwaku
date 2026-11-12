@@ -1,9 +1,12 @@
 // What her home's page remembers (island.ts and its parts, island-*.ts):
 // every value that changes as the page runs, in one object made as the page
 // starts (islandVars: st in island.ts, handed to each part in its core),
-// read and written as st.<name> wherever it is used. Only types and the
-// values they start at: nothing here runs or touches the page.
+// read and written as st.<name> wherever it is used; its shape and what is
+// being done with it (IslandState: st.view, st.isHover, st.nudge, st.pull...)
+// read alone, moved on by island-state.ts's events (island.ts go). Only
+// types and the values they start at: nothing here runs or touches the page.
 import type * as Flow from './flow.ts'
+import { initial, type IslandState } from './island-state.ts'
 import type { Config } from '../shared/config.ts'
 
 // The compact island at its narrowest: just her, when there is nothing to say.
@@ -53,7 +56,7 @@ export interface TbLayout {
   right: any[]
 }
 
-export interface IslandVars {
+export interface IslandVars extends IslandState {
   // --- What she is told ------------------------------------------------------------
   // The page's language, and what pet:update said last.
   lang: string
@@ -100,24 +103,11 @@ export interface IslandVars {
   islandRoom: number
 
   // --- The shapes -----------------------------------------------------------------
-  // The shape drawn (island.ts update): compact, expanded, ask, settings;
-  // '' before the first draw, and while the island is off.
-  view: string
-  // The pointer rested on it (HOVER_OPEN_MS), and the waits to take it and
-  // to let it go.
-  isHover: boolean
+  // The waits for the pointer resting on it (HOVER_OPEN_MS) and gone from it.
   hoverTimer: Timer | undefined
-  // Closed by a press while it was open by itself (dismiss): the pointer
-  // still on it opens it no more, until it has left and come back.
-  dismissed: boolean
-  // Something just happened: { until, clip, text, widget, kind, after }.
-  // The island opens for a moment, she plays clip, and text (a hello)
-  // replaces the mood's line (island.ts nudgeFor); and its end.
-  nudge: any
+  // A nudge's time (st.nudge: island.ts nudgeFor).
   nudgeTimer: Timer | undefined
-  // Dropped open from the notch by her tray icon (setPeek), for PEEK_MS at
-  // most if the pointer never comes.
-  peek: boolean
+  // The notch's peek (st.peek) going back by itself after PEEK_MS.
   peekTimer: Timer
   // The settings opened in the notch and not used yet (island.ts update):
   // their wait to close, whether a move, a press, a wheel or a key came
@@ -168,23 +158,14 @@ export interface IslandVars {
   herShown: boolean
   // The portraits' clock while she is out (playPortraits).
   portraitTimer: Timer | null
-  // Her being pulled out: { x0, y0, started, broken, at, carrying }. Once
-  // the drop pinches off she is carrying: her window has her, this page only
-  // waits for the button to be let go.
-  pull: any
   // When the last pull ended: the click the browser sends after it (the press
   // on her, the release on the island) is not a click on the island.
   pulledAt: number
   // The drop's frames (she kicks her legs in it).
   dropTimer: Timer | undefined
-  // Reaching for her (her middle on the screen, close), or taking her in;
-  // the reach's drop drawing back.
-  isReaching: boolean
-  isAbsorbing: boolean
+  // The reach's drop drawing back (st.isReaching); the wait for main to say
+  // she is home (st.isComingHome).
   retractTimer: Timer | undefined
-  // Taken back in: she is home from then on for this page, before main says
-  // so, so she lands in her live portrait and not in the still one.
-  isComingHome: boolean
   comingHomeTimer: Timer | undefined
 
   // --- The flow light (island-ring.ts) ---------------------------------------------
@@ -295,6 +276,7 @@ export interface IslandVars {
 
 export function islandVars(flowIdle: ReturnType<typeof Flow.idle>): IslandVars {
   return {
+    ...initial(),
     lang: 'en',
     now: { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] },
     config: {},
@@ -313,13 +295,8 @@ export function islandVars(flowIdle: ReturnType<typeof Flow.idle>): IslandVars {
     islandMx: null,
     islandRoom: 0,
 
-    view: '',
-    isHover: false,
     hoverTimer: undefined,
-    dismissed: false,
-    nudge: null,
     nudgeTimer: undefined,
-    peek: false,
     peekTimer: 0,
     settingsIdleTimer: 0,
     settingsUsed: false,
@@ -346,13 +323,9 @@ export function islandVars(flowIdle: ReturnType<typeof Flow.idle>): IslandVars {
     reactTimer: undefined,
     herShown: false,
     portraitTimer: null,
-    pull: null,
     pulledAt: 0,
     dropTimer: undefined,
-    isReaching: false,
-    isAbsorbing: false,
     retractTimer: undefined,
-    isComingHome: false,
     comingHomeTimer: undefined,
 
     news: null,

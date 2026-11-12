@@ -23,6 +23,7 @@
     "src/pet/agents.ts",
     "src/pet/aim.ts",
     "src/pet/anchor.ts",
+    "src/pet/bridge.ts",
     "src/pet/capsule.ts",
     "src/pet/deskgrid.ts",
     "src/pet/flow.ts",

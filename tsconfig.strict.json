@@ -36,6 +36,7 @@
     "src/pet/hovers.ts",
     "src/pet/mica.ts",
     "src/pet/panel.ts",
+    "src/pet/pet.ts",
     "src/pet/placing.ts",
     "src/pet/presses.ts",
     "src/pet/sprite.ts",

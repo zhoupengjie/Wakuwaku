@@ -14,7 +14,7 @@ const MARGIN = 2 * BLUR
 // The tint for Windows' mode, as its Mica has it: the picture's lightness
 // taken to the tint's, keeping its hues (so any wallpaper is as dark, or
 // as light), then the tint itself over it, part of the way.
-const TINTS = {
+const TINTS: Record<string, { tint: string; luminosity: number; opacity: number }> = {
   dark: { tint: '#202020', luminosity: 0.8, opacity: 0.45 },
   light: { tint: '#f3f3f3', luminosity: 0.8, opacity: 0.5 },
 }
@@ -26,6 +26,17 @@ const FADE_MS = 400
 // it: filling the display (cut to fit), fitting in it, stretched to it, in
 // its middle at its own size, tiled from its corner, or filling all the
 // displays together (span). natural: its size in pixels.
+// The paper as the Rust side sends it (taskbar/win/look.rs, desk.rs): its
+// file (url; none: the colour alone), the colour round it, mon and screen
+// as [x, y, w, h], the display's scale (sf).
+interface Paper {
+  url?: string | null
+  position: string
+  color?: string
+  mon: number[]
+  screen: number[]
+  sf?: number
+}
 // Where place() lays the picture: its box, in the strip's px, and whether
 // it is tiled from that box's corner.
 interface Placed {
@@ -35,11 +46,11 @@ interface Placed {
   h: number
   tile?: boolean
 }
-function place(paper, natural): Placed {
+function place(paper: Paper, natural: { w: number; h: number }): Placed {
   const [mx, my, mw, mh] = paper.mon
   const sf = paper.sf || 1
   const { w: iw, h: ih } = natural
-  const centred = ([bx, by, bw, bh], w, h) => ({ x: bx + (bw - w) / 2, y: by + (bh - h) / 2, w, h })
+  const centred = ([bx, by, bw, bh]: number[], w: number, h: number) => ({ x: bx + (bw - w) / 2, y: by + (bh - h) / 2, w, h })
   switch (paper.position) {
     case 'stretch':
       return { x: mx, y: my, w: mw, h: mh }
@@ -68,14 +79,14 @@ function place(paper, natural): Placed {
 // the display's edges carried on past them (below the strip, beyond its
 // ends: blurred with nothing there, they would darken), blurred, tinted.
 // img: the picture, loaded (none: the colour alone); mode: Windows' (dark, light).
-function draw(paper, img, width, height, mode = 'dark') {
+function draw(paper: Paper, img: HTMLImageElement | null, width: number, height: number, mode = 'dark') {
   const { tint, luminosity, opacity } = TINTS[mode] || TINTS.dark
   const W = Math.ceil((width + 2 * MARGIN) * SCALE)
   const H = Math.ceil((height + 2 * MARGIN) * SCALE)
   const raw = document.createElement('canvas')
   raw.width = W
   raw.height = H
-  const c = raw.getContext('2d')
+  const c = raw.getContext('2d')!
   c.fillStyle = paper.color || '#000'
   c.fillRect(0, 0, W, H)
   c.setTransform(SCALE, 0, 0, SCALE, MARGIN * SCALE, MARGIN * SCALE)
@@ -83,7 +94,8 @@ function draw(paper, img, width, height, mode = 'dark') {
     const at = place(paper, { w: img.naturalWidth, h: img.naturalHeight })
     c.imageSmoothingQuality = 'high'
     if (at.tile) {
-      const tiles = c.createPattern(img, 'repeat')
+      // Null only for a picture not decoded: it is, by now.
+      const tiles = c.createPattern(img, 'repeat')!
       tiles.setTransform(new DOMMatrix().translate(at.x, at.y).scale(at.w / img.naturalWidth, at.h / img.naturalHeight))
       c.fillStyle = tiles
       c.fillRect(-MARGIN, -MARGIN, width + 2 * MARGIN, height + 2 * MARGIN)
@@ -105,7 +117,7 @@ function draw(paper, img, width, height, mode = 'dark') {
   const out = document.createElement('canvas')
   out.width = W
   out.height = H
-  const o = out.getContext('2d')
+  const o = out.getContext('2d')!
   o.filter = `blur(${BLUR * SCALE}px)`
   o.drawImage(raw, 0, 0)
   o.filter = 'none'
@@ -127,7 +139,7 @@ function draw(paper, img, width, height, mode = 'dark') {
 // saturated, no tint. Each widget shows its own part of it (desk.ts
 // paperFor). Gives { canvas, margin, scale }: the canvas covers the
 // display and the margin, at scale.
-function glassPaper(paper, img, { blur = 30, saturate = 1.6, scale = SCALE } = {}) {
+function glassPaper(paper: Paper, img: HTMLImageElement | null, { blur = 30, saturate = 1.6, scale = SCALE } = {}) {
   const [mx, my, mw, mh] = paper.mon
   const margin = 2 * blur
   const W = Math.ceil((mw + 2 * margin) * scale)
@@ -135,7 +147,7 @@ function glassPaper(paper, img, { blur = 30, saturate = 1.6, scale = SCALE } = {
   const raw = document.createElement('canvas')
   raw.width = W
   raw.height = H
-  const c = raw.getContext('2d')
+  const c = raw.getContext('2d')!
   c.fillStyle = paper.color || '#000'
   c.fillRect(0, 0, W, H)
   c.setTransform(scale, 0, 0, scale, (margin - mx) * scale, (margin - my) * scale)
@@ -143,7 +155,7 @@ function glassPaper(paper, img, { blur = 30, saturate = 1.6, scale = SCALE } = {
     const at = place(paper, { w: img.naturalWidth, h: img.naturalHeight })
     c.imageSmoothingQuality = 'high'
     if (at.tile) {
-      const tiles = c.createPattern(img, 'repeat')
+      const tiles = c.createPattern(img, 'repeat')!
       tiles.setTransform(new DOMMatrix().translate(at.x, at.y).scale(at.w / img.naturalWidth, at.h / img.naturalHeight))
       c.fillStyle = tiles
       c.fillRect(mx - margin, my - margin, mw + 2 * margin, mh + 2 * margin)
@@ -165,7 +177,7 @@ function glassPaper(paper, img, { blur = 30, saturate = 1.6, scale = SCALE } = {
   const out = document.createElement('canvas')
   out.width = W
   out.height = H
-  const o = out.getContext('2d')
+  const o = out.getContext('2d')!
   o.filter = `blur(${blur * scale}px) saturate(${saturate})`
   o.drawImage(raw, 0, 0)
   return { canvas: out, margin, scale }
@@ -179,7 +191,7 @@ function glassPaper(paper, img, { blur = 30, saturate = 1.6, scale = SCALE } = {
 // what is behind it, not by the system's mode. null: not to be told (no
 // paper, or a picture whose pixels cannot be read).
 const LIGHT_SCALE = 0.1
-async function lightness(paper, width, height, side = false) {
+async function lightness(paper: Paper | null, width: number, height: number, side = false) {
   if (!paper) return null
   let img = null
   if (paper.url) {
@@ -197,14 +209,14 @@ async function lightness(paper, width, height, side = false) {
   const c = document.createElement('canvas')
   c.width = W
   c.height = H
-  const g = c.getContext('2d', { willReadFrequently: true })
+  const g = c.getContext('2d', { willReadFrequently: true })!
   g.fillStyle = paper.color || '#000'
   g.fillRect(0, 0, W, H)
   g.setTransform(LIGHT_SCALE, 0, 0, LIGHT_SCALE, 0, 0)
   if (img) {
     const at = place(paper, { w: img.naturalWidth, h: img.naturalHeight })
     if (at.tile) {
-      const tiles = g.createPattern(img, 'repeat')
+      const tiles = g.createPattern(img, 'repeat')!
       tiles.setTransform(new DOMMatrix().translate(at.x, at.y).scale(at.w / img.naturalWidth, at.h / img.naturalHeight))
       g.fillStyle = tiles
       g.fillRect(0, 0, width, height)
@@ -225,10 +237,15 @@ async function lightness(paper, width, height, side = false) {
 // The picture's pixels (RGBA, W by H) as the strip's lightness along it:
 // each column's (a side bar's, each row's) luminance averaged across it,
 // a column every step px of the strip; mean, all of it.
-function profileOf(d, W, H, side = false) {
-  const lin = v => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+interface Profile {
+  step: number
+  ys: number[]
+  mean: number
+}
+function profileOf(d: ArrayLike<number>, W: number, H: number, side = false): Profile {
+  const lin = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
   const n = side ? H : W
-  const ys = new Array(n).fill(0)
+  const ys: number[] = new Array(n).fill(0)
   for (let y = 0; y < H; y++)
     for (let x = 0; x < W; x++) {
       const p = 4 * (y * W + x)
@@ -241,7 +258,7 @@ function profileOf(d, W, H, side = false) {
 
 // Light enough for dark words: where black reads better on it than white
 // does (their contrast ratios even at about 0.18).
-const wantsDarkInk = y => (y + 0.05) / 0.05 > 1.05 / (y + 0.05)
+const wantsDarkInk = (y: number) => (y + 0.05) / 0.05 > 1.05 / (y + 0.05)
 
 // Dark words for what lies from..to along the strip (its px), by what is
 // under it alone: the ink that reads better where it reads worst, black
@@ -250,7 +267,7 @@ const wantsDarkInk = y => (y + 0.05) / 0.05 > 1.05 / (y + 0.05)
 // deep blue, the strip's middle a light brown) keeps light words, where
 // the whole strip's mean gave them dark ones. Nothing under it
 // (off the strip, or not known): null.
-function inkOn(profile, from, to) {
+function inkOn(profile: Pick<Profile, 'step' | 'ys'> | null | undefined, from: number, to: number) {
   if (!profile?.ys?.length || from === to) return null
   const { step, ys } = profile
   const a = Math.max(0, Math.floor(Math.min(from, to) / step))
@@ -271,23 +288,23 @@ function inkOn(profile, from, to) {
 // wantsDarkInk or inkOn, null while not known); else as Windows' mode
 // (light). Only them: the settings, what opens from the strip and her
 // island go by Windows' mode.
-const stripInkLight = ({ light, clear, filled, backdrop }) => (clear && !filled && backdrop != null ? backdrop : !!light)
+const stripInkLight = ({ light, clear, filled, backdrop }: { light: boolean; clear: boolean; filled: boolean; backdrop: boolean | null }) => (clear && !filled && backdrop != null ? backdrop : !!light)
 
 // Windows' accent as its own taskbar draws with it (taskbar/ accent):
 // its darker shade where the words are dark, its lighter where they are
 // light; null while not known. island.ts sets it twice: --win-accent by
 // Windows' mode (the settings, what opens from the strip), --strip-accent
 // by the strip's words (stripInkLight), for what is drawn on the strip.
-const accentShade = (accent, light) => (accent ? (light ? accent.dark : accent.light) || null : null)
+const accentShade = (accent: { light?: string; dark?: string } | null | undefined, light: boolean) => (accent ? (light ? accent.dark : accent.light) || null : null)
 
 // The Mica in box (the strip's own size): set to a picture (taskbar/'s
 // paper), the strip's size and Windows' mode, drawn anew only when one
 // changes, the new faded in over the old; cleared.
-function mount(box) {
+function mount(box: HTMLElement) {
   let key = ''
   let turn = 0
   return {
-    async set(paper, width, height, mode = 'dark') {
+    async set(paper: Paper | null, width: number, height: number, mode = 'dark') {
       const now = JSON.stringify([paper, width, height, mode])
       if (!paper || now === key) return
       key = now

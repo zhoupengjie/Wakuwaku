@@ -99,6 +99,10 @@ export interface IslandLater {
   Picker: PickerFace | null
 }
 
+// One of her sheet's rows (sprite.ts CLIPS), by a name the code may not
+// know (a mood's, a reaction's): its row, frames and each one's ms.
+export type Clip = (typeof CLIPS)[keyof typeof CLIPS]
+
 // A size the window or the island is given, in the page's px.
 export interface Room {
   width: number
@@ -123,16 +127,16 @@ export interface IslandCore {
   BREAK_PX: number
   CAPSULE_X: number
   CELL_W: number
-  CLIPS: typeof CLIPS
+  CLIPS: Record<string, Clip>
   DROP_R: number
   Flow: typeof Flow
-  MOOD_CLIP: typeof MOOD_CLIP
+  MOOD_CLIP: Record<string, string>
   PEEK_MS: number
   PER_PX: number
   PULL_ROOM: Room
   REACH_R: number
   REACH_SHARE: number
-  REACTIONS: typeof REACTIONS
+  REACTIONS: Record<string, { clip: string; times: number }>
   TASKBAR_GAP: number
   TASKBAR_H: number
   Widgets: typeof Widgets

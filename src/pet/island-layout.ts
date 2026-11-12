@@ -12,7 +12,8 @@ import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 import type { TbLayout } from './island-vars.ts'
-import type { Slide, Widget } from './widgets.ts'
+import type { Ctx } from './wcards.ts'
+import type { Entry, Group, Member, Placed, Slide, Turn, Widget } from './widgets.ts'
 
 // A carousel's node on the strip, held while the pointer is on it.
 type CarouselNode = HTMLElement & { _held?: boolean }
@@ -60,7 +61,7 @@ export function layoutPart(core: IslandCore) {
   const TB_RIGHT = ['monitor', 'tray', 'keys', 'quick', 'clock']
   // Those that may be taken off the strip (the rest stay: the ghost says so).
   const TB_OPTIONAL = ['monitor', 'front']
-  const TB_PRESETS = {
+  const TB_PRESETS: Record<string, TbLayout> = {
     win11: { left: ['her'], center: ['start', 'apps'], right: TB_RIGHT },
     left: { left: ['her', 'start', 'apps'], center: [], right: TB_RIGHT },
     herRight: { left: ['start', 'apps'], center: [], right: [...TB_RIGHT, 'her'] },
@@ -80,8 +81,8 @@ export function layoutPart(core: IslandCore) {
   trayPart.append(trayBox, privBox)
   const PART_NODES: Record<string, HTMLElement> = { her: herSlot, start: startPart, apps: windowsBox, monitor: facesBox, tray: trayPart, keys: keysBox, quick: quickBox, clock: clockBox, front: frontBox }
   for (const [part, node] of Object.entries(PART_NODES)) node.dataset.part = part
-  const zones = { left: el('span', 'tzone tz-left') as Zone, center: el('span', 'tzone tz-center') as Zone, right: el('span', 'tzone tz-right') as Zone }
-  let seatSent = null
+  const zones: Record<string, Zone> = { left: el('span', 'tzone tz-left') as Zone, center: el('span', 'tzone tz-center') as Zone, right: el('span', 'tzone tz-right') as Zone }
+  let seatSent: number | null = null
 
   // The layout: the one being edited, or as kept, or before any as
   // taskbarAlign had it; each part once, one it lacks (new since) where the
@@ -108,7 +109,7 @@ export function layoutPart(core: IslandCore) {
   // Whether the strip has the monitor's part.
   const hasMonitorPart = (layout = tbLayout()) => Object.values(layout).some(run => run.includes('monitor'))
   // Which preset its parts are as ('custom': none), whatever widgets are there.
-  const presetOf = layout => {
+  const presetOf = (layout: unknown) => {
     const parts = JSON.stringify(Widgets.partsAlone(tbLayout(layout)))
     return Object.keys(TB_PRESETS).find(k => JSON.stringify(tbLayout(TB_PRESETS[k])) === parts) || 'custom'
   }
@@ -116,8 +117,8 @@ export function layoutPart(core: IslandCore) {
   // The widgets put there, each its node, kept while it stays there (by its
   // id); dragged by its id as a part by its name while the layout is edited.
   const entryNodes = new Map<string, PartNode>()
-  function entryNode(e) {
-    let node = entryNodes.get(e.id)
+  function entryNode(e: Entry) {
+    let node: PartNode | null | undefined = entryNodes.get(e.id)
     if (node && node._type !== e.type) {
       entryNodes.delete(e.id)
       node = null
@@ -149,7 +150,7 @@ export function layoutPart(core: IslandCore) {
     herSlot.classList.toggle('first', layout.left[0] === 'her')
     // A run with a flexible spacer takes the room there is (the middle one
     // not in the middle of the screen then: its spacer has the say).
-    const stretch = k => layout[k].some(p => p.type === 'flex')
+    const stretch = (k: string) => layout[k].some(p => p.type === 'flex')
     for (const k of Object.keys(zones)) zones[k].classList.toggle('stretch', stretch(k))
     barRest.classList.toggle('tb-stretch', Object.keys(zones).some(stretch))
     // What the strip shows takes no turns in the island too.
@@ -173,10 +174,10 @@ export function layoutPart(core: IslandCore) {
   const popCtx = () => ({ ...barCtx(), light: isLight() })
   // Placed this long ago at most, a widget with nothing yet is loading.
   const LOADING_MS = 20000
-  const placedAt = new Map()
+  const placedAt = new Map<string, number>()
   // Why one shows nothing: its plugin wants its settings, stopped, is
   // starting (just put there), or nothing yet.
-  function emptyState(m) {
+  function emptyState(m: Member) {
     const p = m.type === 'plugin' ? pluginsSaid.list.find(x => x.id === m.of) : null
     if (p?.missing) return 'needs'
     if (p?.state === 'stopped') return 'error'
@@ -186,7 +187,7 @@ export function layoutPart(core: IslandCore) {
   }
   const monitorWanted = () => st.allWidgets.some(w => w.id === 'monitor')
   // Its size as drawn: M where it has a medium size, else S.
-  const sizeFor = (size, w) => (size === 'M' && (!w || Widgets.sizesOf(w).includes('m')) ? 'M' : 'S')
+  const sizeFor = (size: string | undefined, w: Widget | null) => (size === 'M' && (!w || Widgets.sizesOf(w).includes('m')) ? 'M' : 'S')
 
   function drawEntries() {
     const turn = Math.floor(Date.now() / ENTRY_TURN_MS)
@@ -216,7 +217,7 @@ export function layoutPart(core: IslandCore) {
       node.classList.toggle('empty', !w)
       node.classList.toggle('S', size === 'S')
       const said = w ? Widgets.words(st.lang, w, detailed) : null
-      node.title = w ? [said.label, said.value].filter(Boolean).join(' · ') : `${name} · ${t(st.lang, state === 'needs' ? 'taskbar.w.needs' : 'taskbar.w.none')}`
+      node.title = w ? [said!.label, said!.value].filter(Boolean).join(' · ') : `${name} · ${t(st.lang, state === 'needs' ? 'taskbar.w.needs' : 'taskbar.w.none')}`
       node.innerHTML = w ? WCards.faceHTML(w, size, ctx) : WCards.emptyFaceHTML(e, name, size, state, ctx)
       fillHer(node, 16)
     }
@@ -228,10 +229,10 @@ export function layoutPart(core: IslandCore) {
   // Her face where a widget's glyph is hers (wcards.ts .wher: Claude 今天),
   // still: one frame of her at rest, never played (a portrait that plays
   // keeps a timer going, playPortraits).
-  function fillHer(root, px) {
+  function fillHer(root: ParentNode, px: number) {
     for (const slot of root.querySelectorAll('.wher:empty')) slot.append(herBadge(px))
   }
-  function herBadge(px) {
+  function herBadge(px: number) {
     if (!st.spriteUrl) return face('idle', px)
     const scale = px * PER_PX
     const node = el('span', 'still-her badge')
@@ -256,14 +257,14 @@ export function layoutPart(core: IslandCore) {
   // A stack: the first shown (medium), two thin edges over it for the
   // others; a press opens them all above it (drawStackPop).
   const SLIDE_H = 40
-  const carousels = new Map()
+  const carousels = new Map<string, Turn>()
   let carouselTimer: Timer = 0
   const stillMotionNow = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
-  function drawGroup(node, e, ctx) {
+  function drawGroup(node: PartNode, e: Group, ctx: Ctx) {
     const slides = Widgets.slidesOf(e, st.allWidgets)
     const size = node.dataset.size === 'S' ? 'S' : 'M'
-    const face = s => (s.w ? WCards.faceHTML(s.w, sizeFor(size, s.w), ctx) : WCards.emptyFaceHTML(s.member, memberName(s.member), size, emptyState(s.member), ctx))
+    const face = (s: Slide) => (s.w ? WCards.faceHTML(s.w, sizeFor(size, s.w), ctx) : WCards.emptyFaceHTML(s.member, memberName(s.member), size, emptyState(s.member), ctx))
     const drawn = JSON.stringify([e.type, size, slides.map(s => (s.w ? [s.w.id, s.w.label, s.w.value, s.w.detail, s.w.color, s.w.private] : [Widgets.memberKey(s.member), emptyState(s.member)])), ctx.light, ctx.detailed, st.lang])
     // A plugin's member with nothing (its settings first?).
     if (slides.some(s => !s.w && s.member.type === 'plugin')) askPlugins()
@@ -288,7 +289,7 @@ export function layoutPart(core: IslandCore) {
       // News: a mailbox in it whose unread grew since the last look.
       const was = node._words || new Map()
       const news = slides.findIndex(s => s.w && Widgets.newsIn(was.get(s.w.id), s.w))
-      node._words = new Map(slides.filter(s => s.w).map(s => [s.w.id, s.w]))
+      node._words = new Map(slides.filter(s => s.w).map(s => [s.w!.id, s.w!]))
       node._slides = slides
       const html = slides.map(s => `<span class="tws">${face(s)}</span>`).join('')
       node.innerHTML = `<span class="reel">${html}${slides.length > 1 ? html : ''}</span>${slides.length > 1 ? `<span class="dots">${slides.map(() => '<i></i>').join('')}</span>` : ''}`
@@ -301,7 +302,7 @@ export function layoutPart(core: IslandCore) {
   }
 
   // The slide shown: the reel moved (sliding, or at once), the dot lit.
-  function showSlide(node, at, slide, by = 0) {
+  function showSlide(node: PartNode, at: number, slide: boolean, by = 0) {
     const reel = node.querySelector('.reel')
     const n = node._slides?.length || 0
     if (!reel || !n) return
@@ -328,7 +329,7 @@ export function layoutPart(core: IslandCore) {
   const CAROUSEL_SLIDE_MS = 500
 
   // One turned now: by news (to it), or by hand (by), else its next.
-  function turnCarousel(id, news = -1, by = 0) {
+  function turnCarousel(id: string, news = -1, by = 0) {
     const node = entryNodes.get(id)
     const state = carousels.get(id)
     const n = node?._slides?.length || 0
@@ -356,7 +357,7 @@ export function layoutPart(core: IslandCore) {
       if (node._held) continue
       const due = Widgets.carouselDue(state, now)
       if (due <= 0) {
-        const next = Widgets.carouselTurn(state, node._slides.length, now)
+        const next = Widgets.carouselTurn(state, node._slides!.length, now)
         carousels.set(id, next)
         if (next.at !== state.at) showSlide(node, next.at, true, 1)
         soonest = Math.min(soonest, Widgets.CAROUSEL_MS)
@@ -380,8 +381,9 @@ export function layoutPart(core: IslandCore) {
       const node = (e.target as HTMLElement).closest?.('.tw-carousel') as CarouselNode
       if (!node || e.target !== node) return
       node._held = false
-      const state = carousels.get(node.dataset.entry)
-      if (state) carousels.set(node.dataset.entry, { ...state, since: Date.now() })
+      // A widget's node has its entry's id (entryNode).
+      const state = carousels.get(node.dataset.entry!)
+      if (state) carousels.set(node.dataset.entry!, { ...state, since: Date.now() })
       tickCarousels()
     },
     true,
@@ -393,7 +395,7 @@ export function layoutPart(core: IslandCore) {
       const node = (e.target as HTMLElement).closest('.tw-carousel')
       if (!node || st.editLayout) return
       e.preventDefault()
-      turnCarousel(node.dataset.entry, -1, e.deltaY > 0 ? 1 : -1)
+      turnCarousel(node.dataset.entry!, -1, e.deltaY > 0 ? 1 : -1)
     },
     { passive: false },
   )
@@ -401,11 +403,11 @@ export function layoutPart(core: IslandCore) {
   document.addEventListener('visibilitychange', () => tickCarousels())
 
   // A member's name, as put there (a plugin's, a widget's label as it was).
-  const memberName = m => Widgets.nameOf(st.lang, { ...m, id: 'w0' }, st.allWidgets, isDetailed())
+  const memberName = (m: Member) => Widgets.nameOf(st.lang, { ...m, id: 'w0' }, st.allWidgets, isDetailed())
   // The name kept with someone else's plugin as it is put somewhere (her
   // own she knows by their ids): its own, as its widgets say it, for while
   // it has nothing to say.
-  function ownName(id) {
+  function ownName(id: string) {
     const name = t(st.lang, `w.ex.${id}`) === `w.ex.${id}` ? Widgets.pluginName(st.lang, id, st.allWidgets) : ''
     return name ? { name: [...name].slice(0, 40).join('') } : {}
   }
@@ -415,19 +417,20 @@ export function layoutPart(core: IslandCore) {
   // parameter they need) or were stopped: asked for while a plugin on the
   // strip has nothing to say, twice a minute at most, and once the layout
   // is kept.
-  const pluginsSaid = { at: 0, list: [] }
+  // What settings_get says of them: loose JSON, each read for a few fields.
+  const pluginsSaid: { at: number; list: any[] } = { at: 0, list: [] }
   function askPlugins(now = false) {
     if (!now && Date.now() - pluginsSaid.at < 30000) return
     pluginsSaid.at = Date.now()
     pet.settings.get().then(got => tellPlugins(got && [...(got.plugins || []), ...(got.addons || [])]))
   }
-  function tellPlugins(list) {
+  function tellPlugins(list: unknown) {
     if (!Array.isArray(list)) return
     pluginsSaid.list = list
     for (const node of entryNodes.values()) node._drawn = ''
     if (st.taskbarBuilt && home() === 'taskbar') drawEntries()
   }
-  const needsSettings = e => e.type === 'plugin' && !!pluginsSaid.list.find(p => p.id === e.of)?.missing
+  const needsSettings = (e: Placed) => e.type === 'plugin' && !!pluginsSaid.list.find(p => p.id === e.of)?.missing
   setInterval(() => {
     if (st.taskbarBuilt && home() === 'taskbar' && entryNodes.size) drawEntries()
   }, ENTRY_TURN_MS)
@@ -465,7 +468,7 @@ export function layoutPart(core: IslandCore) {
       pet.seat(seat)
     }
   }
-  const midLeft = width => Math.min(Math.max(8, st.slotMiddle - width / 2), innerWidth - width - 8)
+  const midLeft = (width: number) => Math.min(Math.max(8, st.slotMiddle! - width / 2), innerWidth - width - 8)
   // Its left edge there for the width it has (or is going to: setSize), set
   // as the width is, on the same spring (style.css isl-mid), so it grows and
   // shrinks about its middle all the way.
@@ -514,7 +517,7 @@ export function layoutPart(core: IslandCore) {
 
   // The settings beside a side bar, from her capsule's top (or foot, in the
   // bar's lower half), kept 8 px off the screen's ends.
-  function placeSideSettings(height) {
+  function placeSideSettings(height: number) {
     const at = parseFloat(document.documentElement.style.getPropertyValue('--isl-y')) || TASKBAR_GAP
     const y = Math.max(TASKBAR_GAP, Math.min(at, innerHeight - TASKBAR_GAP - height))
     document.documentElement.style.setProperty('--set-y', `${Math.round(y)}px`)
@@ -524,7 +527,7 @@ export function layoutPart(core: IslandCore) {
   // button is made anew with every change to the list, and the flashes
   // carry on from where they were (style.css .flash, --flash-delay)
   // instead of starting over.
-  const flashSince = new Map()
+  const flashSince = new Map<number, number>()
 
   function fillTaskbar() {
     if (!st.taskbarBuilt) {
@@ -570,7 +573,7 @@ export function layoutPart(core: IslandCore) {
   // slid away with the left run and back on its margin's transition, her
   // capsule in it going to and fro as the program in front changed: the
   // user, 2026-11-04); of another length, it slides to the middle as ever.
-  let middleLength = null
+  let middleLength: number | null = null
 
   function alignApps() {
     if (!st.taskbarBuilt) return

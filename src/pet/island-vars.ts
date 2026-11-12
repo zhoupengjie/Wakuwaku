@@ -78,6 +78,7 @@ export interface TbLayout {
   left: any[]
   center: any[]
   right: any[]
+  [run: string]: any[]
 }
 
 export interface IslandVars extends IslandState {

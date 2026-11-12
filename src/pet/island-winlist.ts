@@ -33,7 +33,8 @@ export function winlistPart(core: IslandCore) {
       // its live picture (taskbar/mod.rs thumbs).
       for (const w of windows) {
         const card = el('div', w.front ? 'wcard front' : 'wcard')
-        card.dataset.win = w.id
+        // Its handle, a number, made a string as data-* are.
+        card.dataset.win = w.id as unknown as string
         const top = el('div', 'wtop')
         if (w.png || app.png) {
           const img = el('img')
@@ -43,10 +44,10 @@ export function winlistPart(core: IslandCore) {
         // A window with no title (tasks.rs is_task): its program's name.
         top.append(el('span', 'wt', w.title || app.name))
         const x = el('span', 'wx', '✕')
-        x.dataset.close = w.id
+        x.dataset.close = w.id as unknown as string
         top.append(x)
         const room = el('div', 'wthumb')
-        room.dataset.thumb = w.id
+        room.dataset.thumb = w.id as unknown as string
         card.append(top, room)
         rows.push(card)
       }

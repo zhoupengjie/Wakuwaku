@@ -10,6 +10,7 @@
 import * as Presses from './presses.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
+import type { TaskApp } from './island-vars.ts'
 
 export function glidePart(core: IslandCore) {
   const {
@@ -119,7 +120,7 @@ export function glidePart(core: IslandCore) {
     const order = appOrder()
     const rank = a => (order.includes(a.app) ? order.indexOf(a.app) : Infinity)
     return st.taskWindows
-      .map((a, n) => [a, n])
+      .map((a, n): [TaskApp, number] => [a, n])
       .sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1])
       .map(([a]) => a)
   }

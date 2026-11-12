@@ -48,6 +48,30 @@ export interface Look {
   taskView?: boolean
 }
 
+// A program's button as taskbar/ sends it (taskbar:windows, buttons.rs):
+// its key, its path and app id, its name, whether it is kept on the
+// taskbar, its icon, and its windows.
+export interface TaskApp {
+  app: string
+  path?: string
+  id?: string | null
+  name?: string
+  pinned?: boolean
+  png?: string
+  windows?: TaskWindow[]
+}
+// One of its windows: its handle, title and picture; in front, minimized,
+// maximized on the strip's display (max), flashing for attention.
+export interface TaskWindow {
+  id: number
+  title?: string
+  png?: string
+  front?: boolean
+  min?: boolean
+  max?: boolean
+  flash?: boolean
+}
+
 // A layout of the strip (widgets.ts layoutOf): its three runs, each its
 // parts by name and the widgets put there.
 export interface TbLayout {
@@ -237,7 +261,7 @@ export interface IslandVars extends IslandState {
   trayRectsSent: string
   trayOpen: boolean
   // The windows' buttons as last sent (taskbar/), and as drawn.
-  taskWindows: any[]
+  taskWindows: TaskApp[]
   windowsDrawn: string
   // The programs' buttons drawn once already: a new one after that grows its line in.
   buttonsDrawn: boolean

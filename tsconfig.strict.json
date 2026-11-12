@@ -43,6 +43,7 @@
     "src/pet/island-layout.ts",
     "src/pet/island-plate.ts",
     "src/pet/island-right.ts",
+    "src/pet/island-winlist.ts",
     "src/pet/island-wmenu.ts",
     "src/pet/island-wpop.ts",
     "src/pet/mica.ts",

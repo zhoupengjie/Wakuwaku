@@ -66,7 +66,7 @@ src-tauri/
     loops.rs              她隔一会儿看一次的线程：鼠标（pointer）、插件（widgets）、监控（monitor）、全屏（fullscreen）、每半秒的 ticker；鼠标和监控的线程可以提前叫醒（wake_pointer、wake_monitor）
     webview.rs            WebView2 的启动参数（browser_args：在她那块屏的显卡上渲染等）和它放文件的地方
     pet.rs                她的窗口：大小和位置、眼睛、拖动和被"携带"、走动、头顶的面板、飞回岛里
-    island/               她的家的窗口：灵动岛、任务栏各放在哪，按页面要求扩大、伸手够她、把她吸回去、为设置临时升起、灵动岛下面有窗口时让开。mod.rs 是岛的状态、各种几何（在哪块屏、哪条边、多大）；strip.rs 是任务栏里的胶囊和告诉 Windows 的条带；window.rs 是窗口的排、建；stow.rs 是让开下面的窗口、显示和隐藏；handoff.rs 是和 Windows 任务栏的交接、窗口留在屏幕上；pointer.rs 是指针、座位、缩放、拉她和吸回去；front.rs 是设置、别的屏上来的确认、置顶，和 where_
+    island/               她的家的窗口：灵动岛、任务栏各放在哪，按页面要求扩大、伸手够她、把她吸回去、为设置临时升起、灵动岛下面有窗口时让开。mod.rs 是岛的状态、各种几何（在哪块屏、哪条边、多大）；strip.rs 是任务栏里的胶囊和告诉 Windows 的条带；window.rs 是窗口的排、建；stow.rs 是让开下面的窗口、显示和隐藏；handoff.rs 是和 Windows 任务栏的交接、窗口留在屏幕上；pointer.rs 是指针、座位、缩放、拉她和吸回去；front.rs 是设置、别的屏上来的确认、置顶，和 where_。岛的状态（Shared::island）是一把锁下的一个结构，指针线程、页面命令、窗口的几个线程各自短暂地拿（A1 起不在锁里等任何东西）；交接里等页面回答用通道，每一步告诉页面时新建，收的一头和已收到的回答归发出这一步、接着等的那个线程（thread_local）
     desk/                 桌面小工具的窗口：每块有小工具的屏一个，压在别的窗口下面、桌面图标上面（显示桌面后也在），点击只在小工具上被接住，每块屏的壁纸。mod.rs 是窗口本身（哪几块屏要、建、排、推给页面）；pointer.rs 是指针（在不在小工具上、多久看一次、桌面图标）；commands.rs 是页面能调的 desk_* 命令；drag.rs 是从她的家拖小工具到桌面；displays.rs 是每块屏的壁纸和标识（key_for）；counts.rs 是调试日志里每分钟的计数；win.rs 是 Windows 一侧（层级、键盘钩子、自己的消息线程），other.rs 是别的系统上的空实现。状态按谁有分开：每个窗口的事实和页面说过的（Desk）整份发布（DESKS，Arc，改时在副本上改完放回），指针线程拿一份 Arc 读，不等页面命令；告诉过每个页面的（Told）另放；窗口现在接不接鼠标、上次看时按键是否按下、Ctrl 的状态只归指针线程（thread_local）
     backplate.rs          垫在岛的窗口正下面的亚克力：一个自己的原生窗口，DWM 模糊它后面的别的窗口（#20）
     appbar.rs             任务栏占住的那条空间（Windows 的 AppBar），以及 Windows 任务栏的自动隐藏状态

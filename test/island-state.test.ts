@@ -153,3 +153,17 @@ test('next never changes the state it is given, and stateOf takes it alone', () 
   const held = { ...S.initial(), view: 'compact' as const, other: 1 }
   assert.deepEqual(S.stateOf(held), { ...S.initial(), view: 'compact' })
 })
+
+test('a press on it while something is open in it: what was kept for a look is no reason to close it', () => {
+  // Opened by itself (an ending, a hello set to open): the press puts it away (#45).
+  assert.equal(S.pressOn(nudge(5000)), 'close')
+  // What its words point to opens, whichever way it came.
+  const letter = { open: { tab: 'mail', account: 'a', uid: 7 } }
+  assert.equal(S.pressOn(nudge(5000, { widget: letter })), 'there')
+  assert.equal(S.pressOn(nudge(5000, { widget: letter, kept: true })), 'there')
+  // Kept for the next look and shown as the person opened it (her hello
+  // after a start, on the first hover): a press as any other.
+  assert.equal(S.pressOn(nudge(5000, { kept: true })), 'press')
+  assert.equal(S.pressOn(nudge(5000, { kept: true, widget: { open: {} } })), 'press')
+  assert.equal(S.pressOn(null), 'close')
+})

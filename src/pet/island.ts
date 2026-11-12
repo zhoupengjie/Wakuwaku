@@ -2106,7 +2106,13 @@ export function islandPage(later: IslandLater) {
         if (isNudging()) dismiss()
         return jumpTo(id)
       }
-      if (isNudging() && !(e.target as HTMLElement).closest('[data-widget]')) return pressNudge()
+      // Open by itself: a press closes it, or opens what its words point to;
+      // what was kept and shown as the island was opened to look goes, and
+      // the press does what any other does (island-state.ts pressOn).
+      if (isNudging() && !(e.target as HTMLElement).closest('[data-widget]')) {
+        if (State.pressOn(st.nudge) !== 'press') return pressNudge()
+        endNudge()
+      }
       // Not connected: "don't remind me" puts the hint away; any other
       // press but on a session's or a widget's row opens the settings'
       // welcome (a session listed still goes to its window: the hooks

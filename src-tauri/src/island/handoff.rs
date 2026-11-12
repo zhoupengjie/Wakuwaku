@@ -1,4 +1,7 @@
 // The handover with Windows' taskbar, and the window kept on its screen.
+use std::cell::RefCell;
+use std::sync::mpsc::{Receiver, Sender};
+
 use super::*;
 
 // --- The handover with Windows' taskbar (handoff.ts) ----------------------------------
@@ -9,26 +12,51 @@ use super::*;
 // goes. Each answer of the page's (covered, bare, done) waited for so long
 // at most: neither side can hold the other. Not on the main thread: its
 // events reach the page through the main thread.
-pub(super) static HANDOFF: Lock<Vec<String>> = Lock::new("island::handoff::HANDOFF", Vec::new());
-pub(super) static HANDOFF_SAID: std::sync::Condvar = std::sync::Condvar::new();
+//
+// The page's answers come over a channel each step told makes anew
+// (handoff_ask): answers to an earlier step go nowhere. Its receiving end
+// and the answers heard so far are the thread's that told the step and
+// waits for them (each step's waits follow it on that thread: covered;
+// bare, then done).
+static ANSWERS: Lock<Option<Sender<String>>> = Lock::ranked("island::handoff::ANSWERS", crate::lock::LEAF, None);
+
+thread_local! {
+    static HEARD: RefCell<Option<(Receiver<String>, Vec<String>)>> = const { RefCell::new(None) };
+}
 
 // What the page answers (taskbar_handoff).
 pub fn handoff_answer(what: &str) {
-    HANDOFF.lock().unwrap().push(what.to_string());
-    HANDOFF_SAID.notify_all();
+    let to = ANSWERS.lock().unwrap().clone();
+    if let Some(to) = to {
+        let _ = to.send(what.to_string());
+    }
 }
 
 // A step told the page; its answers from before forgotten.
 pub(super) fn handoff_ask(sh: &Shared, step: Value) {
-    HANDOFF.lock().unwrap().clear();
+    let (to, from) = std::sync::mpsc::channel();
+    *ANSWERS.lock().unwrap() = Some(to);
+    HEARD.set(Some((from, Vec::new())));
     let _ = sh.app.emit_to("island", "taskbar:handoff", step);
 }
 
-// An answer, within ms at most: true once it came.
+// An answer to the last step told on this thread, within ms at most:
+// true once it came (now, or before: those heard are kept for the waits
+// after). False too once another step is told (its way gone).
 pub(super) fn handoff_wait(what: &str, ms: u64) -> bool {
-    let said = HANDOFF.lock().unwrap();
-    let (said, _) = said.wait_timeout_while(&HANDOFF_SAID, std::time::Duration::from_millis(ms), |s| !s.iter().any(|x| x == what)).unwrap();
-    said.iter().any(|x| x == what)
+    let until = std::time::Instant::now() + std::time::Duration::from_millis(ms);
+    HEARD.with_borrow_mut(|heard| {
+        let Some((from, seen)) = heard else { return false };
+        loop {
+            if seen.iter().any(|x| x == what) {
+                return true;
+            }
+            match from.recv_timeout(until.saturating_duration_since(std::time::Instant::now())) {
+                Ok(said) => seen.push(said),
+                Err(_) => return false,
+            }
+        }
+    })
 }
 
 // Her page ready, the taskbar to be taken (not yet up, nothing full screen,

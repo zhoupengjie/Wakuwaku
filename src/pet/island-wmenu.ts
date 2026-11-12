@@ -2,24 +2,31 @@
 // or in the open island; its sizes, where it is shown (the island, the
 // taskbar, the desktop), its settings, taken off.
 // Made by island.ts in the section's place as the page starts
-// (wmenuPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (wmenuPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as DeskGrid from './deskgrid.ts'
 import * as Placing from './placing.ts'
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
-import type { WmenuCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function wmenuPart(core: WmenuCore) {
+export function wmenuPart(core: IslandCore) {
   const {
-    st, Widgets, barRest, closePop, closeStackPop, closeWidgetPop, el, entryNodes, fillHer, hasMonitorPart, home,
-    isDetailed, island, isleCtx, keepLayout, memberName, openWidgetSettings, ownName, placedAt, popCtx,
-    removeEntry, removeMember, rowSize, setRowSize, showCard, stackPop, t, tbLayout, update, watchPresses,
+    st, pieces, Widgets, el, home, isDetailed, island, isleCtx, newId, rowSize, setRowSize, showCard, t, update,
   } = core
+  const { barRest } = pieces.right
+  const {
+    entryNodes, fillHer, hasMonitorPart, memberName, ownName, placedAt, popCtx, tbLayout,
+  } = pieces.layout
+  const { closePop, watchPresses } = pieces.glide
+  const {
+    closeStackPop, closeWidgetPop, keepLayout, openWidgetSettings, removeEntry, removeMember, stackPop,
+  } = pieces.wpop
 
   // A right press on a widget, on the strip or in the open island: its size
   // (small, medium, large; one it has not greyed, why under the pointer),
@@ -135,9 +142,9 @@ export function wmenuPart(core: WmenuCore) {
     else if (w || entry) {
       const it = menuItemOf(w, entry, member)
       const inBoard = b => !!it && b.items.some(x => DeskGrid.keyOf(x) === keyFor(it))
-      for (const b of core.deskBoards().slice(0, 3)) {
+      for (const b of pieces.boards.deskBoards().slice(0, 3)) {
         if (inBoard(b)) continue
-        parts.push(item('board', t(st.lang, 'desk.toBoard', { name: core.boardName(b) }), it && DeskGrid.boardFirst(b, core.boardSize(it)) ? '' : t(st.lang, 'desk.boardFull'), b.id))
+        parts.push(item('board', t(st.lang, 'desk.toBoard', { name: pieces.boards.boardName(b) }), it && DeskGrid.boardFirst(b, pieces.boards.boardSize(it)) ? '' : t(st.lang, 'desk.boardFull'), b.id))
       }
       parts.push(item('board', t(st.lang, 'desk.newBoard'), '', 'new'))
     }
@@ -153,7 +160,7 @@ export function wmenuPart(core: WmenuCore) {
 
   function openMenu(m, near, at = null) {
     if (st.popFor) closePop()
-    if (st.imeOpen) core.closeImeList()
+    if (st.imeOpen) pieces.ime.closeImeList()
     if (st.wgFor && m.where === 'bar') closeWidgetPop()
     st.menuFor = m
     wmenu.innerHTML = menuHTML(m)
@@ -163,7 +170,7 @@ export function wmenuPart(core: WmenuCore) {
     if (m.where === 'bar') {
       if (wmenu.parentElement !== barRest) barRest.append(wmenu)
       const over = st.stackFor && !stackPop.hidden && stackPop.contains(near) ? stackPop : near
-      const pos = core.besideOrOver(over, wmenu, 8)
+      const pos = pieces.winlist.besideOrOver(over, wmenu, 8)
       wmenu.style.left = pos.left === undefined ? '' : `${pos.left}px`
       wmenu.style.top = pos.top === undefined ? '' : `${pos.top}px`
       wmenu.style.bottom = ''
@@ -226,31 +233,31 @@ export function wmenuPart(core: WmenuCore) {
         return setRowSize(w.id, v)
       case 'where':
         if (v === 'bar' && w && !entry) return placeWidget(menuItemOf(w), 'bar')
-        if (v === 'isle' && entry) return core.backToIsland(w, entry, member)
+        if (v === 'isle' && entry) return pieces.boards.backToIsland(w, entry, member)
         if (v === 'isle' && w) return placeWidget(menuItemOf(w), 'isle')
-        if (v === 'desk') return core.toDesk(w, entry, member)
+        if (v === 'desk') return pieces.boards.toDesk(w, entry, member)
         return
       case 'board': {
         const it = menuItemOf(w, entry, member)
         // Off the strip (its group, or its place) and into the board.
-        return it && core.toBoard(it, v)
+        return it && pieces.boards.toBoard(it, v)
       }
       case 'group': {
         const next = entry && neighbourOf(entry.id)
-        return next && keepLayout(Widgets.groupWith(tbLayout(), next.id, entry.id, v, core.newId))
+        return next && keepLayout(Widgets.groupWith(tbLayout(), next.id, entry.id, v, newId))
       }
       // Into the group beside it, as its last; its kind kept.
       case 'join': {
         const next = entry && neighbourOf(entry.id)
-        return next && Widgets.isGroup(next) && keepLayout(Widgets.groupWith(tbLayout(), entry.id, next.id, next.type, core.newId))
+        return next && Widgets.isGroup(next) && keepLayout(Widgets.groupWith(tbLayout(), entry.id, next.id, next.type, newId))
       }
       case 'regroup':
         return entry && keepLayout(Widgets.regroup(tbLayout(), entry.id, v))
       case 'ungroup':
         if (st.stackFor === entry?.id) closeStackPop()
-        return entry && keepLayout(Widgets.ungroup(tbLayout(), entry.id, core.newId))
+        return entry && keepLayout(Widgets.ungroup(tbLayout(), entry.id, newId))
       case 'takeOut':
-        return entry && keepLayout(Widgets.takeOut(tbLayout(), entry.id, Number(v), core.newId))
+        return entry && keepLayout(Widgets.takeOut(tbLayout(), entry.id, Number(v), newId))
       case 'settings':
         return w && openWidgetSettings(w)
       // picker.ts: its way of showing in her capsule.
@@ -279,7 +286,7 @@ export function wmenuPart(core: WmenuCore) {
     const source = w.plugin ? { type: 'plugin', of: w.plugin } : { type: 'widget', of: w.id }
     if (Widgets.shownOn(tbLayout(), st.allWidgets).has(w.id)) return
     const named = w.private ? {} : w.plugin ? ownName(w.plugin) : { name: [...String(Widgets.words(st.lang, w).label)].slice(0, 40).join('') }
-    const entry = { id: core.newId(), ...source, size: Widgets.sizesOf(w).includes('m') ? 'M' : 'S', ...(w.icon in Widgets.ICONS ? { icon: w.icon } : {}), ...named }
+    const entry = { id: newId(), ...source, size: Widgets.sizesOf(w).includes('m') ? 'M' : 'S', ...(w.icon in Widgets.ICONS ? { icon: w.icon } : {}), ...named }
     const layout = tbLayout()
     layout.right.unshift(entry)
     placedAt.set(Widgets.memberKey(source), Date.now())
@@ -324,12 +331,12 @@ export function wmenuPart(core: WmenuCore) {
   function placeNow(item, on) {
     const keys = [keyFor(item), ...(item.plugin ? st.allWidgets.filter(w => w.plugin === item.plugin).map(w => `widget:${w.id}`) : [])]
     const p = Placing.whereIs({ keys, on, taskbar: home() === 'taskbar' ? tbLayout() : null, desk: st.config.deskLayout, home: home() })
-    return p.board ? { at: 'board', name: core.boardName(p.board) } : { at: p.at }
+    return p.board ? { at: 'board', name: pieces.boards.boardName(p.board) } : { at: p.at }
   }
   function placeWidget(item, where) {
     const key = keyFor(item)
     // Off the desktop as it goes elsewhere (the desktop's pages keep the places).
-    if (where !== 'desk' && DeskGrid.has(st.config.deskLayout, item)) core.deskOff([item])
+    if (where !== 'desk' && DeskGrid.has(st.config.deskLayout, item)) pieces.boards.deskOff([item])
     if (where === 'bar') {
       if (whereOf(item) === 'bar') return
       const layout = tbLayout()
@@ -343,7 +350,7 @@ export function wmenuPart(core: WmenuCore) {
       const source = item.plugin ? { type: 'plugin', of: item.plugin } : { type: 'widget', of: item.id }
       const named = w && !w.private ? { name: [...String(Widgets.words(st.lang, w).label)].slice(0, 40).join('') } : item.plugin ? ownName(item.plugin) : {}
       const icon = (w?.icon || item.icon) in Widgets.ICONS ? { icon: w?.icon || item.icon } : {}
-      layout.right.unshift({ id: core.newId(), ...source, size: !w || Widgets.sizesOf(w).includes('m') ? 'M' : 'S', ...icon, ...named })
+      layout.right.unshift({ id: newId(), ...source, size: !w || Widgets.sizesOf(w).includes('m') ? 'M' : 'S', ...icon, ...named })
       placedAt.set(key, Date.now())
       return keepLayout(layout)
     }
@@ -363,7 +370,7 @@ export function wmenuPart(core: WmenuCore) {
     // The taskbar's layout kept only when it was on it (not written as a
     // preset's for one put on the desktop from the capsule).
     if (off || where === 'isle') keepLayout(layout)
-    if (where === 'desk') return core.putOnDesk(item)
+    if (where === 'desk') return pieces.boards.putOnDesk(item)
     if (item.id && (st.config.widgetsOff || []).includes(item.id)) pet.settings.set({ widgetsOff: st.config.widgetsOff.filter(x => x !== item.id) })
   }
 
@@ -377,7 +384,7 @@ export function wmenuPart(core: WmenuCore) {
         if (Widgets.isGroup(p)) {
           const at = p.items.findIndex(m => Widgets.memberKey(m) === key)
           if (at >= 0) {
-            layout = Widgets.dropMember(layout, p.id, at, core.newId)
+            layout = Widgets.dropMember(layout, p.id, at, newId)
             off = true
           }
         } else if (Widgets.isSource(p) && Widgets.memberKey(p) === key) {

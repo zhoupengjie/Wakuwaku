@@ -1,20 +1,23 @@
 // Boards on the desktop (§7 工作台): widgets and stacks sent from the island
 // or the taskbar to the desktop (deskLayout), gathered on a board, and back.
 // Made by island.ts in the section's place as the page starts
-// (boardsPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (boardsPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as DeskGrid from './deskgrid.ts'
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
-import type { BoardsCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function boardsPart(core: BoardsCore) {
+export function boardsPart(core: IslandCore) {
   const {
-    st, Widgets, closeStackPop, home, keepLayout, offBar, placeWidget, removeEntry, removeMember, t, takeWidgets,
-    tbLayout, update,
+    st, pieces, Widgets, home, newId, t, takeWidgets, update,
   } = core
+  const { tbLayout } = pieces.layout
+  const { closeStackPop, keepLayout, removeEntry, removeMember } = pieces.wpop
+  const { offBar, placeWidget } = pieces.wmenu
 
   // Their names as the desktop's pages give them: their own, else 工作台,
   // numbered when several have none.
@@ -41,9 +44,9 @@ export function boardsPart(core: BoardsCore) {
     if (board) {
       const spot = DeskGrid.boardFirst(board, size)
       if (!spot) return
-      next = DeskGrid.intoBoard(old, board.id, m, size, spot, core.newId)
+      next = DeskGrid.intoBoard(old, board.id, m, size, spot, newId)
     } else {
-      next = [...DeskGrid.without(old, item, core.newId), { id: core.newId(), type: 'board', items: [{ ...m, size, at: [0, 0] }] }]
+      next = [...DeskGrid.without(old, item, newId), { id: newId(), type: 'board', items: [{ ...m, size, at: [0, 0] }] }]
     }
     offBar([item])
     keepDeskLayout(next)
@@ -73,7 +76,7 @@ export function boardsPart(core: BoardsCore) {
     const source = item.plugin ? { type: 'plugin', of: item.plugin } : { type: 'widget', of: item.id }
     const label = w && !w.private && !item.plugin ? [...String(Widgets.words(st.lang, w).label)].slice(0, 40).join('') : ''
     const icon = (w?.icon || item.icon) in Widgets.ICONS ? { icon: w?.icon || item.icon } : {}
-    keepDesk([{ id: core.newId(), ...source, size: sizes.includes('m') ? 'm' : 's', ...icon, ...(label ? { name: label } : {}) }])
+    keepDesk([{ id: newId(), ...source, size: sizes.includes('m') ? 'm' : 's', ...icon, ...(label ? { name: label } : {}) }])
   }
   function keepDesk(entries) {
     st.config.deskLayout = [...(Array.isArray(st.config.deskLayout) ? st.config.deskLayout : []), ...entries]
@@ -83,7 +86,7 @@ export function boardsPart(core: BoardsCore) {
   }
   function deskOff(items) {
     let next = Array.isArray(st.config.deskLayout) ? st.config.deskLayout : []
-    for (const it of items) next = DeskGrid.without(next, it, core.newId)
+    for (const it of items) next = DeskGrid.without(next, it, newId)
     st.config.deskLayout = next
     pet.settings.set({ deskLayout: next })
   }
@@ -95,7 +98,7 @@ export function boardsPart(core: BoardsCore) {
       const sizes = DeskGrid.sizesOfEntry({ type: 'stack', items }, st.allWidgets)
       if (st.stackFor === entry.id) closeStackPop()
       removeEntry(entry.id)
-      return keepDesk([{ id: core.newId(), type: 'stack', items, size: sizes.includes('m') ? 'm' : sizes[0] || 's' }])
+      return keepDesk([{ id: newId(), type: 'stack', items, size: sizes.includes('m') ? 'm' : sizes[0] || 's' }])
     }
     const m = entry ? (Widgets.isGroup(entry) ? entry.items[member] : entry) : null
     const item = m ? (m.type === 'plugin' ? { plugin: m.of } : { id: m.of }) : w?.plugin ? { plugin: w.plugin } : w ? { id: w.id } : null
@@ -110,7 +113,7 @@ export function boardsPart(core: BoardsCore) {
       deskOff(items)
       const members = items.slice(0, 8).map(it => (it.plugin ? { type: 'plugin', of: it.plugin } : { type: 'widget', of: it.id }))
       const layout = tbLayout()
-      layout.right.unshift({ id: core.newId(), type: 'stack', items: members })
+      layout.right.unshift({ id: newId(), type: 'stack', items: members })
       return keepLayout(layout)
     }
     for (const it of items) placeWidget(it, where)

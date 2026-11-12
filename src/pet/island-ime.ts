@@ -2,18 +2,22 @@
 // input method (taskbar:keys), Windows' own icons for it where it has them,
 // and the list of input methods a press on it opens.
 // Made by island.ts in the section's place as the page starts
-// (imePart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (imePart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import { pet } from './bridge.ts'
-import type { ImeCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function imePart(core: ImeCore) {
+export function imePart(core: IslandCore) {
   const {
-    st, besideOrOver, capsMark, closePop, closeWidgetPop, el, imeMark, imePop, isSide, showBattery, showNet,
-    showPrivacy, showVolume, t, watchPresses,
+    st, pieces, el, isSide, t,
   } = core
+  const { capsMark, imeMark, showBattery, showNet, showPrivacy, showVolume } = pieces.right
+  const { closePop, watchPresses } = pieces.glide
+  const { closeWidgetPop, imePop } = pieces.wpop
+  const { besideOrOver } = pieces.winlist
 
   // The script's mark by the layout's language: its own and plain letters.
   const SCRIPTS = { 0x04: ['中', '英'], 0x11: ['あ', 'A'], 0x12: ['한', 'A'] }

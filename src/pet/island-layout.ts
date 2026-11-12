@@ -2,28 +2,31 @@
 // strip, her seat, the widgets on it, and several in one place (the spec's
 // §5): stacks and carousels taking turns.
 // Made by island.ts in the section's place as the page starts
-// (layoutPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (layoutPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
-import type { LayoutCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 import type { TbLayout } from './island-vars.ts'
 
 // A carousel's node on the strip, held while the pointer is on it.
 type CarouselNode = HTMLElement & { _held?: boolean }
 
-export function layoutPart(core: LayoutCore) {
+export function layoutPart(core: IslandCore) {
   const {
-    st, CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, barRest, body, clockBox, deskEdge, el,
-    face, facesBox, frontBox, growNode, home, isCapsule, isDetailed, isLight, isOn, isSide, isSlim, isSplit,
-    isStripLight, island, keysBox, len, lo, onPixels, privBox, quickBox, sheetImage, showFrame, sizeOf,
-    snapStart, startButton, startPart, t, takeWidgets, taskCompactH, taskViewButton, trayBox, widgetFaces,
-    windowsBox,
+    st, pieces, CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, body, el, face, home,
+    isCapsule, isDetailed, isLight, isOn, isSide, isSlim, isSplit, isStripLight, island, len, lo, sheetImage,
+    showFrame, sizeOf, t, takeWidgets, taskCompactH,
   } = core
+  const {
+    barRest, clockBox, deskEdge, facesBox, frontBox, growNode, keysBox, onPixels, privBox, quickBox,
+    snapStart, startButton, startPart, taskViewButton, trayBox, widgetFaces, windowsBox,
+  } = pieces.right
 
   // Its parts in three runs, as a KDE panel has them: from the left end, in
   // the middle of the screen (moved left when crowded, alignApps), and up to
@@ -145,7 +148,7 @@ export function layoutPart(core: LayoutCore) {
   // What the widgets on the strip are drawn with (wcards.ts ctx), as its
   // words are; what opens from them (a card, a stack, a menu), as Windows'
   // mode, as their ground is.
-  const barCtx = () => ({ lang: st.lang, light: isStripLight(), detailed: isDetailed(), width: core.STACK_CARD_W, hour: new Date().getHours(), now: Date.now() })
+  const barCtx = () => ({ lang: st.lang, light: isStripLight(), detailed: isDetailed(), width: pieces.wpop.STACK_CARD_W, hour: new Date().getHours(), now: Date.now() })
   const popCtx = () => ({ ...barCtx(), light: isLight() })
   // Placed this long ago at most, a widget with nothing yet is loading.
   const LOADING_MS = 20000
@@ -196,8 +199,8 @@ export function layoutPart(core: LayoutCore) {
       node.innerHTML = w ? WCards.faceHTML(w, size, ctx) : WCards.emptyFaceHTML(e, name, size, state, ctx)
       fillHer(node, 16)
     }
-    if (st.wgFor) core.drawWidgetPop()
-    if (st.stackFor) core.drawStackPop()
+    if (st.wgFor) pieces.wpop.drawWidgetPop()
+    if (st.stackFor) pieces.wpop.drawStackPop()
     tickCarousels()
   }
 
@@ -506,7 +509,7 @@ export function layoutPart(core: LayoutCore) {
     if (!st.taskbarBuilt) {
       // As wide as the strip: her island lies over its slot in it (placeSlot).
       barRest.style.left = '0px'
-      barRest.replaceChildren(core.glide, zones.left, zones.center, growNode, zones.right, deskEdge, core.pop, core.wgPop, core.stackPop, core.imePop)
+      barRest.replaceChildren(pieces.glide.glide, zones.left, zones.center, growNode, zones.right, deskEdge, pieces.glide.pop, pieces.wpop.wgPop, pieces.wpop.stackPop, pieces.wpop.imePop)
       st.taskbarBuilt = true
       st.trayDrawn = ''
       st.windowsDrawn = ''
@@ -521,14 +524,14 @@ export function layoutPart(core: LayoutCore) {
     quickBox.title = t(st.lang, 'taskbar.quick')
     deskEdge.title = t(st.lang, 'taskbar.desktop')
     facesBox.replaceChildren(...widgetFaces())
-    core.drawFront()
-    core.drawWindows()
-    core.drawTray()
-    core.tickClock()
+    pieces.look.drawFront()
+    pieces.glide.drawWindows()
+    pieces.look.drawTray()
+    pieces.look.tickClock()
     alignApps()
     placeSlot()
     snapStart()
-    core.inkParts()
+    pieces.look.inkParts()
     // Editing: picker.ts's popover over its widget, where it is now.
     if (st.editLayout) Picker?.relaid()
   }
@@ -550,7 +553,7 @@ export function layoutPart(core: LayoutCore) {
 
   function alignApps() {
     if (!st.taskbarBuilt) return
-    core.fadeWins()
+    pieces.glide.fadeWins()
     const middle = zones.center
     // Along the bar: its left margin, a side bar's top one (the other none).
     const margin = isSide() ? 'marginTop' : 'marginLeft'
@@ -603,14 +606,14 @@ export function layoutPart(core: LayoutCore) {
   }
   zones.center.addEventListener('transitionend', e => {
     if (e.target !== zones.center || (e.propertyName !== 'margin-left' && e.propertyName !== 'margin-top')) return
-    if (st.popFor) core.drawPop()
-    if (st.glideOn?.isConnected) core.glideTo(st.glideOn, true)
+    if (st.popFor) pieces.winlist.drawPop()
+    if (st.glideOn?.isConnected) pieces.glide.glideTo(st.glideOn, true)
     placeSlot()
     snapStart()
-    core.inkParts()
+    pieces.look.inkParts()
     if (st.editLayout) Picker?.relaid()
-    if (st.wgFor) core.drawWidgetPop()
-    requestAnimationFrame(core.sendTrayRects)
+    if (st.wgFor) pieces.wpop.drawWidgetPop()
+    requestAnimationFrame(pieces.look.sendTrayRects)
   })
 
   return { PART_NODES, RUNS_APART, TB_OPTIONAL, TB_PRESETS, alignApps, askPlugins, carousels, drawEntries, entryNodes, fillHer, fillTaskbar, flashSince, hasMonitorPart, herSlot, memberName, midLeft, needsSettings, ownName, placeMid, placeSideSettings, placeSlot, placedAt, popCtx, presetOf, stillMotionNow, tbLayout, tickCarousels, turnCarousel, zones }

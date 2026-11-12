@@ -3,19 +3,21 @@
 // own window taking her under the cursor; brought close again, it reaches
 // out a drop for her and takes her back in (reach, absorb).
 // Made by island.ts in the section's place as the page starts
-// (dropPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (dropPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import { pet } from './bridge.ts'
-import type { DropCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function dropPart(core: DropCore) {
+export function dropPart(core: IslandCore) {
   const {
-    st, BODY_H, BODY_W, BREAK_PX, CLIPS, DROP_R, PULL_ROOM, REACH_R, REACH_SHARE, atBottom, body, dropHer,
-    dropSheet, gooDrop, gooIsland, gooNeck, her, hidePlate, home, isHome, isNudging, isOn, isSetting, isSide,
-    island, pressNudge, setRoom, setStow, sheetImage, showFrame, tbEdge, update,
+    st, pieces, BODY_H, BODY_W, BREAK_PX, CLIPS, DROP_R, PULL_ROOM, REACH_R, REACH_SHARE, atBottom, body,
+    dropHer, dropSheet, gooDrop, gooIsland, gooNeck, her, home, isHome, isNudging, isOn, isSetting, isSide,
+    island, pressNudge, setRoom, sheetImage, showFrame, tbEdge, update,
   } = core
+  const { hidePlate, setStow } = pieces.plate
 
   function pullDown(e) {
     console.log('pointerdown on her in the island, button', e.button)

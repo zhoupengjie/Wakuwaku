@@ -2,18 +2,19 @@
 // (backplate.rs), or a deeper ground of its own; and the island out of the
 // way of the window under it (zhoupengjie/Wakuwaku#49), its size told.
 // Made by island.ts in the section's place as the page starts
-// (platePart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (platePart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as Anchor from './anchor.ts'
 import { pet } from './bridge.ts'
-import type { PlateCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function platePart(core: PlateCore) {
+export function platePart(core: IslandCore) {
   const {
-    st, Anchor, afterSpring, anchor, atBottom, body, home, inTopStrip, isCapsule, isEmbedded, isOn, isRinging,
-    isSide, island, sizeOf, stillMotion, tbEdge,
+    st, pieces, Anchor, afterSpring, anchor, atBottom, body, home, inTopStrip, isCapsule, isEmbedded, isOn,
+    isRinging, isSide, island, sizeOf, stillMotion, tbEdge,
   } = core
 
   // The page's own blur (--i-blur) blurs only what the page draws: open
@@ -52,7 +53,7 @@ export function platePart(core: PlateCore) {
 
   function plateWanted() {
     if (!isOn() || st.now.plate !== true || st.quiet || st.view === 'settings' || body.classList.contains('pulling') || body.classList.contains('isl-stowed')) return false
-    const { op, blur } = core.groundOf(core.lookNow())
+    const { op, blur } = pieces.look.groundOf(pieces.look.lookNow())
     if (!(op < 1 && blur > 0)) return false
     return home() !== 'taskbar' || st.view !== 'compact'
   }
@@ -90,12 +91,12 @@ export function platePart(core: PlateCore) {
   function rectAt(r, width, height) {
     // About her capsule's middle in Windows' taskbar (isEmbedded, placeMid):
     // grown upward from a taskbar along the bottom, downward from one along the top.
-    if (isEmbedded() && st.slotMiddle != null) return { x: core.midLeft(width), y: atBottom() ? r.top + r.height - height : r.top, width, height }
+    if (isEmbedded() && st.slotMiddle != null) return { x: pieces.layout.midLeft(width), y: atBottom() ? r.top + r.height - height : r.top, width, height }
     if (home() !== 'taskbar') return Anchor.grown(r, width, height, anchor(), atBottom() ? 'bottom' : 'top')
     const fromRight = tbEdge() === 'right' || (!isSide() && body.classList.contains('isl-right'))
     const fromFoot = tbEdge() === 'bottom' || (isSide() && body.classList.contains('isl-low'))
     const fromMid = !isSide() && st.slotMiddle != null && body.classList.contains('isl-mid')
-    return { x: fromMid ? core.midLeft(width) : fromRight ? r.right - width : r.left, y: fromFoot ? r.bottom - height : r.top, width, height }
+    return { x: fromMid ? pieces.layout.midLeft(width) : fromRight ? r.right - width : r.left, y: fromFoot ? r.bottom - height : r.top, width, height }
   }
 
   // Changing size: under the smaller of its two boxes (where they meet),
@@ -153,7 +154,7 @@ export function platePart(core: PlateCore) {
     const across = Math.min(1, (box.width - 2) / (sides[0] + sides[2]))
     const down = Math.min(1, (box.height - 2) / (sides[1] + sides[3]))
     const [left, top, right, bottom] = [sides[0] * across, sides[1] * down, sides[2] * across, sides[3] * down]
-    const rect = { x: box.x + left, y: box.y + top, width: box.width - left - right, height: box.height - top - bottom, vw: innerWidth, vh: innerHeight, dark: core.modeNow() !== 'light' }
+    const rect = { x: box.x + left, y: box.y + top, width: box.width - left - right, height: box.height - top - bottom, vw: innerWidth, vh: innerHeight, dark: pieces.look.modeNow() !== 'light' }
     island.style.setProperty('--rim', `${rim.toFixed(2)}px`)
     body.classList.add('plated')
     const sent = JSON.stringify(rect)
@@ -189,7 +190,7 @@ export function platePart(core: PlateCore) {
 
   function deepWanted() {
     if (!isOn() || st.view === 'settings' || (home() === 'taskbar' && st.view === 'compact')) return false
-    const { op, blur } = core.groundOf(core.lookNow())
+    const { op, blur } = pieces.look.groundOf(pieces.look.lookNow())
     return op < DEEP_OP && !(st.now.plate === true && blur > 0) && overMax()
   }
 
@@ -256,7 +257,7 @@ export function platePart(core: PlateCore) {
   function setSize({ width, height }) {
     island.style.width = `${width}px`
     island.style.height = `${height}px`
-    if ((home() === 'taskbar' && !isSide()) || isEmbedded()) core.placeMid(width)
+    if ((home() === 'taskbar' && !isSide()) || isEmbedded()) pieces.layout.placeMid(width)
     // The taskbar's left end is square, and what grows up from it is rounded
     // above (on its Mica, her capsule and all it grows into round).
     // What grows from her end is flat where it meets the strip: the strip's

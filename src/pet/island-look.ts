@@ -2,22 +2,28 @@
 // light or dark and Windows' accent, the ink of its words on what is under
 // them; the clock, the tray drawn and opened, the peek at the desktop.
 // Made by island.ts in the section's place as the page starts
-// (lookPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (lookPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as Mica from './mica.ts'
 import { Settings } from './pages.ts'
 import { pet } from './bridge.ts'
-import type { LookCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function lookPart(core: LookCore) {
+export function lookPart(core: IslandCore) {
   const {
-    st, DEEP_OP, PEEK_MS, TASKBAR_H, alignApps, barRest, body, clearWhen, clockBox, deskEdge, drawEntries,
-    drawWindows, el, endNudge, frontBox, frontIcon, frontName, glide, home, isCapsule, isClear, isFilled,
-    isLight, isMica, isOn, isSide, isSlim, isStripLight, island, islandViews, placeAnchor, sendSolid, setDeep,
-    snapStart, stripH, t, trayBox, update, watchPresses,
+    st, pieces, PEEK_MS, TASKBAR_H, body, clearWhen, el, endNudge, home, isCapsule, isClear, isFilled,
+    isLight, isMica, isOn, isSide, isSlim, isStripLight, island, islandViews, placeAnchor, sendSolid, stripH,
+    t, update,
   } = core
+  const { DEEP_OP, setDeep } = pieces.plate
+  const {
+    barRest, clockBox, deskEdge, frontBox, frontIcon, frontName, snapStart, trayBox,
+  } = pieces.right
+  const { alignApps, drawEntries } = pieces.layout
+  const { drawWindows, glide, watchPresses } = pieces.glide
 
   // Behind the strip's parts: the desktop's picture under it, blurred and
   // tinted (mica.ts) for Windows' mode, as taskbar/ sent it last; drawn

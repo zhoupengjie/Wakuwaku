@@ -2,21 +2,30 @@
 // programs' buttons and the tray's icons gone through with the arrow keys,
 // pressed with Enter or Space, their menus with Shift+F10.
 // Made by island.ts in the section's place as the page starts
-// (keysPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (keysPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import { Picker, Settings } from './pages.ts'
 import { pet } from './bridge.ts'
-import type { KeysCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function keysPart(core: KeysCore) {
+export function keysPart(core: IslandCore) {
   const {
-    st, along, appOf, barRest, batMark, body, chevron, clockBox, closeImeList, closePop, closeStackPop,
-    closeWidgetPop, el, endEdit, flyout, hi, home, isOn, isOut, isSetting, isSide, lo, netMark, openImeList,
-    openMenu, openStackPop, openTray, openWidgetPop, orderedTray, outBox, pop, pressApp, quickBox, t, trayBox,
-    trayOrder, volMark, wgPop, windowsBox, wmenu,
+    st, pieces, along, body, el, endEdit, hi, home, isOn, isSetting, isSide, lo, t,
   } = core
+  const {
+    barRest, batMark, clockBox, netMark, quickBox, trayBox, volMark, windowsBox,
+  } = pieces.right
+  const { appOf, closePop, pop } = pieces.glide
+  const { closeStackPop, closeWidgetPop, openStackPop, openWidgetPop, wgPop } = pieces.wpop
+  const { openMenu, wmenu } = pieces.wmenu
+  const { pressApp } = pieces.winlist
+  const { closeImeList, openImeList } = pieces.ime
+  const {
+    chevron, flyout, isOut, openTray, orderedTray, outBox, trayOrder,
+  } = pieces.look
 
   // As on Windows' own taskbar: Win+T puts the keyboard on the programs'
   // buttons (the first; Win+Shift+T the last; again, the next one), Win+B

@@ -2,17 +2,18 @@
 // network, the volume and the battery (taskbar:keys), what is using the
 // microphone, camera or location, the clock and the program in front.
 // Made by island.ts in the section's place as the page starts
-// (rightPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (rightPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
-import type { RightCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function rightPart(core: RightCore) {
+export function rightPart(core: IslandCore) {
   const {
-    st, Widgets, el, home, isDetailed, isPinned, isSide, island, stripHue, stripInk, t,
+    st, pieces, Widgets, el, home, isDetailed, isPinned, isSide, island, stripHue, stripInk, t,
   } = core
 
   // Start and the programs, the monitor, the tray's icons, the clock and the
@@ -57,7 +58,7 @@ export function rightPart(core: RightCore) {
   }
 
   function fillBar() {
-    if (home() === 'taskbar') core.fillTaskbar()
+    if (home() === 'taskbar') pieces.layout.fillTaskbar()
   }
 
   // The taskbar's parts that stay put: rebuilt every second with the

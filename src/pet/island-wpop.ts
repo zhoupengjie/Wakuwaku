@@ -2,21 +2,24 @@
 // as the clock's opens Windows' calendar; a stack opened (the spec's §5),
 // its members side by side.
 // Made by island.ts in the section's place as the page starts
-// (wpopPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (wpopPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { Picker, Settings } from './pages.ts'
 import { pet } from './bridge.ts'
-import type { WpopCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function wpopPart(core: WpopCore) {
+export function wpopPart(core: IslandCore) {
   const {
-    st, Widgets, barRest, closePop, el, entryNodes, fillHer, home, isDetailed, isSide, memberName, needsSettings,
-    popCtx, t, tbLayout, update, watchPresses,
+    st, pieces, Widgets, el, home, isDetailed, isSide, newId, t, update,
   } = core
+  const { barRest } = pieces.right
+  const { entryNodes, fillHer, memberName, needsSettings, popCtx, tbLayout } = pieces.layout
+  const { closePop, watchPresses } = pieces.glide
 
   // A press on one opens its card above it, as the clock's opens Windows'
   // calendar: what it says (its large size, wcards.ts cardHTML, when it has
@@ -37,8 +40,8 @@ export function wpopPart(core: WpopCore) {
 
   function openWidgetPop(id, pick = null) {
     if (st.popFor) closePop()
-    if (st.imeOpen) core.closeImeList()
-    if (st.menuFor) core.closeMenu()
+    if (st.imeOpen) pieces.ime.closeImeList()
+    if (st.menuFor) pieces.wmenu.closeMenu()
     st.wgFor = id
     st.wgPick = pick
     drawWidgetPop()
@@ -110,7 +113,7 @@ export function wpopPart(core: WpopCore) {
     wgPop.hidden = false
     // Over the stack it was picked from, else over it.
     const over = st.stackFor === st.wgFor && !stackPop.hidden ? stackPop : node
-    const at = core.besideOrOver(over, wgPop, isSide() ? 8 : 4)
+    const at = pieces.winlist.besideOrOver(over, wgPop, isSide() ? 8 : 4)
     wgPop.style.left = at.left === undefined ? '' : `${at.left}px`
     wgPop.style.top = at.top === undefined ? '' : `${at.top}px`
     wgPop.classList.toggle('above-stack', over === stackPop)
@@ -142,7 +145,7 @@ export function wpopPart(core: WpopCore) {
   // One of a group's off the taskbar: the rest stay (one left, alone).
   function removeMember(id, index) {
     closeWidgetPop()
-    keepLayout(Widgets.dropMember(tbLayout(), id, index, core.newId))
+    keepLayout(Widgets.dropMember(tbLayout(), id, index, newId))
   }
 
   wgPop.addEventListener('click', e => {
@@ -195,9 +198,9 @@ export function wpopPart(core: WpopCore) {
 
   function openStackPop(id) {
     if (st.popFor) closePop()
-    if (st.imeOpen) core.closeImeList()
+    if (st.imeOpen) pieces.ime.closeImeList()
     if (st.wgFor) closeWidgetPop()
-    if (st.menuFor) core.closeMenu()
+    if (st.menuFor) pieces.wmenu.closeMenu()
     st.stackFor = id
     stackOpenedAt = Date.now()
     stackPop._drawn = ''
@@ -243,7 +246,7 @@ export function wpopPart(core: WpopCore) {
       stackPop.style.animationDelay = `-${into}ms`
       for (const [i, row] of [...stackPop.querySelectorAll('.srow')].entries()) row.style.animationDelay = `${i * 40 - into}ms`
     }
-    const at = core.besideOrOver(node, stackPop, 8)
+    const at = pieces.winlist.besideOrOver(node, stackPop, 8)
     stackPop.style.left = at.left === undefined ? '' : `${at.left}px`
     stackPop.style.top = at.top === undefined ? '' : `${at.top}px`
   }
@@ -278,7 +281,7 @@ export function wpopPart(core: WpopCore) {
     if (!d.moved) return d.widget ? openWidgetPop(id, d.widget) : undefined
     d.row.classList.remove('dragging', 'out')
     d.row.style.transform = ''
-    if (d.out) return keepLayout(Widgets.takeOut(tbLayout(), id, d.member, core.newId))
+    if (d.out) return keepLayout(Widgets.takeOut(tbLayout(), id, d.member, newId))
     // Before the line it is let go over (after it past its middle).
     const rows = [...stackPop.querySelectorAll('.srow')].filter(r => r !== d.row)
     const below = rows.find(r => {
@@ -305,7 +308,7 @@ export function wpopPart(core: WpopCore) {
     e.preventDefault()
     e.stopPropagation()
     const row = e.target.closest('.srow')
-    if (row && st.stackFor) core.openMenu({ where: 'bar', entry: st.stackFor, member: Number(row.dataset.member), widget: row.dataset.widget || null }, row)
+    if (row && st.stackFor) pieces.wmenu.openMenu({ where: 'bar', entry: st.stackFor, member: Number(row.dataset.member), widget: row.dataset.widget || null }, row)
   })
 
   return { STACK_CARD_W, closeStackPop, closeWidgetPop, drawStackPop, drawWidgetPop, imePop, keepLayout, openStackPop, openWidgetPop, openWidgetSettings, removeEntry, removeMember, stackPop, wgPop }

@@ -3,20 +3,24 @@
 // draws them: taskbar_thumbs), pressed, dragged, and files dragged onto a
 // button bringing its window up.
 // Made by island.ts in the section's place as the page starts
-// (winlistPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (winlistPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as Aim from './aim.ts'
 import * as Presses from './presses.ts'
 import { pet } from './bridge.ts'
-import type { WinlistCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function winlistPart(core: WinlistCore) {
+export function winlistPart(core: IslandCore) {
   const {
-    st, across, along, appOf, appOrder, barRest, body, closePop, crossHi, crossLo, el, hi, home, isExplorer, isOn,
-    isSide, island, len, lo, openPop, orderedApps, pop, popReach, t, tbEdge, windowsBox,
+    st, pieces, across, along, body, crossHi, crossLo, el, hi, home, isOn, isSide, island, len, lo, t, tbEdge,
   } = core
+  const { barRest, windowsBox } = pieces.right
+  const {
+    appOf, appOrder, closePop, isExplorer, openPop, orderedApps, pop, popReach,
+  } = pieces.glide
 
   function drawPop() {
     const app = st.popFor && appOf(st.popFor.app)

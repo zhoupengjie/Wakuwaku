@@ -2,20 +2,22 @@
 // button opens above it (its windows, or a widget's card): opened, closed,
 // kept up while the pointer is on its way to it.
 // Made by island.ts in the section's place as the page starts
-// (glidePart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are; what the island
-// remembers is core.st (island-vars.ts), read and written as st.<name>;
-// what it hands back is the island's again.
+// (glidePart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as Presses from './presses.ts'
 import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
-import type { GlideCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function glidePart(core: GlideCore) {
+export function glidePart(core: IslandCore) {
   const {
-    st, alignApps, barRest, body, crossLo, el, entryNodes, flashSince, hi, home, imeMark, isOn, isSide, lo,
-    openedUp, placeSlot, t, trayBox, windowsBox,
+    st, pieces, body, crossLo, el, hi, home, isOn, isSide, lo, openedUp, t,
   } = core
+  const { barRest, imeMark, trayBox, windowsBox } = pieces.right
+  const { alignApps, entryNodes, flashSince, placeSlot } = pieces.layout
 
   // Under the pointer, one highlight for all the taskbar's buttons that
   // slides from one to the next as her island's drop moves: its leading
@@ -62,7 +64,7 @@ export function glidePart(core: GlideCore) {
       glide.classList.add('squash')
     }
     glide.classList.add('on')
-    glide.classList.toggle('ink-light', core.inkOf(node))
+    glide.classList.toggle('ink-light', pieces.look.inkOf(node))
     st.glideOn = node
   }
 
@@ -186,7 +188,7 @@ export function glidePart(core: GlideCore) {
     })
     if (fresh.length) requestAnimationFrame(() => requestAnimationFrame(() => fresh.forEach(b => b.classList.remove('fresh'))))
     st.buttonsDrawn = true
-    if (st.popFor) core.drawPop()
+    if (st.popFor) pieces.winlist.drawPop()
   }
 
   // A button's insides as its program is now: its icon (or its first
@@ -246,11 +248,11 @@ export function glidePart(core: GlideCore) {
   const isExplorer = path => /(^|[\\/])explorer\.exe$/i.test(path || '')
 
   function openPop(key, kind) {
-    if (st.wgFor) core.closeWidgetPop()
-    if (st.imeOpen) core.closeImeList()
+    if (st.wgFor) pieces.wpop.closeWidgetPop()
+    if (st.imeOpen) pieces.ime.closeImeList()
     clearTimeout(st.popTimer)
     st.popFor = { app: key, kind }
-    core.drawPop()
+    pieces.winlist.drawPop()
     watchPresses()
     // Windows' End task as its setting is now (the look tells it only every
     // half minute): the menu drawn again should it have changed.
@@ -258,7 +260,7 @@ export function glidePart(core: GlideCore) {
       pet.taskbar.endTask().then(on => {
         if (on === st.look.endTask) return
         st.look.endTask = on === true
-        if (st.popFor?.kind === 'menu') core.drawPop()
+        if (st.popFor?.kind === 'menu') pieces.winlist.drawPop()
       })
   }
 
@@ -273,7 +275,7 @@ export function glidePart(core: GlideCore) {
     clearTimeout(st.popTimer)
     st.popFor = null
     pop.hidden = true
-    core.sendThumbs()
+    pieces.winlist.sendThumbs()
     watchPresses()
   }
 
@@ -293,11 +295,11 @@ export function glidePart(core: GlideCore) {
     if (!isOn() || home() !== 'taskbar' || !at) return
     const over = document.elementFromPoint(at.x, at.y)
     if (st.popFor && !(over && (pop.contains(over) || windowsBox.contains(over)))) closePop()
-    if (st.trayOpen && !(over && trayBox.contains(over))) core.openTray(false)
-    if (st.wgFor && !(over && (core.wgPop.contains(over) || entryNodes.get(st.wgFor)?.contains(over) || core.stackPop.contains(over)))) core.closeWidgetPop()
-    if (st.stackFor && !(over && (core.stackPop.contains(over) || entryNodes.get(st.stackFor)?.contains(over) || core.wgPop.contains(over) || core.wmenu.contains(over)))) core.closeStackPop()
-    if (st.menuFor?.where === 'bar' && !(over && core.wmenu.contains(over))) core.closeMenu()
-    if (st.imeOpen && !(over && (core.imePop.contains(over) || imeMark.contains(over)))) core.closeImeList()
+    if (st.trayOpen && !(over && trayBox.contains(over))) pieces.look.openTray(false)
+    if (st.wgFor && !(over && (pieces.wpop.wgPop.contains(over) || entryNodes.get(st.wgFor)?.contains(over) || pieces.wpop.stackPop.contains(over)))) pieces.wpop.closeWidgetPop()
+    if (st.stackFor && !(over && (pieces.wpop.stackPop.contains(over) || entryNodes.get(st.stackFor)?.contains(over) || pieces.wpop.wgPop.contains(over) || pieces.wmenu.wmenu.contains(over)))) pieces.wpop.closeStackPop()
+    if (st.menuFor?.where === 'bar' && !(over && pieces.wmenu.wmenu.contains(over))) pieces.wmenu.closeMenu()
+    if (st.imeOpen && !(over && (pieces.wpop.imePop.contains(over) || imeMark.contains(over)))) pieces.ime.closeImeList()
   })
 
   return { appOf, appOrder, closePop, drawWindows, fadeWins, glide, glideTo, isExplorer, openPop, orderedApps, pop, popReach, watchPresses }

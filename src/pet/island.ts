@@ -69,6 +69,24 @@ import { islandVars, MIN_W } from './island-vars.ts'
 import type { Config } from '../shared/config.ts'
 import type { TbLayout } from './island-vars.ts'
 
+// The island's parts as each is made (island.ts, in its section's place):
+// what each hands back, reached by a part made before it (pieces.<name>), or
+// by one made before a later one, once the page is up.
+export interface IslandParts {
+  plate: ReturnType<typeof platePart>
+  right: ReturnType<typeof rightPart>
+  layout: ReturnType<typeof layoutPart>
+  glide: ReturnType<typeof glidePart>
+  wpop: ReturnType<typeof wpopPart>
+  wmenu: ReturnType<typeof wmenuPart>
+  boards: ReturnType<typeof boardsPart>
+  winlist: ReturnType<typeof winlistPart>
+  ime: ReturnType<typeof imePart>
+  look: ReturnType<typeof lookPart>
+  ring: ReturnType<typeof ringPart>
+  drop: ReturnType<typeof dropPart>
+}
+
 // What the page remembers, all of it (island-vars.ts): st.<name> here and
 // in every part.
 const st = islandVars(Flow.idle())
@@ -1151,21 +1169,32 @@ function fadeGround() {
   if (!stillMotion()) island.animate([from], { id: 'ground', duration: GROUND_FADE_MS, easing: 'ease-out' })
 }
 
+// --- The parts' core ----------------------------------------------------------
+// What every part (island-*.ts) is given as it is made below, each in its
+// section's place: the island's own constants and functions, what the
+// page remembers (st), and the parts made so far (pieces: each one's
+// functions as it hands them back, a later part's reached once the page
+// is up). A part takes from it what it uses.
+const pieces = {} as IslandParts
+const core = {
+  st, pieces, ANCHORED, Anchor, BODY_H, BODY_W, BREAK_PX, CAPSULE_X, CELL_W, CLIPS, DROP_R, Flow, MOOD_CLIP,
+  PEEK_MS, PER_PX, PULL_ROOM, REACH_R, REACH_SHARE, REACTIONS, TASKBAR_GAP, TASKBAR_H, Widgets, across,
+  afterSpring, along, anchor, animateHer, atBottom, body, clearWhen, compact, crossHi, crossLo, dropHer,
+  dropSheet, el, endEdit, endNudge, face, flow, gooDrop, gooIsland, gooNeck, her, herTalks, hi, hintAccent,
+  home, hue, inTopStrip, ink, isCapsule, isClear, isDetailed, isEmbedded, isFilled, isHinting, isHome,
+  isLight, isMica, isNudging, isOn, isPinned, isRinging, isSetting, isSide, isSlim, isSplit, isStripLight,
+  island, islandViews, isleCtx, len, lo, newId, newsDot, nudgeFor, openedUp, placeAnchor, pressNudge, rowSize,
+  sendSolid, setRoom, setRowSize, sheetImage, showCard, showFrame, sizeOf, spins, stillMotion, stripH,
+  stripHue, stripInk, t, takeWidgets, taskCompactH, taskHead, tbEdge, update,
+}
+export type IslandCore = typeof core
+
 // --- Behind the island: a blur, or a deeper ground (zhoupengjie/Wakuwaku#20) ------
 // In island-plate.ts:
-const plateCore = {
-  st, Anchor, afterSpring, anchor, atBottom, body, home, inTopStrip, isCapsule, isEmbedded, isOn, isRinging,
-  isSide, island, sizeOf, stillMotion, tbEdge,
-  get groundOf() { return groundOf },
-  get lookNow() { return lookNow },
-  get midLeft() { return midLeft },
-  get modeNow() { return modeNow },
-  get placeMid() { return placeMid },
-}
-export type PlateCore = typeof plateCore
+pieces.plate = platePart(core)
 const {
   DEEP_OP, PLATE_OUT_MS, hidePlate, placePlate, setDeep, setSize, setStow,
-} = platePart(plateCore)
+} = pieces.plate
 
 // --- Deciding ---------------------------------------------------------------
 
@@ -1190,170 +1219,79 @@ function sizeOf(name) {
 
 // --- The taskbar's right part ---------------------------------------------------
 // In island-right.ts:
-const rightCore = {
-  st, Widgets, el, home, isDetailed, isPinned, isSide, island, stripHue, stripInk, t,
-  get fillTaskbar() { return fillTaskbar },
-}
-export type RightCore = typeof rightCore
+pieces.right = rightPart(core)
 const {
-  barRest, batMark, capsMark, clockBox, deskEdge, facesBox, fillBar, frontBox, frontIcon, frontName,
-  growNode, imeMark, keysBox, netMark, onPixels, privBox, quickBox, showBattery, showNet, showPrivacy,
-  showVolume, snapStart, startButton, startPart, taskViewButton, trayBox, volMark, widgetFaces, windowsBox,
-} = rightPart(rightCore)
+  barRest, batMark, capsMark, clockBox, deskEdge, facesBox, fillBar, frontBox, frontIcon, frontName, growNode,
+  imeMark, keysBox, netMark, onPixels, privBox, quickBox, showBattery, showNet, showPrivacy, showVolume,
+  snapStart, startButton, startPart, taskViewButton, trayBox, volMark, widgetFaces, windowsBox,
+} = pieces.right
 
 // --- The taskbar's layout (taskbarLayout) -------------------------------------------
 // In island-layout.ts:
-const layoutCore = {
-  st, CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, barRest, body, clockBox, deskEdge, el,
-  face, facesBox, frontBox, growNode, home, isCapsule, isDetailed, isLight, isOn, isSide, isSlim, isSplit,
-  isStripLight, island, keysBox, len, lo, onPixels, privBox, quickBox, sheetImage, showFrame, sizeOf,
-  snapStart, startButton, startPart, t, takeWidgets, taskCompactH, taskViewButton, trayBox, widgetFaces,
-  windowsBox,
-  get STACK_CARD_W() { return STACK_CARD_W },
-  get drawFront() { return drawFront },
-  get drawPop() { return drawPop },
-  get drawStackPop() { return drawStackPop },
-  get drawTray() { return drawTray },
-  get drawWidgetPop() { return drawWidgetPop },
-  get drawWindows() { return drawWindows },
-  get fadeWins() { return fadeWins },
-  get glide() { return glide },
-  get glideTo() { return glideTo },
-  get imePop() { return imePop },
-  get inkParts() { return inkParts },
-  get pop() { return pop },
-  get sendTrayRects() { return sendTrayRects },
-  get stackPop() { return stackPop },
-  get tickClock() { return tickClock },
-  get wgPop() { return wgPop },
-}
-export type LayoutCore = typeof layoutCore
+pieces.layout = layoutPart(core)
 const {
-  PART_NODES, RUNS_APART, TB_OPTIONAL, TB_PRESETS, alignApps, askPlugins, carousels, drawEntries,
-  entryNodes, fillHer, fillTaskbar, flashSince, hasMonitorPart, herSlot, memberName, midLeft, needsSettings,
-  ownName, placeMid, placeSideSettings, placeSlot, placedAt, popCtx, presetOf, stillMotionNow, tbLayout,
-  tickCarousels, turnCarousel, zones,
-} = layoutPart(layoutCore)
+  PART_NODES, RUNS_APART, TB_OPTIONAL, TB_PRESETS, alignApps, askPlugins, carousels, drawEntries, entryNodes,
+  fillHer, fillTaskbar, flashSince, hasMonitorPart, herSlot, memberName, midLeft, needsSettings, ownName,
+  placeMid, placeSideSettings, placeSlot, placedAt, popCtx, presetOf, stillMotionNow, tbLayout, tickCarousels,
+  turnCarousel, zones,
+} = pieces.layout
 
 // --- The pointer's glide --------------------------------------------------------
 // In island-glide.ts:
-const glideCore = {
-  st, alignApps, barRest, body, crossLo, el, entryNodes, flashSince, hi, home, imeMark, isOn, isSide, lo,
-  openedUp, placeSlot, t, trayBox, windowsBox,
-  get closeImeList() { return closeImeList },
-  get closeMenu() { return closeMenu },
-  get closeStackPop() { return closeStackPop },
-  get closeWidgetPop() { return closeWidgetPop },
-  get drawPop() { return drawPop },
-  get imePop() { return imePop },
-  get inkOf() { return inkOf },
-  get openTray() { return openTray },
-  get sendThumbs() { return sendThumbs },
-  get stackPop() { return stackPop },
-  get wgPop() { return wgPop },
-  get wmenu() { return wmenu },
-}
-export type GlideCore = typeof glideCore
+pieces.glide = glidePart(core)
 const {
   appOf, appOrder, closePop, drawWindows, fadeWins, glide, glideTo, isExplorer, openPop, orderedApps, pop,
   popReach, watchPresses,
-} = glidePart(glideCore)
+} = pieces.glide
 
 // --- A widget on the taskbar, opened ------------------------------------------------
 // In island-wpop.ts:
-const wpopCore = {
-  st, Widgets, barRest, closePop, el, entryNodes, fillHer, home, isDetailed, isSide, memberName, needsSettings,
-  popCtx, t, tbLayout, update, watchPresses,
-  get besideOrOver() { return besideOrOver },
-  get closeImeList() { return closeImeList },
-  get closeMenu() { return closeMenu },
-  get newId() { return newId },
-  get openMenu() { return openMenu },
-}
-export type WpopCore = typeof wpopCore
+pieces.wpop = wpopPart(core)
 const {
-  STACK_CARD_W, closeStackPop, closeWidgetPop, drawStackPop, drawWidgetPop, imePop, keepLayout,
-  openStackPop, openWidgetPop, openWidgetSettings, removeEntry, removeMember, stackPop, wgPop,
-} = wpopPart(wpopCore)
+  STACK_CARD_W, closeStackPop, closeWidgetPop, drawStackPop, drawWidgetPop, imePop, keepLayout, openStackPop,
+  openWidgetPop, openWidgetSettings, removeEntry, removeMember, stackPop, wgPop,
+} = pieces.wpop
 
 // --- A widget's menu (the spec's §10) -------------------------------------------------
 // In island-wmenu.ts:
-const wmenuCore = {
-  st, Widgets, barRest, closePop, closeStackPop, closeWidgetPop, el, entryNodes, fillHer, hasMonitorPart, home,
-  isDetailed, island, isleCtx, keepLayout, memberName, openWidgetSettings, ownName, placedAt, popCtx,
-  removeEntry, removeMember, rowSize, setRowSize, showCard, stackPop, t, tbLayout, update, watchPresses,
-  get backToIsland() { return backToIsland },
-  get besideOrOver() { return besideOrOver },
-  get boardName() { return boardName },
-  get boardSize() { return boardSize },
-  get closeImeList() { return closeImeList },
-  get deskBoards() { return deskBoards },
-  get deskOff() { return deskOff },
-  get newId() { return newId },
-  get putOnDesk() { return putOnDesk },
-  get toBoard() { return toBoard },
-  get toDesk() { return toDesk },
-}
-export type WmenuCore = typeof wmenuCore
+pieces.wmenu = wmenuPart(core)
 const {
   closeMenu, keyFor, offBar, openMenu, placeNow, placeWidget, whereOf, wmenu,
-} = wmenuPart(wmenuCore)
+} = pieces.wmenu
 
 // --- Boards on the desktop (§7 工作台) ---------------------------------------------
 // In island-boards.ts:
-const boardsCore = {
-  st, Widgets, closeStackPop, home, keepLayout, offBar, placeWidget, removeEntry, removeMember, t, takeWidgets,
-  tbLayout, update,
-  get newId() { return newId },
-}
-export type BoardsCore = typeof boardsCore
+pieces.boards = boardsPart(core)
 const {
   backToIsland, boardName, boardSize, deskBoards, deskOff, deskPlace, keepDesk, keepDeskLayout, putOnDesk,
   toBoard, toDesk,
-} = boardsPart(boardsCore)
+} = pieces.boards
 
 // --- A program's windows, listed over its button -------------------------------------
 // In island-winlist.ts:
-const winlistCore = {
-  st, across, along, appOf, appOrder, barRest, body, closePop, crossHi, crossLo, el, hi, home, isExplorer, isOn,
-  isSide, island, len, lo, openPop, orderedApps, pop, popReach, t, tbEdge, windowsBox,
-}
-export type WinlistCore = typeof winlistCore
-const { besideOrOver, drawPop, pressApp, sendThumbs } = winlistPart(winlistCore)
+pieces.winlist = winlistPart(core)
+const {
+  besideOrOver, drawPop, pressApp, sendThumbs,
+} = pieces.winlist
 
 // --- The input method on the taskbar -------------------------------------------------
 // In island-ime.ts:
-const imeCore = {
-  st, besideOrOver, capsMark, closePop, closeWidgetPop, el, imeMark, imePop, isSide, showBattery, showNet,
-  showPrivacy, showVolume, t, watchPresses,
-}
-export type ImeCore = typeof imeCore
-const { closeImeList, openImeList } = imePart(imeCore)
+pieces.ime = imePart(core)
+const {
+  closeImeList, openImeList,
+} = pieces.ime
 
 // --- The taskbar's look: Mica, light or dark, Windows' accent -------------------------
 // In island-look.ts:
-const lookCore = {
-  st, DEEP_OP, PEEK_MS, TASKBAR_H, alignApps, barRest, body, clearWhen, clockBox, deskEdge, drawEntries,
-  drawWindows, el, endNudge, frontBox, frontIcon, frontName, glide, home, isCapsule, isClear, isFilled,
-  isLight, isMica, isOn, isSide, isSlim, isStripLight, island, islandViews, placeAnchor, sendSolid, setDeep,
-  snapStart, stripH, t, trayBox, update, watchPresses,
-}
-export type LookCore = typeof lookCore
+pieces.look = lookPart(core)
 const {
   chevron, drawFront, drawMica, drawTray, flyout, groundOf, inkOf, inkParts, isOut, lookNow, modeNow,
   openTray, orderedTray, outBox, sendTrayRects, setInk, setPeek, tickClock, trayOrder,
-} = lookPart(lookCore)
+} = pieces.look
 
 // --- The keyboard on the taskbar (Win+T, Win+B) ---------------------------------------
 // In island-keys.ts:
-const keysCore = {
-  st, along, appOf, barRest, batMark, body, chevron, clockBox, closeImeList, closePop, closeStackPop,
-  closeWidgetPop, el, endEdit, flyout, hi, home, isOn, isOut, isSetting, isSide, lo, netMark, openImeList,
-  openMenu, openStackPop, openTray, openWidgetPop, orderedTray, outBox, pop, pressApp, quickBox, t, trayBox,
-  trayOrder, volMark, wgPop, windowsBox, wmenu,
-}
-export type KeysCore = typeof keysCore
-keysPart(keysCore)
+keysPart(core)
 
 // --- Editing the layout: the parts dragged about on the strip itself -------------------
 // As KDE edits a panel (the picker of 2026-10-17): each part outlined, the
@@ -1369,7 +1307,9 @@ keysPart(keysCore)
 const editBar = el('div', 'tbedit')
 
 // A new widget's id, as settings.rs takes it: "w" and up to 15 of a-z 0-9.
-const newId = () => `w${Date.now().toString(36).slice(-6)}${Math.random().toString(36).slice(2, 6)}`
+function newId() {
+  return `w${Date.now().toString(36).slice(-6)}${Math.random().toString(36).slice(2, 6)}`
+}
 
 // Pointer in or out of what editing puts over the strip: the window takes it.
 editBar.addEventListener('mouseenter', () => pet.hover(true))
@@ -1755,25 +1695,17 @@ function dismiss() {
 
 // --- The flow light (flow.ts) -------------------------------------------------------
 // In island-ring.ts:
-const ringCore = {
-  st, ANCHORED, CLIPS, Flow, REACTIONS, animateHer, body, compact, flow, her, herTalks, hintAccent, home, hue,
-  ink, isCapsule, isHinting, isHome, isNudging, isOn, isRinging, isSide, island, modeNow, newsDot, nudgeFor,
-  setStow, spins, stillMotionNow, taskHead, update,
-}
-export type RingCore = typeof ringCore
+pieces.ring = ringPart(core)
 const {
   animateRing, blink, cue, drawNews, placeFlow, placeNews, stopRing, stopStepping, takePending,
-} = ringPart(ringCore)
+} = pieces.ring
 
 // --- Pulling her out: the drop --------------------------------------------------
 // In island-drop.ts:
-const dropCore = {
-  st, BODY_H, BODY_W, BREAK_PX, CLIPS, DROP_R, PULL_ROOM, REACH_R, REACH_SHARE, atBottom, body, dropHer,
-  dropSheet, gooDrop, gooIsland, gooNeck, her, hidePlate, home, isHome, isNudging, isOn, isSetting, isSide,
-  island, pressNudge, setRoom, setStow, sheetImage, showFrame, tbEdge, update,
-}
-export type DropCore = typeof dropCore
-const { absorb, reach } = dropPart(dropCore)
+pieces.drop = dropPart(core)
+const {
+  absorb, reach,
+} = pieces.drop
 
 // --- On and off ---------------------------------------------------------------
 

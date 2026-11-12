@@ -267,10 +267,11 @@ export interface IslandVars extends IslandState {
   // The programs' buttons drawn once already: a new one after that grows its line in.
   buttonsDrawn: boolean
   // The pointer gliding along the buttons (island-glide.ts).
-  glideOn: any
-  // { app, kind: 'list' | 'menu' } while open, what it showed last, and its
-  // wait to open; shown and moving along with the pointer (island-winlist.ts).
-  popFor: any
+  glideOn: HTMLElement | null
+  // { app, kind: 'list' | 'menu' } while open (pressed: by a press on its
+  // button), what it showed last, and its wait to open; shown and moving
+  // along with the pointer (island-winlist.ts).
+  popFor: { app: string; kind: 'list' | 'menu'; pressed?: boolean } | null
   popDrawn: string
   popTimer: Timer | undefined
   popShown: any

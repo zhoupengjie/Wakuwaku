@@ -10,7 +10,10 @@
 import * as Presses from './presses.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
-import type { TaskApp } from './island-vars.ts'
+import type { TaskApp, TaskWindow } from './island-vars.ts'
+
+// A side of a box, or its size along one: what the glide is set by.
+type Side = 'top' | 'bottom' | 'left' | 'right' | 'width' | 'height'
 
 export function glidePart(core: IslandCore) {
   const {
@@ -29,20 +32,20 @@ export function glidePart(core: IslandCore) {
   const GLIDE_ON = '.start, .tview, .win, .tout .ticon, .tchev, .tpriv, .kbd .ime, .tquick, .face.mon, .tw-widget, .tw-plugin, .tw-group, .tclock'
   const GLIDE_FAR = 360
   const glide = el('span', 'hdrop')
-  let glideTimer
+  let glideTimer: Timer | undefined
 
-  function glideTo(node, still = false) {
+  function glideTo(node: HTMLElement, still = false) {
     clearTimeout(glideTimer)
     const bar = barRest.getBoundingClientRect()
     const r = node.getBoundingClientRect()
     // Along the bar its two ends slide (left and right, or a side bar's top
     // and bottom); across it, as the button is.
-    const [from, to, crossFrom, crossSize] = isSide() ? ['top', 'bottom', 'left', 'width'] : ['left', 'right', 'top', 'height']
+    const [from, to, crossFrom, crossSize]: Side[] = isSide() ? ['top', 'bottom', 'left', 'width'] : ['left', 'right', 'top', 'height']
     const left = lo(r) - lo(bar)
     const right = hi(bar) - hi(r)
     const was = st.glideOn && glide.classList.contains('on') && glide.dataset.axis === from ? parseFloat(glide.style[from]) : null
     if (glide.dataset.axis !== from) {
-      for (const p of ['left', 'right', 'top', 'bottom', 'width', 'height']) glide.style[p] = ''
+      for (const p of ['left', 'right', 'top', 'bottom', 'width', 'height'] as const) glide.style[p] = ''
       glide.dataset.axis = from
     }
     glide.style[crossFrom] = `${crossLo(r) - crossLo(bar)}px`
@@ -76,22 +79,22 @@ export function glidePart(core: IslandCore) {
     }, 90)
   }
 
-  const isGlideOn = node => node?.matches?.(GLIDE_ON) && !node.closest('.wpop, .wgpop, .tfly, .wstk, .wmenu')
+  const isGlideOn = (node: HTMLElement | null) => node?.matches?.(GLIDE_ON) && !node.closest('.wpop, .wgpop, .tfly, .wstk, .wmenu')
   // The programs' buttons pressed in and springing back (presses.ts pressIn;
   // Start and Task View have their own, style.css .start.down).
   Presses.pressIn(windowsBox, '.win')
   barRest.addEventListener(
     'mouseenter',
     e => {
-      if (!isOn() || home() !== 'taskbar' || !isGlideOn(e.target) || body.classList.contains('tray-dragging') || body.classList.contains('win-dragging')) return
-      glideTo(e.target)
+      if (!isOn() || home() !== 'taskbar' || !isGlideOn(e.target as HTMLElement) || body.classList.contains('tray-dragging') || body.classList.contains('win-dragging')) return
+      glideTo(e.target as HTMLElement)
     },
     true,
   )
   barRest.addEventListener(
     'mouseleave',
     e => {
-      if (e.target === barRest || isGlideOn(e.target)) glideOff()
+      if (e.target === barRest || isGlideOn(e.target as HTMLElement)) glideOff()
     },
     true,
   )
@@ -118,7 +121,7 @@ export function glidePart(core: IslandCore) {
   const appOrder = () => (Array.isArray(st.config.taskbarOrder) ? st.config.taskbarOrder.map(String) : [])
   function orderedApps() {
     const order = appOrder()
-    const rank = a => (order.includes(a.app) ? order.indexOf(a.app) : Infinity)
+    const rank = (a: TaskApp) => (order.includes(a.app) ? order.indexOf(a.app) : Infinity)
     return st.taskWindows
       .map((a, n): [TaskApp, number] => [a, n])
       .sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1])
@@ -150,7 +153,7 @@ export function glidePart(core: IslandCore) {
     // (presses.ts pressIn) though the windows change under it; a new one's
     // line grows in (fresh). Drawn anew each time, none of it could move.
     const old = new Map([...windowsBox.children as HTMLCollectionOf<HTMLElement>].filter(b => b.dataset.app != null).map(b => [b.dataset.app, b]))
-    const fresh = []
+    const fresh: HTMLElement[] = []
     const buttons = apps.map(app => {
       const windows = app.windows || []
       let button = old.get(app.app)
@@ -172,7 +175,7 @@ export function glidePart(core: IslandCore) {
       button.classList.toggle('flash', flashes.length > 0)
       // From the longest-flashing window's start: a negative delay puts
       // the animation that far along (past its end: the last frame).
-      if (flashes.length) button.style.setProperty('--flash-delay', `${-Math.max(...flashes.map(w => now - flashSince.get(w.id)))}ms`)
+      if (flashes.length) button.style.setProperty('--flash-delay', `${-Math.max(...flashes.map(w => now - flashSince.get(w.id)!))}ms`)
       else button.style.removeProperty('--flash-delay')
       button.classList.toggle('idle', !windows.length)
       if (!windows.length) button.title = app.name || ''
@@ -194,8 +197,8 @@ export function glidePart(core: IslandCore) {
   // A button's insides as its program is now: its icon (or its first
   // letter), the title of its one window or its name, how many; each
   // changed only as it changes, the icon kept through a press.
-  function fillButton(button, app, windows) {
-    let icon = button.firstElementChild
+  function fillButton(button: HTMLElement, app: TaskApp, windows: TaskWindow[]) {
+    let icon = button.firstElementChild as HTMLElement | null
     if (app.png) {
       if (icon?.tagName !== 'IMG') {
         const img = el('img')
@@ -204,7 +207,7 @@ export function glidePart(core: IslandCore) {
         else button.prepend(img)
         icon = img
       }
-      if (icon.getAttribute('src') !== app.png) icon.src = app.png
+      if (icon.getAttribute('src') !== app.png) (icon as HTMLImageElement).src = app.png
     } else {
       const letter = (app.name || '?').slice(0, 1).toUpperCase()
       if (!icon?.classList.contains('letter')) {
@@ -243,11 +246,11 @@ export function glidePart(core: IslandCore) {
   barRest.append(pop)
   // Its room for the pointer down to the buttons (style.css .wreach, #56).
   const popReach = el('span', 'wreach')
-  const appOf = key => st.taskWindows.find(a => a.app === key)
+  const appOf = (key: unknown) => st.taskWindows.find(a => a.app === key)
   // File Explorer's button, by its program: explorer.exe, the shell itself.
-  const isExplorer = path => /(^|[\\/])explorer\.exe$/i.test(path || '')
+  const isExplorer = (path?: string) => /(^|[\\/])explorer\.exe$/i.test(path || '')
 
-  function openPop(key, kind) {
+  function openPop(key: string, kind: 'list' | 'menu') {
     if (st.wgFor) pieces.wpop.closeWidgetPop()
     if (st.imeOpen) pieces.ime.closeImeList()
     clearTimeout(st.popTimer)

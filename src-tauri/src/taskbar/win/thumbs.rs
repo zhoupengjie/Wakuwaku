@@ -1,22 +1,58 @@
 // The windows' live pictures (DWM's thumbnails) over a button's list, on the
 // taskbar and the dock, in windows of their own; the dock's badges drawn over
 // its icons.
+//
+// Each window of pictures is laid by the thread whose window it is, and
+// what it shows is that thread's alone: the lists' by the taskbar's
+// thread (asked by a message, the last ask kept: thumbs), the dock's by
+// the main thread (bars.rs asks it there). No thread waits on another's
+// window: a sync command on the main thread laid the lists' and waited
+// on the taskbar's thread, which may be busy with Explorer or setting
+// the work area (up to 1.3 s); the taskbar's thread, ending, hid the
+// dock's and waited on the main thread, which on the way out was
+// waiting for it to end (two seconds, then left).
+use std::cell::RefCell;
+
 use super::*;
 use crate::lock::Lock;
 
-// The live pictures shown (window, thumbnail), over the windows listed above a button.
-pub(super) static THUMBS: Lock<Vec<(isize, isize)>> = Lock::new("taskbar::win::thumbs::THUMBS", Vec::new());
+thread_local! {
+    // The live pictures shown (window, thumbnail), over the windows
+    // listed above a button: the taskbar's thread's (thread.rs run makes
+    // their window), gone with it.
+    static THUMBS: RefCell<Vec<(isize, isize)>> = const { RefCell::new(Vec::new()) };
+    // The same for the windows minimized into the dock (split, bars.rs
+    // show_mins), and the icons over them: the main thread's, whose their
+    // windows are (make_dock_host), there as long as the dock is up.
+    static DOCK_THUMBS: RefCell<Vec<(isize, isize)>> = const { RefCell::new(Vec::new()) };
+    static BADGE_ICONS: RefCell<Vec<(isize, (u32, u32, Vec<u8>))>> = const { RefCell::new(Vec::new()) };
+}
 pub(super) static THUMB_HOST: AtomicIsize = AtomicIsize::new(0);
-// The same for the windows minimized into the dock (split, bars.rs
-// show_mins): a window of their own, there as long as the dock is up.
-pub(super) static DOCK_THUMBS: Lock<Vec<(isize, isize)>> = Lock::new("taskbar::win::thumbs::DOCK_THUMBS", Vec::new());
 pub(super) static DOCK_HOST: AtomicIsize = AtomicIsize::new(0);
-// The live pictures' window's ground (COLORREF), as set last (thumbs_ground).
+// The lists' pictures last asked for, not yet laid by the taskbar's
+// thread (WM_THUMBS): only the last ask matters.
+static THUMBS_ASKED: Lock<Option<Vec<(isize, (i32, i32, i32, i32))>>> = Lock::ranked("taskbar::win::thumbs::THUMBS_ASKED", crate::lock::LEAF, None);
+// The live pictures' window's ground (COLORREF), as set last on its
+// class (thumbs_ground; the class outlives the taskbar's thread).
 pub(super) static THUMBS_GROUND: AtomicU32 = AtomicU32::new(0x001E_1C1C);
+
+// The dock's pictures and icons are the main thread's (make_dock_host).
+fn on_dock_thread() {
+    debug_assert!(crate::lock::on_main(), "the dock's pictures are the main thread's");
+}
 
 // The live pictures' window as the cards round it are: dark, or light in
 // Windows' light mode (style.css .wpop, its ground #1c1c1e or #f9f9f9).
+// Asked by the look's thread; set on the taskbar's, whose window it is.
 pub(super) fn thumbs_ground(light: bool) {
+    let ours = OURS.load(Ordering::SeqCst);
+    if ours != 0 {
+        // SAFETY: the thread's own window; a posted message, no pointers.
+        unsafe { PostMessageW(ours as Hwnd, WM_THUMBS_GROUND, light as usize, 0) };
+    }
+}
+
+pub(super) fn thumbs_ground_here(light: bool) {
     let host = THUMB_HOST.load(Ordering::SeqCst);
     let colour: u32 = if light { 0x00F9_F9F9 } else { 0x001E_1C1C };
     if host == 0 || THUMBS_GROUND.swap(colour, Ordering::SeqCst) == colour {
@@ -37,8 +73,30 @@ pub(super) fn thumbs_ground(light: bool) {
 // room for them (the windows listed above a program's button): each
 // window's at (x, y, w, h) on the screen, physical, its shape kept, on
 // the window of their own laid over those rooms. None: all taken away.
+// Laid by the taskbar's thread, not waited for; none while it is not up
+// (its own went with it).
 pub fn thumbs(items: Vec<(isize, (i32, i32, i32, i32))>) {
-    place_thumbs(THUMB_HOST.load(Ordering::SeqCst) as Hwnd, &mut THUMBS.lock().unwrap(), items, None);
+    let ours = OURS.load(Ordering::SeqCst);
+    if ours == 0 {
+        return;
+    }
+    *THUMBS_ASKED.lock().unwrap() = Some(items);
+    // SAFETY: the thread's own window; a posted message, no pointers.
+    unsafe { PostMessageW(ours as Hwnd, WM_THUMBS, 0, 0) };
+}
+
+// On the taskbar's thread (WM_THUMBS): the last asked laid.
+pub(super) fn thumbs_asked() {
+    let asked = THUMBS_ASKED.lock().unwrap().take();
+    if let Some(items) = asked {
+        THUMBS.with_borrow_mut(|shown| place_thumbs(THUMB_HOST.load(Ordering::SeqCst) as Hwnd, shown, items, None));
+    }
+}
+
+// The taskbar's thread ending: its pictures taken away.
+pub(super) fn drop_thumbs() {
+    THUMBS_ASKED.lock().unwrap().take();
+    THUMBS.with_borrow_mut(|shown| place_thumbs(std::ptr::null_mut(), shown, Vec::new(), None));
 }
 
 // The windows minimized into the dock, each its live picture where the
@@ -48,7 +106,8 @@ pub fn thumbs(items: Vec<(isize, (i32, i32, i32, i32))>) {
 // never a frame out of its room. On the main thread, the window's own
 // (make_dock_host).
 pub fn dock_thumbs(items: Vec<(isize, (i32, i32, i32, i32))>, area: Option<(i32, i32, i32, i32)>) {
-    place_thumbs(DOCK_HOST.load(Ordering::SeqCst) as Hwnd, &mut DOCK_THUMBS.lock().unwrap(), items, area);
+    on_dock_thread();
+    DOCK_THUMBS.with_borrow_mut(|shown| place_thumbs(DOCK_HOST.load(Ordering::SeqCst) as Hwnd, shown, items, area));
 }
 
 // Each minimized window's program's icon over its live picture's corner
@@ -61,18 +120,14 @@ pub fn dock_thumbs(items: Vec<(isize, (i32, i32, i32, i32))>, area: Option<(i32,
 // 不需要占那么大位置). Each window's icon read once from what the taskbar
 // last sent (its program's png), kept while the window is in the dock.
 pub(super) static DOCK_BADGES: AtomicIsize = AtomicIsize::new(0);
-pub(super) static BADGE_ICONS: Lock<Vec<(isize, (u32, u32, Vec<u8>))>> = Lock::new("taskbar::win::thumbs::BADGE_ICONS", Vec::new());
 
 pub fn dock_badges(items: Vec<(isize, (i32, i32, i32, i32))>) {
+    on_dock_thread();
     let host = DOCK_BADGES.load(Ordering::SeqCst) as Hwnd;
-    // One lock at a time, and none over the window's own calls: the window
-    // is the main thread's (make_dock_host), and the taskbar's thread hides
-    // it here as it ends, the main thread maybe waiting on BADGE_ICONS.
-    let missing: Vec<isize> = {
-        let mut icons = BADGE_ICONS.lock().unwrap();
+    let missing: Vec<isize> = BADGE_ICONS.with_borrow_mut(|icons| {
         icons.retain(|(h, _)| items.iter().any(|i| i.0 == *h));
         items.iter().filter(|i| i.1 .2 > 0 && i.1 .3 > 0).map(|i| i.0).filter(|h| !icons.iter().any(|(k, _)| k == h)).collect()
-    };
+    });
     if host.is_null() {
         return;
     }
@@ -94,12 +149,13 @@ pub fn dock_badges(items: Vec<(isize, (i32, i32, i32, i32))>) {
                 })
                 .collect()
         };
-        let mut icons = BADGE_ICONS.lock().unwrap();
-        for (h, px) in read {
-            if !icons.iter().any(|(k, _)| *k == h) {
-                icons.push((h, px));
+        BADGE_ICONS.with_borrow_mut(|icons| {
+            for (h, px) in read {
+                if !icons.iter().any(|(k, _)| *k == h) {
+                    icons.push((h, px));
+                }
             }
-        }
+        });
     }
     let left = items.iter().map(|i| i.1 .0).min().unwrap_or(0);
     let top = items.iter().map(|i| i.1 .1).min().unwrap_or(0);
@@ -107,13 +163,12 @@ pub fn dock_badges(items: Vec<(isize, (i32, i32, i32, i32))>) {
     let h = items.iter().map(|i| i.1 .1 + i.1 .3).max().unwrap_or(0) - top;
     // Premultiplied BGRA, top-down, as UpdateLayeredWindow takes it.
     let mut canvas = vec![0u8; (w * h * 4) as usize];
-    {
-        let icons = BADGE_ICONS.lock().unwrap();
+    BADGE_ICONS.with_borrow(|icons| {
         for (hwnd, (x, y, iw, ih)) in &items {
             let Some((_, (sw, sh, src))) = icons.iter().find(|(k, _)| k == hwnd) else { continue };
             draw_scaled(&mut canvas, w, (x - left, y - top, *iw, *ih), (*sw, *sh, src));
         }
-    }
+    });
     show_layered(host, (left, top, w, h), &canvas);
 }
 
@@ -297,11 +352,12 @@ pub fn make_dock_host(owner: isize) {
 
 // The dock gone: its pictures with it (the window goes with its owner).
 pub fn drop_dock_host() {
-    place_thumbs(std::ptr::null_mut(), &mut DOCK_THUMBS.lock().unwrap(), Vec::new(), None);
+    on_dock_thread();
+    DOCK_THUMBS.with_borrow_mut(|shown| place_thumbs(std::ptr::null_mut(), shown, Vec::new(), None));
     DOCK_HOST.store(0, Ordering::SeqCst);
     // Its icons' window goes with it (owned by it).
     DOCK_BADGES.store(0, Ordering::SeqCst);
-    BADGE_ICONS.lock().unwrap().clear();
+    BADGE_ICONS.with_borrow_mut(|icons| icons.clear());
 }
 
 // The windows of the live pictures (the lists', the dock's) back over

@@ -112,9 +112,17 @@ pub(super) fn run(strip: (i32, i32, i32, i32), ready: std::sync::mpsc::Sender<is
         KillTimer(hwnd, WORK_STILL);
         log(&format!("tray handed back; it was handed {}", systray::seen()));
         systray::stop();
-        thumbs(Vec::new());
-        dock_thumbs(Vec::new(), None);
-        dock_badges(Vec::new());
+        drop_thumbs();
+        // The dock's pictures and their icons hidden by the main thread,
+        // whose windows they are; not waited for: quitting, the main
+        // thread is waiting for this one to end (hold.rs stop_within), and
+        // each call waited on it till it gave up, two seconds.
+        if let Some(sh) = sh() {
+            let _ = sh.app.run_on_main_thread(|| {
+                dock_thumbs(Vec::new(), None);
+                dock_badges(Vec::new());
+            });
+        }
         let host = THUMB_HOST.swap(0, Ordering::SeqCst);
         if host != 0 {
             DestroyWindow(host as Hwnd);
@@ -309,6 +317,8 @@ pub(super) extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lpara
         WM_DISPLAYCHANGE => displays_changed(wparam, lparam),
         WM_TRAY_CHANGED => send_icons(),
         WM_RESEND_TRAY => resend_tray(),
+        WM_THUMBS => thumbs_asked(),
+        WM_THUMBS_GROUND => thumbs_ground_here(wparam != 0),
         WM_PAPER => send_look(),
         WM_SETTINGCHANGE if wparam == SPI_SETWORKAREA as usize => {
             work_after_still(hwnd);

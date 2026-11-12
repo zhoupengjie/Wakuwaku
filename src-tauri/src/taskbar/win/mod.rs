@@ -238,6 +238,10 @@ const WM_PAPER: u32 = 0x8004;
 const WM_PAPER_SET: u32 = 0x8005;
 // Debug only (/debug/hang): this thread held still for wparam seconds.
 const WM_HOLD_STILL: u32 = 0x8012;
+// The lists' live pictures asked for (thumbs.rs thumbs: the last ask
+// laid), and their window's ground (wparam: light), both this thread's.
+const WM_THUMBS: u32 = 0x8013;
+const WM_THUMBS_GROUND: u32 = 0x8014;
 // The timers on the window: the half second's tick, the looks after
 // Windows' word (settle), and the work area looked at once Explorer
 // has been still a moment (WORK_STILL_MS: keep_work).

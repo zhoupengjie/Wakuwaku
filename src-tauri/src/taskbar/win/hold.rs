@@ -251,7 +251,9 @@ pub(super) fn explorer_check() -> bool {
     let up = explorer_up(pid).map_or_else(|| "gone".to_string(), |d| format!("up {:.1} s", d.as_secs_f64()));
     systray::set_aside(true);
     log(&format!("Explorer started again (pid {pid}, {up}): ours set behind its tray until it has run {} s (zhoupengjie/Wakuwaku#85)", EXPLORER_SETTLE.as_secs()));
-    if let Some(away) = RESTARTS.lock().unwrap().seen(Instant::now()) {
+    // Read first: an if let's condition holds its lock through the block.
+    let away = RESTARTS.lock().unwrap().seen(Instant::now());
+    if let Some(away) = away {
         step_away(away);
     }
     true
@@ -456,13 +458,19 @@ pub fn give_back(sh: &Shared) {
     // Windows' own keys first: its taskbar has them again (winkeys.rs).
     crate::winkeys::stop();
     TASKS_STOP.store(true, Ordering::SeqCst);
-    if let Some(thread) = TASKS.lock().unwrap().take() {
+    // Each thread taken out of its lock first: as an if let's condition
+    // the lock was held through the block, over the two seconds' wait for
+    // the thread (and the log's and TASKS_DOING's locks inside it).
+    let tasks = TASKS.lock().unwrap().take();
+    if let Some(thread) = tasks {
         wake_tasks();
         if !stop_within("the buttons' thread", thread) {
-            log(&format!("giving back: the buttons' thread was {}", *TASKS_DOING.lock().unwrap()));
+            let doing = *TASKS_DOING.lock().unwrap();
+            log(&format!("giving back: the buttons' thread was {doing}"));
         }
     }
-    if let Some(thread) = KEYS.lock().unwrap().take() {
+    let keys = KEYS.lock().unwrap().take();
+    if let Some(thread) = keys {
         wake_keys();
         stop_within("the keys' thread", thread);
     }

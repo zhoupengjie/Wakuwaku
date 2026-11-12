@@ -2215,6 +2215,8 @@ pub fn keep_on_top(sh: &Arc<Shared>) {
 
 pub fn where_(sh: &Shared) -> Value {
     let actual = window(sh).and_then(|win| crate::main_wait::outer_position(&win)).map(|p| json!([p.x, p.y]));
+    // Read before the island's lock: embed.rs takes EMBED's alone.
+    let embed = crate::embed::where_();
     let isl = sh.island.lock().unwrap();
     json!({
         "actual": actual,
@@ -2239,7 +2241,7 @@ pub fn where_(sh: &Shared) -> Value {
         "capRoom": isl.cap_room,
         "mx": isl.mx,
         "opened": isl.opened,
-        "embed": crate::embed::where_(),
+        "embed": embed,
         "stow": {
             "closed": closed_rect(&isl).map(|r| json!([r.0, r.1, r.2, r.3])),
             "under": isl.stow.under,

@@ -852,15 +852,18 @@ fn hooks_file(sh: &Shared) -> PathBuf {
 // with the efforts it takes; Antigravity's as agy lists them.
 pub fn models(sh: &Shared) -> Value {
     static SEEN: Lock<Option<(Instant, Value)>> = Lock::new("mail::agent::models SEEN", None);
-    let mut seen = SEEN.lock().unwrap();
-    let mut v = match seen.as_ref().filter(|(at, _)| at.elapsed() < Duration::from_secs(30)) {
-        Some((_, v)) => v.clone(),
-        None => {
-            let v = read_models();
-            *seen = Some((Instant::now(), v.clone()));
-            v
+    let mut v = {
+        let mut seen = SEEN.lock().unwrap();
+        match seen.as_ref().filter(|(at, _)| at.elapsed() < Duration::from_secs(30)) {
+            Some((_, v)) => v.clone(),
+            None => {
+                let v = read_models();
+                *seen = Some((Instant::now(), v.clone()));
+                v
+            }
         }
     };
+    // SEEN let go first: Antigravity's take their own lock.
     v["agy"] = Value::Array(agy_models(sh));
     v
 }

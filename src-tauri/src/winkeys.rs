@@ -386,7 +386,9 @@ mod imp {
     static SH: Lock<Option<Arc<Shared>>> = Lock::ranked("winkeys::SH", crate::lock::LEAF, None);
 
     fn log(line: &str) {
-        if let Some(sh) = SH.lock().unwrap().clone() {
+        // Cloned out first: an if let's condition would hold SH over the log's own locks.
+        let sh = SH.lock().unwrap().clone();
+        if let Some(sh) = sh {
             sh.log(&format!("winkeys: {line}"));
         }
     }
@@ -600,11 +602,12 @@ mod imp {
 
     // Her taskbar holds the strip: the keys hers (taskbar/win/hold.rs take).
     pub fn start(sh: &Arc<Shared>) {
+        // Hers before THREADS is taken (the same Shared all along).
+        *SH.lock().unwrap() = Some(sh.clone());
         let mut threads = THREADS.lock().unwrap();
         if threads.is_some() {
             return;
         }
-        *SH.lock().unwrap() = Some(sh.clone());
         let (work_tx, work_rx) = std::sync::mpsc::channel();
         let work_sh = sh.clone();
         let work = crate::spawn_named("taskbar keys work", move || work_loop(work_sh, work_tx));

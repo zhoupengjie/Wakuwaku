@@ -81,7 +81,8 @@ pub fn run(sh: &Arc<Shared>, account: &Account, watch: &Watch) {
                 }
                 // Letters come down ahead and no longer to be kept (older
                 // now, or kept for less): let go.
-                let gone = st.lock().unwrap().prune(offline(sh), now());
+                let wants = offline(sh);
+                let gone = st.lock().unwrap().prune(wants, now());
                 if gone > 0 {
                     sh.log(&format!("mail {}: {gone} letters no longer kept offline", account.id));
                 }
@@ -183,6 +184,8 @@ fn save(st: &Lock<Store>) {
 // unread, the newest unread letter (new mail opens the island, once the
 // first sync is done: `newest_seen` known), how much is kept whole.
 fn tell(sh: &Shared, account: &Account, watch: &Watch, st: &Lock<Store>, state: &str, newest_seen: &mut Option<u32>) {
+    // The setting read before the store is taken: one lock at a time.
+    let wants = offline(sh);
     let (unread, newest, letters, offline) = {
         let s = st.lock().unwrap();
         let unseen: Vec<&Entry> = s.inbox.letters.values().filter(|e| !e.seen).collect();
@@ -190,7 +193,7 @@ fn tell(sh: &Shared, account: &Account, watch: &Watch, st: &Lock<Store>, state: 
         // The newest unread first, as many as its widget's card lists.
         let letters: Vec<(String, String, Option<i64>)> =
             unseen.iter().rev().take(LISTED).map(|e| (if e.from.name.is_empty() { e.from.address.clone() } else { e.from.name.clone() }, e.subject.clone(), e.date)).collect();
-        (unseen.len(), newest, letters, s.offline(offline(sh), now()))
+        (unseen.len(), newest, letters, s.offline(wants, now()))
     };
     let first = state == "ok" && newest_seen.is_none();
     let is_new = state == "ok" && matches!((newest, *newest_seen), (Some(n), Some(seen)) if n > seen);
@@ -262,7 +265,8 @@ fn sync_sent(sh: &Shared, conn: &mut Session, st: &Lock<Store>) -> Result<(), Fa
 // Letters kept whole, newest first, for a while (or until stopped or
 // kicked); how many are still to come.
 fn download(sh: &Shared, conn: &mut Session, st: &Lock<Store>, watch: &Watch, skip: &mut HashSet<(Folder, u32)>) -> Result<usize, Fail> {
-    let todo: Vec<(Folder, u32)> = st.lock().unwrap().missing(offline(sh), now()).into_iter().filter(|x| !skip.contains(x)).collect();
+    let wants = offline(sh);
+    let todo: Vec<(Folder, u32)> = st.lock().unwrap().missing(wants, now()).into_iter().filter(|x| !skip.contains(x)).collect();
     let started = Instant::now();
     let mut open: Option<Folder> = None;
     let mut done = 0;

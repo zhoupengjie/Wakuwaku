@@ -91,10 +91,11 @@ pub(super) fn mark_sessions(sh: &Shared) {
     // Found before and still there: kept, looked for anew after a
     // minute (a session may move to another window); not found before:
     // looked for again after a while (many have no window of their own).
-    let mut found = SESSION_WINDOWS.lock().unwrap();
-    let found = found.get_or_insert_with(HashMap::new);
-    let mut looked = SESSION_LOOKED.lock().unwrap();
-    let looked = looked.get_or_insert_with(HashMap::new);
+    // Taken out while the windows are looked for (jump.rs takes its own
+    // lock, and walks every process) and put back after: this thread's
+    // alone, none of them held over another (lock.rs).
+    let mut found = SESSION_WINDOWS.lock().unwrap().take().unwrap_or_default();
+    let mut looked = SESSION_LOOKED.lock().unwrap().take().unwrap_or_default();
     found.retain(|id, _| targets.iter().any(|t| t.0 == *id));
     looked.retain(|id, _| targets.iter().any(|t| t.0 == *id));
     let retry = Duration::from_secs(if sh.is_quiet() { 60 } else { 15 });
@@ -123,6 +124,8 @@ pub(super) fn mark_sessions(sh: &Shared) {
             marks.entry(hwnd).or_default().push(json!({ "id": id, "mood": mood }));
         }
     }
+    *SESSION_WINDOWS.lock().unwrap() = Some(found);
+    *SESSION_LOOKED.lock().unwrap() = Some(looked);
     *MARKS.lock().unwrap() = Some(marks);
 }
 
@@ -260,14 +263,15 @@ pub(super) fn send_windows(sh: &Shared) {
         }
     }
     let list: Vec<Value> = {
-        let mut pngs = WIN_PNGS.lock().unwrap();
-        let pngs = pngs.get_or_insert_with(HashMap::new);
+        // This thread's caches, taken out while the list is made (each
+        // window asked for its icon, the other caches read) and put back
+        // after: none of them held over another (lock.rs).
+        let mut pngs = WIN_PNGS.lock().unwrap().take().unwrap_or_default();
         pngs.retain(|h, _| order.contains(h));
-        let mut names = APP_NAMES.lock().unwrap();
-        let names = names.get_or_insert_with(HashMap::new);
-        let mut file_pngs = FILE_PNGS.lock().unwrap();
-        let file_pngs = file_pngs.get_or_insert_with(HashMap::new);
-        apps.iter()
+        let mut names = APP_NAMES.lock().unwrap().take().unwrap_or_default();
+        let mut file_pngs = FILE_PNGS.lock().unwrap().take().unwrap_or_default();
+        let list = apps
+            .iter()
             .map(|(key, path, id, is_pinned, windows)| {
                 // The app each window says it is, and that app's icon as
                 // Windows' taskbar shows it (app_png): the button's, and a
@@ -337,7 +341,11 @@ pub(super) fn send_windows(sh: &Shared) {
                 };
                 json!({ "app": key, "path": path, "id": id, "name": name, "pinned": is_pinned, "png": png, "windows": windows })
             })
-            .collect()
+            .collect();
+        *WIN_PNGS.lock().unwrap() = Some(pngs);
+        *APP_NAMES.lock().unwrap() = Some(names);
+        *FILE_PNGS.lock().unwrap() = Some(file_pngs);
+        list
     };
     let list = Value::Array(list);
     let mut sent = SENT_WINDOWS.lock().unwrap();

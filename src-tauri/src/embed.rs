@@ -792,6 +792,9 @@ mod imp {
     // as with the embedding (owned: look's first check, she starts anew).
     fn detach(sh: &Arc<Shared>, why: &str, owner: isize) {
         let parenting = island::parenting(sh);
+        // Read before EMBED is taken: the island's lock is never taken
+        // inside it (island.rs where_ takes EMBED's after its own).
+        let island_hwnd = island::hwnd(sh);
         let (was, hwnd, parented, owned) = {
             let mut e = EMBED.lock().unwrap();
             let was = std::mem::take(&mut e.laid);
@@ -802,7 +805,7 @@ mod imp {
             e.child = None;
             e.said.clear();
             if owner != 0 && e.hwnd == 0 {
-                e.hwnd = island::hwnd(sh);
+                e.hwnd = island_hwnd;
             }
             (was, e.hwnd, parented, owned)
         };

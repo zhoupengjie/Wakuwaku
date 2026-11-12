@@ -55,8 +55,14 @@ pub(super) static BADGE_ICONS: Lock<Vec<(isize, (u32, u32, Vec<u8>))>> = Lock::n
 
 pub fn dock_badges(items: Vec<(isize, (i32, i32, i32, i32))>) {
     let host = DOCK_BADGES.load(Ordering::SeqCst) as Hwnd;
-    let mut icons = BADGE_ICONS.lock().unwrap();
-    icons.retain(|(h, _)| items.iter().any(|i| i.0 == *h));
+    // One lock at a time, and none over the window's own calls: the window
+    // is the main thread's (make_dock_host), and the taskbar's thread hides
+    // it here as it ends, the main thread maybe waiting on BADGE_ICONS.
+    let missing: Vec<isize> = {
+        let mut icons = BADGE_ICONS.lock().unwrap();
+        icons.retain(|(h, _)| items.iter().any(|i| i.0 == *h));
+        items.iter().filter(|i| i.1 .2 > 0 && i.1 .3 > 0).map(|i| i.0).filter(|h| !icons.iter().any(|(k, _)| k == h)).collect()
+    };
     if host.is_null() {
         return;
     }
@@ -67,12 +73,20 @@ pub fn dock_badges(items: Vec<(isize, (i32, i32, i32, i32))>) {
         return;
     }
     // The icons not read yet: from the programs as last sent (their png).
-    let missing: Vec<isize> = items.iter().map(|i| i.0).filter(|h| !icons.iter().any(|(k, _)| k == h)).collect();
     if !missing.is_empty() {
-        let sent = SENT_WINDOWS.lock().unwrap();
-        for h in missing {
-            let png = sent.as_array().into_iter().flatten().find(|a| a["windows"].as_array().is_some_and(|ws| ws.iter().any(|w| w["id"].as_i64() == Some(h as i64)))).and_then(|a| a["png"].as_str());
-            if let Some(px) = png.and_then(rgba_of) {
+        let read: Vec<(isize, (u32, u32, Vec<u8>))> = {
+            let sent = SENT_WINDOWS.lock().unwrap();
+            missing
+                .into_iter()
+                .filter_map(|h| {
+                    let png = sent.as_array().into_iter().flatten().find(|a| a["windows"].as_array().is_some_and(|ws| ws.iter().any(|w| w["id"].as_i64() == Some(h as i64)))).and_then(|a| a["png"].as_str());
+                    png.and_then(rgba_of).map(|px| (h, px))
+                })
+                .collect()
+        };
+        let mut icons = BADGE_ICONS.lock().unwrap();
+        for (h, px) in read {
+            if !icons.iter().any(|(k, _)| *k == h) {
                 icons.push((h, px));
             }
         }
@@ -83,9 +97,12 @@ pub fn dock_badges(items: Vec<(isize, (i32, i32, i32, i32))>) {
     let h = items.iter().map(|i| i.1 .1 + i.1 .3).max().unwrap_or(0) - top;
     // Premultiplied BGRA, top-down, as UpdateLayeredWindow takes it.
     let mut canvas = vec![0u8; (w * h * 4) as usize];
-    for (hwnd, (x, y, iw, ih)) in &items {
-        let Some((_, (sw, sh, src))) = icons.iter().find(|(k, _)| k == hwnd) else { continue };
-        draw_scaled(&mut canvas, w, (x - left, y - top, *iw, *ih), (*sw, *sh, src));
+    {
+        let icons = BADGE_ICONS.lock().unwrap();
+        for (hwnd, (x, y, iw, ih)) in &items {
+            let Some((_, (sw, sh, src))) = icons.iter().find(|(k, _)| k == hwnd) else { continue };
+            draw_scaled(&mut canvas, w, (x - left, y - top, *iw, *ih), (*sw, *sh, src));
+        }
     }
     show_layered(host, (left, top, w, h), &canvas);
 }

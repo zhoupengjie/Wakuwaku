@@ -167,13 +167,15 @@ pub(super) fn send_icons() {
     let shown = systray::shown();
     let kept = windows_kept();
     let (whole, light): (Vec<Value>, Vec<Value>) = {
-        let mut pngs = PNGS.lock().unwrap();
-        let pngs = pngs.get_or_insert_with(HashMap::new);
+        // The pictures (this thread's alone) taken out and put back after,
+        // so only PNG_SENT is held over the list (lock.rs); PNG_SENT stays
+        // in place, a page come up (resend) emptying it meanwhile.
+        let mut pngs = PNGS.lock().unwrap().take().unwrap_or_default();
         pngs.retain(|k, _| shown.iter().any(|s| s.key == *k));
-        let mut sent = PNG_SENT.lock().unwrap();
-        let sent = sent.get_or_insert_with(HashMap::new);
+        let mut sent_now = PNG_SENT.lock().unwrap();
+        let sent = sent_now.get_or_insert_with(HashMap::new);
         sent.retain(|k, _| shown.iter().any(|s| s.key == *k));
-        shown
+        let made = shown
             .iter()
             .map(|s| {
                 // One only Explorer's tray holds: Windows' own picture of it.
@@ -202,7 +204,10 @@ pub(super) fn send_icons() {
                 sent.insert(s.key, s.icon);
                 (item, lite)
             })
-            .unzip()
+            .unzip();
+        drop(sent_now);
+        *PNGS.lock().unwrap() = Some(pngs);
+        made
     };
     *SENT.lock().unwrap() = Value::Array(whole);
     let _ = sh.app.emit_to("island", "taskbar:tray", Value::Array(light));

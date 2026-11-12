@@ -899,9 +899,11 @@ pub fn view(sh: &Shared) -> Value {
         let v = serde_json::from_str::<Value>(&fs::read_to_string(p).ok()?).ok()?;
         Some(json!({ "at": v["sentAt"], "url": v["answer"]["url"], "number": v["answer"]["number"], "count": v["answer"]["count"] }))
     });
+    // The settings read before STATUS is taken: one lock at a time.
+    let mode = mode_of(&sh.settings.lock().unwrap());
     let s = STATUS.lock().unwrap();
     json!({
-        "mode": mode_of(&sh.settings.lock().unwrap()),
+        "mode": mode,
         "can": can_send(),
         "waiting": waiting.len(),
         "newest": newest,

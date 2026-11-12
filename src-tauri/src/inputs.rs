@@ -820,8 +820,9 @@ mod imp {
     // Started with the taskbar's keys (taskbar/win/hold.rs take): told when the
     // input method in front changed; its log lines.
     pub fn start(draw: Draw, changed: Box<dyn Fn() + Send>, log: Box<dyn Fn(&str) + Send>) {
-        let mut thread = THREAD.lock().unwrap();
-        if thread.is_some() {
+        // One lock at a time: whether it runs, then what it draws with,
+        // then the thread (started by the taskbar's take alone).
+        if THREAD.lock().unwrap().is_some() {
             return;
         }
         *DRAW.lock().unwrap() = Some(draw);
@@ -830,7 +831,10 @@ mod imp {
         if let Some(pngs) = PNGS.lock().unwrap().as_mut() {
             pngs.values_mut().for_each(|v| v.1 = false);
         }
-        *thread = Some(std::thread::Builder::new().name("taskbar input".into()).spawn(move || run(changed, log)).expect("a thread"));
+        let mut thread = THREAD.lock().unwrap();
+        if thread.is_none() {
+            *thread = Some(std::thread::Builder::new().name("taskbar input".into()).spawn(move || run(changed, log)).expect("a thread"));
+        }
     }
 
     // Asked to stop (taskbar/win/hold.rs give_back): its thread, to be waited for.

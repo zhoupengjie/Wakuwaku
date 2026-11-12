@@ -1213,12 +1213,9 @@ fn hide_pop(sh: &Shared) {
 // it goes, as Windows' own; on the strip, its page has the press.
 pub fn pressed(sh: &Shared, (x, y): (i32, i32)) {
     let inside = |r: Mon| x >= r.0 && y >= r.1 && x < r.0 + r.2 && y < r.1 + r.3;
-    let away = {
-        let open = OPEN.lock().unwrap();
-        let Some(p) = open.as_ref() else { return };
-        let strip = against(&p.bar);
-        !p.rect.is_some_and(inside) && !strip.is_some_and(inside)
-    };
+    // Read out of OPEN before BARS is looked at (against): one lock at a time.
+    let Some((bar, rect)) = OPEN.lock().unwrap().as_ref().map(|p| (p.bar.clone(), p.rect)) else { return };
+    let away = !rect.is_some_and(inside) && !against(&bar).is_some_and(inside);
     if away {
         hide_pop(sh);
     }

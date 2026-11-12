@@ -281,6 +281,27 @@ mod tests {
         ] {
             assert!(!at(bad, true), "{bad}");
         }
+        // Her own letter pages, in the island's page alone, exactly; no other
+        // page of hers, nor srcdoc.
+        use super::files::is_letter_page;
+        for good in ["http://tauri.localhost/pet/letter.html", "https://tauri.localhost/pet/letter.html", "http://tauri.localhost/pet/letter-pictures.html"] {
+            assert!(is_letter_page(good, true), "{good}");
+        }
+        for bad in [
+            "http://tauri.localhost/pet/letter.html?x=1",
+            "http://tauri.localhost/pet/letter.html#x",
+            "http://tauri.localhost/pet/letter-pictures.html?x",
+            "http://tauri.localhost/pet/letter-pictures.htm",
+            "http://tauri.localhost/pet/index.html",
+            "http://tauri.localhost/letter.html",
+            "http://tauri.localhost.example.com/pet/letter.html",
+            "http://wakuplugin.localhost/pet/letter.html",
+            "about:srcdoc",
+            "about:blank",
+        ] {
+            assert!(!is_letter_page(bad, true), "{bad}");
+        }
+        assert!(!is_letter_page("http://tauri.localhost/pet/letter.html", false), "no letters on the desktop");
         // Who may ask for a card's view: her island's page, the desktop's.
         for (label, may) in [("island", true), ("desk-1", true), ("desk-12", true), ("desk-", false), ("desk-x", false), ("pet", false), ("bar-1", false), ("barpop", false), ("islandx", false)] {
             assert_eq!(may_view(label), may, "{label}");

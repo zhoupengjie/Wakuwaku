@@ -12,6 +12,13 @@ import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
 import type { SettingsCore } from './settings.ts'
 
+// Whether a letter's HTML (as letters.rs leaves it) asks for something from
+// elsewhere: a picture's address, a background, a url() in its styles
+// (http, https, or // which is http in her letter page). One too many is no
+// harm: the bar to show its pictures is there for nothing.
+const REMOTE = /(?:\b(?:src|srcset|background|poster)\s*=\s*["']?|url\(\s*(?:["']|&quot;|&#39;)?)\s*(?:https?:)?\/\//i
+export const hasRemote = (html: string) => REMOTE.test(html)
+
 export function letterPart(core: SettingsCore) {
   const {
     st, pieces, AGENTS, COLOR, MOST_FILES, T, Widgets, body, draw, esc, expanded, inbox, keepDraft, layer,
@@ -288,12 +295,56 @@ export function letterPart(core: SettingsCore) {
     </div>`)
   }
 
+  // The letters' HTML as their frames are to show it, by the frame's
+  // data-doc (a letter, in the light look or the dark, with its pictures or
+  // not): put here by mailBodyHTML, into the frame by fillFrame. The last
+  // few alone.
+  const letterDocs = new Map<string, string>()
+
+  // A letter's pictures from elsewhere (its sender's server): none until
+  // asked for, as Thunderbird has it, since one asked for tells the sender
+  // the letter was opened, when and from where (a tracking pixel). Asked
+  // for this letter (显示图片, until the page goes), or for its sender
+  // always (the setting mailPictures, their addresses in lower case).
+  const picturesOnce = new Set<string>()
+  const letterKey = l => `${l.account}|${l.folder || 'inbox'}|${l.uid}`
+  const senderOf = l => String(l.from?.[0]?.address || '').trim().toLowerCase()
+  const picturesFrom = (): string[] => (Array.isArray(st.snap.settings?.mailPictures) ? st.snap.settings.mailPictures : [])
+  const isSenderShown = l => !!senderOf(l) && picturesFrom().includes(senderOf(l))
+  const isPicturesShown = l => picturesOnce.has(letterKey(l)) || isSenderShown(l)
+
+  // 显示图片 for this letter, for its sender always, or not for its sender
+  // any more (the letter back to none at once).
+  function setPictures(how) {
+    const l = st.reading?.letter
+    if (!l) return
+    const key = letterKey(l)
+    const from = senderOf(l)
+    closeMenu()
+    if (how === 'once') picturesOnce.add(key)
+    if (how === 'always' && from) {
+      picturesOnce.add(key)
+      if (!picturesFrom().includes(from)) patch({ mailPictures: [...picturesFrom(), from] })
+    }
+    if (how === 'never') {
+      picturesOnce.delete(key)
+      if (from) patch({ mailPictures: picturesFrom().filter(a => a !== from) })
+    }
+    redrawMail()
+  }
+
   // The letter's body: as it was written (its styles, its cards, its
   // pictures), in a frame that cannot run anything, or the plain text when
   // there is no HTML. The frame is sandboxed: no scripts, no forms, nothing
   // of hers in it. Its pictures are the letter's own (the sender's server),
   // so they are read as they come. The text it was written with is not put
   // under it: a letter shows as its sender made it (the user, 2026-10-20).
+  // The frame shows letter.html, a page of her own with a policy of its own,
+  // or letter-pictures.html, the same with the pictures from elsewhere let
+  // in, and the letter is put into it once it is there (fillFrame): a
+  // srcdoc was kept from loading by the island's frame guard and would have
+  // kept the island's policy (zhoupengjie/Wakuwaku#129). Pictures it has
+  // from elsewhere and not shown: a bar over it to show them.
   function mailBodyHTML(l) {
     const html = String(l.html || '')
     if (!html.trim()) {
@@ -302,17 +353,51 @@ export function letterPart(core: SettingsCore) {
     const light = document.body.classList.contains('set-light')
     const fg = light ? '#1b1b1b' : '#f5f5f7'
     const link = light ? '#005fb8' : '#5e9eff'
-    // no-referrer in the letter itself: the frame's referrerpolicy is for
-    // its own request alone, and its pictures would tell their servers her
-    // page's address.
-    const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src http: https: data: cid:; style-src 'unsafe-inline'; font-src data:"><style>
+    const doc = `<!doctype html><html><head><style>
       html,body{width:100%;max-width:100%;margin:0;padding:0;overflow-x:hidden;background:transparent;color:${fg};color-scheme:${light ? 'light' : 'dark'};font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:13px;line-height:1.5}
       *,*::before,*::after{box-sizing:border-box;max-width:100%!important;min-width:0!important}
       img,video,svg,canvas,iframe{height:auto!important}
       td,th,div,p,span,a,li{overflow-wrap:anywhere}
       a{color:${link}}
     </style></head><body>${html}</body></html>`
-    return `<div class="m-html-wrap"><iframe class="m-html" sandbox="allow-same-origin" referrerpolicy="no-referrer" scrolling="no" title="${esc(l.subject || T('mail.noSubject'))}" srcdoc="${esc(doc)}"></iframe></div>`
+    const remote = hasRemote(html)
+    const shown = remote && isPicturesShown(l)
+    const id = `${letterKey(l)}|${light ? 'light' : 'dark'}|${shown ? 'pictures' : 'none'}`
+    letterDocs.delete(id)
+    letterDocs.set(id, doc)
+    for (const old of letterDocs.keys()) {
+      if (letterDocs.size <= 8) break
+      letterDocs.delete(old)
+    }
+    const from = senderOf(l)
+    const bar =
+      remote && !shown
+        ? `<div class="m-pics"><span class="grow">${esc(T('mail.pics.blocked'))}</span><button class="pbtn sm" data-pics="once">${esc(T('mail.pics.show'))}</button>${
+            from ? `<button class="pbtn sm" data-pics="always" title="${esc(from)}">${esc(T('mail.pics.always'))}</button>` : ''
+          }</div>`
+        : ''
+    const page = shown ? 'letter-pictures.html' : 'letter.html'
+    return `${bar}<div class="m-html-wrap"><iframe class="m-html" src="${page}" data-doc="${esc(id)}" sandbox="allow-same-origin" referrerpolicy="no-referrer" scrolling="no" title="${esc(l.subject || T('mail.noSubject'))}"></iframe></div>`
+  }
+
+  // The letter put into its frame's page once letter.html is there (not
+  // the empty page a frame has first), and again for another letter or the
+  // other look; marked on the page itself, so a frame that loads it again
+  // gets the letter again. Its styles go to the page's head, its body for
+  // the page's. DOMParser reads it here without fetching or running
+  // anything, so its pictures are first asked for in the letter's page,
+  // under that page's policy and with no referrer.
+  function fillFrame(frame, doc) {
+    const id = frame.dataset.doc
+    const page = doc.documentElement
+    if (!id || !page.hasAttribute('data-letter') || page.getAttribute('data-filled') === id) return
+    const letter = letterDocs.get(id)
+    if (letter == null) return
+    const got = new DOMParser().parseFromString(letter, 'text/html')
+    for (const s of doc.head.querySelectorAll('style')) s.remove()
+    for (const s of got.head.querySelectorAll('style')) doc.head.append(doc.importNode(s, true))
+    doc.body.replaceWith(doc.importNode(got.body, true))
+    page.setAttribute('data-filled', id)
   }
 
   // The frame as tall as the letter in it: the page measures it (the frame
@@ -350,6 +435,10 @@ export function letterPart(core: SettingsCore) {
         }
       }
       const watch = () => {
+        try {
+          const doc = frame.contentDocument
+          if (doc) fillFrame(frame, doc)
+        } catch (e) {}
         fit()
         try {
           const doc = frame.contentDocument
@@ -696,7 +785,11 @@ export function letterPart(core: SettingsCore) {
     ]
       .map(([kind, key]) => `<button class="mi" data-w-reply="${kind}" ${at}>${esc(T(key))}</button>`)
       .join('')
-    menuEl.innerHTML = `${replies}<div class="mi-sep"></div>${talks}<div class="mi-sep"></div>${terminals}<div class="mi-sep"></div>${starItem}`
+    // The letter open, from a sender whose pictures are always shown: not
+    // any more (the list's rows have no address to go by).
+    const open = isReading(account, folder, uid) ? st.reading.letter : null
+    const never = open && isSenderShown(open) ? `<button class="mi" data-pics="never" title="${esc(senderOf(open))}">${esc(T('mail.pics.never'))}</button>` : ''
+    menuEl.innerHTML = `${replies}<div class="mi-sep"></div>${talks}<div class="mi-sep"></div>${terminals}<div class="mi-sep"></div>${starItem}${never}`
     st.menuPick = null
     placeMenu(x, y)
   }
@@ -762,5 +855,5 @@ export function letterPart(core: SettingsCore) {
   })
   body.addEventListener('scroll', closeMenu)
 
-  return { addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu, openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setProxy, star, step, waySetting, write, writeAbout }
+  return { addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu, openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setPictures, setProxy, star, step, waySetting, write, writeAbout }
 }

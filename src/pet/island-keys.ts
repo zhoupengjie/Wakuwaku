@@ -1,8 +1,8 @@
 // The keyboard on the taskbar (Win+T, Win+B), as on Windows' own: the
 // programs' buttons and the tray's icons gone through with the arrow keys,
 // pressed with Enter or Space, their menus with Shift+F10.
-// Made by island.js in the section's place as the page starts
-// (keysPart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (keysPart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -156,7 +156,7 @@ export function keysPart(core: KeysCore) {
     keyRing()
   }
 
-  pet.onFocusBar(({ part, back } = {}) => {
+  pet.onFocusBar(({ part, back }: { part?: string; back?: boolean } = {}) => {
     // Win let go after something else than Win+T or Win+B (winkeys.rs win_up).
     if (part === 'end') return keysOff()
     keyPaused = false
@@ -198,7 +198,7 @@ export function keysPart(core: KeysCore) {
         return pet.taskbar.keysPause()
       }
       // Editing the taskbar's layout: Esc closes what the picker has open
-      // (picker.js: a drag, its popover, the search's words, the picker),
+      // (picker.ts: a drag, its popover, the search's words, the picker),
       // then ends it, as 完成: kept as it goes, there is no 取消 (#53).
       if (core.editLayout && e.key === 'Escape') {
         e.preventDefault()
@@ -367,14 +367,14 @@ export function keysPart(core: KeysCore) {
   // The taskbar's own buttons open what Windows' do: Start, and from the
   // clock the notifications and the calendar (once the button is up).
   barRest.addEventListener('click', e => {
-    const what = e.target.closest('[data-bar]')?.dataset.bar
+    const what = (e.target as HTMLElement).closest('[data-bar]')?.dataset.bar
     if (what && what !== 'settings') pet.taskbar.open(what)
     if (what === 'ime' && core.imeOpen) closeImeList()
     // A widget put there: its card, or closed again; a carousel's, the one
     // it shows; a stack: its others opened over it, or closed again.
-    const widget = e.target.closest('.tw-widget, .tw-plugin, .tw-carousel')
+    const widget = (e.target as HTMLElement).closest('.tw-widget, .tw-plugin, .tw-carousel')
     if (widget) core.wgFor === widget.dataset.entry ? closeWidgetPop() : openWidgetPop(widget.dataset.entry)
-    const stack = e.target.closest('.tw-stack')
+    const stack = (e.target as HTMLElement).closest('.tw-stack')
     if (stack) core.stackFor === stack.dataset.entry ? closeStackPop() : openStackPop(stack.dataset.entry)
   })
   // A right press: a tray icon's program has it; on the input method, the
@@ -386,9 +386,9 @@ export function keysPart(core: KeysCore) {
     if (trayKey(e)) return
     if (wgPop.contains(e.target) || wmenu.contains(e.target)) return
     // A widget put there (one, or several in one place): its menu.
-    const widget = e.target.closest('.tw-widget, .tw-plugin, .tw-group')
+    const widget = (e.target as HTMLElement).closest('.tw-widget, .tw-plugin, .tw-group')
     if (widget) return openMenu({ where: 'bar', entry: widget.dataset.entry }, widget)
-    if (e.target.closest('[data-bar="ime"]')) return core.imeOpen ? closeImeList() : openImeList()
+    if ((e.target as HTMLElement).closest('[data-bar="ime"]')) return core.imeOpen ? closeImeList() : openImeList()
     const mark = quickBox.contains(e.target) ? quickMarkAt(e.clientX, e.clientY) : null
     pet.menu(mark === volMark ? 'volume' : mark === netMark ? 'network' : clockBox.contains(e.target) ? 'clock' : null)
   })

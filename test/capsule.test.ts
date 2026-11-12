@@ -123,7 +123,7 @@ test('in the island: members in order (turns, pinned at its end, the open ones l
   // The members' widgets alone (one widget, one place: the monitor is on the desktop).
   assert.deepEqual(ids(p.listed), ['weather', 'tokens', 'today', 'stock-aapl', 'stock-nvda'])
   assert.deepEqual(ids(p.listed), p.members.flatMap(m => ids(m.widgets)))
-  assert.equal(p.where, undefined)
+  assert.equal((p as any).where, undefined)
   // The taskbar her home: one on the strip is not listed; its monitor part shows its readings.
   const bar = { left: ['her'], center: ['start', 'apps'], right: [{ id: 'w1', type: 'plugin', of: 'stock', size: 'M' }, 'monitor', 'tray', 'keys', 'quick', 'clock'] }
   const q = G.placement({ all, home: 'taskbar', taskbar: bar, capsule })

@@ -122,7 +122,7 @@ test("a sensor's reading: its hardware's glyph, full and orange by its kind, aft
 // warning; a drive read or written filled as the network's, but full at
 // 1 GB/s, its glyph marked down or up; a card's clock and memory never full.
 test("a built-in reading: a drive's own warning, its rates filled and marked", () => {
-  const s = (icon, kind, text, warn) => ({ icon, kind, text, ...(warn === undefined ? {} : { warn }) })
+  const s = (icon, kind, text, warn?) => ({ icon, kind, text, ...(warn === undefined ? {} : { warn }) })
   assert.equal(Widgets.isHigh(s('disk', 'temp', '84°', 84)), true)
   assert.equal(Widgets.isHigh(s('disk', 'temp', '83°', 84)), false)
   assert.equal(Widgets.isHigh(s('disk', 'temp', '91°', 94)), false)
@@ -189,7 +189,7 @@ test('a layout made whole: each part once, the missing ones where Windows has th
   assert.deepEqual(got.center, ['apps'])
   assert.deepEqual(got.right, ['clock', { id: 'wb', type: 'flex' }, 'monitor', 'tray', 'keys', 'quick'])
   // A copy: changing it changes not what was kept.
-  got.left[2].size = 'M'
+  ;(got.left[2] as typeof w).size = 'M'
   assert.equal(w.size, 'S')
   // Nothing kept: Windows' own.
   assert.deepEqual(Widgets.layoutOf(null, PARTS, WIN11), WIN11)

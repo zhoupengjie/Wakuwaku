@@ -1,6 +1,6 @@
 // The few words the Rust side says itself (the tray's menu and its tip,
 // Windows' menus on the taskbar, her notices, dialogs and notifications),
-// written where the pages' are, in src/shared/i18n.js, and nowhere else:
+// written where the pages' are, in src/shared/i18n.ts, and nowhere else:
 // build.rs reads the keys this program names from there into WORDS.
 
 include!(concat!(env!("OUT_DIR"), "/words.rs"));
@@ -18,7 +18,7 @@ pub fn lang(setting: &str) -> &'static str {
 }
 
 // The words for key in lang ("zh", else English); the key itself where
-// i18n.js has none, as the pages' t.
+// i18n.ts has none, as the pages' t.
 pub fn t(lang: &str, key: &str) -> String {
     match WORDS.binary_search_by(|(k, ..)| (*k).cmp(key)) {
         Ok(at) => {
@@ -33,7 +33,7 @@ pub fn t(lang: &str, key: &str) -> String {
 mod tests {
     use super::*;
 
-    // Every key the program asks for is in i18n.js and so in WORDS: the
+    // Every key the program asks for is in i18n.ts and so in WORDS: the
     // ones it names at a t( call or in a list of them, and those it builds
     // (a mood's, a notification's, Windows' own menu items' on the taskbar:
     // tray.rs part_menu).

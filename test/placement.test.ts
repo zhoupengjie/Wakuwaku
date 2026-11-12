@@ -50,7 +50,7 @@ test('on the desktop (alone, stacked or in a board): out of the turns, not pinne
   // The open island lists her capsule's own alone (one widget, one place,
   // the user's call of 2026-10-17): those on the desktop are there, not here.
   assert.deepEqual(ids(p.listed), ['tokens'])
-  assert.equal(p.where, undefined)
+  assert.equal((p as any).where, undefined)
 })
 
 test('on the taskbar: out of the island while the taskbar is her home only', () => {

@@ -2,8 +2,8 @@
 // pointer goes from button to button, their live pictures placed (Windows
 // draws them: taskbar_thumbs), pressed, dragged, and files dragged onto a
 // button bringing its window up.
-// Made by island.js in the section's place as the page starts
-// (winlistPart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (winlistPart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -174,7 +174,7 @@ export function winlistPart(core: WinlistCore) {
   // they all came to the front together, or all went down), and pressed
   // again it goes. One the pointer rested on stays open for the press.
   // With the keys and the other buttons as on Windows' own
-  // (zhoupengjie/Wakuwaku#36, presses.js pressOf): the middle button or
+  // (zhoupengjie/Wakuwaku#36, presses.ts pressOf): the middle button or
   // Shift, another of it; Ctrl and Shift, another as administrator; Ctrl on
   // one with several windows, the next of them; a right press, its menu,
   // with Shift its window's own menu (one for all its windows when it has
@@ -348,7 +348,7 @@ export function winlistPart(core: WinlistCore) {
   // The pointer resting on a running program's button: its windows. With
   // another's list open, only once it has been on this button as long as
   // Windows' own taskbar waits, and not while it is on its way up into
-  // the list (aim.js, zhoupengjie/Wakuwaku#56): it changed at once to any
+  // the list (aim.ts, zhoupengjie/Wakuwaku#56): it changed at once to any
   // button crossed on the way to a card.
   const aim = Aim.create()
   const aimList = () => (core.popFor?.kind === 'list' && !pop.hidden ? { key: core.popFor.app, rect: pop.getBoundingClientRect(), edge: tbEdge() } : null)
@@ -385,7 +385,7 @@ export function winlistPart(core: WinlistCore) {
   // list open, a card in it held over as long bringing that one, for the
   // file to be let go of in the window, as on Windows' own
   // (zhoupengjie/Wakuwaku#36). The drag's place comes from Tauri
-  // (bridge.js onFileDrag, which also plays it as the pointer's: the list
+  // (bridge.ts onFileDrag, which also plays it as the pointer's: the list
   // goes once the drag has left it and the buttons a moment, as for the
   // pointer). What it is held over: 'win:<id>', 'app:<key>', or null.
   let fileHeld = null

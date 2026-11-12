@@ -116,7 +116,7 @@ fn sky_words(code: &Value, lang: &str) -> &'static str {
     sky(int(code)).map_or("", |(zh, en)| if lang == "zh" { zh } else { en })
 }
 
-// The sky by its WMO code as one of the island's weather icons (wcards.js:
+// The sky by its WMO code as one of the island's weather icons (wcards.ts:
 // Windows' own glyphs), by day or by night (is_day 0; none is day).
 fn sky_icon(code: &Value, is_day: &Value) -> &'static str {
     let night = is_day.as_f64() == Some(0.0);

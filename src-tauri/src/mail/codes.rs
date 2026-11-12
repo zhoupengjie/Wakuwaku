@@ -545,7 +545,7 @@ fn notices() -> std::sync::MutexGuard<'static, Vec<Notice>> {
     NOTICES.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-// As the prompt panel shows them (panel.js mailBody), after the prompts.
+// As the prompt panel shows them (panel.ts mailBody), after the prompts.
 pub fn views() -> Vec<Value> {
     notices()
         .iter()

@@ -3,15 +3,18 @@ import { describe, it } from 'node:test'
 import { decideHotkeyAction, holderOf } from '../src/pet/panel.ts'
 import { STRINGS } from '../src/shared/i18n.ts'
 
+// What the hotkey decision reads; a test gives only what it is about.
+type HotkeyState = Parameters<typeof decideHotkeyAction>[0]
+
 describe('global shortcuts behavioral tests', () => {
   describe('frontend hotkey decision state machine (panel.js decideHotkeyAction)', () => {
     it('which === "island" always requests island toggle', () => {
-      const res = decideHotkeyAction({ which: 'island' })
+      const res = decideHotkeyAction({ which: 'island' } as HotkeyState)
       assert.deepEqual(res, { type: 'toggle' })
     })
 
     it('ignores unknown hotkey actions', () => {
-      const res = decideHotkeyAction({ which: 'unknown' })
+      const res = decideHotkeyAction({ which: 'unknown' } as HotkeyState)
       assert.deepEqual(res, { type: 'ignore' })
     })
 

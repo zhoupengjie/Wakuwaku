@@ -1,6 +1,6 @@
 # 预览工具：样例页、模拟器、改前改后
 
-用**真实的页面代码**（`src/pet` 的 index.html、desk.html、bar.html 和它们的脚本、样式）在浏览器里跑她的界面，Tauri 换成一个替身（`fake-tauri.js`）。不改产品代码。三样东西共用一份**场景**（`scenes.js`）：
+用**真实的页面代码**（`src/pet` 的 index.html、desk.html、bar.html 和它们的脚本、样式，按 `scripts/build-pages.mjs` 写进 `dist/` 的样子：脚本去掉了类型；render.ps1、publish.js 先跑它）在浏览器里跑她的界面，Tauri 换成一个替身（`fake-tauri.js`）。不改产品代码。三样东西共用一份**场景**（`scenes.js`）：
 
 - **模拟器**（试玩页）：一张假桌面，亲手点、拖、悬停；改代码时本地实时预览，验收时发成 Artifact。
 - **样例页**：每个场景、每个状态截成 PNG，深浅色各一张，`docs/design/style.md` 的「样子」。
@@ -17,7 +17,7 @@
 
 现在的场景：新用户第一次打开、平常、三个会话在忙、等你批准、做完了（流光）、出错了、提醒停留（停留 30 秒，流光转完后光环静止亮着）、展开停留（展开胶囊，开 30 秒）、放满小工具的任务栏、桌面、空桌面、灵动岛模式、岛在右上（展开着）、浅色 + 透明任务栏、编辑任务栏布局中、添加小工具（编辑任务栏，右边开着小工具库）、编辑胶囊（胶囊上方的面板）、组合（小工具库里存好的工作台）、Ctrl 多选（选中几个，右键组成工作台）。
 
-加一个场景：在 `SCENES` 里加一项（`id`、`title`、`note`、`world`，可选 `home`、`islandPos`（岛在顶部哪边：`left`、`center`、`right`，窗口照 `islandWindow` 放）、`mode`、`play`），在 `LIST` 里加一张它的图（`scene: '<id>'`、`section: 'scenes'`、`page`、`view`）。`test/preview.test.js` 会查世界是否完整、布局里的小工具是否都在、每个场景有没有图。新数据放进 `fixtures.js`，新的「Rust 会发的东西」放进 `fake-tauri.js`。
+加一个场景：在 `SCENES` 里加一项（`id`、`title`、`note`、`world`，可选 `home`、`islandPos`（岛在顶部哪边：`left`、`center`、`right`，窗口照 `islandWindow` 放）、`mode`、`play`），在 `LIST` 里加一张它的图（`scene: '<id>'`、`section: 'scenes'`、`page`、`view`）。`test/preview.test.ts` 会查世界是否完整、布局里的小工具是否都在、每个场景有没有图。新数据放进 `fixtures.js`，新的「Rust 会发的东西」放进 `fake-tauri.js`。
 
 ## 模拟器（playground）
 
@@ -27,7 +27,7 @@ node tools/preview/publish.js build <文件夹> [--label <文字>]  # 要发布�
 node tools/preview/publish.js serve [端口] [文件夹]          # 按发布的样子在本地试 build 的结果
 ```
 
-- **dev**：不打包，按发布时的路径（`preview/`、`pet/`、`shared/`、`pets/`、`assets/`）直接读 `src/pet`、`src/shared`、`tools/preview`。改了文件，开着的页面自己跟上：她页面的样式就地换掉；她页面的脚本或 HTML 只重新载入用到它的那一块（世界不变，开着的设置、正在编辑的布局会再打开）；模拟器自己的文件（`playground.*`、`fake-tauri.js`、`fixtures.js`、`scenes.js`）整页重载，世界、场景、控制台的状态带过去。页头的绿点标签写着「本地实时 · 分支 … · 提交」。build 会漏掉的文件，dev 在控制台里说一声。
+- **dev**：不打包，按发布时的路径（`preview/`、`pet/`、`shared/`、`pets/`、`assets/`）直接读 `dist/pet`、`dist/shared`（`src/` 一改就重新写进去）、`tools/preview`。改了文件，开着的页面自己跟上：她页面的样式就地换掉；她页面的脚本或 HTML 只重新载入用到它的那一块（世界不变，开着的设置、正在编辑的布局会再打开）；模拟器自己的文件（`playground.*`、`fake-tauri.js`、`fixtures.js`、`scenes.js`）整页重载，世界、场景、控制台的状态带过去。页头的绿点标签写着「本地实时 · 分支 … · 提交」。build 会漏掉的文件，dev 在控制台里说一声。
 - **页头标签**：`build` 默认从 git 取「主线 · 3ec87d9」或「分支 simulator · 3ec87d9」，工作区有没提交的改动再加「+ 未提交的改动」；`--label` 换成自己的话（`--label ""` 不要标签）。
 - **发布（协调来做）**：主线版发到固定的那个链接；分支要验收时，另 `build` 一份带分支标签的，单独发一个 Artifact。发布用 Artifact 工具：`file_path` 是文件夹里的 `playground.html`，`files` 是 `files.json` 那张表（发布路径 → 本地文件）。更新已有的链接时带上 `url`。
 - `playground.html` 只有页面内容（title、meta、一个 style、标记和脚本），托管方会套上 html/head/body；`serve`、`dev` 也照这样套。仓库里这一份只能通过 `publish.js` 打开。

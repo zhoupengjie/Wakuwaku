@@ -1,6 +1,5 @@
 // Widgets, the first kind of plugin in the island (widgets.rs): their icons,
-// and their words in her language. Loaded by the page before island.js, and
-// required by the tests.
+// and their words in her language. Imported by the pages and the tests.
 //
 // A widget is { id, label, value, icon, color, builtIn, on, leftMs, private };
 // a built-in one's label and value are { key, vars } to translate. A private
@@ -93,7 +92,7 @@ function markHTML(name, color, cls = '') {
 // words rendered when a language is given), else its id.
 const markName = (w, lang) => (typeof w?.label === 'string' ? w.label : lang && w?.label ? render(lang, w.label) : '') || w?.name || w?.id || ''
 // Its icon (a plugin's own picture, else one of hers), or that mark.
-const iconHTML = (w, lang) => (hasPicture(w) ? maskHTML(w.iconUrl) : hasIcon(w?.icon) ? icon(w.icon) : markHTML(markName(w, lang), w?.color))
+const iconHTML = (w, lang?) => (hasPicture(w) ? maskHTML(w.iconUrl) : hasIcon(w?.icon) ? icon(w.icon) : markHTML(markName(w, lang), w?.color))
 
 // The monitor's readings, or null for a widget that has none.
 const partsOf = w => (Array.isArray(w?.value?.parts) ? w.value.parts : null)
@@ -233,7 +232,7 @@ const rowsHTML = (w, column = false) =>
     .map(row => `<span class="wrow">${row.map(cellHTML).join('')}</span>`)
     .join('')
 
-// --- On the taskbar (island.js) -----------------------------------------------------
+// --- On the taskbar (island.ts) -----------------------------------------------------
 // The taskbar's layout (taskbarLayout) is three runs, { left, center,
 // right }, of its parts by name ('start', 'clock', …) and of the widgets
 // put there, each { id, type, of, size, name, icon }: type 'widget' (of: a
@@ -246,6 +245,12 @@ const rowsHTML = (w, column = false) =>
 // them opened over it by a press), { id, type, items }, 2 to 8 of them,
 // each { type, of, name, icon } as one put there alone, none twice, shown
 // medium. settings.rs checks the same.
+// Such a layout's three runs, each its parts' names and entries in order.
+interface Runs {
+  left?: any[]
+  center?: any[]
+  right?: any[]
+}
 const ENTRY_TYPES = ['widget', 'plugin', 'flex', 'gap', 'sep', 'carousel', 'stack']
 const GROUP_TYPES = ['carousel', 'stack']
 const MAX_ENTRIES = 32
@@ -279,7 +284,7 @@ const keyOf = item => (typeof item === 'string' ? item : item.id)
 // (new since) where the default has it, but for those that may be taken
 // off (optional: the monitor's, #53), missing from one kept because they
 // were; each widget once, 32 at most.
-function layoutOf(saved, parts, base, optional = []) {
+function layoutOf(saved, parts, base: Runs, optional = []) {
   const kept = !!saved && typeof saved === 'object' && ['left', 'center', 'right'].some(k => Array.isArray(saved[k]))
   const seen = new Set()
   let entries = 0
@@ -297,7 +302,7 @@ function layoutOf(saved, parts, base, optional = []) {
 }
 
 // The monitor on the strip is its part (its readings in two rows, as the
-// clock has its two: island-right.js widgetFaces), never besides a widget put
+// clock has its two: island-right.ts widgetFaces), never besides a widget put
 // there for it (#53, and §7: a widget in one place). One put there alone
 // (a layout of before) becomes the part where it stood; one in a group
 // stays there and the part goes.
@@ -320,7 +325,7 @@ function monitorAsPart(layout) {
   return out
 }
 
-// A layout for the top bar (island.js split) from the one kept: Start and
+// A layout for the top bar (island.ts split) from the one kept: Start and
 // the programs (and quick settings and the clock, if set so) left out,
 // they are in the dock (dock: those parts). One kept for the strip along
 // an edge (with them in it) that has her at its start and nothing else in
@@ -358,7 +363,7 @@ function edgeOf(layout) {
 
 // --- Several in one place: made, changed, taken apart -----------------------------
 // Each takes a layout and gives a new one (the one given left as it was);
-// newId makes an entry's id (island.js: "w" and a-z 0-9).
+// newId makes an entry's id (island.ts: "w" and a-z 0-9).
 const cloneLayout = layout => JSON.parse(JSON.stringify(layout))
 const findEntry = (layout, id) => {
   for (const k of Object.keys(layout)) {
@@ -442,7 +447,7 @@ function regroup(layout, id, type) {
 }
 
 // Its parts alone: what a preset says.
-const partsAlone = layout => Object.fromEntries(Object.entries(layout).map(([k, run]) => [k, run.filter(p => typeof p === 'string')]))
+const partsAlone = (layout: Runs) => Object.fromEntries(Object.entries(layout).map(([k, run]) => [k, run.filter(p => typeof p === 'string')]))
 
 // A preset's parts, and the widgets where they were: in their run, after
 // its parts (before them in the right run, not past the clock).
@@ -472,7 +477,7 @@ const slidesOf = (entry, all) =>
 
 // --- A carousel's turns (the spec's §5, §9) ------------------------------------------
 // Every CAROUSEL_MS the next slides up, while it may move: not under the
-// pointer, not while nobody is about, never with motion reduced (island.js
+// pointer, not while nobody is about, never with motion reduced (island.ts
 // holds it then and calls nothing). A slide with news (newsIn) cuts in at
 // once, for a turn of its own, and the turns go on from where they were.
 // { at, since, back }: the slide shown, since when, and where to go back
@@ -492,7 +497,7 @@ const carouselStep = (state, n, by, now) => ({ at: n ? (((state.at + by) % n) + 
 const carouselDue = (state, now) => Math.max(0, CAROUSEL_MS - (now - state.since))
 
 // News on a slide: a mailbox's unread grew (a letter came); its own
-// nudge (island.js) is news too. A clock or a reading changing is not.
+// nudge (island.ts) is news too. A clock or a reading changing is not.
 function newsIn(before, after) {
   if (!before || !after || after.from !== 'mail') return false
   const n = w => Number(w?.value?.vars?.n ?? (typeof w?.value === 'string' ? parseInt(w.value, 10) : NaN))
@@ -500,7 +505,7 @@ function newsIn(before, after) {
 }
 
 // The widgets the layout shows (not to take their turns in the island too).
-function shownOn(layout, all) {
+function shownOn(layout: Runs, all) {
   const ids = new Set()
   for (const run of Object.values(layout)) for (const e of run) if (typeof e !== 'string') for (const w of sourcesOf(e, all)) ids.add(w.id)
   return ids

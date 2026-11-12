@@ -1,12 +1,12 @@
 // What the page still has entered and the pointer is no longer on, for
-// bridge.js to play its mouseleave. The page hears mouseenter and mouseleave
-// two ways: WebView2's own (the window caught) and played by bridge.js from
+// bridge.ts to play its mouseleave. The page hears mouseenter and mouseleave
+// two ways: WebView2's own (the window caught) and played by bridge.ts from
 // where the Rust side says the pointer is (the window letting clicks
 // through, pointer.rs). Entered one way, the leave may never come the other:
 // a mouseenter played, WebView2 had seen no move over her, and its first
 // move was already off her, so it had nothing to leave (the taskbar's island
-// stayed open after a hover, 2026-10-16). Loaded by the page before
-// bridge.js, and required by the tests.
+// stayed open after a hover, 2026-10-16). Imported by bridge.ts and the
+// tests.
 // Caught, WebView2 hit-tests the pointer itself, a pixel or so from where
 // the Rust side read it a moment before: an element is left only once the
 // pointer is this far (CSS px) outside its box too, never at its edge,

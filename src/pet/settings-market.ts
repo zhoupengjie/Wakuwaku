@@ -1,8 +1,8 @@
-// The plugin market (market.rs; addonui.js the words and steps): its list,
+// The plugin market (market.rs; addonui.ts the words and steps): its list,
 // an item's page, installing and updating, taken away, permissions allowed,
 // installing from a file; a word at the panel's foot (toast).
-// Made by settings.js in the section's place as the page starts
-// (marketPart(core), imported by settings.js): what it takes of the settings' core
+// Made by settings.ts in the section's place as the page starts
+// (marketPart(core), imported by settings.ts): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
@@ -108,7 +108,7 @@ export function marketPart(core: MarketCore) {
     const b = AddonUI.marketButton(item, { installed: installedOf(item.id), job: market.jobs[item.id], T })
     return `<div class="r jumps mk-row" data-mk-item="${esc(item.id)}" role="button" tabindex="0"><span class="wi" style="color:${esc(marketColor(item))}">${marketTile(item)}</span><div class="grow"><div class="ellip">${esc(AddonUI.wordsIn(item.name, core.lang))}${item.author ? `<span class="d"> @${esc(item.author)}</span>` : ''}</div><div class="d ellip">${esc(AddonUI.marketAbout(item, T, core.lang))}</div></div>${marketButtonHTML(item, b)}</div>`
   }
-  // Its button (addonui.js marketButton); a download under way, how far, filling.
+  // Its button (addonui.ts marketButton); a download under way, how far, filling.
   function marketButtonHTML(item, b) {
     if (b.what === 'busy') return `<span class="mk-prog" style="--p:${b.pct}%"><span>${esc(b.label)}</span></span>`
     return `<button class="pbtn sm${b.primary ? ' al' : ''}" data-mk-do="${b.what}" data-id="${esc(item.id)}"${b.disabled ? ' disabled' : ''}>${esc(b.label)}</button>`
@@ -117,7 +117,7 @@ export function marketPart(core: MarketCore) {
   // One of the market's own page (spec §2): 获取更多 › 名字; its icon, name,
   // the green 已审核, who made it, its version, size and kind, its button;
   // its cards as she would draw them from what it says it shows (its
-  // index's sample, her own templates: wdesk.js), a pack's picture, or
+  // index's sample, her own templates: wdesk.ts), a pack's picture, or
   // neither; what it is; what it can do.
   function marketItemPage(item) {
     const name = AddonUI.wordsIn(item.name, core.lang)
@@ -136,7 +136,7 @@ export function marketPart(core: MarketCore) {
   }
 
   // Its cards drawn into their place, once the page is: the desktop's own
-  // (wdesk.js, loaded the first time one is shown), each in its glass at
+  // (wdesk.ts, loaded the first time one is shown), each in its glass at
   // its size, with the desktop's stylesheet in a shadow of their own so
   // neither page's styles reach the other's (desk.css takes its colours
   // from :host there, light as Windows is: set-light). Beside this script
@@ -174,7 +174,7 @@ export function marketPart(core: MarketCore) {
     }
   }
 
-  // What is asked before one goes in (addonui.js marketAskOf): installing,
+  // What is asked before one goes in (addonui.ts marketAskOf): installing,
   // what it may do beyond the web; updating one here, what more it asks for.
   const marketAsk = id => AddonUI.marketAskOf(marketItem(id), T, andList, core.lang, (core.snap?.addons || []).find(a => a.id === id)?.perms || null)
 
@@ -246,7 +246,7 @@ export function marketPart(core: MarketCore) {
     if (core.isOpen && core.tab === 'widgets' && core.sub) draw()
   })
 
-  // The question over the panel (addonui.js layerOf, uninstallLayerOf): its
+  // The question over the panel (addonui.ts layerOf, uninstallLayerOf): its
   // title, the amber note, what it will do, its notes, a line to the
   // developer docs, its buttons; nothing while none is asked.
   function sheetHTML() {
@@ -278,7 +278,7 @@ export function marketPart(core: MarketCore) {
     if (was && html) requestAnimationFrame(() => sheet.querySelector('[data-sheet="cancel"]')?.focus({ preventScroll: true }))
   }
 
-  // Installing from a file (spec §3), its steps (addonui.js next): Windows'
+  // Installing from a file (spec §3), its steps (addonui.ts next): Windows'
   // dialog for a .zip, the .zip looked at, asked about (or why it cannot
   // go in), installed; then a word, its row edged until the panel closes,
   // 新 in the picker until it is put somewhere, the page at its row.

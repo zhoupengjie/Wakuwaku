@@ -22,14 +22,14 @@ import { t } from '../shared/i18n.ts'
 
 const { invoke } = window.__TAURI__.core
 const { listen } = window.__TAURI__.event
-// For this window alone: listen() by itself hears what is sent to any (bridge.js).
+// For this window alone: listen() by itself hears what is sent to any (bridge.ts).
 const LABEL = window.__TAURI_INTERNALS__?.metadata?.currentWebview?.label || window.__TAURI__.webviewWindow?.getCurrentWebviewWindow?.()?.label || ''
-const target = { kind: 'WebviewWindow', label: LABEL }
+const target: TauriTarget = { kind: 'WebviewWindow', label: LABEL }
 
 const body = document.body
 const start = document.querySelector('.start')
 // Task View after Start, while Windows has its button on (as the main
-// taskbar's, island-right.js taskViewButton): Windows' own pictures, else its
+// taskbar's, island-right.ts taskViewButton): Windows' own pictures, else its
 // icon font's glyph (bar.html).
 const taskView = document.querySelector('.tview')
 invoke('taskbar_task_view_icons')
@@ -41,7 +41,30 @@ invoke('taskbar_task_view_icons')
   .catch(() => {})
 const wins = document.getElementById('wins')
 const clock = document.querySelector('.clock')
-let state = { windows: [], look: {}, edge: 'bottom', align: 'center', material: 'clear', lang: 'zh' }
+// What bar:state brings (bars.rs refresh): the programs and windows on this
+// display, Windows' look, where the strip is and of what; in the dock its
+// glass's acrylic, quick settings and the Recycle Bin; a prompt waiting.
+interface BarState {
+  windows: any[]
+  look: { mode?: string; seconds?: boolean; taskView?: boolean; accent?: { base?: string; light?: string; dark?: string } }
+  edge: string
+  align: string
+  material: string
+  lang: string
+  dock?: boolean
+  clearWhen?: string
+  filled?: boolean
+  asks?: { n: number; kind?: string }
+  islandLook?: any
+  sprite?: string
+  spriteVersion?: number
+  keys?: boolean
+  keysNow?: any
+  acrylic?: boolean
+  bin?: { png?: string; full?: boolean }
+  paper?: any
+}
+let state: BarState = { windows: [], look: {}, edge: 'bottom', align: 'center', material: 'clear', lang: 'zh' }
 
 const el = (tag, cls?, text?) => {
   const n = document.createElement(tag)
@@ -52,12 +75,12 @@ const el = (tag, cls?, text?) => {
 const isSide = () => state.edge === 'left' || state.edge === 'right'
 const isDock = () => state.dock === true
 const isLight = () => state.look?.mode === 'light'
-// How a clear strip fills in (taskbarClearWhen), as island.js reads it: as
+// How a clear strip fills in (taskbarClearWhen), as island.ts reads it: as
 // Mica (the default) or solid, or never.
 const clearWhen = () => (['solid', 'always'].includes(state.clearWhen) ? state.clearWhen : 'mica')
 // Its ground: the material; clear, while a window is maximized or full
 // screen on this display (bars.rs fills) it fills in as Mica or solid,
-// unless it is to stay clear always, as hers does on hers (island.js isFilled).
+// unless it is to stay clear always, as hers does on hers (island.ts isFilled).
 const ground = () => {
   // The dock is glass: Windows' acrylic, or the desktop's picture (Mica), clear or not; or solid.
   const material = isDock() ? (state.material === 'black' ? 'black' : 'mica') : state.material || 'clear'
@@ -69,7 +92,7 @@ const ground = () => {
 // not its tint at once and the picture after.
 const clearMica = () => !isDock() && (state.material || 'clear') === 'clear' && clearWhen() === 'mica'
 
-// The Start mark, drawn on the screen's own pixels (as the main taskbar's, island-right.js drawStartMark).
+// The Start mark, drawn on the screen's own pixels (as the main taskbar's, island-right.ts drawStartMark).
 let startScale = 0
 function drawStart() {
   const dpr = devicePixelRatio || 1
@@ -86,10 +109,10 @@ function drawStart() {
   start.innerHTML = `<svg viewBox="0 0 ${box} ${box}" style="width:${box / dpr}px;height:${box / dpr}px"><defs><linearGradient id="start-blue" gradientUnits="userSpaceOnUse" x1="${at}" y1="${at}" x2="${end}" y2="${end}"><stop class="s0" offset="0"/><stop class="s1" offset="1"/></linearGradient></defs><g fill="url(#start-blue)">${rect(at, at)}${rect(far, at)}${rect(at, far)}${rect(far, far)}</g></svg>`
 }
 
-// As the main taskbar's (island-look.js tickClock): with the seconds while
+// As the main taskbar's (island-look.ts tickClock): with the seconds while
 // Windows' own clock shows them, then anew at each second's start, else
 // every five seconds; called again when drawn, which sets the pace anew.
-let clockTick = 0
+let clockTick: Timer = 0
 function tickClock() {
   clearTimeout(clockTick)
   const seconds = state.look?.seconds === true
@@ -123,24 +146,24 @@ function tipClock() {
 clock.addEventListener('pointerenter', tipClock)
 clock.addEventListener('contextmenu', () => invoke('pet_menu', { part: 'clock' }).catch(() => {}))
 
-// A button for each program, as the main taskbar's icons (island.js
+// A button for each program, as the main taskbar's icons (island.ts
 // drawWindows): its icon, a mark under it while running (longer in the
 // accent for the one in front), how many windows at its corner when more
 // than one. Its name in its tip only while it does not run: running, its
 // windows are listed when the pointer rests on it, and a tip stood over
 // the list's corner (the test session, 2026-10-13).
 // Each program's button kept from one drawing to the next (by its key),
-// what changed changed in it, as on the main taskbar (island.js
+// what changed changed in it, as on the main taskbar (island.ts
 // drawWindows): its line springs between a dash and the pill of the one
 // in front, a new one's grows in (fresh), a press plays out though the
-// windows change under it (presses.js pressIn). In the dock a program
+// windows change under it (presses.ts pressIn). In the dock a program
 // started grows into its place and one ended shrinks away, the glass
 // with them, as its minimized windows do (moveMin): it jumped narrower
 // as the window brought back from it was closed (the user, 2026-11-04).
 let buttonsDrawn = false
 function drawWindows() {
   const list = state.windows || []
-  const old = new Map([...wins.children].filter(b => b.dataset.app != null).map(b => [b.dataset.app, b]))
+  const old = new Map([...(wins.children as HTMLCollectionOf<HTMLElement>)].filter(b => b.dataset.app != null).map(b => [b.dataset.app, b]))
   const fresh = []
   const animate = isDock() && buttonsDrawn
   const buttons = list.map(app => {
@@ -164,7 +187,7 @@ function drawWindows() {
     b.classList.toggle('flash', windows.some(w => w.flash))
     if (!windows.length) b.title = app.name || ''
     else b.removeAttribute('title')
-    const img = (((((b.querySelector<HTMLElement>(':scope > img') as HTMLElement as HTMLElement as HTMLElement as HTMLElement as HTMLElement)))))
+    const img = b.querySelector<HTMLImageElement>(':scope > img')
     if (img.getAttribute('src') !== (app.png || '')) img.src = app.png || ''
     let count = b.querySelector(':scope > .count')
     if (windows.length > 1) {
@@ -209,7 +232,7 @@ new ResizeObserver(() => {
 }).observe(end)
 
 // --- Her capsule, while a prompt waits ---------------------------------------
-// As her island on the main taskbar draws itself (island.js placeHer,
+// As her island on the main taskbar draws itself (island.ts placeHer,
 // drawIslandLook): her round portrait playing her waiting clip, ringed in
 // the waiting colour, and the words in it; its ground her island's, as the
 // settings have it for Windows' mode (islandLook: bg, op, blur, edge,
@@ -222,9 +245,9 @@ const words = her.querySelector('.words')
 const WAITING = { dark: '#ffb340', light: '#b25e00' }
 const FACE = 30
 const PER_PX = 0.00875
-let frames = 0
+let frames: Timer = 0
 
-// A colour's relative lightness (WCAG), 0 to 1 (island-look.js lightness).
+// A colour's relative lightness (WCAG), 0 to 1 (island-look.ts lightness).
 function lightness(rgb) {
   const [r, g, b] = [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255].map(v => {
     v /= 255
@@ -321,7 +344,7 @@ function draw() {
 }
 
 // Mica: this display's own wallpaper under the strip, blurred and tinted
-// as the main strip's (mica.js; bars.rs read_papers sends where it lies);
+// as the main strip's (mica.ts; bars.rs read_papers sends where it lies);
 // its tint (style.css) until the picture comes.
 const mica = Mica.mount(document.getElementById('mica'))
 function drawMica() {
@@ -332,15 +355,15 @@ function drawMica() {
 }
 
 // Presses: Start and the clock open what Windows' do, the sliver shows the
-// desktop; a program's button as on the main taskbar (island-winlist.js pressApp):
+// desktop; a program's button as on the main taskbar (island-winlist.ts pressApp):
 // one not running starts, one window to the front or minimized, several
 // their list to pick from, pressed again it goes (zhoupengjie/Wakuwaku#34);
 // with the keys and the other buttons as on Windows' own
-// (zhoupengjie/Wakuwaku#36, presses.js pressOf).
+// (zhoupengjie/Wakuwaku#36, presses.ts pressOf).
 const appOf = key => (state.windows || []).find(a => a.app === key)
-// The window Ctrl and a press last brought (island-winlist.js cycled).
+// The window Ctrl and a press last brought (island-winlist.ts cycled).
 let cycled = null
-// A window's own menu open: no list on the pointer resting (island-winlist.js menuUp).
+// A window's own menu open: no list on the pointer resting (island-winlist.ts menuUp).
 let menuUp = false
 function pressApp(node, app, what) {
   const windows = app.windows || []
@@ -374,7 +397,7 @@ function pressApp(node, app, what) {
   if (!windows.length) return call('taskbar_app', { path: String(app.path), what: 'launch', id: app.id ? String(app.id) : null })
   call('taskbar_window', { id: Number(windows[0].id), what: 'press' })
 }
-// Shift and Ctrl as Windows has them at the press (island-winlist.js heldAtPress):
+// Shift and Ctrl as Windows has them at the press (island-winlist.ts heldAtPress):
 // this window never takes the keyboard either.
 let heldAtPress = null
 document.addEventListener('pointerdown', e => {
@@ -415,13 +438,13 @@ document.addEventListener('mousedown', e => e.button === 1 && e.preventDefault()
 // 跟任务栏保持一致，加上「占着位置」).
 document.addEventListener('contextmenu', e => {
   e.preventDefault()
-  if (!isDock() || (e.target as HTMLElement).closest('[data-app], #mins, .bin, #her') || clock.contains(e.target)) return
+  if (!isDock() || (e.target as HTMLElement).closest('[data-app], #mins, .bin, #her') || clock.contains(e.target as Node)) return
   invoke('pet_menu', { part: null }).catch(() => {})
 })
 
-// Over a program's button, as on the main taskbar (island-glide.js openPop): the
+// Over a program's button, as on the main taskbar (island-glide.ts openPop): the
 // pointer resting on a running one, its windows; a right press, its menu.
-// In a window of their own over the strip (bars.rs bar_pop, barpop.js),
+// In a window of their own over the strip (bars.rs bar_pop, barpop.ts),
 // which goes once the pointer has left both a moment (told it here,
 // bar_pop_over) or at a press elsewhere. { app, kind } while open.
 let popFor = null
@@ -443,8 +466,8 @@ function closePop() {
 }
 // Another's list open: this button's only once the pointer has been on it
 // as long as Windows' own taskbar waits, and not while it is on its way
-// up into the list (aim.js, zhoupengjie/Wakuwaku#56), as on the main
-// taskbar (island-winlist.js aimPop). Where the list's window lies, in this
+// up into the list (aim.ts, zhoupengjie/Wakuwaku#56), as on the main
+// taskbar (island-winlist.ts aimPop). Where the list's window lies, in this
 // page's px, comes once it is laid (bars.rs barpop_place).
 const aim = Aim.create()
 listen('bar:pop-at', e => (popAt = e.payload || null), { target })
@@ -492,8 +515,8 @@ listen(
 )
 
 // A file dragged from another program and held over a running program's
-// button half a second, as on the main taskbar (island-winlist.js fileHeld): its
-// window to the front, or with several their list open (barpop.js: a card
+// button half a second, as on the main taskbar (island-winlist.ts fileHeld): its
+// window to the front, or with several their list open (barpop.ts: a card
 // there held over as long brings that one). Tauri's drop handler has the
 // window's drags (tauri://drag-*, where it is in physical px), and the
 // page hears no mouse meanwhile: the list's window is told when the drag
@@ -564,7 +587,7 @@ const LAG_MS = 60
 const SLIDE_MS = 180
 const PLATE_IN_MS = 150
 // DWM's corners on the plate (8 px) inside the glass's (8): a pixel in
-// (backplate.rs; island-plate.js plateInset).
+// (backplate.rs; island-plate.ts plateInset).
 const PLATE_INSET = 1
 // Where the glass is as it last settled (its px), where the plate goes
 // meanwhile and where it may still be (its last but one, LAG_MS), whether
@@ -703,7 +726,7 @@ new ResizeObserver(() => {
   if (glideOn?.isConnected) glideTo(glideOn, true)
 }).observe(strip)
 
-// --- The pointer's glide (as the main taskbar's: island-glide.js glideTo) ---------------
+// --- The pointer's glide (as the main taskbar's: island-glide.ts glideTo) ---------------
 // One highlight under the pointer for all its buttons, behind them,
 // sliding from one to the next, its leading edge first and the trailing
 // one after, so it stretches and gathers, a little squashed on the way
@@ -774,7 +797,7 @@ strip.addEventListener('pointerdown', e => {
   if (e.button === 0 && glideOn && (e.target as HTMLElement).closest(GLIDE_ON) === glideOn) glide.classList.add('down')
 })
 addEventListener('pointerup', () => glide.classList.remove('down'))
-// Its buttons pressed in and springing back (presses.js pressIn; not a
+// Its buttons pressed in and springing back (presses.ts pressIn; not a
 // minimized window's, whose picture is Windows' own over it).
 Presses.pressIn(strip, '.start, .tview, .win:not(.mini)')
 addEventListener('resize', () => {
@@ -810,11 +833,11 @@ listen(
   },
   { target },
 )
-// Windows' Start menu open: Start lit, as the main taskbar's (island-right.js startButton).
+// Windows' Start menu open: Start lit, as the main taskbar's (island-right.ts startButton).
 listen('dock:start', e => start.classList.toggle('open', e.payload?.open === true), { target })
 
 // Quick settings in the dock (state.keys): the network's way out and the
-// volume, as the main taskbar's button draws them (island-right.js showNet,
+// volume, as the main taskbar's button draws them (island-right.ts showNet,
 // showVolume), from what Windows says (dock:keys, taskbar/win/keys.rs keys_loop);
 // a press opens Windows' own (Win+A), the wheel on it the volume.
 const quick = document.querySelector('.quick')
@@ -891,7 +914,7 @@ function drawMins() {
       if (!first) moveMin(b, true)
     }
     b.title = w.title || app.name || ''
-    const badge = (((((b.querySelector<HTMLElement>('.badge') as HTMLElement as HTMLElement as HTMLElement as HTMLElement as HTMLElement)))))
+    const badge = b.querySelector<HTMLImageElement>('.badge')
     if (badge.getAttribute('src') !== (app.png || '')) badge.src = app.png || ''
     after = b
   }
@@ -978,7 +1001,7 @@ const binSep = document.getElementById('binsep')
 function drawBin(b) {
   bin.hidden = binSep.hidden = !isDock()
   if (!isDock()) return
-  const img = (((((bin.querySelector<HTMLElement>('img') as HTMLElement as HTMLElement as HTMLElement as HTMLElement as HTMLElement)))))
+  const img = bin.querySelector<HTMLImageElement>('img')
   if (b?.png && img.getAttribute('src') !== b.png) img.src = b.png
   img.hidden = !b?.png
   bin.classList.toggle('full', b?.full === true)

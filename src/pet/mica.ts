@@ -1,4 +1,4 @@
-// The taskbar's Mica (island.js): the desktop's picture under the strip,
+// The taskbar's Mica (island.ts): the desktop's picture under the strip,
 // blurred and tinted as Windows' own Mica is. Mica takes the wallpaper, not
 // what is behind the window, and nothing but the wallpaper is behind the
 // taskbar anyway (windows keep out of its strip). So the picture is drawn
@@ -26,7 +26,16 @@ const FADE_MS = 400
 // it: filling the display (cut to fit), fitting in it, stretched to it, in
 // its middle at its own size, tiled from its corner, or filling all the
 // displays together (span). natural: its size in pixels.
-function place(paper, natural) {
+// Where place() lays the picture: its box, in the strip's px, and whether
+// it is tiled from that box's corner.
+interface Placed {
+  x: number
+  y: number
+  w: number
+  h: number
+  tile?: boolean
+}
+function place(paper, natural): Placed {
   const [mx, my, mw, mh] = paper.mon
   const sf = paper.sf || 1
   const { w: iw, h: ih } = natural
@@ -112,10 +121,10 @@ function draw(paper, img, width, height, mode = 'dark') {
 
 // The display's picture as the desktop's widgets take it (the widget
 // design's §2: their glass is the wallpaper under them, blurred 30 and
-// saturated 1.6, the glass colour over it; desk.js): the whole display
+// saturated 1.6, the glass colour over it; desk.ts): the whole display
 // (the desk window is the display, paper.mon from its corner), its edges
 // carried on into a margin round it as the strip's are, blurred and
-// saturated, no tint. Each widget shows its own part of it (desk.js
+// saturated, no tint. Each widget shows its own part of it (desk.ts
 // paperFor). Gives { canvas, margin, scale }: the canvas covers the
 // display and the margin, at scale.
 function glassPaper(paper, img, { blur = 30, saturate = 1.6, scale = SCALE } = {}) {
@@ -165,7 +174,7 @@ function glassPaper(paper, img, { blur = 30, saturate = 1.6, scale = SCALE } = {
 // How light the desktop is right under the strip, 0 (black) to 1 (white):
 // the picture where it lies there, unblurred, its relative luminance (as
 // WCAG takes it, from linear light), along the strip (profileOf: a side
-// bar's down it). The clear strip's words go by it (island.js backdrop),
+// bar's down it). The clear strip's words go by it (island.ts backdrop),
 // each part by what is under it (inkOn), as text over iOS's glass goes by
 // what is behind it, not by the system's mode. null: not to be told (no
 // paper, or a picture whose pixels cannot be read).
@@ -256,7 +265,7 @@ function inkOn(profile, from, to) {
   return (lo + 0.05) / 0.05 > 1.05 / (hi + 0.05)
 }
 
-// The strip's own words dark (island.js isStripLight, inkParts; style.css
+// The strip's own words dark (island.ts isStripLight, inkParts; style.css
 // tb-ink-light, ink-light): on the clear strip with the desktop showing
 // through (not filled in), as the desktop under them wants (backdrop:
 // wantsDarkInk or inkOn, null while not known); else as Windows' mode
@@ -266,7 +275,7 @@ const stripInkLight = ({ light, clear, filled, backdrop }) => (clear && !filled 
 
 // Windows' accent as its own taskbar draws with it (taskbar/ accent):
 // its darker shade where the words are dark, its lighter where they are
-// light; null while not known. island.js sets it twice: --win-accent by
+// light; null while not known. island.ts sets it twice: --win-accent by
 // Windows' mode (the settings, what opens from the strip), --strip-accent
 // by the strip's words (stripInkLight), for what is drawn on the strip.
 const accentShade = (accent, light) => (accent ? (light ? accent.dark : accent.light) || null : null)

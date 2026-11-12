@@ -157,7 +157,7 @@ test('nothing to say: greyed with its name; loading a glint; stopped amber', () 
 })
 
 test("Claude today's hours as fixed slots: twelve at least, 18 px at most, an hour without turns a 2 px line", () => {
-  for (const [size, h] of [['m', 30], ['l', 54]]) {
+  for (const [size, h] of [['m', 30], ['l', 54]] as [string, number][]) {
     const html = WDesk.faceHTML(today, size, ctx(dark))
     const rects = html.match(/<rect [^>]*>/g) || []
     // The first turn at 9, now 14: twelve slots, 3 to 14.

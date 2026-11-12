@@ -1,8 +1,8 @@
-// The Agent page (agents.js says what each agent is and can do): each one's
+// The Agent page (agents.ts says what each agent is and can do): each one's
 // row and what opens under it, connecting, repairing, removing; and the
 // General page's update, crash reports and about.
-// Made by settings.js in the section's place as the page starts
-// (agentsPart(core), imported by settings.js): what it takes of the settings' core
+// Made by settings.ts in the section's place as the page starts
+// (agentsPart(core), imported by settings.ts): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
@@ -37,18 +37,27 @@ export interface AgentsCore {
   toolNames: any
 }
 
+// Why one could not be written: the error, its kind, and the folder it was
+// for, or DeepSeek Harness's way it was switching to.
+interface Failure {
+  error: string
+  kind: string
+  folder?: string
+  via?: string
+}
+
 export function agentsPart(core: AgentsCore) {
   const {
     Agents, COLOR, T, draw, esc, nameList, netNow, patch, row, sec, seg, sw,
   } = core
 
   // Why each could not be written: { error, kind, folder } (locked, invalid, path, other).
-  const failed = {}
+  const failed: Record<string, Failure> = {}
   const sessionOpen = new Set()
   let connectingAll = false
   const known = () => ({ busy: core.connecting, failed })
 
-  // One written or removed (bridge.js settings.agent): what
+  // One written or removed (bridge.ts settings.agent): what
   // came back shown; not written, why (the card names the file), its row
   // open to say so, and Claude Code's plugin the other way.
   async function agentDo(id, action) {
@@ -76,7 +85,7 @@ export function agentsPart(core: AgentsCore) {
   }
 
   // DeepSeek Harness's way switched (her plugin, or DSH's own hook bridge:
-  // agents.js, connection/dsh.rs dsh_way): the chosen one put in, the other
+  // agents.ts, connection/dsh.rs dsh_way): the chosen one put in, the other
   // taken away, in its row meanwhile (the bridge's packages come from npm:
   // a minute or two); not connected yet, the choice is kept for Connect.
   // registry: 'npmmirror', picked after the registry pnpm names could not
@@ -141,7 +150,7 @@ export function agentsPart(core: AgentsCore) {
     const open = core.agentOpen === id
     const small = [a.aka, r.version].filter(Boolean).map(text => `<span class="ver">${esc(text)}</span>`).join('')
     const line = agentLine(id, state)
-    // A button only where the person has something to do (agents.js
+    // A button only where the person has something to do (agents.ts
     // actionOf); else a faint › saying the row opens.
     let end = `<span class="fi chev${open ? ' open' : ''}">\uE76C</span>`
     if (state === 'busy') end = `<button class="pbtn sm" disabled><span class="spin"></span>${esc(T('wc.busy'))}</button>`

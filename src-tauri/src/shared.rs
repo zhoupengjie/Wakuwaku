@@ -66,7 +66,7 @@ pub struct Shared {
     greeted: AtomicBool,
     // When each agent's last event came (ms), 0 never, by its place in
     // connection::ALL (connection::slot): the settings tell connected from
-    // installed, waiting for a session (agents.js). Codex runs its hooks only
+    // installed, waiting for a session (agents.ts). Codex runs its hooks only
     // once the person trusts them; omp loads its extension only as it
     // starts after it was written.
     pub seen: [std::sync::atomic::AtomicU64; 8],
@@ -392,10 +392,10 @@ impl Shared {
         now["settingsOpen"] = json!(settings_open);
         now["quiet"] = json!(self.is_quiet());
         // An app full screen on her display: no flow light's ring then, the
-        // dot alone (island-ring.js cue; pet:full-screen as it changes).
+        // dot alone (island-ring.ts cue; pet:full-screen as it changes).
         now["fullScreen"] = json!(self.is_fullscreen());
         // Her window up on the desktop: she says it herself there, a prompt
-        // over her head, and her home does not open for it (panel.js holderOf).
+        // over her head, and her home does not open for it (panel.ts holderOf).
         now["herUp"] = json!(pet::is_shown(self));
         // Whether a blur of what is behind the island can be put under it
         // (backplate.rs): Windows 11, transparency effects on.
@@ -417,7 +417,7 @@ impl Shared {
             // the island about islandMx (physical px from the window's left,
             // where its capsule lies in the strip), and keeps the capsule's
             // width within the room it has there (islandRoom, physical px; 0
-            // none; anchor.js capsuleWidth).
+            // none; anchor.ts capsuleWidth).
             let (embedded, mx, room) = island::embedding(self);
             now["islandEmbed"] = json!(embedded);
             now["islandMx"] = json!(mx);
@@ -428,7 +428,7 @@ impl Shared {
         now["widgets"] = self.widgets_said();
         // Nothing connected (Claude Code, Codex, Antigravity): the island
         // says so, naming those on this computer, and a press on it opens
-        // the settings where they are (island.js).
+        // the settings where they are (island.ts).
         let unconnected = !connection::seems_connected();
         now["unconnected"] = json!(unconnected);
         if unconnected {
@@ -728,7 +728,7 @@ impl Shared {
     // logged for 10 s after a change: asked how, and what it saw. Watched
     // whatever the settings say: her island left up over an app full screen
     // (hideInFullscreen off) still plays no flow light's ring over it
-    // (island.js), told so as it changes (pet:full-screen).
+    // (island.ts), told so as it changes (pet:full-screen).
     pub fn look_fullscreen(self: &Arc<Self>, asked: Option<Instant>) {
         static CHANGED: Mutex<Option<Instant>> = Mutex::new(None);
         let watching = fullscreen::AVAILABLE;

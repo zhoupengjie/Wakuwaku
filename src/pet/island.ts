@@ -1,5 +1,5 @@
 // Her home: by display, a black pill at the top centre after the iPhone's
-// Dynamic Island (island; or at a top corner, anchor.js), or a strip along
+// Dynamic Island (island; or at a top corner, anchor.ts), or a strip along
 // the bottom of the screen in place of Windows' taskbar (taskbar): its left
 // end hers, the other sessions as tags along the rest, with the Start
 // button, the tray's icons (taskbar/) and the clock besides. The same element in each, which
@@ -14,9 +14,9 @@
 //             a session goes to its window (jump.rs)
 //   ask       a prompt from Claude, answered right in the island, her beside it
 // Other sessions busy too: a small "+N" by the clock, in the colour of the
-// next one that wants something. The words come from status.js.
+// next one that wants something. The words come from status.ts.
 //
-// While no session needs anything, plugins (widgets.rs, widgets.js) take
+// While no session needs anything, plugins (widgets.rs, widgets.ts) take
 // turns in the compact island, and the open one lists her capsule's; the wheel
 // turns to the next, a click on one keeps it. One may ask to open the island
 // for itself (a nudge): never while a session wants you.
@@ -94,7 +94,7 @@ const hue = () => (inkLight ? COLOR_LIGHT : COLOR)
 const stripHue = () => (isStripLight() ? COLOR_LIGHT : COLOR)
 // A widget's own colour (a script's, or the monitor's), on a light ground
 // as deep as the moods' there: one of the moods' colours as its deeper
-// one, any other darkened until it reads on white (widgets.js).
+// one, any other darkened until it reads on white (widgets.ts).
 function deeper(colour, light) {
   if (!colour || !light) return colour
   const mood = Object.keys(COLOR).find(k => COLOR[k] === String(colour).toLowerCase())
@@ -132,7 +132,7 @@ const EAR = 64
 // At the top of the screen, the side island.rs placed her window at
 // (pet:update islandAt: left, center, right; zhoupengjie/Wakuwaku#59): the
 // island laid out at that side of it (isl-at-left, isl-at-right), and all
-// that follows it (anchor.js). None said (an older island.rs), the
+// that follows it (anchor.ts). None said (an older island.rs), the
 // centre, where it is.
 let islandAt = 'center'
 const anchor = () => Anchor.anchorOf({ home: home(), at: islandAt, notch: !!screenTop?.notch })
@@ -146,7 +146,7 @@ let islandEdge = 'top'
 let islandStrip = 0
 const atBottom = () => Anchor.edgeAt({ home: home(), edge: islandEdge, notch: !!screenTop?.notch }) === 'bottom'
 // The strip under it, and how far up from the window's foot the closed
-// island lies, in the page's px (anchor.js foot).
+// island lies, in the page's px (anchor.ts foot).
 const stripUnder = () => (islandStrip > 0 ? islandStrip / (devicePixelRatio || 1) : 0)
 const footAt = () => Anchor.foot(stripUnder())
 // Where the settings' foot stands above it: off the strip as off the
@@ -172,9 +172,9 @@ const roomPx = () => (islandRoom > 0 ? islandRoom / (devicePixelRatio || 1) : 0)
 // Dropped open from the notch by her tray icon (setPeek), for PEEK_MS at
 // most if the pointer never comes.
 let peek = false
-let peekTimer = 0
+let peekTimer: Timer = 0
 const PEEK_MS = 6000
-let settingsIdleTimer = 0
+let settingsIdleTimer: Timer = 0
 let settingsUsed = false
 // Where the pointer was first seen in the settings: a move counts once it
 // goes a few px from there (WebKit may send one as they open under it).
@@ -186,14 +186,14 @@ for (const type of pet.mac ? ['pointermove', 'pointerdown', 'wheel', 'keydown'] 
     e => {
       if (view !== 'settings') return
       if (type !== 'pointermove') settingsUsed = true
-      else if (!settingsFrom) settingsFrom = { x: e.screenX, y: e.screenY }
-      else if (Math.hypot(e.screenX - settingsFrom.x, e.screenY - settingsFrom.y) > 8) settingsUsed = true
+      else if (!settingsFrom) settingsFrom = { x: (e as MouseEvent).screenX, y: (e as MouseEvent).screenY }
+      else if (Math.hypot((e as MouseEvent).screenX - settingsFrom.x, (e as MouseEvent).screenY - settingsFrom.y) > 8) settingsUsed = true
     },
     true,
   )
 }
 // Within the room the capsule has in Windows' taskbar (roomPx; 0: no
-// limit): as set, else narrow, else 0, her portrait alone (anchor.js
+// limit): as set, else narrow, else 0, her portrait alone (anchor.ts
 // capsuleWidth; isTight, TIGHT_W: a round capsule).
 const slotWidth = () => (screenTop?.notch ? screenTop.notch + 2 * EAR : Anchor.capsuleWidth(WIDTHS[config.islandWidth] || WIDTHS.normal, roomPx(), WIDTHS))
 const TIGHT_W = 36
@@ -235,7 +235,7 @@ const CAPSULE_X = 6
 const CAPSULE_Y = 5
 // A portrait px across is the sheet at this scale.
 const PER_PX = 0.00875
-// The settings' width (the Mail page in two panes is wider: settings.js).
+// The settings' width (the Mail page in two panes is wider: settings.ts).
 const SETTINGS_W = 520
 const BODY_SCALE = 0.5
 const BODY_W = Math.round(CELL_W * BODY_SCALE)
@@ -298,7 +298,7 @@ island.after(flow)
 const spins = [...flow.querySelectorAll('.flow-spin')]
 const ANCHORED = !!window.CSS?.supports?.('anchor-name: --a')
 const isRinging = () => flow.classList.contains('on')
-// Its state (flow.js), its animations running, its colours' blends, its
+// Its state (flow.ts), its animations running, its colours' blends, its
 // dot's and its end's timers.
 let flowState = Flow.idle()
 let flowAnims = []
@@ -313,7 +313,29 @@ const panel = document.getElementById('panel')
 const stage = document.getElementById('stage')
 
 let lang = 'en'
-let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
+// What pet:update said last (shared.rs payload): the session shown, its
+// mood and words, the other sessions, and what else comes with it (her
+// plate there to have, Windows' light mode, not connected yet and the
+// tools here).
+interface Now {
+  mood: string
+  detail: string
+  project: string
+  since: number
+  took: number
+  others: number
+  sessions: number
+  list: any[]
+  id?: string
+  reply?: string
+  stepSince?: number
+  todo?: { done: number; total: number; active?: string }
+  plate?: boolean
+  winLight?: boolean
+  unconnected?: boolean
+  tools?: string[]
+}
+let now: Now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
 let config: Config = {}
 // OLED's guard against burn-in (the settings' oledShift): what stays put
 // all day, the taskbar's icons, words and clock and the island, a screen
@@ -354,7 +376,17 @@ function oledShift() {
 }
 // Windows' look as taskbar/ sent it last: its mode (dark, light) and
 // accent colour; and whether its End task is on (a program's menu offers it).
-let look = { mode: 'dark' }
+// Its accent comes as its own colour and its shades for a light and a dark
+// ground (taskbar/win/look.rs); the clock's seconds and the Task View
+// button on or off as Windows has them.
+interface Look {
+  mode: string
+  accent?: { base: string; light: string; dark: string }
+  endTask?: boolean
+  seconds?: boolean
+  taskView?: boolean
+}
+let look: Look = { mode: 'dark' }
 let spriteUrl = null
 let second = null
 let isHover = false
@@ -400,7 +432,7 @@ let isAbsorbing = false
 let isComingHome = false
 let comingHomeTimer
 // Her window up on the desktop (shared.rs payload herUp): out there she says
-// it herself, the prompts over her head too (pet.js, panel.js), and the
+// it herself, the prompts over her head too (pet.ts, panel.ts), and the
 // island does not open for them.
 let herUp = false
 const herTalks = () => config.out === true && herUp && !isComingHome
@@ -429,13 +461,13 @@ let monitor = null
 let placedOut = new Set()
 let pinnedNow = false
 let listedNow = []
-// picker.js: her capsule's members (capsule.js: the capsule setting's
+// picker.ts: her capsule's members (capsule.ts: the capsule setting's
 // order and modes), and those pinned at its right end.
 let membersNow = []
 let pinsNow = []
 
 // The widgets as sent: those that take turns are those on, but for the
-// monitor pinned and what is put elsewhere (deskgrid.js placement, the
+// monitor pinned and what is put elsewhere (deskgrid.ts placement, the
 // rule tested there); the same one stays shown as the list changes
 // around it.
 function takeWidgets(all) {
@@ -462,7 +494,7 @@ const isOn = () => ROLE === 'island'
 // The top bar and the dock (split) are her taskbar too, split in two (isSplit).
 const home = () => (config.display === 'taskbar' || config.display === 'split' ? 'taskbar' : 'island')
 // A strip across the screen (the taskbar): the other sessions have tags in it.
-// The taskbar's strip the desktop's picture through (mica.js), neither
+// The taskbar's strip the desktop's picture through (mica.ts), neither
 // solid nor clear.
 const isMica = () => isOn() && home() === 'taskbar' && !['black', 'clear'].includes(config.taskbarMaterial)
 // The taskbar's strip clear, the desktop itself through it; while a window
@@ -472,7 +504,7 @@ const isMica = () => isOn() && home() === 'taskbar' && !['black', 'clear'].inclu
 const isClear = () => isOn() && home() === 'taskbar' && config.taskbarMaterial === 'clear'
 const clearWhen = () => (['solid', 'always'].includes(config.taskbarClearWhen) ? config.taskbarClearWhen : 'mica')
 const isFilled = () => isClear() && clearWhen() !== 'always' && taskWindows.some(a => (a.windows || []).some(w => w.max && !w.min))
-// How light the desktop under the clear strip is, along it (mica.js
+// How light the desktop under the clear strip is, along it (mica.ts
 // lightness): what each part's words go by (inkParts); null, not known
 // (yet). backdropLight: the strip's as a whole, by its mean, true light
 // enough for dark words.
@@ -499,7 +531,7 @@ const isCapsule = () => isMica() || isClear() || isLight()
 const tbEdge = () => (isSplit() ? 'top' : home() === 'taskbar' && ['top', 'left', 'right'].includes(config.taskbarEdge) ? config.taskbarEdge : 'bottom')
 // The top bar and the dock (display split, a home of its own beside the
 // island and the taskbar): the strip is a top bar, Start and the programs
-// in the dock at the foot (bars.rs, bar.js), not on it.
+// in the dock at the foot (bars.rs, bar.ts), not on it.
 const isSplit = () => config.display === 'split'
 // The strip's thickness: Windows' own, or split, the top bar's (style.css tb-slim).
 const stripH = () => (isSplit() && config.splitBar !== 48 ? SLIM_H : TASKBAR_H)
@@ -533,7 +565,7 @@ const taskCompactH = () => (isCapsule() ? stripH() - 2 * capsuleY() : stripH())
 // In her seat: there is a pet to show, and she is not out on the desktop.
 const isHome = () => !!spriteUrl && (config.out !== true || isComingHome)
 const isAsking = () => isOn() && !panel.hidden
-// The settings open in the island (settings.js).
+// The settings open in the island (settings.ts).
 const isSetting = () => isOn() && !!Settings?.isOpen()
 const isNudging = () => !!nudge && Date.now() < nudge.until
 // The specifics on screen (session names, commands, replies), unless turned off.
@@ -701,7 +733,7 @@ function fillCompact() {
   const turning = el('span', 'turning')
   turning.append(words, ...(more ? [more] : []), value)
   const isBare = !words.textContent && !value.textContent && !more
-  // picker.js: the members pinned at its end (five at most, capsule.js): the
+  // picker.ts: the members pinned at its end (five at most, capsule.ts): the
   // monitor's readings as they were, another its glyph and value.
   // The room too narrow for words (isTight: a short stretch of Windows'
   // taskbar): her portrait alone, nothing pinned.
@@ -758,7 +790,7 @@ function pinHTML(w) {
   return `<span class="wpin" style="color:${color}">${Widgets.iconHTML(w, lang)}<b>${WCards.esc(WCards.briefOf(w, { lang, light: inkLight, detailed: isDetailed() }).value)}</b></span>`
 }
 // Five pinned (the user's call of 2026-10-17) may not fit: each measured
-// with its value and as its glyph alone, capsule.js fitPins says which
+// with its value and as its glyph alone, capsule.ts fitPins says which
 // shows how (the values going from the left first, the monitor's
 // readings last, then the others' that fit back; then the leftmost out,
 // a "+k" before the rest, their names in its tip).
@@ -815,7 +847,7 @@ const TURN_MS = 320
 // takes its turns in her capsule as any other).
 const isPinned = () => pinnedNow
 
-// A widget's line in the open island (the spec's §6, wcards.js rowHTML),
+// A widget's line in the open island (the spec's §6, wcards.ts rowHTML),
 // the one shown lit: small, its glyph, name and value in one line;
 // medium, its name over a second line (the weather's range, the monitor's
 // memory and network), a small curve where it has a series. One with a
@@ -850,7 +882,7 @@ function showCard(id) {
   update()
 }
 
-// A plugin's own view in its unfolded card (views.js; the spec's §4):
+// A plugin's own view in its unfolded card (views.ts; the spec's §4):
 // its view.html over the card, a medium one there (as wide as the card,
 // 128 px high), where its widget gives one; the card drawn from its data
 // until the view is ready, and whenever views may not show (nobody about,
@@ -962,7 +994,7 @@ function fillExpanded() {
   }
   // The widgets, the one shown lit: under the sessions too, a session at
   // work not all the island says (2026-10-10). Her capsule's members in
-  // their order (deskgrid.js placement); those on the taskbar or the
+  // their order (deskgrid.ts placement); those on the taskbar or the
   // desktop are there, not here again (one widget, one place).
   if (listedNow.length && !(isNudging() && nudge.widget)) {
     const list = el('span', 'wlist')
@@ -999,7 +1031,7 @@ function fillExpanded() {
   const old = expanded.querySelector(':scope > .lines')
   if (old && view === 'expanded') linesTop = old.scrollTop
   lines.style.maxHeight = Number.isFinite(most) ? `${Math.max(60, Math.floor(most - EXPANDED_PAD_Y))}px` : ''
-  // A card's plugin view kept loaded as its card is drawn anew (views.js park, mount).
+  // A card's plugin view kept loaded as its card is drawn anew (views.ts park, mount).
   islandViews?.park()
   expanded.replaceChildren(...(isHome() ? [] : [stillHer(48)]), lines)
   islandViews?.mount()
@@ -1108,7 +1140,7 @@ function placeHer({ width, height }) {
 // Her mood's clip, in the portrait as standing; waiting by a prompt, a
 // reaction's while the island says something.
 // At rest she plays the idle row once, then holds its first frame this
-// long (as she does out on the desktop, pet.js): each frame is a frame of
+// long (as she does out on the desktop, pet.ts): each frame is a frame of
 // the whole strip.
 const IDLE_HOLD_MS = 4000
 
@@ -1197,7 +1229,7 @@ function openedUp(part, on) {
   // shrunk back (the spring), so it goes back in with nothing moving in it.
   if (open !== was) tellOpened(open)
 }
-let openedTimer = 0
+let openedTimer: Timer = 0
 function tellOpened(on) {
   clearTimeout(openedTimer)
   if (on) return pet.opened(true)
@@ -1273,7 +1305,7 @@ function fadeGround() {
 // What the plate was last told (where, as JSON; '': none), the wait for
 // the spring before it fades in, and the wait while it moves with it.
 let plateSent = ''
-// In island-plate.js:
+// In island-plate.ts:
 const plateCore = {
   Anchor, afterSpring, anchor, atBottom, body, home, inTopStrip, isCapsule, isEmbedded, isOn, isRinging,
   isSide, island, sizeOf, stillMotion, tbEdge,
@@ -1326,7 +1358,7 @@ function sizeOf(name) {
 // The program last in front (drawFront).
 let frontWas = null
 let taskbarBuilt = false
-// In island-right.js:
+// In island-right.ts:
 const rightCore = {
   Widgets, el, home, isDetailed, isPinned, isSide, island, stripHue, stripInk, t,
   get editLayout() { return editLayout },
@@ -1344,8 +1376,15 @@ const {
 } = rightPart(rightCore)
 
 // --- The taskbar's layout (taskbarLayout) -------------------------------------------
+// A layout of the strip (widgets.ts layoutOf): its three runs, each its
+// parts by name and the widgets put there.
+export interface TbLayout {
+  left: any[]
+  center: any[]
+  right: any[]
+}
 // While the layout is being edited: the one being made, not yet kept.
-let editLayout = null
+let editLayout: TbLayout = null
 let arranged = ''
 // Her slot's middle along the strip while it is in the middle run (placeSlot),
 // and where her island's left edge lies to be about it at a width: the
@@ -1360,7 +1399,7 @@ let taskWindows = []
 let windowsDrawn = ''
 // The programs' buttons drawn once already: a new one after that grows its line in.
 let buttonsDrawn = false
-// In island-layout.js:
+// In island-layout.ts:
 const layoutCore = {
   CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, barRest, body, clockBox, deskEdge, el,
   face, facesBox, frontBox, growNode, home, isCapsule, isDetailed, isLight, isOn, isSide, isSlim, isSplit,
@@ -1425,7 +1464,7 @@ let wgFor = null
 let wgPick = null
 let stackFor = null
 let imeOpen = false
-// In island-glide.js:
+// In island-glide.ts:
 const glideCore = {
   alignApps, barRest, body, crossLo, el, entryNodes, flashSince, hi, home, imeMark, isOn, isSide, lo,
   openedUp, placeSlot, t, trayBox, windowsBox,
@@ -1466,7 +1505,7 @@ const {
 } = glidePart(glideCore)
 
 // --- A widget on the taskbar, opened ------------------------------------------------
-// In island-wpop.js:
+// In island-wpop.ts:
 const wpopCore = {
   Widgets, barRest, closePop, el, entryNodes, fillHer, home, isDetailed, isSide, memberName, needsSettings,
   popCtx, t, tbLayout, update, watchPresses,
@@ -1497,7 +1536,7 @@ const {
 let menuFor = null
 // The open island's height for its menu (0: none open).
 let menuRoom = 0
-// In island-wmenu.js:
+// In island-wmenu.ts:
 const wmenuCore = {
   Widgets, barRest, closePop, closeStackPop, closeWidgetPop, el, entryNodes, fillHer, hasMonitorPart, home,
   isDetailed, island, isleCtx, keepLayout, memberName, openWidgetSettings, ownName, placedAt, popCtx,
@@ -1531,7 +1570,7 @@ const {
 } = wmenuPart(wmenuCore)
 
 // --- Boards on the desktop (§7 工作台) ---------------------------------------------
-// In island-boards.js:
+// In island-boards.ts:
 const boardsCore = {
   Widgets, closeStackPop, home, keepLayout, offBar, placeWidget, removeEntry, removeMember, t, takeWidgets,
   tbLayout, update,
@@ -1551,7 +1590,7 @@ let popShown = null
 let popMoving = false
 let popMoveTimer
 // --- A program's windows, listed over its button -------------------------------------
-// In island-winlist.js:
+// In island-winlist.ts:
 const winlistCore = {
   across, along, appOf, appOrder, barRest, body, closePop, crossHi, crossLo, el, hi, home, isExplorer, isOn,
   isSide, island, len, lo, openPop, orderedApps, pop, popReach, t, tbEdge, windowsBox,
@@ -1569,7 +1608,7 @@ export type WinlistCore = typeof winlistCore
 const { besideOrOver, drawPop, pressApp, sendThumbs } = winlistPart(winlistCore)
 
 // --- The input method on the taskbar -------------------------------------------------
-// In island-ime.js:
+// In island-ime.ts:
 const imeCore = {
   besideOrOver, capsMark, closePop, closeWidgetPop, el, imeMark, imePop, isSide, showBattery, showNet,
   showPrivacy, showVolume, t, watchPresses,
@@ -1585,7 +1624,7 @@ const { closeImeList, openImeList } = imePart(imeCore)
 // The monitor's scale as taskbar:strip says it (sf); 0 until told.
 let stripScale = 0
 let trayOpen = false
-// In island-look.js:
+// In island-look.ts:
 const lookCore = {
   DEEP_OP, PEEK_MS, TASKBAR_H, alignApps, barRest, body, clearWhen, clockBox, deskEdge, drawEntries,
   drawWindows, el, endNudge, frontBox, frontIcon, frontName, glide, home, isCapsule, isClear, isFilled,
@@ -1621,7 +1660,7 @@ const {
 } = lookPart(lookCore)
 
 // --- The keyboard on the taskbar (Win+T, Win+B) ---------------------------------------
-// In island-keys.js:
+// In island-keys.ts:
 const keysCore = {
   along, appOf, barRest, batMark, body, chevron, clockBox, closeImeList, closePop, closeStackPop,
   closeWidgetPop, el, endEdit, flyout, hi, home, isOn, isOut, isSetting, isSide, lo, netMark, openImeList,
@@ -1642,12 +1681,12 @@ keysPart(keysCore)
 // --- Editing the layout: the parts dragged about on the strip itself -------------------
 // As KDE edits a panel (the picker of 2026-10-17): each part outlined, the
 // three runs shown (an empty one a place to drop into), a bar above the
-// strip to open the picker (picker.js: the widgets there are, a sidebar at
+// strip to open the picker (picker.ts: the widgets there are, a sidebar at
 // the screen's side, to drag onto the strip, into her capsule or onto the
 // desktop) and to be done. What changes is kept as it goes (update:
-// picker.js persist), so there is no 取消: a widget taken off comes back by
+// picker.ts persist), so there is no 取消: a widget taken off comes back by
 // its toast's 撤销. The drags, the popover over a widget and her capsule's
-// panel are picker.js's: the strip's presses go there while editing. The
+// panel are picker.ts's: the strip's presses go there while editing. The
 // parts' own presses are held back meanwhile; her island lets the pointer
 // through to its slot, to be dragged by it.
 const editBar = el('div', 'tbedit')
@@ -1664,7 +1703,7 @@ editBar.addEventListener('mouseleave', () => pet.hover(false))
 // its mode flipped while the pointer was on the bar, a press going to the
 // window under it and only its release coming here, so 完成 and 取消 did
 // nothing (zhoupengjie/Wakuwaku#53). A couple of px more all round.
-// picker.js: the picker, its popover, the capsule's panel and a toast
+// picker.ts: the picker, its popover, the capsule's panel and a toast
 // with 撤销 too, editing or not, in either home (on: the layout being
 // edited, for her menu's 退出编辑; the rects whatever it is).
 let solidSent = ''
@@ -1709,7 +1748,7 @@ document.addEventListener(
 )
 
 // opts.picker: from her menu's 添加小工具…, the picker open with it.
-function editTaskbar(opts) {
+function editTaskbar(opts?) {
   if (home() !== 'taskbar') return
   if (editLayout) return opts?.picker && Picker?.open()
   if (isSetting()) Settings?.close?.('edit')
@@ -1754,7 +1793,7 @@ function drawEditBar() {
 
 // What a layout puts on the strip, as placeWidget takes them: its widgets
 // and plugins, and the monitor while it has its part.
-const barItems = layout => [...Object.values(layout).flatMap(run => run.filter(p => typeof p !== 'string').flatMap(Widgets.membersOf).map(m => (m.type === 'plugin' ? { plugin: m.of } : { id: m.of }))), ...(hasMonitorPart(layout) ? [{ id: 'monitor' }] : [])]
+const barItems = (layout: TbLayout) => [...Object.values(layout).flatMap(run => run.filter(p => typeof p !== 'string').flatMap(Widgets.membersOf).map(m => (m.type === 'plugin' ? { plugin: m.of } : { id: m.of }))), ...(hasMonitorPart(layout) ? [{ id: 'monitor' }] : [])]
 
 function endEdit(keep) {
   if (!editLayout) return
@@ -1779,7 +1818,7 @@ function endEdit(keep) {
     const onDeskToo = barItems(layout).filter(it => !barItems(was).some(x => keyFor(x) === keyFor(it)) && DeskGrid.has(config.deskLayout, it))
     if (onDeskToo.length) deskOff(onDeskToo)
     config.taskbarLayout = layout
-    const patch = { taskbarLayout: layout }
+    const patch: Config = { taskbarLayout: layout }
     // A plugin put there that was not running: it runs now.
     const plugins = config.plugins && typeof config.plugins === 'object' ? config.plugins : {}
     const off = [...new Set(Object.values(layout).flatMap(run => run.filter(p => p.type === 'plugin').map(p => p.of)))].filter(id => plugins[id]?.on !== true)
@@ -1830,7 +1869,7 @@ editBar.addEventListener('contextmenu', e => {
   e.preventDefault()
   if (editLayout) pet.menu()
 })
-// A press on a part or a widget: picker.js drags it (on the strip, into
+// A press on a part or a widget: picker.ts drags it (on the strip, into
 // her capsule, off it, onto the desktop), or, let go where it was, opens
 // a widget's popover or her capsule's panel.
 barRest.addEventListener(
@@ -1917,7 +1956,7 @@ function update() {
   const want = sizeOf(view)
   if (view === 'settings' && isSide()) placeSideSettings(want.height)
   // Reaching for her keeps the room to reach in; the picker and the
-  // capsule's panel in the island's home want theirs (picker.js).
+  // capsule's panel in the island's home want theirs (picker.ts).
   const grows = setRoom(isReaching ? PULL_ROOM : Picker ? Picker.roomOver(roomFor(want), baseRoom()) : roomFor(want))
   // The window has its room before the island (and she) grow into it.
   const grow = () => {
@@ -1950,7 +1989,7 @@ function update() {
   const isTimed = time() || now.stepSince || Status.othersOf(now.list, now).some(x => Status.time(x))
   if (isTimed && (view === 'compact' || view === 'expanded')) clockTimer = setInterval(tickTimes, 1000)
   spin()
-  // Editing the layout: kept as it goes (picker.js); where its bar and the
+  // Editing the layout: kept as it goes (picker.ts); where its bar and the
   // rest are now (the picker's too, editing or not), for the Rust side.
   if (editLayout) Picker?.persist()
   sendSolid()
@@ -2042,8 +2081,8 @@ function dismiss() {
   update()
 }
 
-// --- The flow light (flow.js) -------------------------------------------------------
-// In island-ring.js:
+// --- The flow light (flow.ts) -------------------------------------------------------
+// In island-ring.ts:
 const ringCore = {
   ANCHORED, CLIPS, Flow, REACTIONS, animateHer, body, compact, flow, her, herTalks, hintAccent, home, hue,
   ink, isCapsule, isHinting, isHome, isNudging, isOn, isRinging, isSide, island, modeNow, newsDot, nudgeFor,
@@ -2072,7 +2111,7 @@ const {
 } = ringPart(ringCore)
 
 // --- Pulling her out: the drop --------------------------------------------------
-// In island-drop.js:
+// In island-drop.ts:
 const dropCore = {
   BODY_H, BODY_W, BREAK_PX, CLIPS, DROP_R, PULL_ROOM, REACH_R, REACH_SHARE, atBottom, body, dropHer,
   dropSheet, gooDrop, gooIsland, gooNeck, her, hidePlate, home, isHome, isNudging, isOn, isSetting, isSide,
@@ -2097,7 +2136,7 @@ const { absorb, reach } = dropPart(dropCore)
 
 // --- On and off ---------------------------------------------------------------
 
-// At a top corner (anchor.js): the island at that side of its window
+// At a top corner (anchor.ts): the island at that side of its window
 // (style.css isl-at-left, isl-at-right), growing toward the screen's
 // middle; the picker and its toasts under it there too (picker.css). Along
 // the foot of the screen (isl-at-bottom, zhoupengjie/Wakuwaku#105): at the
@@ -2176,7 +2215,7 @@ pet.onUpdate(data => {
   herUp = data.herUp === true
   spriteUrl = data.sprite
   second = data.second || null
-  // Where island.rs put her window at the top of the screen (anchor.js),
+  // Where island.rs put her window at the top of the screen (anchor.ts),
   // or along its foot, over Windows' taskbar so thick (#105).
   islandAt = Anchor.posOf(data.islandAt)
   islandEdge = Anchor.edgeOf(data.islandEdge)
@@ -2225,7 +2264,7 @@ function movedOn() {
 // of seconds, shared.rs redraw_widgets): on the strip, the readings' node
 // alone; the island drawn anew where it shows them in its lines, or when
 // another widget's words changed (the capsule shows them in turn).
-pet.onDeskAsk(({ what, args } = {}) => {
+pet.onDeskAsk(({ what, args }: { what?: string; args?: any } = {}) => {
   if (what === 'settings') {
     const w = allWidgets.find(x => x.id === args?.widget)
     return w && openWidgetSettings(w)
@@ -2274,7 +2313,7 @@ pet.onReact(({ react, say: text }) => {
 })
 
 // An app full screen on her display, or none now: no ring while one is.
-pet.onFullScreen(({ on } = {}) => {
+pet.onFullScreen(({ on }: { on?: boolean } = {}) => {
   fullScreen = on === true
 })
 
@@ -2343,15 +2382,15 @@ for (const target of [island]) {
   // or a widget (its settings).
   target.addEventListener('click', e => {
     // A click in the settings (✕, the head) may just have closed them: not a click to open.
-    if (isSetting() || Settings?.layer?.contains(e.target) || Date.now() - pulledAt < 500) return
-    if (view === 'ask' || panel.contains(e.target) || her.contains(e.target)) return
+    if (isSetting() || Settings?.layer?.contains(e.target as Node) || Date.now() - pulledAt < 500) return
+    if (view === 'ask' || panel.contains(e.target as Node) || her.contains(e.target as Node)) return
     // A widget's menu open in it: a press elsewhere closes it, and is all.
     if (menuFor?.where === 'isle') {
       if (!wmenu.contains(e.target)) closeMenu()
       return
     }
     // A button of a widget's own in its card (what is playing: previous,
-    // play or pause, next; wcards.js actionsHTML): to its plugin.
+    // play or pause, next; wcards.ts actionsHTML): to its plugin.
     const wa = view === 'expanded' && (e.target as HTMLElement).closest('[data-wact]')
     if (wa) {
       if (!wa.classList.contains('off')) pet.widgets?.act(wa.dataset.widget, wa.dataset.wact)
@@ -2438,9 +2477,9 @@ pet.onLookHere(() => {
 island.addEventListener('animationend', e => e.animationName.startsWith('look-here') && island.classList.remove('look-here'))
 // Risen over an app full screen for the prompts alone: her island and its
 // panel, not the strip under them (style.css over-full).
-pet.onOverFull(({ on } = {}) => body.classList.toggle('over-full', on === true))
+pet.onOverFull(({ on }: { on?: boolean } = {}) => body.classList.toggle('over-full', on === true))
 
-// panel.js tells the island when its prompt changes.
+// panel.ts tells the island when its prompt changes.
 // The most the settings may be high: above the taskbar, its room (the
 // window never moves for them); along the foot of the screen (the island
 // home, #105), the window's height over where they stand (settingsFoot)
@@ -2455,11 +2494,11 @@ const settingsMax = () => (home() === 'taskbar' ? (isSide() ? innerHeight - 2 * 
 
 // The taskbar's layout, for the settings: its presets, which one it is, editing it on the strip.
 // From her menu: editing it (添加小工具…: with the picker open, { picker }),
-// or (退出编辑, while editing) out of it, kept as it went (picker.js).
+// or (退出编辑, while editing) out of it, kept as it went (picker.ts).
 pet.onTaskbarEdit(p => (p?.end ? (endEdit(true), Picker?.closeAll()) : editTaskbar(p)))
-// picker.js, capsule-panel.js (loaded after this file): what they work
-// with here, read live. Internal to her home's page; settings.js and
-// panel.js use Island.
+// picker.ts, capsule-panel.ts (loaded after this file): what they work
+// with here, read live. Internal to her home's page; settings.ts and
+// panel.ts use Island.
 const isle = {
   get config() {
     return config
@@ -2490,7 +2529,7 @@ const isle = {
   },
   isOn,
   home,
-  // At the top of the screen, the side the island is at (anchor.js), and
+  // At the top of the screen, the side the island is at (anchor.ts), and
   // the edge of the screen it is along: the top, or the bottom (#105);
   // and, there, whether the island is inside Windows' taskbar (embed.rs).
   anchor,
@@ -2557,6 +2596,6 @@ function ringAt(ms) {
   const angle = Flow.stepsOf(r, s.t0 + ms)[0]?.angle ?? Flow.angleAt(r, s.t0 + ms)
   for (const sp of spins) sp.style.transform = `rotate(${angle}deg)`
 }
-const islandFace = { accent: () => look.accent || null, isOn, isOpen: () => isOn() && view !== 'compact' && !body.classList.contains('isl-stowed'), peek: on => setPeek(typeof on === 'boolean' ? on : view === 'compact'), changed: update, reach, absorb, settingsMax, tbPresets: TB_PRESETS, tbPreset: () => presetOf(config.taskbarLayout), tbWithPreset: name => TB_PRESETS[name] && Widgets.withParts(TB_PRESETS[name], tbLayout(config.taskbarLayout)), editTaskbar, whereOf, placeWidget, placeNow, anchor, notched: () => !!screenTop?.notch, ringAt, views: islandViews }
+const islandFace = { accent: () => look.accent || null, isOn, isOpen: () => isOn() && view !== 'compact' && !body.classList.contains('isl-stowed'), peek: (on?: boolean) => setPeek(typeof on === 'boolean' ? on : view === 'compact'), changed: update, reach, absorb, settingsMax, tbPresets: TB_PRESETS, tbPreset: () => presetOf(config.taskbarLayout), tbWithPreset: name => TB_PRESETS[name] && Widgets.withParts(TB_PRESETS[name], tbLayout(config.taskbarLayout)), editTaskbar, whereOf, placeWidget, placeNow, anchor, notched: () => !!screenTop?.notch, ringAt, views: islandViews }
 export type IslandFace = typeof islandFace
 provide('Island', islandFace)

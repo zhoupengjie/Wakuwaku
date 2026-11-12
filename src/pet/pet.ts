@@ -41,14 +41,27 @@ const panelBox = document.getElementById('panel')
 const hint = document.getElementById('her-hint') || sprite.parentElement.appendChild(Object.assign(document.createElement('div'), { id: 'her-hint', hidden: true }))
 
 let lang = 'en'
-let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
+// The session shown as main tells it (pet:update), with every session in
+// list; its id once it is one of theirs.
+interface Now {
+  id?: string
+  mood: string
+  detail: any
+  project: string
+  since: number
+  took: number
+  others: number
+  sessions: number
+  list: any[]
+}
+let now: Now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
 let config: Config = { scale: 0.55, details: true, walk: true, look: true, sound: false, dnd: false }
 let spriteUrl = null
 // 2: the 11-row sheet; 1: the older 9-row one, without the look-around rows.
 let spriteVersion = 2
 
 // The same page draws her window (role=pet) and the island's (role=island,
-// island.js); in the island's, she is not drawn here.
+// island.ts); in the island's, she is not drawn here.
 const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
 const isIsland = () => ROLE === 'island'
 // Out on the desktop she says it herself (the user's call, 2026-10-28: it
@@ -181,7 +194,7 @@ document.addEventListener('visibilitychange', () => {
 // ended, how long it took and Claude's last words, for as long as main holds
 // the ending (the hold setting) or until the pointer comes over her (seen).
 // Nothing at rest. A press on it goes to that session's window. A prompt
-// (panel.js) takes its place, and so does the list she opens when the
+// (panel.ts) takes its place, and so does the list she opens when the
 // pointer rests on her: every session, a press on one to its window.
 
 // The moods' colours on her dark capsule: the island's on black.
@@ -210,7 +223,7 @@ function span(cls, text?) {
 
 // A dot in the mood's colour, whose, what, "+N", the clock: her capsule's
 // line, and each line of her list.
-function line({ mood, name, what, clock, others }) {
+function line({ mood, name, what, clock, others }: { mood: string; name?: string; what?: string; clock?: string; others?: number }) {
   const row = span('row')
   const dot = span('dot')
   dot.style.background = ON_DARK[mood] || ON_DARK.idle
@@ -472,7 +485,7 @@ function fillBubble(lines, isSaying = false) {
 
 function render() {
   const root = document.documentElement.style
-  root.setProperty('--scale', config.scale)
+  root.setProperty('--scale', config.scale as any)
   root.setProperty('--accent', COLOR[now.mood])
   root.setProperty('--sprite', spriteUrl ? `url("${spriteUrl}")` : 'none')
   root.setProperty('--sheet-h', `${spriteVersion === 2 ? 2288 : 1872}px`)

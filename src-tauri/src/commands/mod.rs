@@ -1,4 +1,4 @@
-// What her pages call (invoke, through src/pet/bridge.js), by what it is
+// What her pages call (invoke, through src/pet/bridge.ts), by what it is
 // about: her window's and what both pages share (pet.rs), the island's
 // (island.rs); here what is neither's. Those of the settings, the bars, the
 // desktop's widgets, the mail, the taskbar and the plugins are in their own

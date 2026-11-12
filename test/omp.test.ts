@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -22,13 +23,13 @@ function render(port, exe = '', data = '') {
 }
 
 // A fresh copy of the module (its shared state gone) on a pretend omp.
-async function load(port, exe, data) {
+async function load(port, exe?, data?) {
   delete globalThis.__wakuwakuOmp1
   const file = path.join(os.tmpdir(), `wakuwaku-omp-test-${process.pid}-${++loads}.mjs`)
   fs.writeFileSync(file, render(port, exe, data))
   try {
     const mod = await import(pathToFileURL(file).href)
-    const handlers = {}
+    const handlers: Record<string, (event: object, ctx: object) => unknown> = {}
     mod.default({ on: (name, fn) => (handlers[name] = fn) })
     return handlers
   } finally {
@@ -38,7 +39,7 @@ async function load(port, exe, data) {
 
 // Her port: each event kept; answer(event) says what comes back (an object,
 // or null to drop the connection).
-async function her(answer = () => ({})) {
+async function her(answer: (body: any) => any = () => ({})) {
   const calls = []
   const server = http.createServer((req, res) => {
     let text = ''
@@ -52,11 +53,11 @@ async function her(answer = () => ({})) {
       res.end(JSON.stringify(out))
     })
   })
-  await new Promise(done => server.listen(0, '127.0.0.1', done))
-  return { port: server.address().port, calls, close: () => new Promise(done => server.close(done)) }
+  await new Promise<void>(done => server.listen(0, '127.0.0.1', done))
+  return { port: (server.address() as AddressInfo).port, calls, close: () => new Promise(done => server.close(done)) }
 }
 
-function ctx({ kind = 'main', id = 's1', review } = {}) {
+function ctx({ kind = 'main', id = 's1', review }: { kind?: string, id?: string, review?: () => unknown } = {}) {
   const resolved = []
   return {
     agent: { kind, id: kind === 'main' ? 'Main' : 'Sub', depth: kind === 'main' ? 0 : 1 },
@@ -169,8 +170,8 @@ test('her not up: nothing thrown or left unhandled, and for a while nothing trie
       tried++
       socket.destroy()
     })
-    await new Promise(done => dropping.listen(0, '127.0.0.1', done))
-    const on = await load(dropping.address().port)
+    await new Promise<void>(done => dropping.listen(0, '127.0.0.1', done))
+    const on = await load((dropping.address() as AddressInfo).port)
     const c = ctx()
     on.session_start({}, c)
     on.before_agent_start({ prompt: 'hi' }, c)
@@ -185,9 +186,9 @@ test('her not up: nothing thrown or left unhandled, and for a while nothing trie
     await new Promise(done => dropping.close(done))
 
     // Nobody on the port at all, and an argument JSON cannot say: still nothing thrown.
-    const looped = {}
+    const looped: { self?: object } = {}
     looped.self = looped
-    const on2 = await load(dropping.address()?.port || 1)
+    const on2 = await load((dropping.address() as AddressInfo)?.port || 1)
     assert.equal(on2.tool_execution_start({ toolCallId: 'x', toolName: 'bash', args: looped }, c), undefined)
     assert.equal(on2.session_start({}, c), undefined)
     assert.equal(on2.plan_review_requested({ reviewId: 'r', planContent: 'p' }, c), undefined)
@@ -207,16 +208,16 @@ test('her not up as a session starts: her exe asked to start her, saying it is o
   const { syncBuiltinESMExports } = moduleModule
   const real = cp.spawn
   const runs = []
-  cp.spawn = (exe, args, options) => {
+  cp.spawn = ((exe, args, options) => {
     runs.push({ exe, args, options })
     return { on() {}, unref() {} }
-  }
+  }) as any
   syncBuiltinESMExports()
   const dropping = http.createServer()
   dropping.on('connection', socket => socket.destroy())
   try {
-    await new Promise(done => dropping.listen(0, '127.0.0.1', done))
-    const port = dropping.address().port
+    await new Promise<void>(done => dropping.listen(0, '127.0.0.1', done))
+    const port = (dropping.address() as AddressInfo).port
     const on = await load(port, 'C:\\waku\\pet\\wakuwaku.exe', 'C:\\waku\\data')
     on.session_switch({}, ctx())
     await settle()
@@ -238,7 +239,7 @@ test('her not up as a session starts: her exe asked to start her, saying it is o
 })
 
 test('a plan review is answered on her, unless the terminal answered first', async () => {
-  let decision = { behavior: 'allow' }
+  let decision: { behavior: string, message?: string } = { behavior: 'allow' }
   const port = await her(body => (body.hook_event_name === 'PermissionRequest' ? { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } } : {}))
   const on = await load(port.port)
   let open = 'r1'

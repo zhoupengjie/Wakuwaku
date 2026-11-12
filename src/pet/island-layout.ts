@@ -1,8 +1,8 @@
 // The taskbar's layout (taskbarLayout): its parts in three runs along the
 // strip, her seat, the widgets on it, and several in one place (the spec's
 // §5): stacks and carousels taking turns.
-// Made by island.js in the section's place as the page starts
-// (layoutPart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (layoutPart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -10,7 +10,10 @@ import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
-import type { LayoutCore } from './island.ts'
+import type { LayoutCore, TbLayout } from './island.ts'
+
+// A carousel's node on the strip, held while the pointer is on it.
+type CarouselNode = HTMLElement & { _held?: boolean }
 
 export function layoutPart(core: LayoutCore) {
   const {
@@ -39,7 +42,7 @@ export function layoutPart(core: LayoutCore) {
   }
   // Split, the top bar's: no Start, no programs (they are in the dock), her
   // in the middle (docs/design/specs/dock-topbar.md §2); quick settings and
-  // the clock in the dock too if set so (splitKeys dock, bar.js).
+  // the clock in the dock too if set so (splitKeys dock, bar.ts).
   const inDock = () => ['start', 'apps', ...(core.config.splitKeys === 'dock' ? ['quick', 'clock'] : [])]
   const splitParts = () => TB_PARTS.filter(p => !inDock().includes(p))
   const splitPreset = () => ({ left: ['front'], center: ['her'], right: TB_RIGHT.filter(p => !inDock().includes(p)) })
@@ -57,22 +60,22 @@ export function layoutPart(core: LayoutCore) {
 
   // The layout: the one being edited, or as kept, or before any as
   // taskbarAlign had it; each part once, one it lacks (new since) where the
-  // default has it; the widgets put there (widgets.js layoutOf). No gear
+  // default has it; the widgets put there (widgets.ts layoutOf). No gear
   // (zhoupengjie/Wakuwaku#38): the settings are a press on her capsule, or
   // her menus', away, as Windows 11's taskbar has none; one kept in an old
   // layout is left out, as a part no longer there.
   // The monitor's part may be taken off (#53): dragged off the strip it is
   // gone from the layout, not put back as a part new since; a monitor put
-  // there as a widget is that part (widgets.js monitorAsPart).
+  // there as a widget is that part (widgets.ts monitorAsPart).
   // The one kept is the strip's and the top bar's both: for the top bar
   // (split) Start and the programs left out and the program in front put
-  // first (widgets.js splitOf); kept from there, with neither Start nor the
+  // first (widgets.ts splitOf); kept from there, with neither Start nor the
   // programs in it, for the strip along an edge the program in front taken
   // out again, the top bar's own, and her back at the left's start from the
   // middle (edgeOf). Else, on a return to the taskbar, the program in front
   // stayed at the strip's left end, before her, moved to the middle, with
   // Start and the programs after her (the user, 2026-11-07).
-  function tbLayout(saved = core.editLayout || core.config.taskbarLayout) {
+  function tbLayout(saved = core.editLayout || core.config.taskbarLayout): TbLayout {
     const base = saved && typeof saved === 'object' ? saved : core.config.taskbarAlign === 'left' ? TB_PRESETS.left : TB_PRESETS.win11
     if (isSplit()) return Widgets.monitorAsPart(Widgets.layoutOf(Widgets.splitOf(base, inDock()), splitParts(), splitPreset(), SPLIT_OPTIONAL))
     return Widgets.monitorAsPart(Widgets.layoutOf(Widgets.edgeOf(base), TB_PARTS, TB_PRESETS.win11, TB_OPTIONAL))
@@ -128,9 +131,9 @@ export function layoutPart(core: LayoutCore) {
     takeWidgets(core.allWidgets)
   }
 
-  // Each widget put there, as big as it is set and it has (widgets.js
+  // Each widget put there, as big as it is set and it has (widgets.ts
   // sizesOf: a countdown is small alone): S its glyph and value; M its value
-  // over its name, as the clock has the date under the time (wcards.js
+  // over its name, as the clock has the date under the time (wcards.ts
   // faceHTML: the glyph white or black as the tray's icons, only ups and
   // downs in colour). One with nothing to say greyed, with its name; just
   // put there with its plugin starting, a shimmer for a few seconds; its
@@ -138,7 +141,7 @@ export function layoutPart(core: LayoutCore) {
   // CI runs) shows them in turn. Several in one place: a carousel (in turn,
   // drawGroup) or a stack (the first, its others opened over it).
   const ENTRY_TURN_MS = 5000
-  // What the widgets on the strip are drawn with (wcards.js ctx), as its
+  // What the widgets on the strip are drawn with (wcards.ts ctx), as its
   // words are; what opens from them (a card, a stack, a menu), as Windows'
   // mode, as their ground is.
   const barCtx = () => ({ lang: core.lang, light: isStripLight(), detailed: isDetailed(), width: core.STACK_CARD_W, hour: new Date().getHours(), now: Date.now() })
@@ -197,7 +200,7 @@ export function layoutPart(core: LayoutCore) {
     tickCarousels()
   }
 
-  // Her face where a widget's glyph is hers (wcards.js .wher: Claude 今天),
+  // Her face where a widget's glyph is hers (wcards.ts .wher: Claude 今天),
   // still: one frame of her at rest, never played (a portrait that plays
   // keeps a timer going, playPortraits).
   function fillHer(root, px) {
@@ -223,13 +226,13 @@ export function layoutPart(core: LayoutCore) {
   // second, the spec's curve); a column of dots at its right, the one shown
   // long. Not under the pointer (held), not while nobody is about (quiet),
   // never by itself with motion reduced (the wheel turns it then, by a
-  // fade); news (a letter come) cuts in for a turn (widgets.js
+  // fade); news (a letter come) cuts in for a turn (widgets.ts
   // carouselTurn). One timer for them all, only while one may turn.
   // A stack: the first shown (medium), two thin edges over it for the
   // others; a press opens them all above it (drawStackPop).
   const SLIDE_H = 40
   const carousels = new Map()
-  let carouselTimer = 0
+  let carouselTimer: Timer = 0
   const stillMotionNow = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
   function drawGroup(node, e, ctx) {
@@ -341,7 +344,7 @@ export function layoutPart(core: LayoutCore) {
   barRest.addEventListener(
     'mouseenter',
     e => {
-      const node = e.target.closest?.('.tw-carousel')
+      const node = (e.target as HTMLElement).closest?.('.tw-carousel') as CarouselNode
       if (node && e.target === node) node._held = true
     },
     true,
@@ -349,7 +352,7 @@ export function layoutPart(core: LayoutCore) {
   barRest.addEventListener(
     'mouseleave',
     e => {
-      const node = e.target.closest?.('.tw-carousel')
+      const node = (e.target as HTMLElement).closest?.('.tw-carousel') as CarouselNode
       if (!node || e.target !== node) return
       node._held = false
       const state = carousels.get(node.dataset.entry)
@@ -362,7 +365,7 @@ export function layoutPart(core: LayoutCore) {
   barRest.addEventListener(
     'wheel',
     e => {
-      const node = e.target.closest('.tw-carousel')
+      const node = (e.target as HTMLElement).closest('.tw-carousel')
       if (!node || core.editLayout) return
       e.preventDefault()
       turnCarousel(node.dataset.entry, -1, e.deltaY > 0 ? 1 : -1)
@@ -525,7 +528,7 @@ export function layoutPart(core: LayoutCore) {
     placeSlot()
     snapStart()
     core.inkParts()
-    // Editing: picker.js's popover over its widget, where it is now.
+    // Editing: picker.ts's popover over its widget, where it is now.
     if (core.editLayout) Picker?.relaid()
   }
 
@@ -581,7 +584,7 @@ export function layoutPart(core: LayoutCore) {
         const others = [...barRest.children].filter(n => n !== middle && n !== growNode && getComputedStyle(n).position !== 'absolute')
         const used = others.reduce((a, n) => {
           const cs = getComputedStyle(n)
-          return a + n.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0)
+          return a + (n as HTMLElement).offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0)
         }, 0)
         const free = barRest.clientHeight - (parseFloat(getComputedStyle(barRest).paddingTop) || 0) - used - natural - RUNS_APART
         want = Math.round(Math.max(0, Math.min((innerHeight - natural) / 2 - (start.top - shifted - now), free)))

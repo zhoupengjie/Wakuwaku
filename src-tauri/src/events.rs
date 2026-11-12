@@ -1,5 +1,5 @@
 // An agent's event (agent-core's AgentEvent: what a session is doing) in her
-// words, as texts { key, vars } for src/shared/i18n.js, so the page says them
+// words, as texts { key, vars } for src/shared/i18n.ts, so the page says them
 // in her language. Every agent's events come here so: agent-core reads each
 // its own way (its hook's names, its quirks, whose a session is) and keeps
 // the sessions (its registry, which her state.rs is built on); here they are

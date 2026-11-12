@@ -1,4 +1,4 @@
-// The desktop's widgets (the widget design of 2026-10-16, §7; desk.js draws
+// The desktop's widgets (the widget design of 2026-10-16, §7; desk.ts draws
 // them): a window for each display that has some (desk-1, desk-2, ...:
 // pet/desk.html), as big as the display, clear but for the widgets.
 //
@@ -28,11 +28,11 @@
 // Its glass: each display's own wallpaper (wallpaper.rs, as the strip's
 // Mica takes it), told to its page when it changes (desk:paper; looked at
 // as Windows says the picture or the displays changed, and every half
-// minute for a slideshow); desk.js blurs it and gives each widget its part.
+// minute for a slideshow); desk.ts blurs it and gives each widget its part.
 //
 // The layout is the settings' deskLayout (settings.rs is_desk_layout); a page
 // keeps what it changed (desk_keep, merged with the rest), and her island's
-// page puts widgets on and off the desktop (island-wmenu.js placeWidget).
+// page puts widgets on and off the desktop (island-wmenu.ts placeWidget).
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -88,7 +88,7 @@ static SHARED: OnceLock<Arc<Shared>> = OnceLock::new();
 const NEAR_PX: f64 = 40.0;
 
 // Each display with what it shows, from the layout: its own, and on the
-// main display those whose display is not there (deskgrid.js shownHere);
+// main display those whose display is not there (deskgrid.ts shownHere);
 // and one a widget is being dragged over from her home, though nothing is
 // on it yet (Drag keep).
 fn wanted(sh: &Shared) -> Vec<(Area, String, bool)> {
@@ -108,7 +108,7 @@ fn wanted(sh: &Shared) -> Vec<(Area, String, bool)> {
 }
 
 // An entry on a display: its own, and on the main display one whose display
-// is not there (deskgrid.js shownHere).
+// is not there (deskgrid.ts shownHere).
 fn shown_on(e: &Value, key: &str, primary: bool, keys: &[&str]) -> bool {
     match e["d"].as_str() {
         Some(d) => d == key || (primary && !keys.contains(&d)),
@@ -190,7 +190,7 @@ pub fn refresh(sh: &Shared) {
             "lang": sh.lang(),
             "light": light,
             // Windows' accent, as taskbar:look has it (what is picked with
-            // Ctrl, the rectangle: desk.js).
+            // Ctrl, the rectangle: desk.ts).
             "accent": accent,
             "detailed": sh.setting(config::DETAILS) != false,
             "home": sh.home(),
@@ -286,7 +286,7 @@ pub fn catch_up(sh: &Shared) {
 }
 
 // Whether each page's cards may show their plugins' views (tier 2,
-// src/pet/views.js), told as it changes (desk:views { on }): not while
+// src/pet/views.ts), told as it changes (desk:views { on }): not while
 // nobody is about, nor while its desktop is not seen (as its words are not
 // sent then: push_widgets), nor while the island's watchdog has them taken
 // away (addons.rs pause_views). Looked at only while a plugin with a view
@@ -527,7 +527,7 @@ fn contains(r: Mon, (x, y): (i32, i32)) -> bool {
 // it is on one of its widgets (or held, or a menu open there), lets it
 // through elsewhere. How long until the next look (ms; IDLE_MS: none wanted).
 //
-// Several widgets picked with Ctrl (desk.js, the user's call of 2026-10-17:
+// Several widgets picked with Ctrl (desk.ts, the user's call of 2026-10-17:
 // Ctrl and a drag over the bare desktop draws a rectangle, Ctrl and a press
 // on one picks it): while Ctrl is down (GetAsyncKeyState) and the pointer is
 // over a display's desktop that has widgets, seen, in its work area and off
@@ -795,7 +795,7 @@ pub fn desk_hold(window: WebviewWindow, on: bool) {
     }
 }
 
-// A board's name being typed (desk.js rename): the window takes the keyboard
+// A board's name being typed (desk.ts rename): the window takes the keyboard
 // for it (it never takes the focus otherwise: WS_EX_NOACTIVATE), and lets go
 // of it after (Enter, Esc, or a press elsewhere): the window that had it gets
 // it back, and this one goes back down right over the desktop.
@@ -875,7 +875,7 @@ pub async fn desk_icons(app: tauri::AppHandle, window: WebviewWindow) -> Option<
     icons
 }
 
-// Ctrl and the wheel over its bare desktop (desk.js): the window takes the
+// Ctrl and the wheel over its bare desktop (desk.ts): the window takes the
 // mouse there while Ctrl is held (poll), so Explorer heard nothing of it.
 // Handed on to the desktop's icon view as Windows would have sent it
 // (WM_MOUSEWHEEL, Ctrl among its keys, the same turn, where the pointer is,
@@ -890,7 +890,7 @@ pub fn desk_wheel(window: WebviewWindow, x: f64, y: f64, delta: i32) {
     imp::wheel_to_icons(mon.0 + (x * sf).round() as i32, mon.1 + (y * sf).round() as i32, delta.clamp(-1200, 1200));
 }
 
-// Some of its widgets picked with Ctrl, or none any more (desk.js): a press
+// Some of its widgets picked with Ctrl, or none any more (desk.ts): a press
 // off them is looked for (poll), and told (desk:outside).
 #[tauri::command]
 pub fn desk_picked(window: WebviewWindow, on: bool) {
@@ -901,7 +901,7 @@ pub fn desk_picked(window: WebviewWindow, on: bool) {
 }
 
 // The icons' rects (x, y, w, h: the screen's px) that lie on a display, in
-// its window's px (deskgrid.js takes them as blocks to keep clear of).
+// its window's px (deskgrid.ts takes them as blocks to keep clear of).
 #[cfg_attr(not(windows), allow(dead_code))]
 fn blocks_on(rects: &[(i32, i32, i32, i32)], mon: Mon, sf: f64) -> Vec<[f64; 4]> {
     rects
@@ -940,13 +940,13 @@ pub async fn desk_ask(app: tauri::AppHandle, what: String, args: Value) {
 }
 
 // --- A widget dragged from her home -------------------------------------------------------------
-// The widget picker in her home's window (picker.js, the KDE-like design of
+// The widget picker in her home's window (picker.ts, the KDE-like design of
 // 2026-10-17): a card, a widget off the strip or a combo dragged over the
 // desktop. Her home's page says where the pointer is, in its own px
 // (desk_drag_preview, as it moves; desk_drop, let go of there): that is the
 // screen's (her home's window's corner and scale, island.rs origin), the
 // display under it, and that display's desktop page's px; told to that
-// page alone (desk:drag-preview, desk:drop: desk-drop.js shows where it
+// page alone (desk:drag-preview, desk:drop: desk-drop.ts shows where it
 // would land and puts it there), as it came but for x and y (item and size,
 // or a combo's set; the drop's ticket). A page it has left is told null.
 // What a page found goes back to her home's page (desk_drag_answer →

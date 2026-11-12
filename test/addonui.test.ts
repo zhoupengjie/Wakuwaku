@@ -15,8 +15,8 @@ import { t, list, STRINGS } from '../src/shared/i18n.ts'
 import F from '../tools/preview/fixtures.js'
 import * as wdeskModule from '../src/pet/wdesk.ts'
 
-const zh = (key, vars) => t('zh', key, vars)
-const en = (key, vars) => t('en', key, vars)
+const zh = (key, vars?) => t('zh', key, vars)
+const en = (key, vars?) => t('en', key, vars)
 const andZh = names => list('zh', names, 'and')
 
 const rain = {

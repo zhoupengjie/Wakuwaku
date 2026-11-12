@@ -2,8 +2,8 @@
 // read; the Mail page drawn, with its accounts and the codes come by mail;
 // the Network page (the proxy, how she reaches the web, its test); and the
 // menus a letter and a button open.
-// Made by settings.js in the section's place as the page starts
-// (letterPart(core), imported by settings.js): what it takes of the settings' core
+// Made by settings.ts in the section's place as the page starts
+// (letterPart(core), imported by settings.ts): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.

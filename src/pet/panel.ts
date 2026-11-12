@@ -311,7 +311,7 @@ function questionBody(ask) {
 // Tell main how much room the panel needs; null when it is gone.
 function report() {
   // In the island, the island sizes itself and the window around it; in
-  // hers, she has the room over her head for whatever is there (pet.js).
+  // hers, she has the room over her head for whatever is there (pet.ts).
   if (Island?.isOn()) return Island.changed()
   if (HerTalk) return HerTalk.room()
   requestAnimationFrame(() => {
@@ -444,7 +444,7 @@ function decideHotkeyAction({ which, ask, shownId, isArmed, islandOpen }) {
 }
 
 if (typeof window !== 'undefined' && pet) {
-  pet.onHotkey?.(({ which } = {}) => {
+  pet.onHotkey?.(({ which }: { which?: string } = {}) => {
     // Out on the desktop the prompt is over her head: the keys answer it
     // there (main sends them to her window then, shortcuts.rs), and the
     // island stays shut; the island's own key is the island's alone.

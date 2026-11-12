@@ -171,7 +171,7 @@ function handoff() {
     const bar = document.getElementById('bar-rest')
     if (!bar) return
     late = new MutationObserver(records => {
-      const fresh = records.flatMap(r => [...r.addedNodes]).filter(n => n.nodeType === 1 && n.matches(PARTS) && n.getClientRects().length)
+      const fresh = records.flatMap(r => [...r.addedNodes]).filter(n => n.nodeType === 1 && (n as Element).matches(PARTS) && (n as Element).getClientRects().length)
       for (const el of fresh) comeAt(el, 160)
     })
     late.observe(bar, { childList: true, subtree: true })
@@ -182,7 +182,7 @@ function handoff() {
   const SETTLED_MS = 250
   const SETTLED_MOST_MS = 1000
   function settled() {
-    return new Promise(resolve => {
+    return new Promise<void>(resolve => {
       const bar = document.getElementById('bar-rest')
       const fresh = records => records.some(r => [...r.addedNodes].some(n => n.nodeType === 1 && (n.matches(PARTS) || !!n.querySelector?.(PARTS))))
       const done = () => {
@@ -356,7 +356,7 @@ function handoff() {
   // in: Windows' strip's picture to lay over it (none: nothing to cover).
   // go: Windows' is hidden under it now: the dust.
   // out: quitting: hers crumbles, Windows' to be shown under it (bare).
-  pet.onHandoff(async ({ step: next, picture: url, size } = {}) => {
+  pet.onHandoff(async ({ step: next, picture: url, size }: { step?: string; picture?: string; size?: number[] } = {}) => {
     if (next === 'in') {
       if (quiet()) unhide()
       else if (url) {

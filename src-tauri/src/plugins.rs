@@ -182,7 +182,7 @@ pub static PLUGINS: [Plugin; 9] = [
         id: "stock",
         icon: "stock",
         // Its up and down colours (the one place every widget of it follows,
-        // wcards.js trendOf): red up as Chinese markets show them, or green
+        // wcards.ts trendOf): red up as Chinese markets show them, or green
         // up; none chosen, by her language.
         params: &[p("Symbol", Kind::Text, false), p("Name", Kind::Text, false), p("Colors", Kind::Choice { options: &["RedUp", "GreenUp"], zh: "RedUp", other: "GreenUp" }, false)],
         by_lang: false,

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -497,8 +498,8 @@ test('check.js --against: files changed in a package need a higher version', () 
   assert.deepEqual(codes(check([path.join(fresh.packages, 'a-clock')], { market: true, against: base.packages })[0].errors), [])
 })
 
-function get(url, opts = {}) {
-  return new Promise((resolve, reject) => {
+function get(url, opts: { timeout?: number } = {}) {
+  return new Promise<any>((resolve, reject) => {
     const req = http.get(url, res => {
       const parts = []
       res.on('data', d => parts.push(d))
@@ -577,7 +578,7 @@ test('the Gitee mirror makes the release, puts up what it lacks and index.json l
       const body = Buffer.concat(parts)
       const url = new URL(req.url, 'http://x')
       calls.push(`${req.method} ${url.pathname}`)
-      const send = (status, json) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(json === undefined ? '' : JSON.stringify(json)) }
+      const send = (status, json?) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(json === undefined ? '' : JSON.stringify(json)) }
       assert.equal(req.headers.authorization, 'token secret')
       if (url.pathname === '/api/v5/repos/lin/market') return send(200, { default_branch: 'master' })
       if (url.pathname === '/api/v5/repos/lin/market/releases/tags/market') return release ? send(200, release) : send(404, { message: 'Not Found' })
@@ -602,8 +603,8 @@ test('the Gitee mirror makes the release, puts up what it lacks and index.json l
       send(404, { message: 'Not Found' })
     })
   })
-  await new Promise(r => gitee.listen(0, '127.0.0.1', r))
-  const api = `http://127.0.0.1:${gitee.address().port}/api/v5`
+  await new Promise<void>(r => gitee.listen(0, '127.0.0.1', r))
+  const api = `http://127.0.0.1:${(gitee.address() as AddressInfo).port}/api/v5`
   try {
     const opts = { repo: 'lin/market', dir: m.out, token: 'secret', api, verify: false, log: () => {}, retryWait: 1 }
     const first = await mirror(opts)

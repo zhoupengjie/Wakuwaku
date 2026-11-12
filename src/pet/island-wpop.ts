@@ -1,8 +1,8 @@
 // A widget on the taskbar, opened: a press on one opens its card above it,
 // as the clock's opens Windows' calendar; a stack opened (the spec's §5),
 // its members side by side.
-// Made by island.js in the section's place as the page starts
-// (wpopPart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (wpopPart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -19,7 +19,7 @@ export function wpopPart(core: WpopCore) {
   } = core
 
   // A press on one opens its card above it, as the clock's opens Windows'
-  // calendar: what it says (its large size, wcards.js cardHTML, when it has
+  // calendar: what it says (its large size, wcards.ts cardHTML, when it has
   // one; each of a plugin's widgets else), where it comes from, and its
   // settings, its mail, or taking it off the taskbar. A carousel's: the one
   // shown; a stack's line pressed: that one's. A press anywhere else closes
@@ -126,7 +126,7 @@ export function wpopPart(core: WpopCore) {
     }
     core.arranged = ''
     update()
-    // picker.js: its cards' "已放" anew.
+    // picker.ts: its cards' "已放" anew.
     Picker?.changed()
   }
 
@@ -152,7 +152,7 @@ export function wpopPart(core: WpopCore) {
     const group = Widgets.isGroup(entry)
     const w = group ? core.allWidgets.find(x => x.id === (core.wgPick || entryNodes.get(core.wgFor)._slides?.[entryNodes.get(core.wgFor)._at || 0]?.w?.id)) : null
     if (what === 'remove') {
-      // picker.js: taken off with a way back (undo), off once it is nowhere.
+      // picker.ts: taken off with a way back (undo), off once it is nowhere.
       const at = group && w ? entry.items.findIndex(m => Widgets.sourcesOf(m, core.allWidgets).includes(w)) : -1
       if (Picker?.remove({ entry: entry.id, member: at })) return closeWidgetPop()
       if (!group) return removeEntry(entry.id)

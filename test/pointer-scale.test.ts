@@ -10,7 +10,7 @@ test('a DPR-only resize resends unchanged settings hit regions, once per scale',
   const solid = source.slice(source.indexOf("\nlet solidSent = ''"), source.indexOf('\nconst solidWatch ='))
   const resize = look.slice(look.indexOf('  let stripThick =')).match(/  window\.addEventListener\('resize', \(\) => \{[\s\S]*?\n  \}\)/)[0]
   const sent = []
-  const listeners = {}
+  const listeners: Record<string, () => void> = {}
   let redraws = 0
   // Keep the CSS bounds fixed: a scale-only change must still reach Rust.
   const settings = { isConnected: true, getBoundingClientRect: () => ({ left: 40, top: 500, width: 520, height: 100 }) }

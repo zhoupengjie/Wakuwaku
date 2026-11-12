@@ -11,13 +11,13 @@ const ctrl = { shift: false, ctrl: true }
 const both = { shift: true, ctrl: true }
 
 test('a plain press is a press, whatever the program has open', () => {
-  for (const open of [0, 1, 3]) assert.equal(pressOf(click, none, open), 'press', open)
+  for (const open of [0, 1, 3] as any[]) assert.equal(pressOf(click, none, open), 'press', open)
   // The keys not known: as if none were held.
   assert.equal(pressOf(click, null, 2), 'press')
 })
 
 test('the middle button and Shift start another, Ctrl and Shift as administrator', () => {
-  for (const open of [0, 1, 3]) {
+  for (const open of [0, 1, 3] as any[]) {
     assert.equal(pressOf(middle, none, open), 'launch', open)
     assert.equal(pressOf(click, shift, open), 'launch', open)
     assert.equal(pressOf(click, both, open), 'admin', open)

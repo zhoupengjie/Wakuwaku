@@ -2,7 +2,7 @@
 // bar_pop): its windows, a card each with its live picture (Windows draws
 // them where the cards leave room, taskbar/mod.rs thumbs), or, on a right
 // press, what can be done with it (Windows' End task too while it is on);
-// as her own taskbar's (island-winlist.js drawPop).
+// as her own taskbar's (island-winlist.ts drawPop).
 // The window is laid against the strip at the size this lays it out at
 // (barpop_place). The windows' list goes once the pointer has been off the
 // button and off it a moment; either goes at a press elsewhere (bars.rs
@@ -12,7 +12,7 @@ import { t } from '../shared/i18n.ts'
 
 const { invoke } = window.__TAURI__.core
 const { listen } = window.__TAURI__.event
-const target = { kind: 'WebviewWindow', label: 'barpop' }
+const target: TauriTarget = { kind: 'WebviewWindow', label: 'barpop' }
 
 const pop = document.getElementById('pop')
 // Its room for the pointer out to the strip (barpop.css .reach, #56).
@@ -71,7 +71,7 @@ function rows(s) {
   }
   const out = [el('div', 'whead', app.name), item(t(s.lang, windows.length ? 'taskbar.newWindow' : 'taskbar.open'), 'launch'), item(t(s.lang, app.pinned ? 'taskbar.unpin' : 'taskbar.pin'), app.pinned ? 'unpin' : 'pin')]
   // Windows' End task while its setting is on (bars.rs, read as it
-  // opens), but for File Explorer, as on her own taskbar (island-winlist.js drawPop).
+  // opens), but for File Explorer, as on her own taskbar (island-winlist.ts drawPop).
   if (windows.length && s.endTask && !/(^|[\\/])explorer\.exe$/i.test(app.path || '')) out.push(item(t(s.lang, windows.length > 1 ? 'taskbar.endAll' : 'taskbar.end'), 'end'))
   if (windows.length) out.push(item(t(s.lang, windows.length > 1 ? 'taskbar.closeAll' : 'taskbar.close'), 'close'))
   return out
@@ -173,7 +173,7 @@ pop.addEventListener('pointerdown', e => {
 document.addEventListener('contextmenu', e => e.preventDefault())
 
 // A file dragged from another program over the list (its program's button
-// held over: bar.js): a card held over half a second brings its window to
+// held over: bar.ts): a card held over half a second brings its window to
 // the front, for the file to be let go of in it, as on Windows' own
 // (zhoupengjie/Wakuwaku#36). The page hears no mouse while the drag is on
 // it (Tauri's drop handler has it, tauri://drag-*, in physical px): the

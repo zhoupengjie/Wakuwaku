@@ -1,8 +1,8 @@
 // The Look page: her home (island, taskbar, the top bar and dock), her
 // island's look by Windows' mode (presets, or its colour and parts), Windows'
 // own mode and accent, and the desktop's picture.
-// Made by settings.js in the section's place as the page starts
-// (lookPart(core), imported by settings.js): what it takes of the settings' core
+// Made by settings.ts in the section's place as the page starts
+// (lookPart(core), imported by settings.ts): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
@@ -51,7 +51,7 @@ export function lookPart(core: LookCore) {
   // island itself, so a small one here shows the look (hovered, it opens).
   const ILOOK_DEFAULT = {
     // Bare in the dark mode, a new user's since 2026-10-13 (the person's own
-    // look; island-look.js drawIslandLook takes it as the default too).
+    // look; island-look.ts drawIslandLook takes it as the default too).
     dark: { bg: '#2c2c2c', op: 100, blur: 0, edge: 'line', bare: true },
     light: { bg: '#f3f3f3', op: 100, blur: 0, edge: 'line', bare: false },
   }
@@ -99,7 +99,7 @@ export function lookPart(core: LookCore) {
       ['ring', { bg: '#fbfbfb', op: 100, blur: 0, edge: 'ring', bare: false }],
     ],
   }
-  // The moods' colours on a light ground, as island.js has them (COLOR_LIGHT).
+  // The moods' colours on a light ground, as island.ts has them (COLOR_LIGHT).
   const COLOR_DEEP = { idle: '#6e6e73', working: '#0067c0', waiting: '#b25e00', done: '#0f7b3f', review: '#7346c9', error: '#c42b3c' }
   // Grounds to pick for each mode: as dark (or light) as its words need.
   const ILOOK_SWATCHES = {
@@ -129,7 +129,7 @@ export function lookPart(core: LookCore) {
     draw()
   }
 
-  // A colour's relative luminance (WCAG), as island.js judges a ground:
+  // A colour's relative luminance (WCAG), as island.ts judges a ground:
   // above 0.35, the words on it go dark.
   function luminance(hex) {
     const [r, g, b] = [1, 3, 5].map(i => {
@@ -160,7 +160,7 @@ export function lookPart(core: LookCore) {
   }
 
   // A ground picked, any colour: the words on it go light or dark as it is
-  // (island.js), so only a mid one reads poorly either way (between 0.18
+  // (island.ts), so only a mid one reads poorly either way (between 0.18
   // and 0.36, under 4.5 to 1 with white words, and dark ones not yet):
   // moved out to the nearer side, its hue kept.
   function ilookSteer(hex) {
@@ -186,7 +186,7 @@ export function lookPart(core: LookCore) {
   // The island as the look makes it, on a strip over a desktop; big, it
   // opens under the pointer (open, above the strip, the page has nothing
   // behind it to blur: its ground alone, as on the taskbar; blurred where
-  // Windows' acrylic goes under it, island-plate.js placePlate). At the top of
+  // Windows' acrylic goes under it, island-plate.ts placePlate). At the top of
   // the screen, a pill at the top of a desktop, opening down; blurred only
   // by that acrylic, open or not.
   function ilookPreview(mode, look, big = false) {
@@ -250,7 +250,7 @@ export function lookPart(core: LookCore) {
     ilookSave(mode, { ...ilookOf(mode), [key]: value }, keep)
   }
 
-  // The taskbar's layout (island-layout.js tbLayout): a preset, or one dragged
+  // The taskbar's layout (island-layout.ts tbLayout): a preset, or one dragged
   // into shape on the strip itself (the button: the settings close for it).
   // Split in two (taskbarEdge split, docs/design/specs/dock-topbar.md): the
   // top bar's thickness, the dock out of the way of windows or in the room
@@ -269,7 +269,7 @@ export function lookPart(core: LookCore) {
   }
 
   function layoutRow() {
-    // The top bar (split): no presets, its own default (island.js SPLIT_PRESET); edited as ever.
+    // The top bar (split): no presets, its own default (island.ts SPLIT_PRESET); edited as ever.
     if (core.snap.settings.display === 'split') return row(esc(T('s.taskbarLayout')), esc(T('s.layoutSplit')), `<button class="pbtn sm" data-tb-edit>${esc(T('s.layoutEdit'))}</button>`)
     const preset = Island?.tbPreset?.() || 'win11'
     const presets = ['win11', 'left', 'herRight'].map(p => [p, T(`s.layout.${p}`)])
@@ -279,7 +279,7 @@ export function lookPart(core: LookCore) {
 
   // Where her island sits at the top of the screen (zhoupengjie/Wakuwaku#59):
   // a top corner, or the top centre (as ever, the default); it opens
-  // downward and toward the screen's middle (island.js anchor). Round a
+  // downward and toward the screen's middle (island.ts anchor). Round a
   // Mac's notch, the centre only. On the taskbar she is where her capsule
   // is dragged: a line saying so instead, and the way there, the layout
   // edited as her menu's 编辑任务栏布局 does (data-tb-edit).
@@ -318,7 +318,7 @@ export function lookPart(core: LookCore) {
   }
 
   // At the top of the screen, up out of the way while a window lies under
-  // it (island-plate.js setStow, zhoupengjie/Wakuwaku#49): on unless turned off.
+  // it (island-plate.ts setStow, zhoupengjie/Wakuwaku#49): on unless turned off.
   // Not on a Mac, where it hangs over the menu bar.
   function hideUnderRow() {
     return row(esc(T('s.islandHideUnder')), esc(T('s.islandHideUnderNote')), sw('islandHideUnder', core.snap.settings.islandHideUnder !== false))

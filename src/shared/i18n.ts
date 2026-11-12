@@ -1,5 +1,5 @@
-// The app's words in Chinese and English. Loaded by the pages as a script
-// (window.I18n) and required by the main process, the scripts and the tests.
+// The app's words in Chinese and English. Imported by the pages and the
+// tests; build.rs reads its STRINGS for the words the program says itself.
 const STRINGS = {
   zh: {
     // Moods
@@ -30,7 +30,7 @@ const STRINGS = {
     'island.review': '改好了',
     'island.error': '出错了',
 
-    // What a session is doing (events.rs step_of), how its turn ended (status.js)
+    // What a session is doing (events.rs step_of), how its turn ended (status.ts)
     'step.thinking': '思考中',
     'step.thinkingFor': '思考了 {time}',
     'step.for': '已跑 {time}',
@@ -226,7 +226,7 @@ const STRINGS = {
     'home.credits': '宠物精灵图来自 codex-pets.net，版权归各自作者；本程序以 MIT 许可发布。',
     'home.repo': '项目主页',
 
-    // The settings, grown out of the island (settings.js)
+    // The settings, grown out of the island (settings.ts)
     's.headIdle': '{name}在休息',
     's.headWorking': '她正在干活',
     's.headWaiting': '她在等你',
@@ -328,7 +328,7 @@ const STRINGS = {
     's.taskbarButtonsNote': '只显示图标时，鼠标停在上面会列出它的窗口',
     's.taskbarButtonsSide': '侧边任务栏只显示图标',
     's.taskbarEdge': '任务栏位置',
-    // Which display her home is on (settings-welcome.js screenRow, #104).
+    // Which display her home is on (settings-welcome.ts screenRow, #104).
     's.screen': '屏幕',
     's.screenNote': '她的家在 {n} 号屏（{w}×{h}）；选别的，她整个搬过去',
     's.screenNoteMain': '她的家在 {n} 号屏（{w}×{h}），Windows 的主显示器；选别的，她整个搬过去',
@@ -338,7 +338,7 @@ const STRINGS = {
     's.displaysAllNote': '每块屏都换成她的任务栏；其他屏上放开始、那块屏的窗口和时钟。窗口按钮怎么分，跟 Windows 设置里「在多个显示器上显示任务栏应用」走。',
     's.displaysMainNote': '她的任务栏只在上面选的那块屏，其他屏幕不显示任务栏，Windows 自己的也不显示。',
     's.displaysOne': '现在只接了一块屏幕',
-    // Her capsule on another display's taskbar while a prompt waits (bar.js).
+    // Her capsule on another display's taskbar while a prompt waits (bar.ts).
     'bar.approve': '在等你批准 · {n}',
     'bar.answer': '在等你回答 · {n}',
     's.taskbarEdgeNote': '放在屏幕哪一边。开始菜单、搜索、快速设置和通知中心是 Windows 自己的面板，仍然从屏幕底部弹出。',
@@ -1164,8 +1164,8 @@ const STRINGS = {
     'pl.trouble': '还没显示：{line}',
     'pl.stopped': '出错：{line}',
 
-    // Other people's plugins on the Plugins page and in the picker (addonui.js,
-    // settings.js; docs/design/specs/plugins.md §3)
+    // Other people's plugins on the Plugins page and in the picker (addonui.ts,
+    // settings.ts; docs/design/specs/plugins.md §3)
     'addons.unreviewed': '未经审核',
     'addons.newerApp': '需要新版 Wakuwaku',
     'addons.stopped': '无响应，已停用',
@@ -1521,7 +1521,7 @@ const STRINGS = {
     'hint.off': '不用提醒',
     's.noPetYet': '还没有宠物：在「宠物」页下载一只',
 
-    // Each agent's own words on the Agent page (agents.js words, settings-agents.js agentNotes)
+    // Each agent's own words on the Agent page (agents.ts words, settings-agents.ts agentNotes)
     's.codexUpgradable': '可以改用后台 hook（Codex 少等）',
     's.codexUpgradeNote': '现在的 hook 都正常。修复会把开始一轮和每一步的 hook 改到后台运行，Codex 每轮、每次改文件各少等约 0.3 秒；改完在 Codex 的 /hooks（桌面版：设置 → 钩子）里信任这 3 个（UserPromptSubmit、PreToolUse、PostToolUse），别的不用再信任。',
     's.agyOff': '在 hooks.json 里被关掉了',
@@ -1571,7 +1571,7 @@ const STRINGS = {
     's.opencodeStale': '需要修复（她的端口变了，或是旧版本装的）',
     's.opencodeUnreadable': '读不了 wakuwaku.js',
 
-    // The Agent page (settings-agents.js pageAgents, agents.js)
+    // The Agent page (settings-agents.ts pageAgents, agents.ts)
     's.tabAgents': 'Agent',
     'ag.line': '已连接 {n} 个 agent',
     'ag.line1': '已连接 1 个 agent',
@@ -1735,7 +1735,7 @@ const STRINGS = {
     'menu.editTaskbar': '编辑任务栏布局',
     'menu.editTopBar': '编辑顶栏布局',
     'menu.endEdit': '退出编辑',
-    // The widget picker and her capsule's panel (picker.js, capsule-panel.js).
+    // The widget picker and her capsule's panel (picker.ts, capsule-panel.ts).
     'menu.addWidgets': '添加小工具…',
     'menu.editCapsule': '编辑胶囊',
     'menu.deviceManager': '设备管理器',
@@ -2933,8 +2933,8 @@ const STRINGS = {
     'pl.trouble': 'Nothing yet: {line}',
     'pl.stopped': 'Failed: {line}',
 
-    // Other people's plugins on the Plugins page and in the picker (addonui.js,
-    // settings.js; docs/design/specs/plugins.md §3)
+    // Other people's plugins on the Plugins page and in the picker (addonui.ts,
+    // settings.ts; docs/design/specs/plugins.md §3)
     'addons.unreviewed': 'Not reviewed',
     'addons.newerApp': 'Needs a newer Wakuwaku',
     'addons.stopped': 'Stopped responding, turned off',
@@ -3339,7 +3339,7 @@ const STRINGS = {
     's.opencodeStale': 'Needs a repair (her port changed, or an older version installed it)',
     's.opencodeUnreadable': "Can't read wakuwaku.js",
 
-    // The Agent page (settings-agents.js pageAgents, agents.js)
+    // The Agent page (settings-agents.ts pageAgents, agents.ts)
     's.tabAgents': 'Agents',
     'ag.line': '{n} agents connected',
     'ag.line1': '1 agent connected',
@@ -3504,7 +3504,7 @@ const STRINGS = {
     'menu.editTaskbar': 'Edit the taskbar layout',
     'menu.editTopBar': 'Edit the top bar layout',
     'menu.endEdit': 'Stop editing the taskbar',
-    // The widget picker and her capsule's panel (picker.js, capsule-panel.js).
+    // The widget picker and her capsule's panel (picker.ts, capsule-panel.ts).
     'menu.addWidgets': 'Add widgets…',
     'menu.editCapsule': 'Edit capsule',
     'menu.deviceManager': 'Device Manager',

@@ -3,7 +3,7 @@
 //
 // A window that lets clicks through hears no mouse moves (Electron could
 // forward them; Tauri cannot). So while the pointer is near, look() hands
-// back where it is in the page (CSS pixels), for src/pet/bridge.js to play
+// back where it is in the page (CSS pixels), for src/pet/bridge.ts to play
 // the mouseenter / mouseleave the page waits for. The page then says when the
 // pointer is over something of its own (set_over), and the window takes the click.
 //
@@ -13,7 +13,7 @@
 // (the test VM's taskbar island stayed open for good after a hover, its
 // window taking every click over the bottom of the screen, 2026-10-16). So
 // caught, where the pointer is goes to the page too as it moves (caught:
-// true), and bridge.js leaves what the pointer is no longer on. Only while
+// true), and bridge.ts leaves what the pointer is no longer on. Only while
 // the page says the pointer is on her, and only as it moves: nothing at rest.
 use serde_json::{json, Value};
 use std::collections::VecDeque;
@@ -106,7 +106,7 @@ impl ClickThrough {
     // the window keeps the pointer (a drag); passive: it takes no mouse at
     // all; solid: rects in the page (CSS px: x, y, w, h) where the window
     // takes the mouse whatever the page says (the taskbar's layout being
-    // edited: its bar of buttons, the library, the tools; island.js), so a
+    // edited: its bar of buttons, the library, the tools; island.ts), so a
     // press there is never let through to the window under it, nor its
     // mouse mode flip back and forth while the pointer is on them
     // (zhoupengjie/Wakuwaku#53: 完成 and 取消 did nothing, the presses going

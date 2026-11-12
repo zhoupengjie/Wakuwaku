@@ -6,13 +6,13 @@
 // first: it tells the page holding the frame it is ready, is told the
 // plugin's id, version, her language, theme and quiet, its settings and its
 // main, sets up `waku`, and then loads the main. Everything else goes by
-// messages to that page (src/pet/addons.js), which knows the plugin by this
+// messages to that page (src/pet/addons.ts), which knows the plugin by this
 // frame and asks for it: its widgets, the web, its storage, a nudge, the
 // agents and the hardware where its manifest has them. It answers the
 // watchdog's pings, with how long the plugin's own long tasks took since.
 //
 // view.html (tier 2) runs in a card's frame, on the desktop or in the
-// capsule (src/pet/views.js), at its own address in the plugin's folder,
+// capsule (src/pet/views.ts), at its own address in the plugin's folder,
 // this the first script in its head (addons.rs view_page). There `waku` is
 // the view's: its size, the data its widget gave, her theme and language,
 // the card's colours and fonts as CSS variables (all there from the start:
@@ -52,7 +52,7 @@
     } catch {}
   }
   if (typeof Node !== 'undefined' && typeof Element !== 'undefined') {
-    const hooks = [
+    const hooks: [any, string[]][] = [
       [Node.prototype, ['appendChild', 'insertBefore', 'replaceChild']],
       [Element.prototype, ['append', 'prepend', 'before', 'after', 'replaceWith', 'insertAdjacentElement', 'insertAdjacentHTML']],
     ]
@@ -69,7 +69,7 @@
         } catch {}
       }
     }
-    for (const [proto, prop] of [[Element.prototype, 'innerHTML'], [Element.prototype, 'outerHTML']]) {
+    for (const [proto, prop] of [[Element.prototype, 'innerHTML'], [Element.prototype, 'outerHTML']] as [Element, string][]) {
       const desc = proto && Object.getOwnPropertyDescriptor(proto, prop)
       if (!desc || !desc.set) continue
       try {
@@ -142,7 +142,7 @@
 
     // Its own long tasks (the main thread held 50 ms or more by this frame's
     // code: attribution "self"), added up between two pings, for the
-    // watchdog's budget (addons.js). Where the browser does not tell them:
+    // watchdog's budget (addons.ts). Where the browser does not tell them:
     // null, and the pings alone watch it.
     let busy = 0
     let watched = false
@@ -238,7 +238,7 @@
         },
       }),
       every,
-      fetch(url, opts = {}) {
+      fetch(url, opts: { method?: unknown; headers?: unknown; body?: unknown } = {}) {
         const body = opts.body == null ? null : String(opts.body)
         return ask('fetch', { url: String(url), method: String(opts.method || 'GET'), headers: headersOf(opts.headers), body }).then(answerOf)
       },
@@ -308,7 +308,17 @@
     const EVENTS = ['data', 'theme', 'lang']
     // How the page holding it has it now: given in the frame's name (so it
     // is all there before the view's own scripts run), then by messages.
-    let given = {}
+    // What the frame's name may carry, each checked before it is used.
+    interface Given {
+      waku?: unknown
+      id?: unknown
+      size?: unknown
+      data?: unknown
+      theme?: unknown
+      lang?: unknown
+      style?: unknown
+    }
+    let given: Given = {}
     try {
       const n = JSON.parse(window.name || '{}')
       if (n && typeof n === 'object' && n.waku === 1) given = n

@@ -56,4 +56,6 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
+      # The pages' types and the tests' (tsc -p . and tsc -p test).
+      - run: npm run typecheck
       - run: node --test "test/*.test.ts"

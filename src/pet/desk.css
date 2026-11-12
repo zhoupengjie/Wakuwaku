@@ -1,9 +1,9 @@
-/* The desktop's widgets (desk.js): the widget design of 2026-10-16, §2, §3, §7, §8, §9. One
+/* The desktop's widgets (desk.ts): the widget design of 2026-10-16, §2, §3, §7, §8, §9. One
    window per display, clear but for the widgets; each a pane of glass whose ground is the
-   wallpaper under it blurred (desk.js paperFor), the glass colour over it, a hairline, a
+   wallpaper under it blurred (desk.ts paperFor), the glass colour over it, a hairline, a
    highlight along its top, a soft shadow and a faint glow of its own colour in one corner.
    Dark as Windows' mode is dark; .lw light. Its colours on :host too: the market's page draws a
-   plugin's cards with these, in a shadow of their own in the settings (settings-market.js fillCards). */
+   plugin's cards with these, in a shadow of their own in the settings (settings-market.ts fillCards). */
 :root,
 :host {
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
@@ -112,7 +112,7 @@ body {
   outline-offset: 3px;
 }
 
-/* Picked with Ctrl: ringed in Windows' accent (desk.js selected). */
+/* Picked with Ctrl: ringed in Windows' accent (desk.ts selected). */
 .dw.sel > .wd,
 .dw.sel .layer.top .wd {
   outline: 2px solid var(--w-accent);
@@ -150,7 +150,7 @@ body {
   flex-direction: column;
 }
 
-/* Under its words: the wallpaper under it, blurred (desk.js paperFor); over that the glass colour,
+/* Under its words: the wallpaper under it, blurred (desk.ts paperFor); over that the glass colour,
    its glow in the corner and the highlight along its top. Clear without a picture yet: the
    desktop itself through it. */
 .wd > .wpaper,
@@ -182,7 +182,7 @@ body {
   position: relative;
 }
 
-/* A plugin's own view (views.js): its frame over the body, as big as the body is, the pointer
+/* A plugin's own view (views.ts): its frame over the body, as big as the body is, the pointer
    through it to the card; seen once it says it is ready, the card's words under it hidden then
    (until then, and whenever it is not shown, those words are what the card shows). */
 .wd > .wview {
@@ -675,8 +675,8 @@ body {
   opacity: 0.45;
 }
 
-/* The calendar's cards (wdesk.js calendar): the date block beside the
-   month's grid (wcards.js monthGrid), what is coming under them. */
+/* The calendar's cards (wdesk.ts calendar): the date block beside the
+   month's grid (wcards.ts monthGrid), what is coming under them. */
 .cal-m {
   align-items: flex-start;
   gap: 14px;
@@ -756,8 +756,8 @@ body {
   min-width: 56px;
 }
 
-/* What is playing (wdesk.js media): its title, and the widget's own
-   buttons (wcards.js actionsHTML), play or pause larger in its colour. */
+/* What is playing (wdesk.ts media): its title, and the widget's own
+   buttons (wcards.ts actionsHTML), play or pause larger in its colour. */
 .mtitle {
   overflow: hidden;
   color: var(--w-fg);
@@ -1017,9 +1017,9 @@ body.lw .sdots button.on {
 }
 
 /* --- A board (§7 工作台, and its note of 2026-10-16) ----------------------------------------------
-   A larger pane of the same glass (the wallpaper under it blurred 40, desk.js paperFor), its
+   A larger pane of the same glass (the wallpaper under it blurred 40, desk.ts paperFor), its
    corners 28; its title bar 46 px, always there; its widgets flat tiles on it (no glass of their
-   own: no glass on glass), corners 16, their glow at 55%. desk.js sets its box. */
+   own: no glass on glass), corners 16, their glow at 55%. desk.ts sets its box. */
 .db {
   position: absolute;
   inset: 0;
@@ -1306,7 +1306,7 @@ body.lw .sdots button.on {
   display: none;
 }
 
-/* A board's 移除, asked first (desk.js askRemove): a dim layer over the board's own area, its
+/* A board's 移除, asked first (desk.ts askRemove): a dim layer over the board's own area, its
    tiles softened under it, and in its middle a card in the menu's look: the question, a grey
    line on what becomes of its widgets, 取消 and a red 移除. Folded: the card is its title bar,
    all of it in one line. */
@@ -1685,9 +1685,9 @@ body.lw .sdots button.on {
   }
 }
 
-/* One of her drawn icons (widgets.js ICONS): its strokes in the colour
+/* One of her drawn icons (widgets.ts ICONS): its strokes in the colour
    around it, as on the taskbar (style.css .wicon); a third-party plugin's
-   own picture (widgets.js maskHTML) in one colour the same way, through
+   own picture (widgets.ts maskHTML) in one colour the same way, through
    the picture as a mask. */
 svg.wicon {
   fill: none;
@@ -1704,7 +1704,7 @@ svg.wicon {
   mask: var(--mask) center / contain no-repeat;
 }
 
-/* One without an icon of its own (widgets.js markHTML): the first character
+/* One without an icon of its own (widgets.ts markHTML): the first character
    of its name, weight 600, on a 16 px rounded square tinted as the stack
    cards' icon tiles are: its colour at 18% under it, the letter in its
    colour; light (.lw) 14% and the letter one step deeper; with no colour, a

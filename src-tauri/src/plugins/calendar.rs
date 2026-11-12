@@ -5,7 +5,7 @@
 // Feishu's, iCloud's), what is coming in the next two weeks (ics.rs), the
 // island opening ten minutes before each. Looked at each minute (the date,
 // and the minutes to each event); the feeds read every half hour. The
-// month's grid is the pages' own (wcards.js, wdesk.js), drawn from the
+// month's grid is the pages' own (wcards.ts, wdesk.ts), drawn from the
 // date; the event rows say which days to mark on it.
 //
 // Settings: Url (one or more addresses, commas between; webcal:// is

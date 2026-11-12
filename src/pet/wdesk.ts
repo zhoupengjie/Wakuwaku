@@ -1,8 +1,8 @@
 // Widgets on the desktop, each size (the widget design of 2026-10-16, §4,
 // §8): small 156 x 156, medium 324 x 156, large 324 x 324, what each kind
-// shows in each. Markup as text for desk.js to put in a glass card (the
-// card itself, its glass and its glow are desk.js's); the drawing helpers,
-// the words and the colours are wcards.js's, as on the taskbar and in the
+// shows in each. Markup as text for desk.ts to put in a glass card (the
+// card itself, its glass and its glow are desk.ts's); the drawing helpers,
+// the words and the colours are wcards.ts's, as on the taskbar and in the
 // capsule, so a stock's rise is the same colour everywhere.
 //
 // ctx: { lang, light, detailed (the specifics may show), now (ms), hour,
@@ -180,7 +180,7 @@ function today(w, size, ctx) {
   const series = detailOf(w).series
   const color = colorOf(w, ctx)
   const right = esc(t(ctx, 'desk.today'))
-  // The hours as fixed slots (wcards.js hourBars): twelve at least, 18 px at most each.
+  // The hours as fixed slots (wcards.ts hourBars): twelve at least, 18 px at most each.
   if (size === 'm') {
     const chart = series ? WCards.hourBars(series.points, lit, 292, 30, color, track(ctx)).svg : nodata(ctx)
     return `${head(w, name, ctx, right)}<div class="row nums">${cell(v.turns ?? '—', t(ctx, 'card.turnsUnit'), 'big md')}${cell(time, t(ctx, 'card.worked'))}${cell(tokens.total || '—', 'token')}</div><div class="grow"></div>${chart}`
@@ -229,7 +229,7 @@ function countdown(w, size, ctx) {
 // --- The calendar (s, m, l) --------------------------------------------------------------------
 // Small: the day of the month large, the month and weekday, the lunar
 // date (or the week). Medium: those on the left, the month's grid on the
-// right (wcards.js monthGrid: today lit, a dot on a day with something
+// right (wcards.ts monthGrid: today lit, a dot on a day with something
 // on). Large: and what is coming under them, a line each.
 function calendar(w, size, ctx) {
   const d = detailOf(w)
@@ -262,7 +262,7 @@ function calendar(w, size, ctx) {
 // --- What is playing (s, m, l) ------------------------------------------------------------------
 // The title and artist (the album after), the app at the head's right,
 // how far along as a bar with the times (paused said), and its buttons
-// (wcards.js actionsHTML: previous, play or pause, next, pressed back to
+// (wcards.ts actionsHTML: previous, play or pause, next, pressed back to
 // its plugin). Nothing playing: said so, no buttons.
 function media(w, size, ctx) {
   const said = Widgets.words(ctx.lang, w, true)
@@ -302,7 +302,7 @@ function generic(w, size, ctx) {
 
 // --- Names: never an id, never a bare "widget" (the design session) --------------------------
 // A plugin's own name ("天气"; someone else's, as its widgets say it:
-// widgets.js pluginName), none for one she does not know.
+// widgets.ts pluginName), none for one she does not know.
 const pluginName = (plugin, ctx) => (plugin ? Widgets.pluginName(ctx.lang, plugin, ctx.all || []) : '')
 // The plugin a widget comes from: its own say, else its id's first part
 // as plugins name theirs ("stock-aapl").
@@ -318,7 +318,7 @@ function nameOf(w, ctx) {
 }
 // A member put there (no words come yet): the name it was put there with,
 // a built-in one's, else its plugin's; n its number among the same name's
-// on the display (desk.js), when more than one.
+// on the display (desk.ts), when more than one.
 function memberName(m, ctx, n = 0) {
   if (m.name) return m.name
   const base = baseName(m, ctx, m.of)
@@ -340,7 +340,7 @@ function baseName(m, ctx, id) {
 }
 
 const BY_KIND = { weather, monitor, stock, mail, today, tokens, pomodoro, countdown, calendar, media }
-// A widget's face at a size (one it has: desk.js keeps to them).
+// A widget's face at a size (one it has: desk.ts keeps to them).
 function faceHTML(w, size, ctx) {
   const draw = BY_KIND[kindOf(w)] || generic
   return draw(w, size, ctx)

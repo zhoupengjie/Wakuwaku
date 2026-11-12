@@ -1,5 +1,5 @@
 /* A program's windows or its menu over its button on her taskbar on another
-   display (barpop.js): as her own taskbar's (style.css #bar-rest .wpop),
+   display (barpop.ts): as her own taskbar's (style.css #bar-rest .wpop),
    dark, or light in Windows' light mode. The window is transparent round
    it, room for its shadow. */
 html,
@@ -149,10 +149,10 @@ body {
 }
 
 /* Its room for the pointer reaches the window's edge on the strip
-   (barpop.js GAP; bar.css stretches the buttons' row to the strip's):
+   (barpop.ts GAP; bar.css stretches the buttons' row to the strip's):
    between a button and its list the pointer was on neither, and the list
    closed after 400 ms there. Windows' own stays (zhoupengjie/Wakuwaku#56).
-   An element of its own (barpop.js reach), not ::after: going from an
+   An element of its own (barpop.ts reach), not ::after: going from an
    ::after onto the list itself left the list (style.css .wreach). */
 #pop .reach {
   position: absolute;

@@ -1,16 +1,16 @@
 // A widget dragged from her home over this display's desktop (the picker of
-// 2026-10-17): picker.js, in her home's window, says where the pointer is
+// 2026-10-17): picker.ts, in her home's window, says where the pointer is
 // and when it is let go of; the host forwards it here, in this page's px
 // (desk.rs in the app, to the display under the pointer alone; the
 // playground's page in the simulator):
 //   desk:drag-preview  { x, y, item, size } | null   where it would land
 //   desk:drop          { x, y, item, size, ticket }  let go of
 // item: the member to put here ({ type, of, name?, icon? }); size: its size
-// alone on the grid ('s', 'm'). This page does the grid's sums (deskgrid.js
+// alone on the grid ('s', 'm'). This page does the grid's sums (deskgrid.ts
 // landing): over a board, its first free cell; else the cell under the
 // pointer (the widget's middle there), or the next free one row by row,
 // clear of the icons where it can be, never over another widget; and keeps
-// it as its own drops are kept (desk.js keepLayout: desk_keep). What it
+// it as its own drops are kept (desk.ts keepLayout: desk_keep). What it
 // found goes back to her home's page (desk_drag_answer → island:desk-answer:
 // { ticket, ok, where, why, name }; ticket null for a preview's), for the
 // ghost's words there and, once let go, for the strip to let it go (a move).
@@ -29,7 +29,7 @@
 import * as G from './deskgrid.ts'
 import { Desk } from './pages.ts'
 
-// Once desk.js has made the desktop (its inner parts, D).
+// Once desk.ts has made the desktop (its inner parts, D).
 const D = Desk?.inner
 if (D) deskDrop()
 
@@ -37,7 +37,7 @@ function deskDrop() {
   const { invoke } = window.__TAURI__.core
   const { listen } = window.__TAURI__.event
   const LABEL = window.__TAURI_INTERNALS__?.metadata?.currentWebview?.label || ''
-  const target = { kind: 'WebviewWindow', label: LABEL }
+  const target: TauriTarget = { kind: 'WebviewWindow', label: LABEL }
 
   // Where it would land (dashed, in Windows' accent; amber where it may
   // not), and the grid's cells faintly under it.

@@ -127,7 +127,7 @@ test('the sample mail: two accounts on the example domains, each as its widget s
   }
   // Made-up people at the example domains only (the repo is public).
   for (const address of people) assert.match(address, /^[^@\s]+@example\.(com|org)$/)
-  for (const [key, talk] of Object.entries(talks)) assert.ok(letters[talk.account].inbox.some(l => l.id === key && l.uid === talk.uid), `talk ${key}: about a letter there`)
+  for (const [key, talk] of Object.entries<any>(talks)) assert.ok(letters[talk.account].inbox.some(l => l.id === key && l.uid === talk.uid), `talk ${key}: about a letter there`)
 })
 
 test("the island's window where it sits, as island.rs will put it (anchor.js windowLeft)", () => {
@@ -367,7 +367,7 @@ function png(width, height, rgba, filters, type = 6) {
   ihdr[9] = type
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))])
 }
-const picture = (w, h, at = () => [40, 80, 120, 255]) => {
+const picture = (w, h, at: (x: number, y: number) => number[] = () => [40, 80, 120, 255]) => {
   const d = Buffer.alloc(w * h * 4)
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d.set(at(x, y), (y * w + x) * 4)
   return d

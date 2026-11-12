@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import path from 'node:path'
 import { test } from 'node:test'
 
@@ -14,7 +15,7 @@ const TEMPLATE = fs.readFileSync(path.join(import.meta.dirname, '..', 'integrati
 const load = port => import('data:text/javascript,' + encodeURIComponent(TEMPLATE.replace('const PORT = 47213', `const PORT = ${port}`)))
 
 // Her port: what came, and an answer for each (a function of the body).
-async function fakeHer(answer = () => ({})) {
+async function fakeHer(answer: (event: any) => any = () => ({})) {
   const got = []
   const server = http.createServer((req, res) => {
     let body = ''
@@ -27,12 +28,19 @@ async function fakeHer(answer = () => ({})) {
       res.end(JSON.stringify(out))
     })
   })
-  await new Promise(done => server.listen(0, '127.0.0.1', done))
-  return { got, port: server.address().port, close: () => new Promise(done => server.close(done)) }
+  await new Promise<void>(done => server.listen(0, '127.0.0.1', done))
+  return { got, port: (server.address() as AddressInfo).port, close: () => new Promise(done => server.close(done)) }
+}
+
+// What OpenCode hands a plugin, as much of it as the plugin uses.
+interface OpenCodeCtx {
+  location: { directory: string }
+  event: { subscribe: (options: { signal: AbortSignal }) => AsyncGenerator<unknown> }
+  permission: { reply: (input: unknown) => Promise<unknown> }
 }
 
 // OpenCode's side: the folder this copy is for, and the replies it was given.
-function fakeOpenCode(directory = 'C:\\work\\oc3') {
+function fakeOpenCode(directory = 'C:\\work\\oc3'): { replies: unknown[], ctx: OpenCodeCtx } {
   const replies = []
   return {
     replies,

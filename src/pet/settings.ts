@@ -6,7 +6,7 @@
 //             window), four quick switches; the alerts (how long endings
 //             stay, idle sessions, notifications, sound, prompts, quiet),
 //             start at login and the language, her updates, crash reports, about
-//   agents    the agents she follows (agents.js): each found here a row (how
+//   agents    the agents she follows (agents.ts): each found here a row (how
 //             it stands, what she can do for it, connect, repair, remove),
 //             opened in place to its details; the others to get
 //   look      her home (island, taskbar), size, strolls, eyes; Windows' own
@@ -15,7 +15,7 @@
 //   mail      mail accounts, and setting one up as Thunderbird does: an address and a password, the server found or typed
 //
 // What they show comes from main as a snapshot, again whenever it changes;
-// what they change goes back as a patch, checked there. island.js decides the
+// what they change goes back as a patch, checked there. island.ts decides the
 // island's shape (it is 'settings' while these are open) and places her.
 //
 // Everything that came from elsewhere (session names, pet names, errors) is
@@ -47,7 +47,7 @@ export type SettingsFace = ReturnType<typeof settingsPage>
 function settingsPage() {
 
 
-  // The island's colours (on black), the same as island.js.
+  // The island's colours (on black), the same as island.ts.
   const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
   // Five pages: General (the sessions, the alerts, startup and the
   // language), Agent (connecting them, right after General), Look (her
@@ -66,9 +66,9 @@ function settingsPage() {
   // Her taskbar the home: along an edge, or split into the top bar and the dock.
   const onTaskbar = s => s.display === 'taskbar' || s.display === 'split'
   // How long what she tells stays (停留多久): the quick choices, until seen,
-  // and Custom, whole seconds typed in a box beside them (flow.js holdSecs,
+  // and Custom, whole seconds typed in a box beside them (flow.ts holdSecs,
   // zhoupengjie/Wakuwaku#59).
-  const HOLDS = [...Flow.HOLD_QUICK, 'seen']
+  const HOLDS: (number | 'seen')[] = [...Flow.HOLD_QUICK, 'seen']
   // Minutes a session at rest stays in sight; 0 always (state.rs is_shown).
   const IDLE_HIDES = [15, 30, 60, 120, 0]
   const WAITS = [30, 60, 120, 290]
@@ -111,7 +111,7 @@ function settingsPage() {
   // typed in them and not yet kept ("weather.City": "上海").
   let openPlugin = ''
   const drafts = {}
-  // Other people's plugins (addons.rs; addonui.js the logic): a part of the
+  // Other people's plugins (addons.rs; addonui.ts the logic): a part of the
   // Plugins page opened in its place (sub: { page, id, back }: a plugin's
   // own page, a pack's ({ kind } too), the market, one of the market's),
   // the confirm layer over the panel (installing from a file, by
@@ -126,7 +126,7 @@ function settingsPage() {
   let approveFor = null
   let pickingZip = false
   const freshRows = new Set()
-  // The plugin market (market.rs; addonui.js its words and steps), a part
+  // The plugin market (market.rs; addonui.ts its words and steps), a part
   // of the Plugins page (sub market, an item's page mkItem): its index as
   // last read (items null until one was), when, what went wrong reading it,
   // being read; the category and the words looked for; each download's last
@@ -144,7 +144,7 @@ function settingsPage() {
     pet.shortcutsPause?.(key !== null)
   }
   let failedShortcuts = null
-  pet.onShortcutStatus && pet.onShortcutStatus(({ failed } = {}) => {
+  pet.onShortcutStatus && pet.onShortcutStatus(({ failed }: { failed?: string[] } = {}) => {
     failedShortcuts = new Set(failed || [])
     if (snap) snap.shortcutsFailed = failed || []
     draw()
@@ -179,7 +179,7 @@ function settingsPage() {
   let reading = null
   let handNote = null
   let handNoteTimer
-  // The agents that read mail (agents.js mail): their short names, and
+  // The agents that read mail (agents.ts mail): their short names, and
   // their names on the Mail page's settings.
   const AGENTS = Object.fromEntries(Agents.TABLE.filter(a => a.mail).map(a => [a.id, a.mail]))
   const AGENT_NAMES = Object.fromEntries(Agents.TABLE.filter(a => a.mail).map(a => [a.id, a.name]))
@@ -227,7 +227,7 @@ function settingsPage() {
     <div class="s-toast" role="status" hidden></div>`
   const head = layer.querySelector('.s-head')
   const tabs = layer.querySelector('.s-tabs')
-  tabs.style.setProperty('--tabs', TABS.length)
+  tabs.style.setProperty('--tabs', TABS.length as any)
   const askSlot = layer.querySelector('.s-ask')
   const body = layer.querySelector('.s-body')
   const foot = layer.querySelector('.s-foot')
@@ -250,7 +250,7 @@ function settingsPage() {
 
   function morph(from, to) {
     if (from.nodeType !== to.nodeType || from.nodeName !== to.nodeName) return from.replaceWith(to.cloneNode(true))
-    // A letter's frame with the same letter in it (settings-letter.js
+    // A letter's frame with the same letter in it (settings-letter.ts
     // mailBodyHTML) is left as it is: its height and scrolling are
     // fitFrames', which the markup has not, and would be taken away at every
     // redraw of the page and set again.
@@ -447,7 +447,7 @@ function settingsPage() {
       <div class="links"><span class="link" data-site="site">${esc(T('settings.browse'))} ›</span></div>`
   }
 
-  // --- Her island's look (island-look.js drawIslandLook) ---------------------------------
+  // --- Her island's look (island-look.ts drawIslandLook) ---------------------------------
   let ilookOpen = false
   // The mode being set: '' follows Windows' own.
   let ilookMode = ''
@@ -458,7 +458,7 @@ function settingsPage() {
   // Windows' question for LibreHardwareMonitor (run as administrator) takes
   // the focus too: from the press, and while its job is at that stage.
   let lhmAsking = 0
-  // In settings-look.js:
+  // In settings-look.ts:
   const {
     ACCENT_PICKER, ilookDefault, ilookFor, ilookInput, ilookOf, ilookPresets, ilookSave, lhmAsks, pageLook,
     paperDo, winMode,
@@ -478,7 +478,7 @@ function settingsPage() {
     const s = snap.settings
     // When she has something to tell that needs no answer (a turn's end, a
     // hello, a plugin's nudge): the island open, a ring round it (the flow
-    // light, the default), or the dot alone (island-ring.js cue); its three
+    // light, the default), or the dot alone (island-ring.ts cue); its three
     // choices under it, too long beside it.
     const cue = Flow.endCue(s)
     const cues = [
@@ -544,7 +544,7 @@ function settingsPage() {
   // What a plugin she runs says under its name, as it is (placed is on, so
   // put nowhere is off): 没放; running, 运行中 and what it does; else why it
   // shows nothing (a parameter to fill in, 出错 with its last line). Put
-  // somewhere and not on yet (picker.js turns it on): starting.
+  // somewhere and not on yet (picker.ts turns it on): starting.
   function pluginNote(p, mine, placed) {
     if (!placed) return { text: T('pl.unplaced') }
     if (p.state === 'off') return { text: T('pl.starting') }
@@ -557,9 +557,9 @@ function settingsPage() {
     return { text: `${T('pl.running')} · ${T(`w.ex.${p.id}.note`)}` }
   }
 
-  // Where one is put (island-wmenu.js placeNow): its place in a quiet word, or,
+  // Where one is put (island-wmenu.ts placeNow): its place in a quiet word, or,
   // put nowhere, 添加小工具… (the picker, as her menu opens it, on its card:
-  // key, picker.js fromMenu focus).
+  // key, picker.ts fromMenu focus).
   const placeOf = (item, on) => Island?.placeNow?.(item, on) || { at: on ? 'isle' : null }
   function placeHTML(place, key = '') {
     if (!place.at) return `<button class="pbtn sm" data-padd="${esc(key)}">${esc(T('pl.add'))}</button>`
@@ -582,8 +582,8 @@ function settingsPage() {
     return `<div class="pf">${fields.join('')}</div>`
   }
 
-  // --- Other people's plugins (addons.rs view; addonui.js) ---------------------------------
-  // In settings-addons.js:
+  // --- Other people's plugins (addons.rs view; addonui.ts) ---------------------------------
+  // In settings-addons.ts:
   const {
     SUBS, addonById, addonField, addonRow, addonsNow, andList, backSub, canDoHTML, crumbHTML, openSub,
     packById, packTile, packsGroup, toLook,
@@ -602,8 +602,8 @@ function settingsPage() {
     get tab() { return tab }, set tab(v) { tab = v },
   })
 
-  // --- The market (market.rs; addonui.js) ------------------------------------------------
-  // In settings-market.js:
+  // --- The market (market.rs; addonui.ts) ------------------------------------------------
+  // In settings-market.ts:
   const {
     approveGo, drawSheet, fillCards, flowStep, installFromFile, installGo, loadMarket, marketInstall,
     marketItem, marketItemPage, marketPage, toast, uninstallGo, updateAll,
@@ -626,7 +626,7 @@ function settingsPage() {
   })
 
   // --- The Plugins page, and the monitor's sensors -------------------------------------
-  // In settings-plugins.js:
+  // In settings-plugins.ts:
   const { pageWidgets, picksKey } = pluginsPart({
     AddonUI, COLOR, SPINS, SUBS, T, Widgets, addonRow, drafts, esc, market, openHardware, packsGroup,
     placeHTML, placeOf, pluginFields, pluginNote, render, row, sec, seg, sw, widgetRows,
@@ -637,7 +637,7 @@ function settingsPage() {
   })
 
   // --- Mail accounts and the inbox -----------------------------------------------------
-  // In settings-mail.js:
+  // In settings-mail.ts:
   const {
     APP_PASSWORD, AUTHS, PROXY_KINDS, PROXY_MODES, SECURITIES, WIDE_W, accountOf, agentChoices, agentsHTML,
     boxName, choicesOf, confOf, firstAgent, formProxy, handButtons, inboxHTML, inboxId, isLetter, isReading,
@@ -661,7 +661,7 @@ function settingsPage() {
   // --- Writing a letter ----------------------------------------------------------------------
   // The same menu as a picker: a model or an effort, the one set ticked.
   let menuPick = null
-  // In settings-letter.js:
+  // In settings-letter.ts:
   const {
     addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu,
     openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setProxy,
@@ -687,7 +687,7 @@ function settingsPage() {
     get writing() { return writing }, set writing(v) { writing = v },
   })
 
-  // --- The Agent page (agents.js) ---------------------------------------------------------
+  // --- The Agent page (agents.ts) ---------------------------------------------------------
   // One row for each agent found on this computer: a dot for how it stands
   // in four of the island's colours (connected green, written and waiting
   // for its first turn blue, the person must act amber, not connected grey;
@@ -707,7 +707,7 @@ function settingsPage() {
   let pluginOpen = false
   let agentOpen = ''
   let othersOpen = false
-  // In settings-agents.js:
+  // In settings-agents.ts:
   const {
     aboutHTML, agentDo, connectAll, dshSwitch, failed, known, pageAgents, pageCrash, pageUpdate, sessionOpen,
   } = agentsPart({
@@ -731,7 +731,7 @@ function settingsPage() {
   // computer, as equals (whichever one uses, or all), in a row: its name,
   // and under it how it stands; under them what each still needs, or why it
   // could not be written; what the buttons write; Claude Code's plugin the
-  // other way. The same model as the Agent page (agents.js: what is here,
+  // other way. The same model as the Agent page (agents.ts: what is here,
   // how each stands, the same buttons). Once one is connected, General has
   // a line on them instead, which opens the Agent page (agentsLine). (The
   // appearance session's spec, 2026-10-13.)
@@ -739,7 +739,7 @@ function settingsPage() {
   // 不用提醒) and nothing connected: the welcome folded to one row at the
   // page's top; opened again by its 去连接, or by asking for connecting.
   let welcomeOpen = false
-  // In settings-welcome.js:
+  // In settings-welcome.ts:
   const {
     PAGES, cardShows, displaysRow, failedHTML, screenRow, toolNames, toolsHere,
   } = welcomePart({
@@ -792,7 +792,7 @@ function settingsPage() {
   // typed in (the download box, a plugin's setting, the mail proxy's
   // address) gets the focus and the caret back.
   function drawBody(reset) {
-    const box = body.contains(document.activeElement) && document.activeElement.matches('input, textarea') ? document.activeElement : null
+    const box = body.contains(document.activeElement) && document.activeElement.matches('input, textarea') ? (document.activeElement as HTMLInputElement | HTMLTextAreaElement) : null
     const which =
       box &&
       (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : box.dataset.mon ? `[data-mon="${box.dataset.mon}"]` : box.dataset.hold ? '[data-hold]' : box.dataset.mf ? `[data-mf="${box.dataset.mf}"]` : box.dataset.w ? `[data-w="${box.dataset.w}"]` : box.dataset.proxyAt !== undefined ? `[data-proxy-at="${box.dataset.proxyAt}"]` : null)
@@ -811,7 +811,7 @@ function settingsPage() {
     // an input method was lost (results landing while one typed).
     const again = (document.getElementById('s-ref') as HTMLInputElement)
     if (again && again.value !== typedRef) again.value = typedRef
-    const back = which && body.querySelector(which)
+    const back = which && body.querySelector<HTMLInputElement | HTMLTextAreaElement>(which)
     if (back && back !== document.activeElement) {
       back.focus()
       back.setSelectionRange(caret, caret)
@@ -1066,7 +1066,7 @@ function settingsPage() {
     if (!menuEl.hidden && !at('.mmenu')) closeMenu()
     // The question over the panel (installing a plugin, taking one away):
     // its buttons, its link to the developer docs; a press beside it is 取消.
-    if (!sheet.hidden && sheet.contains(e.target)) {
+    if (!sheet.hidden && sheet.contains(e.target as Node)) {
       const site = at('[data-site]')
       if (site) return pet.settings.openSite(site.dataset.site)
       const b = at('[data-sheet]')
@@ -1201,7 +1201,7 @@ function settingsPage() {
       return relayout()
     }
     // One put nowhere: 添加小工具…, the picker as her menu's opens it
-    // (picker.js fromMenu: on the taskbar, editing it with the picker open;
+    // (picker.ts fromMenu: on the taskbar, editing it with the picker open;
     // at the top, the picker alone), at its card; the settings make way.
     const add = at('[data-padd]')
     if (add) {
@@ -1332,7 +1332,7 @@ function settingsPage() {
         holdCustom = raw === 'custom'
         if (holdCustom) {
           draw()
-          const box = layer.querySelector('[data-hold]')
+          const box = layer.querySelector<HTMLInputElement>('[data-hold]')
           box?.focus()
           box?.select()
           return
@@ -2154,7 +2154,7 @@ function settingsPage() {
     }
   })
 
-  pet.onSettings(({ tab: next } = {}) => open(next))
+  pet.onSettings(({ tab: next }: { tab?: string } = {}) => open(next))
   pet.onSettingsChanged(got => {
     if (!isOpen) return
     snap = got

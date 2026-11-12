@@ -11,6 +11,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
@@ -23,7 +24,7 @@ const load = () => import('data:text/javascript,' + encodeURIComponent(SOURCE))
 // Her port: what came, in order. answer(event): what she gives back for it
 // ({} by default), or a promise of it (held till then: a prompt); dropped,
 // whether a held one's connection was let go before she answered.
-async function fakeHer(answer = () => ({})) {
+async function fakeHer(answer: (event: any) => any = () => ({})) {
   const got = []
   const dropped = []
   const server = http.createServer((req, res) => {
@@ -39,12 +40,12 @@ async function fakeHer(answer = () => ({})) {
       res.end(JSON.stringify(out))
     })
   })
-  await new Promise(done => server.listen(0, '127.0.0.1', done))
+  await new Promise<void>(done => server.listen(0, '127.0.0.1', done))
   const close = () => {
     server.closeAllConnections()
     return new Promise(done => server.close(done))
   }
-  return { got, dropped, port: server.address().port, close }
+  return { got, dropped, port: (server.address() as AddressInfo).port, close }
 }
 
 // DSH's side: the listeners a plugin registers (and whether first in line),

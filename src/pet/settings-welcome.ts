@@ -1,8 +1,8 @@
 // The welcome at the top of General: the agents found on this computer, how
 // each is connected, connecting them all at once; the displays' rows, the
 // shortcuts that failed; and which page draws which tab (PAGES).
-// Made by settings.js in the section's place as the page starts
-// (welcomePart(core), imported by settings.js): what it takes of the settings' core
+// Made by settings.ts in the section's place as the page starts
+// (welcomePart(core), imported by settings.ts): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
@@ -57,7 +57,7 @@ export function welcomePart(core: WelcomeCore) {
   // The card itself, not General's line: shown, and none connected for real yet.
   const cardShows = () => showWelcome() && !toolsHere().some(tool => toolState(tool) === 'seen')
 
-  // The ones on this computer, in the table's order (agents.js here), but
+  // The ones on this computer, in the table's order (agents.ts here), but
   // one of a version she cannot connect to (Reasonix 0.x: its row on the
   // Agent page says why). None found: the first four (it cannot be told).
   function toolsHere() {
@@ -86,7 +86,7 @@ export function welcomePart(core: WelcomeCore) {
   // dark settings, its dark one on the light (the taskbar's look, else
   // Windows' defaults).
   function accentButton() {
-    const pair = Island?.accent?.() || {}
+    const pair: { light?: string; dark?: string } = Island?.accent?.() || {}
     return winMode() === 'light' ? `--acc:${pair.dark || '#0067c0'};--acc-ink:#fff` : `--acc:${pair.light || '#4cc2ff'};--acc-ink:#000`
   }
 
@@ -151,7 +151,7 @@ export function welcomePart(core: WelcomeCore) {
     const many = tools.length > 1
     const chosen = (core.snap.pets || []).find(p => p.id === core.snap.settings.pet)
     const face = chosen ? `<span class="wc-face">${thumb(40, chosen.url, chosen.version)}</span>` : ''
-    // A nudge to approve only where one of them can ask (agents.js approve).
+    // A nudge to approve only where one of them can ask (agents.ts approve).
     const sub = `${T('wc.sub1')}${tools.some(tool => Agents.byId(tool).caps.approve[0] !== 'no') ? T('wc.subAsk') : ''}${T('wc.sub2')}${many ? T('wc.subMany') : ''}`
     // OpenCode alone: a file of ours, nothing backed up, and she is not woken
     // by it; omp alone: a file of its own is written, nothing to back up.

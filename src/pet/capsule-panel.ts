@@ -1,10 +1,10 @@
 // Her capsule's panel (the picker of 2026-10-17): a popover over her
 // capsule on the taskbar (under the island at the top), opened by a press on
 // her capsule while the taskbar's layout is edited, or by her menu's 编辑胶囊.
-// Loaded after picker.js, which it works with (window.Picker) as island.js
-// does (window.Isle).
+// Loaded after picker.ts, which it works with (Picker, pages.ts) as island.ts
+// does (Isle).
 //
-// It lists the capsule's members (capsule.js), in their order: each with a
+// It lists the capsule's members (capsule.ts), in their order: each with a
 // grip to drag it up or down (that order is their turns' and the open
 // island's), its icon, name and what it says now, how it shows (轮播 its
 // turn in the closed capsule, 固定 always at its right end, five at most,
@@ -44,7 +44,7 @@ function capsulePanel() {
 
   const home = () => Isle.home()
 
-  // Its members as they are now (picker.js listNow), each with its widgets.
+  // Its members as they are now (picker.ts listNow), each with its widgets.
   function members() {
     const list = Picker.listNow()
     const all = Isle.allWidgets
@@ -89,7 +89,7 @@ function capsulePanel() {
   }
 
   // Over her capsule on the strip (beside a side bar's), under the island
-  // at the top (at a top corner, lined up with its side there: anchor.js,
+  // at the top (at a top corner, lined up with its side there: anchor.ts,
   // zhoupengjie/Wakuwaku#59), over one along the foot of the screen (#105);
   // kept on the screen.
   function place() {
@@ -205,7 +205,7 @@ function capsulePanel() {
   document.addEventListener(
     'pointerdown',
     e => {
-      if (!open || panel.contains(e.target) || Isle.island.contains(e.target) || (e.target as HTMLElement).closest('.pk, .pk-toasts, .pk-pop, .tbedit, #bar-rest')) return
+      if (!open || panel.contains(e.target) || Isle.island.contains(e.target as Node) || (e.target as HTMLElement).closest('.pk, .pk-toasts, .pk-pop, .tbedit, #bar-rest')) return
       hide()
     },
     true,

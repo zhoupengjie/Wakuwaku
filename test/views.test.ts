@@ -28,7 +28,7 @@ function setup({ views = {}, canShow = true } = {}) {
     },
     send: (widget, message) => sent.push([widget, message]),
     make: (name, page) => {
-      const el = {
+      const el: any = {
         name,
         page,
         parentElement: null,

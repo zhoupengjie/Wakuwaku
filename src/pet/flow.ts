@@ -10,8 +10,7 @@
 // What to do for an
 // event, the ring's turns and fades as times and angles, how one coming on
 // another's heels carries on from it, and the colours: all here, with no
-// page, so the tests can say it. island.js draws it. Loaded by the page
-// before island.js, and required by the tests.
+// page, so the tests can say it. island.ts draws it.
 // The events, and which colours win while one ring is playing: an error
 // over changes to review, over a turn done, over a hello, over a plugin.
 const PRIORITY = { error: 5, review: 4, done: 3, hello: 2, plugin: 1 }
@@ -79,7 +78,7 @@ function endCue(config) {
 // Set to open, everything is as it was before the flow light: whatever
 // opened the island by itself still does. A session waiting on you while
 // she is out on the desktop (herOut): nothing, the prompt is over her head
-// (pet.js, panel.js).
+// (pet.ts, panel.ts).
 function cueFor(kind, { setting = 'ring', view = 'compact', blocked = false, herOut = false } = {}) {
   if (kind === 'waiting' && herOut) return null
   if (kind === 'waiting' || setting === 'open') return 'open'
@@ -123,7 +122,7 @@ const CUED = ['done', 'review', 'error', 'hello', 'plugin']
 // How long the island stays open by itself (endCue open, cueFor's open):
 // what endCue governs as long as the hold says (it stayed its fixed few
 // seconds whatever was chosen, zhoupengjie/Wakuwaku#65), until seen
-// being Infinity: open until the pointer has been over it (island.js
+// being Infinity: open until the pointer has been over it (island.ts
 // seenNudge). A session waiting on you, a new version, what happens
 // inside a turn: their own time (ms), as before.
 function openFor(kind, hold, ms) {
@@ -131,7 +130,7 @@ function openFor(kind, hold, ms) {
 }
 
 // The hold setting: whole seconds from 3 to 600 (settings.rs is_hold), or
-// "seen". 8, 30 and 120 are its quick choices (settings.js); any other
+// "seen". 8, 30 and 120 are its quick choices (settings.ts); any other
 // number is a custom one (#59).
 const HOLD_MIN = 3
 const HOLD_MAX = 600
@@ -201,7 +200,7 @@ function mix(colour, other, share) {
 // a light ground its colour 15 % deeper first. A plugin with no colour of
 // its own (or not one of ours to mix) rings in the fallback given (the
 // accent).
-function palette(kind, light, colour, fallback = '#4cc2ff') {
+function palette(kind, light, colour?, fallback = '#4cc2ff') {
   const set = PALETTES[kind]
   if (set) return set[light ? 'light' : 'dark']
   let c = rgbOf(colour) ? colour : rgbOf(fallback) ? fallback : '#4cc2ff'
@@ -296,7 +295,7 @@ function lightAt(ring, t) {
 // fade as they end: lit, still, until the hold is over, counted from the
 // event (as main holds the ending itself, state.rs settle_at), then down
 // over 0.56 s, the dot coming as it does. Held still, nothing of it runs
-// (island-ring.js holdRing): the gradient left where it stopped, the glow
+// (island-ring.ts holdRing): the gradient left where it stopped, the glow
 // under it the same. With reduced motion it is lit still the whole hold,
 // not 1.4 s. A ring's times then:
 //   stillAt  its turning over (the light up, with reduced motion): from
@@ -394,9 +393,10 @@ function play(state, kind, t, { still = false, hold = 0 } = {}) {
 
 // Cut short (the island opened: the person is looking). What comes next
 // rings anew: it was seen, not played out.
-const stop = () => idle()
+// (Its callers hand it the state as they do play's and release's; it needs none.)
+const stop: (state?: unknown) => ReturnType<typeof idle> = () => idle()
 
-// Held, and what it says has moved on (its session at work again: island.js
+// Held, and what it says has moved on (its session at work again: island.ts
 // movedOn): its hold over at t, down as at its time (after its turning,
 // should it still turn), the dot coming. Anything else as it is.
 function release(state, t) {

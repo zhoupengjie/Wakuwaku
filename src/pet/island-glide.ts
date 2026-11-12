@@ -1,8 +1,8 @@
 // The pointer's glide along the strip's buttons, and the list a program's
 // button opens above it (its windows, or a widget's card): opened, closed,
 // kept up while the pointer is on its way to it.
-// Made by island.js in the section's place as the page starts
-// (glidePart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (glidePart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -75,7 +75,7 @@ export function glidePart(core: GlideCore) {
   }
 
   const isGlideOn = node => node?.matches?.(GLIDE_ON) && !node.closest('.wpop, .wgpop, .tfly, .wstk, .wmenu')
-  // The programs' buttons pressed in and springing back (presses.js pressIn;
+  // The programs' buttons pressed in and springing back (presses.ts pressIn;
   // Start and Task View have their own, style.css .start.down).
   Presses.pressIn(windowsBox, '.win')
   barRest.addEventListener(
@@ -94,7 +94,7 @@ export function glidePart(core: GlideCore) {
     true,
   )
   barRest.addEventListener('pointerdown', e => {
-    if (e.button === 0 && core.glideOn && e.target.closest(GLIDE_ON) === core.glideOn) glide.classList.add('down')
+    if (e.button === 0 && core.glideOn && (e.target as HTMLElement).closest(GLIDE_ON) === core.glideOn) glide.classList.add('down')
   })
   window.addEventListener('pointerup', () => glide.classList.remove('down'))
   window.addEventListener('resize', () => {
@@ -145,7 +145,7 @@ export function glidePart(core: GlideCore) {
     // Each program's button kept from one drawing to the next (by its key),
     // what changed changed in it: its line stretches as its window comes to
     // the front (style.css #bar-rest .win::after), a press on it plays out
-    // (presses.js pressIn) though the windows change under it; a new one's
+    // (presses.ts pressIn) though the windows change under it; a new one's
     // line grows in (fresh). Drawn anew each time, none of it could move.
     const old = new Map([...windowsBox.children].filter(b => b.dataset.app != null).map(b => [b.dataset.app, b]))
     const fresh = []
@@ -282,7 +282,7 @@ export function glidePart(core: GlideCore) {
   // (taskbar/win/presses.rs press hook), for ours never take the focus whose loss would.
   let watching = false
   function watchPresses() {
-    // picker.js: its capsule panel, its popover, closed by a press elsewhere too.
+    // picker.ts: its capsule panel, its popover, closed by a press elsewhere too.
     const want = !!core.popFor || core.trayOpen || !!core.wgFor || !!core.stackFor || core.menuFor?.where === 'bar' || core.imeOpen || !!Picker?.watches()
     if (want === watching) return
     watching = want

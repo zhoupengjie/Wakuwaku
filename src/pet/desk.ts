@@ -1,7 +1,7 @@
 // The desktop's widgets on one display (the widget design of 2026-10-16, §3,
 // §7, §8, §9, §10; desk.rs makes a window for each display that has some):
 // each alone, several stacked, or several in a board, where it stands on
-// the display's grid, its glass the wallpaper under it blurred (mica.js
+// the display's grid, its glass the wallpaper under it blurred (mica.ts
 // glassPaper, desk.rs reads which picture), the glass colour over it.
 //
 // Alone: dragged anywhere (it snaps to the grid, clear of the icons and the
@@ -21,7 +21,7 @@
 // Right-click: its menu, as the taskbar's and the capsule's. Ctrl and a
 // press (or a rectangle dragged over the desktop) picks several, which
 // their menu makes one board; a board's menu keeps it as a combo (存为组合…)
-// for the picker to put up again (desk-drop.js).
+// for the picker to put up again (desk-drop.ts).
 //
 // The window lets clicks through but where a widget is (desk.rs polls the
 // pointer against the shapes this page sends, desk_shapes); while a press is
@@ -39,7 +39,7 @@ import { provide } from './pages.ts'
 const { invoke } = window.__TAURI__.core
 const { listen } = window.__TAURI__.event
 const LABEL = window.__TAURI_INTERNALS__?.metadata?.currentWebview?.label || ''
-const target = { kind: 'WebviewWindow', label: LABEL }
+const target: TauriTarget = { kind: 'WebviewWindow', label: LABEL }
 const desk = document.getElementById('desk')
 
 // What desk.rs says: this display (key, primary, keys of those there,
@@ -96,7 +96,7 @@ const visiting = e => !!e.d && e.d !== here.key
 const find = id => layout.find(e => e.id === id)
 const isBoard = n => !!n && G.isBoard(n.entry)
 
-// Plugins' own views in the medium and large cards (views.js): their data
+// Plugins' own views in the medium and large cards (views.ts): their data
 // asked of her as it changes, what they send their main.js passed on, the
 // card's colours and fonts given them; the cards drawn again as one comes
 // or goes. Not while desk.rs says this desktop is not seen or nobody is
@@ -220,7 +220,7 @@ function face(e, m, size = e.size) {
 // the glass colour and its glow over that, then its words.
 // A member with nothing to say: the name it was put there with, else its
 // plugin's (a built-in one's), numbered when several here would read the
-// same (wdesk.js memberName): never an id, never a bare "widget".
+// same (wdesk.ts memberName): never an id, never a bare "widget".
 function emptyName(e, m, c) {
   if (m.name) return m.name
   const empty = shown().flatMap(x => G.membersOf(x)).filter(x => !x.name && !Widgets.sourcesOf(x, all).length)
@@ -241,7 +241,7 @@ const toolTitles = root => {
 // A member's words into its card's body, as they changed; drawn by its
 // plugin's own view over that, where it has one and this card may show it
 // (medium or large, alone, on top of a stack, a tile of a board unfolded:
-// views.js). key: the card's, its entry's id and its place in it.
+// views.ts). key: the card's, its entry's id and its place in it.
 function fillBody(wd, e, m, size, key, mayView = true) {
   const body = wd?.querySelector('.wbody')
   if (!body) return
@@ -557,11 +557,11 @@ function wire(n) {
   })
   el.addEventListener('click', ev => {
     // A button of the widget's own (what is playing: previous, play or
-    // pause, next; wcards.js actionsHTML): to its plugin, nothing else.
+    // pause, next; wcards.ts actionsHTML): to its plugin, nothing else.
     const wa = ev.target.closest('[data-wact]')
     if (wa) {
       ev.stopPropagation()
-      // Asked of Rust here: this page has no bridge (bridge.js is her
+      // Asked of Rust here: this page has no bridge (bridge.ts is her
       // window's and the island's), and the pet it reached for was none.
       if (!wa.classList.contains('off')) invoke('widget_act', { id: String(wa.dataset.widget || ''), action: String(wa.dataset.wact || '') }).catch(() => false)
       return
@@ -692,12 +692,20 @@ function boardUnder(cx, cy, except) {
   }
   return null
 }
+// The board a drag is over (drag.into): the cell [col, row] it would take
+// there and at what size (spotIn), null when full; or that it is a stack.
+interface Into {
+  b: any
+  stack?: boolean
+  spot?: [number, number] | null
+  size?: string
+}
 // Over a board: where it would land (a dashed place there), none (full:
 // it shakes as it is let go of), or a stack, which may not go in.
 function seekBoard(ev, x, y) {
   const d = drag
   const b = boardUnder(ev.clientX, ev.clientY, d.tile >= 0 ? null : d.n)
-  const into = !b ? null : d.tile < 0 && G.isStack(d.n.entry) ? { b, stack: true } : { b, ...spotIn(b, x, y) }
+  const into: Into = !b ? null : d.tile < 0 && G.isStack(d.n.entry) ? { b, stack: true } : { b, ...spotIn(b, x, y) }
   const was = d.into
   d.into = into
   if (was && (!into || was.b !== into.b || JSON.stringify(was.spot) !== JSON.stringify(into.spot))) was.b.el.querySelector('.bghost')?.remove()
@@ -835,7 +843,7 @@ let iconsLoading = null
 let iconsKnown = false
 let iconsMissed = false
 let iconsTries = 0
-let iconsTimer = 0
+let iconsTimer: Timer = 0
 async function loadIcons() {
   let list = null
   try {
@@ -875,7 +883,7 @@ const toastEl = document.createElement('div')
 toastEl.className = 'wtoast'
 toastEl.hidden = true
 document.body.append(toastEl)
-let toastTimer = 0
+let toastTimer: Timer = 0
 function toast(b, text) {
   const { w } = G.boardBox(b.entry)
   toastEl.textContent = text
@@ -946,7 +954,7 @@ function endRename(ok) {
   keepLayout(layout.map(o => (o.id === b.id ? (name ? { ...rest, name } : rest) : o)))
 }
 
-// --- A board kept as a combo (存为组合…; settings boardSets, deskgrid.js) ------------------------
+// --- A board kept as a combo (存为组合…; settings boardSets, deskgrid.ts) ------------------------
 // Its tiles' widgets, sizes and places under the name typed: one of that
 // name replaced, else added (twenty at most, the oldest going); said on
 // the board. Read and written as the settings are (settings_get,
@@ -1024,7 +1032,7 @@ menuEl.className = 'wmenu'
 menuEl.hidden = true
 document.body.append(menuEl)
 
-// Why a size is not there, by kind (the spec's §4, as island.js has it).
+// Why a size is not there, by kind (the spec's §4, as island.ts has it).
 function noSizeOf(w, size, stack = false) {
   if (stack) return t('desk.stackSize')
   const kind = w ? WCards.kindOf(w) : ''
@@ -1205,8 +1213,8 @@ for (const pop of [menuEl]) {
 document.addEventListener(
   'pointerdown',
   ev => {
-    if (menu && !menuEl.contains(ev.target) && !(ev.target as HTMLElement).closest('.tools button, .bbtns button')) closeMenu()
-    if (lib && !libEl.contains(ev.target) && !(ev.target as HTMLElement).closest('.bbtns button')) closeLib()
+    if (menu && !menuEl.contains(ev.target as Node) && !(ev.target as HTMLElement).closest('.tools button, .bbtns button')) closeMenu()
+    if (lib && !libEl.contains(ev.target as Node) && !(ev.target as HTMLElement).closest('.bbtns button')) closeLib()
     if (asking && !(ev.target as HTMLElement).closest?.('.bask-card')) endAsk(false)
   },
   true,
@@ -1397,7 +1405,7 @@ document.addEventListener(
   ev => {
     if (!ev.ctrlKey || !(ev.target === desk || ev.target === document.body || ev.target === document.documentElement)) return
     ev.preventDefault()
-    const delta = ev.wheelDeltaY || Math.round(-ev.deltaY * 1.2)
+    const delta = (ev as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY || Math.round(-ev.deltaY * 1.2)
     if (delta) invoke('desk_wheel', { x: ev.clientX, y: ev.clientY, delta }).catch(() => {})
   },
   { passive: false },
@@ -1648,7 +1656,7 @@ window.addEventListener('error', e => console.log('error:', e.message, e.filenam
 // For the tests' eyes: what is drawn where.
 const deskFace = {
   state: () => ({ here, layout, spots: Object.fromEntries(spots), icons, paper: !!paper, paper40: !!paper40, shapes: sentShapes }),
-  // The plugins' views here (views.js), for the tests' eyes.
+  // The plugins' views here (views.ts), for the tests' eyes.
   views,
   draw,
   turn: (id, by) => nodes.get(id) && turn(nodes.get(id), by),
@@ -1673,7 +1681,7 @@ const deskFace = {
   shake: id => shake(nodes.get(id)),
   toast: (id, text) => nodes.get(id) && toast(nodes.get(id), text),
   paperAgain: () => lastPaper && setPaper(lastPaper),
-  // desk-drop.js: a widget from her home let go of over this display (the
+  // desk-drop.ts: a widget from her home let go of over this display (the
   // picker of 2026-10-17): what is here, and how it is kept.
   inner: {
     get here() {

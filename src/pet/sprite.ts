@@ -1,5 +1,5 @@
 // The Codex pet v2 sheet: 1536x2288, 8 columns x 11 rows of 192x208 cells.
-// Loaded by the page before pet.js, and required by the tests.
+// Imported by her own window's page (pet.ts), the taskbar's and the tests.
 const CELL_W = 192
 const CELL_H = 208
 

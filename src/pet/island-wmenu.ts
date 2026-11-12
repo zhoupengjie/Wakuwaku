@@ -1,8 +1,8 @@
 // A widget's menu (the spec's §10): a right press on a widget, on the strip
 // or in the open island; its sizes, where it is shown (the island, the
 // taskbar, the desktop), its settings, taken off.
-// Made by island.js in the section's place as the page starts
-// (wmenuPart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (wmenuPart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -142,7 +142,7 @@ export function wmenuPart(core: WmenuCore) {
       parts.push(item('board', t(core.lang, 'desk.newBoard'), '', 'new'))
     }
     if (w) parts.push(item('settings', t(core.lang, 'menu.settings')))
-    // picker.js: in the open island, a member's way of showing in her
+    // picker.ts: in the open island, a member's way of showing in her
     // capsule (under its name), and out of it (移出胶囊).
     const isle = !bar && w ? Picker?.isleMenu?.(w, { opt, line }) : null
     if (isle) parts.splice(1, 0, ...isle.lines)
@@ -253,11 +253,11 @@ export function wmenuPart(core: WmenuCore) {
         return entry && keepLayout(Widgets.takeOut(tbLayout(), entry.id, Number(v), core.newId))
       case 'settings':
         return w && openWidgetSettings(w)
-      // picker.js: its way of showing in her capsule.
+      // picker.ts: its way of showing in her capsule.
       case 'cmode':
         return w && Picker?.setMode(w, v)
       case 'remove':
-        // picker.js: taken off, with a way back (undo), and off once it is nowhere.
+        // picker.ts: taken off, with a way back (undo), and off once it is nowhere.
         if (Picker?.remove(m.where === 'bar' && entry ? { entry: entry.id, member } : { widget: w })) return
         if (m.where === 'bar' && entry) return Widgets.isGroup(entry) && member >= 0 ? removeMember(entry.id, member) : removeEntry(entry.id)
         // Out of her capsule with no picker to do it: off (put nowhere now).
@@ -317,7 +317,7 @@ export function wmenuPart(core: WmenuCore) {
     const keys = new Set(Object.values(tbLayout()).flatMap(run => run.filter(p => typeof p !== 'string').flatMap(Widgets.membersOf).map(Widgets.memberKey)))
     return keys.has(keyFor(item)) ? 'bar' : 'isle'
   }
-  // For the Plugins page (settings.js): where one is put now, as placing.js
+  // For the Plugins page (settings.ts): where one is put now, as placing.ts
   // whereIs says (the strip, the desktop, a board by its name, her capsule
   // while it is on, or nowhere: null), a plugin's widgets standing on the
   // desktop by themselves counted as it.
@@ -387,7 +387,7 @@ export function wmenuPart(core: WmenuCore) {
       }
     return { layout, off }
   }
-  // Off the taskbar, these (a desktop's board took them, desk.js): the
+  // Off the taskbar, these (a desktop's board took them, desk.ts): the
   // monitor its part. Kept only if any was there.
   function offBar(items) {
     let layout = tbLayout()

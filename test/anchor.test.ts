@@ -11,7 +11,7 @@ test('the side the island is laid out at: where its window was put, at the top o
   assert.equal(A.anchorOf({ home: 'island', at: 'right' }), 'right')
   assert.equal(A.anchorOf({ home: 'island', at: 'center' }), 'center')
   // Nothing said (island.rs not placing it so yet), or anything else: the centre.
-  for (const at of [undefined, null, '', 'centre', 'bottom-left', 1]) assert.equal(A.anchorOf({ home: 'island', at }), 'center', String(at))
+  for (const at of [undefined, null, '', 'centre', 'bottom-left', 1]) assert.equal(A.anchorOf({ home: 'island', at: at as any }), 'center', String(at))
   // On the taskbar, and round a Mac's notch: the centre (the notch's place).
   assert.equal(A.anchorOf({ home: 'taskbar', at: 'left' }), 'center')
   assert.equal(A.anchorOf({ home: 'island', at: 'right', notch: true }), 'center')
@@ -61,7 +61,7 @@ test('the edge the island is laid along: where its window was put, the top unles
   assert.equal(A.edgeAt({ home: 'island', edge: 'bottom' }), 'bottom')
   assert.equal(A.edgeAt({ home: 'island', edge: 'top' }), 'top')
   // Nothing said (an older island.rs), or anything else: the top.
-  for (const edge of [undefined, null, '', 'foot', 'Bottom', 1]) assert.equal(A.edgeAt({ home: 'island', edge }), 'top', String(edge))
+  for (const edge of [undefined, null, '', 'foot', 'Bottom', 1]) assert.equal(A.edgeAt({ home: 'island', edge: edge as any }), 'top', String(edge))
   // On the taskbar (its strip has its own edge), and round a Mac's notch: the top.
   assert.equal(A.edgeAt({ home: 'taskbar', edge: 'bottom' }), 'top')
   assert.equal(A.edgeAt({ home: 'island', edge: 'bottom', notch: true }), 'top')

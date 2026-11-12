@@ -1,8 +1,8 @@
-// Other people's plugins (addons.rs view; addonui.js) and packs (packs.rs):
+// Other people's plugins (addons.rs view; addonui.ts) and packs (packs.rs):
 // each one's row and its own page with what it may do, and the pages under
 // the Plugins page (SUBS).
-// Made by settings.js in the section's place as the page starts
-// (addonsPart(core), imported by settings.js): what it takes of the settings' core
+// Made by settings.ts in the section's place as the page starts
+// (addonsPart(core), imported by settings.ts): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
@@ -61,7 +61,7 @@ export function addonsPart(core: AddonsCore) {
 
   // Its row, among hers (spec §3): its icon, its name (a press opens its
   // page), 未经审核 for one from a file, what its widgets say now; under it
-  // how it is and who made it (addonui.js statusOf); at its end its
+  // how it is and who made it (addonui.ts statusOf); at its end its
   // settings' fold and where it is (or 添加小工具…), as hers have; one not
   // responding, 重新启用 there instead. Installed while the panel is open:
   // an accent edge at its left until it closes.
@@ -159,7 +159,7 @@ export function addonsPart(core: AddonsCore) {
     return (list.length ? list : [{ icon: 'none', text: T('addons.perm.none') }]).map(p => line(PERM_GLYPH[p.icon], p.text)).join('') + line('E72E', T('addons.cannotDo'), true)
   }
 
-  // --- Packs (packs.rs view; addonui.js) ------------------------------------------------------
+  // --- Packs (packs.rs view; addonui.ts) ------------------------------------------------------
   // The pets and wallpapers installed as packs, each by its kind and id.
   const packsNow = () => core.snap?.packs || []
   const packById = (kind, id) => packsNow().find(p => p.kind === kind && p.id === id) || null

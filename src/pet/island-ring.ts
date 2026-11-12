@@ -1,8 +1,8 @@
-// The flow light (flow.js says how): what opened the island by itself, the
+// The flow light (flow.ts says how): what opened the island by itself, the
 // ring turning round the closed capsule in the colour of what happened, held
 // lit, faded, blended into the next; her reactions and the news dot.
-// Made by island.js in the section's place as the page starts
-// (ringPart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (ringPart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -102,7 +102,7 @@ export function ringPart(core: RingCore) {
       core.news.shown = false
       for (const b of core.blends) b.anim.cancel()
       core.blends = []
-      for (const s of spins) s.firstChild.style.background = flowStops(kind)
+      for (const s of spins) (s.firstChild as HTMLElement).style.background = flowStops(kind)
       flow.classList.toggle('glow', Flow.glows(flowLight(), step.ring.still))
       flow.classList.add('on')
       placeFlow()
@@ -155,7 +155,7 @@ export function ringPart(core: RingCore) {
   // Its turning in steps: the one showing now set at once, each after it at
   // its time (a timer for the next alone, so nothing wakes between them),
   // on both squares (the glow's too, when it glows).
-  let stepping = 0
+  let stepping: Timer = 0
   function stopStepping() {
     clearTimeout(stepping)
     stepping = 0
@@ -214,7 +214,7 @@ export function ringPart(core: RingCore) {
     const stops = flowStops(kind)
     for (const b of core.blends) settle(b)
     core.blends = spins.map(s => {
-      const [under, over] = s.children
+      const [under, over] = s.children as HTMLCollectionOf<HTMLElement>
       over.style.background = stops
       const b = { under, stops, anim: over.animate([{ opacity: 0 }, { opacity: 1 }], { duration: stillMotionNow() ? 0 : Flow.BLEND_MS, fill: 'forwards' }) }
       b.anim.onfinish = () => settle(b)

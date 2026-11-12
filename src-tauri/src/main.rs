@@ -1,7 +1,7 @@
 // Wakuwaku: a transparent, frameless, always-on-top desktop pet that shows
 // what Claude Code is doing; its hooks report to a local port. The pages are
 // src/pet (her window and the island's), talking to this side through
-// src/pet/bridge.js.
+// src/pet/bridge.ts.
 //
 // Where she is: her home (display) is the island at the top centre, or a
 // taskbar in place of Windows' own; she is in it, or out on the desktop
@@ -43,8 +43,8 @@
 //   widgets.rs     plugins in the island: widgets from scripts, and the built-in ones
 //   plugins.rs     the plugins she runs for you (weather, stocks, timers, CI, dev servers)
 //   addons.rs      third-party plugins: installed from a zip, run in sandboxed frames of
-//                  the island's page (src/pet/addons.js), their views in the cards
-//                  (src/pet/views.js), served by wakuplugin://
+//                  the island's page (src/pet/addons.ts), their views in the cards
+//                  (src/pet/views.ts), served by wakuplugin://
 //   zip.rs         zips read and unpacked (LHM's download, a plugin's package)
 //   tokens.rs      today's tokens, from Claude Code's, Codex's, Antigravity's, omp's, DSH's and Reasonix's own records
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]

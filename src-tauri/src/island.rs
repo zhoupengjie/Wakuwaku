@@ -1,4 +1,4 @@
-// Her home's window (the page draws it, src/pet/island.js), by display:
+// Her home's window (the page draws it, src/pet/island.ts), by display:
 //   island  a black pill at the top centre, or at a top corner (islandPos,
 //           zhoupengjie/Wakuwaku#59, see fit); or along the foot of the
 //           screen, laid over Windows' own taskbar, which stays as it is
@@ -28,7 +28,7 @@ use crate::appbar::Edge;
 use crate::{appbar, taskbar, Shared};
 use crate::config;
 
-// The window without extra room, by home (island.js BASE): the island as
+// The window without extra room, by home (island.ts BASE): the island as
 // wide as pulling her out needs, so it only ever grows down. A window whose
 // top-left corner moves shows its old picture from there for a frame or two,
 // so these never move it. The page asks for more (pet:panel) when a shape
@@ -38,7 +38,7 @@ const ISLAND: (f64, f64) = (760.0, 132.0);
 // the island at the window's foot, what opens from it growing up into the
 // room above it, as the taskbar's does. So the window is as tall as the
 // taskbar's strip and room together and never grows (growing up would move
-// its top-left corner); the page keeps what opens within it (island.js
+// its top-left corner); the page keeps what opens within it (island.ts
 // openMaxH, settingsMax). Only its width may grow, as at the top.
 const ISLAND_BOTTOM: (f64, f64) = (ISLAND.0, TASKBAR_H + TASKBAR_ROOM);
 // The taskbar's strip (as high as Windows' own, so the Start menu and the
@@ -48,11 +48,11 @@ pub const TASKBAR_H: f64 = 48.0;
 // Split in two (taskbarEdge split): the top bar thinner by default, as a
 // menu bar (splitBar 32; 48 as Windows'), docs/design/specs/dock-topbar.md.
 pub const SLIM_H: f64 = 32.0;
-// As high as the settings ever are (they stand above the strip, island.js
+// As high as the settings ever are (they stand above the strip, island.ts
 // settingsMax): opening them never moves the window, which would flash.
 const TASKBAR_ROOM: f64 = 640.0;
 // Beside a side bar (taskbarEdge left or right): as wide as the settings
-// ever are (the Mail page in two panes, settings-mail.js WIDE_W), their gap off
+// ever are (the Mail page in two panes, settings-mail.ts WIDE_W), their gap off
 // the strip and their shadow, for the same reason.
 const SIDE_ROOM: f64 = 960.0 + 8.0 + 12.0;
 // The middle of her portrait at the taskbar's start (its left end, or a
@@ -131,7 +131,7 @@ pub struct Island {
     strip_told: Option<((i32, i32, i32, i32), Edge, (i32, i32), (i32, i32), f64)>,
     // At the top of the screen, up out of the way of a window under it.
     stow: Stow,
-    // The taskbar's layout being edited (island.js editTaskbar): her menu
+    // The taskbar's layout being edited (island.ts editTaskbar): her menu
     // offers to stop. And where the window takes the mouse whatever the
     // page says of the pointer (solid, page px: x, y, w, h; pointer.rs
     // look): the edit bar (zhoupengjie/Wakuwaku#53), the widget picker, its
@@ -152,7 +152,7 @@ pub struct Island {
     // Her island inside Windows' taskbar (embed.rs; islandEmbed): where its
     // closed capsule lies there (physical; none: no room for it), the room
     // it has (physical px; 0 none: the page keeps its width within it,
-    // anchor.js capsuleWidth), and whether it is in. The window is laid
+    // anchor.ts capsuleWidth), and whether it is in. The window is laid
     // about the capsule, its middle mx (physical px from the window's left;
     // pet:update islandMx) where the page lays the island, and is a child of
     // the taskbar, clipped to the strip, while nothing is open in it and
@@ -216,7 +216,7 @@ impl Side {
 // (embed.rs): its middle on the capsule's, kept on its display (a capsule
 // near the strip's end would have it off the screen); and where the
 // capsule's middle lies in it then (mx, physical px from its left), for the
-// page to lay the island about (island-layout.js placeMid).
+// page to lay the island about (island-layout.ts placeMid).
 fn about(area: &Area, cap: (i32, i32, i32, i32), width: i32) -> (i32, i32) {
     let mid = cap.0 + cap.2 / 2;
     let x = (mid - width / 2).clamp(area.x, (area.x + area.w - width).max(area.x));
@@ -224,7 +224,7 @@ fn about(area: &Area, cap: (i32, i32, i32, i32), width: i32) -> (i32, i32) {
 }
 
 // Her island at the top of the screen, up out of the way of the window
-// under it (look_under, call_look; island-plate.js setStow).
+// under it (look_under, call_look; island-plate.ts setStow).
 #[derive(Default)]
 struct Stow {
     // The closed island's size as the page has it (logical), and whether
@@ -256,7 +256,7 @@ impl Island {
 
     // Over Windows' taskbar (#105), how far in from the window's edge along
     // it (its foot along the bottom, its top along the top) the closed
-    // island lies (the page's px; island.js placeAnchor, anchor.js foot):
+    // island lies (the page's px; island.ts placeAnchor, anchor.ts foot):
     // centred in the taskbar's strip (6 px in Windows 11's 48), or TOP with
     // none there, as down from the top of the screen.
     fn foot(&self) -> f64 {
@@ -758,7 +758,7 @@ pub fn tell_strip(sh: &Shared, again: bool) {
         thick as f64 / sf,
         taskbar::work_area_rect()
     ));
-    // With the window's size: the page may be a little bigger (island.js
+    // With the window's size: the page may be a little bigger (island.ts
     // fitPage, zhoupengjie/Wakuwaku#19).
     let _ = sh.app.emit_to("island", "taskbar:strip", json!({ "thick": thick, "win": [size.0, size.1], "sf": sf }));
 }
@@ -1179,7 +1179,7 @@ fn create(sh: &Arc<Shared>) {
 
 // At the top of the screen, a see-through look (islandTopLook) that
 // Windows' acrylic does not blur (none set under 90 %, or it cannot be:
-// backplate.rs) deepens over a maximized window on her display (island.js
+// backplate.rs) deepens over a maximized window on her display (island.ts
 // setDeep, zhoupengjie/Wakuwaku#27): looked at with the full screen's look
 // (every 1.5 s, or a window to the front), told the page as it changes
 // (island:over-max). Windows' mode with it: the page has it in pet:update
@@ -1211,7 +1211,7 @@ pub fn look_over_max(sh: &Arc<Shared>) {
 // the island took the press. So, unless turned off (islandHideUnder), while
 // a window lies under the closed island the page slides it up out of the
 // way, a sliver left at the screen's edge and every press let through, as
-// long as nothing wants the person (island-plate.js setStow). Here: whether a
+// long as nothing wants the person (island-plate.ts setStow). Here: whether a
 // window lies under it, looked at with the full screen's look (every 1.5 s,
 // at once as the pointer comes near or its size changes); and the pointer
 // calling it back down: resting at the screen's edge over it EDGE_MS with
@@ -1230,7 +1230,7 @@ const LEAVE_MS: u128 = 600;
 // window's top edge, or along the foot of the screen (#105) foot above the
 // window's bottom edge: in the middle of the window's width, or at a
 // corner (zhoupengjie/Wakuwaku#59) TOP in from the window's side there, as
-// the page lays it out (anchor.js, style.css isl-at-left / isl-at-right /
+// the page lays it out (anchor.ts, style.css isl-at-left / isl-at-right /
 // isl-at-bottom); the stowed band and the edge that calls it down
 // (call_look) follow from this. None before the page said its size, or in
 // another home.
@@ -1491,7 +1491,7 @@ fn show_or_hide(sh: &Arc<Shared>) {
     crate::bars::sync(sh);
 }
 
-// --- The handover with Windows' taskbar (handoff.js) ----------------------------------
+// --- The handover with Windows' taskbar (handoff.ts) ----------------------------------
 // Windows' taskbar never gone for a moment. Taking over: a picture of it
 // laid over ours, shown exactly over it, before it is put away; then its
 // picture turns to dust that settles into ours. Quitting: ours turns to
@@ -1789,7 +1789,7 @@ pub(crate) fn valid_scale(scale: Option<f64>) -> Option<f64> {
 // The taskbar's layout being edited, or not any more, and where the window
 // takes the mouse whatever the page says of the pointer (page px): the edit
 // bar while editing; the widget picker, its popover over a widget, her
-// capsule's panel and a toast with 撤销 (picker.js solids) whenever they
+// capsule's panel and a toast with 撤销 (picker.ts solids) whenever they
 // are open, editing or not, on the taskbar and at the top of the screen
 // alike; none, the mouse as ever. Logged as each starts and ends only: the
 // rects come again as they change (the picker opened, a toast gone).
@@ -1815,8 +1815,8 @@ pub fn set_editing(sh: &Shared, on: bool, rects: Vec<[f64; 4]>, page_sf: Option<
 // The page's zoom (its webview's): in the taskbar home, Windows' text size
 // taken back out of its scale, the strip as Windows' own is whatever the text
 // size; 1 elsewhere. The taskbar is laid out at 48 of the page's px, as thick
-// as Windows' (TASKBAR_H, island.js the same), the strip as thick as Windows
-// gives it (island.js --strip-h): with the text at 110% the page's px were
+// as Windows' (TASKBAR_H, island.ts the same), the strip as thick as Windows
+// gives it (island.ts --strip-h): with the text at 110% the page's px were
 // 1.65 of the screen's at 150%, the strip 43.6 of them, her end 48 of them
 // laid on its foot, up over its top, the flow light's ring past it
 // (zhoupengjie/Wakuwaku#90); bigger text sizes, more. The text size is what
@@ -2086,7 +2086,7 @@ pub fn show_asks(sh: &Arc<Shared>) {
     let _ = sh.app.emit_to("island", "island:look-here", json!({}));
 }
 
-// Something opened up from her taskbar's strip (island.js openedUp): the
+// Something opened up from her taskbar's strip (island.ts openedUp): the
 // island, a program's windows, a flyout. Her window is kept on top, but a
 // window can lie over it all the same: one kept on top itself that came to
 // the front after hers, or hers no longer kept on top. A maximized window
@@ -2166,7 +2166,7 @@ pub fn asks_answered(sh: &Arc<Shared>) {
     }
 }
 
-// The settings' two buttons by ✕ (settings.js): locked ("settingsPin"), a
+// The settings' two buttons by ✕ (settings.ts): locked ("settingsPin"), a
 // click outside does not close them, and other windows come over them as
 // over any window (hers kept on top only while they are not open); on top
 // as well ("settingsTop"), they stay over every window, another program's

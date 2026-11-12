@@ -1,4 +1,4 @@
-/* Her taskbar on another display (bar.js): as the main one looks (style.css
+/* Her taskbar on another display (bar.ts): as the main one looks (style.css
    #bar-rest), Start and the programs centred or at the start, the clock and
    the desktop's sliver at the end; along a side, in a column. */
 html,
@@ -22,14 +22,14 @@ body {
   padding: 0 0 0 4px;
   /* Its own layer, the glide (.hdrop) under its buttons and over its ground. */
   isolation: isolate;
-  /* Clear filling in as solid, and back (bar.js ground), a short fade as hers. */
+  /* Clear filling in as solid, and back (bar.ts ground), a short fade as hers. */
   transition:
     background-color 0.3s ease,
     box-shadow 0.3s ease;
 }
 
 /* The ground, by material: black (the line along its inner edge), Mica
-   (this display's wallpaper blurred and tinted, mica.js, under the strip's
+   (this display's wallpaper blurred and tinted, mica.ts, under the strip's
    parts; Mica's own tint until it comes), or none (clear: the words haloed
    so they read on any desktop). */
 .b-black #bar {
@@ -61,7 +61,7 @@ body {
   background: #f3f3f3;
 }
 
-/* Clear, filling in as Mica (bar.js clearMica): its layer there all along,
+/* Clear, filling in as Mica (bar.ts clearMica): its layer there all along,
    unseen, faded in while a window fills this display (b-mica) and out after,
    as hers (style.css tb-clear-mica). */
 .b-clear-mica #mica {
@@ -128,9 +128,9 @@ body {
   justify-content: flex-start;
 }
 
-/* Centred on the whole strip, as the main one's are (island-layout.js alignApps),
+/* Centred on the whole strip, as the main one's are (island-layout.ts alignApps),
    not on what the clock leaves: as much room before them as the clock and
-   the sliver take after (bar.js, --end-w, --end-h). */
+   the sliver take after (bar.ts, --end-w, --end-h). */
 #lead {
   flex: none;
   width: var(--end-w, 0px);
@@ -149,7 +149,7 @@ body {
 }
 
 /* The buttons' row as thick as the strip, their middles where they were:
-   going up from a button to its list (barpop.js, its window against the
+   going up from a button to its list (barpop.ts, its window against the
    strip), the pointer is on the row until it is on the list
    (zhoupengjie/Wakuwaku#56). */
 #apps,
@@ -192,7 +192,7 @@ body {
   stop-color: #0179d4;
 }
 
-/* Task View, after Start (bar.js taskView): Windows' own pictures, the one
+/* Task View, after Start (bar.ts taskView): Windows' own pictures, the one
    for a light strip on a light one, else its icon font's glyph; as the
    main taskbar's (style.css #bar-rest .tview). */
 .tview {
@@ -246,7 +246,7 @@ body {
 }
 
 /* The one in front: a light wash, as on the main one; under the pointer,
-   the glide (.hdrop, bar.js glideTo), which slides from one button to the
+   the glide (.hdrop, bar.ts glideTo), which slides from one button to the
    next. */
 .win.front {
   background: rgba(255, 255, 255, 0.17);
@@ -299,7 +299,7 @@ body {
 
 /* Running: a dash under it, stretched into a longer pill in the accent
    for the one in front, springing to each as Windows 11's does; grown in
-   from nothing as it starts (fresh, bar.js drawWindows), gone into nothing
+   from nothing as it starts (fresh, bar.ts drawWindows), gone into nothing
    as it ends. */
 .win::after {
   content: '';
@@ -334,13 +334,13 @@ body {
   opacity: 0;
 }
 
-/* A program's button shrinking away (bar.js drawWindows): nothing to press. */
+/* A program's button shrinking away (bar.ts drawWindows): nothing to press. */
 .win.leaving {
   pointer-events: none;
 }
 
 /* Pressed in under the pointer, springing back as it is let go
-   (presses.js pressIn), as Windows 11's buttons are. */
+   (presses.ts pressIn), as Windows 11's buttons are. */
 .start svg,
 .tview img,
 .tview .tv-glyph,
@@ -482,7 +482,7 @@ body {
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.12);
 }
 
-/* --- Her capsule while a prompt waits (bar.js drawHer) ------------------------------
+/* --- Her capsule while a prompt waits (bar.ts drawHer) ------------------------------
    Where hers is on the main strip, at its start (6 px in, 5 px off its foot):
    her portrait ringed in the waiting colour, then the words and a small ›,
    all in it; its ground, blur and edge her island's (--h-bg, --h-blur,
@@ -642,18 +642,18 @@ body {
   }
 }
 
-/* --- The dock (split: bar.js isDock; docs/design/specs/dock-topbar.md §4) ------------
+/* --- The dock (split: bar.ts isDock; docs/design/specs/dock-topbar.md §4) ------------
    Its window a band along the foot (48 high: bars.rs dock_band), never
    moved nor sized while it is up; in its middle Start and the programs in a
    piece of glass (#bar: 44 high, 2 px off the foot, as wide as what is in
    it), its ground and its edge a layer of their own under them (#glass, as
-   wide as bar.js drawGlass says, over where its plate may still be).
+   wide as bar.ts drawGlass says, over where its plate may still be).
    Windows' acrylic on a plate under it where it settles (b-acrylic,
    backplate.rs DOCK): what is behind it, the windows too, blurred through a
    tint; while it grows or shrinks, the glass beyond the plate as solid as it
    is not there (b-firm), back as it settles; without it (transparency
-   effects off) the desktop's picture as the strip's Mica (mica.js, the whole
-   band's, cut to the same: bar.js drawGlass); or solid. Its corners DWM's
+   effects off) the desktop's picture as the strip's Mica (mica.ts, the whole
+   band's, cut to the same: bar.ts drawGlass); or solid. Its corners DWM's
    round ones (8 px); a hairline round it and a light along its top. Out of
    the way, it slides down but for its top 3 px (b-down). No show-the-desktop
    sliver, no lead; the clock and quick settings after a line only if set so
@@ -717,7 +717,7 @@ body {
 
 /* The ground where the plate is not (b-firm): as solid as Windows' acrylic
    looks, but for the hole over the plate (--hole-l, --hole-r: from this
-   layer's left, bar.js drawGlass); none, solid all over (sliding, down).
+   layer's left, bar.ts drawGlass); none, solid all over (sliding, down).
    Faded out as it settles, at once in as it moves. */
 .b-dock #glass::before {
   --firm: rgba(36, 36, 36, 0.86);
@@ -747,7 +747,7 @@ body {
   display: none;
 }
 
-/* The whole band's picture, cut to where the glass settles (bar.js drawGlass). */
+/* The whole band's picture, cut to where the glass settles (bar.ts drawGlass). */
 .b-dock #mica {
   inset: 0;
 }

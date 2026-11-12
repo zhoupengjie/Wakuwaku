@@ -25,7 +25,7 @@ test('every key the code uses is there', () => {
     }
   }
   walk(root)
-  const used = new Set()
+  const used = new Set<string>()
   for (const file of files) {
     const text = fs.readFileSync(file, 'utf8')
     for (const m of text.matchAll(/(?:\bt\(\s*\w+,\s*|\bT\(\s*|key:\s*)'([a-z]+\.[A-Za-z]+)'/g)) used.add(m[1])

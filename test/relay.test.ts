@@ -6,7 +6,7 @@ import path from 'node:path'
 import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 
-const load = () => import(pathToFileURL(path.join(import.meta.dirname, '..', 'relay', 'relay.js')))
+const load = () => import(pathToFileURL(path.join(import.meta.dirname, '..', 'relay', 'relay.js')).href)
 
 const REPORT = {
   v: 1,
@@ -57,7 +57,7 @@ function fakeForge() {
   }
 }
 
-const post = (body, ip = '203.0.113.9', headers = { 'x-wakuwaku': '1' }) => ({ method: 'POST', path: '/report', ip, header: n => headers[n], body: typeof body === 'string' ? body : JSON.stringify(body) })
+const post = (body, ip = '203.0.113.9', headers: Record<string, string> = { 'x-wakuwaku': '1' }) => ({ method: 'POST', path: '/report', ip, header: n => headers[n], body: typeof body === 'string' ? body : JSON.stringify(body) })
 
 test('a report is checked field by field, and nothing else taken', async () => {
   const { check } = await load()
@@ -216,7 +216,7 @@ test('a GitHub App signs its JWT with the key GitHub gives (PKCS#1)', async () =
 test('GitHub and Gitee are asked as each wants', async () => {
   const { github, gitee } = await load()
   const asked = []
-  const fetcher = async (url, init = {}) => {
+  const fetcher = async (url, init: { method?: string, headers?: Record<string, string>, body?: string } = {}) => {
     asked.push({ url, method: init.method || 'GET', headers: init.headers, body: init.body && JSON.parse(init.body) })
     return { ok: true, status: 201, json: async () => ({ number: 7, html_url: 'u', state: 'open', body: '' }), text: async () => '' }
   }

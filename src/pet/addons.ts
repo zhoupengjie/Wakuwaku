@@ -2,7 +2,7 @@
 // rest; docs/PLUGINS.md is the contract). One hidden <iframe
 // sandbox="allow-scripts"> for each plugin she says to run (addons_running,
 // then addons:changed), at its own first page (__waku/main.html, whose SDK,
-// src/addon/sdk.js, loads its main). A plugin is known here by its frame
+// src/addon/sdk.ts, loads its main). A plugin is known here by its frame
 // alone: a message counts as one plugin's only when it comes from that
 // frame's window (event.source), whatever it says it is, and what it asks
 // is asked of her in that plugin's name. Its settings, her language, her
@@ -10,7 +10,7 @@
 // agents' sessions (from what the page already hears) and the hardware's
 // readings only to one whose manifest asks for them, and only once it
 // listens; its view's messages (addons:view, from a card's frame on the
-// desktop or in the capsule: views.js) as they come. A widget's words go at
+// desktop or in the capsule: views.ts) as they come. A widget's words go at
 // most once a second, a few requests at once, a few log lines a minute.
 //
 // The watchdog (docs/design/specs/plugins.md §8), while any runs: each frame
@@ -107,7 +107,21 @@ function agentsOf(list) {
 // drop(rec) takes one away; post(win, message); log(line); now(); the
 // timers; views(on), the cards' views of this page taken away or back
 // (the desktop's are told by her: invoke views).
-function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout, views = () => {}, rand = Math.random }) {
+// Those deps as createHost takes them; a frame's el and win are the page's
+// iframe and its window, or a test's stand-ins.
+interface HostDeps {
+  invoke: (cmd: string, args?: any) => Promise<any>
+  make: (id: string, src: string) => { el: any; win: any }
+  drop: (rec: any) => void
+  post: (win: any, message: any) => void
+  log?: (line: string) => void
+  now?: () => number
+  setTimer?: (fn: () => void, ms: number) => any
+  clearTimer?: (timer: any) => void
+  views?: (on: boolean) => void
+  rand?: () => number
+}
+function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout, views = () => {}, rand = Math.random }: HostDeps) {
   const recs = new Map()
   const bySource = new Map()
   // Kept stopped (given up on), by id: its rev then, until she sends it changed.
@@ -198,7 +212,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
   }
 
   // Her language, theme, quiet as they are now: those changed told.
-  function setEnv(patch = {}) {
+  function setEnv(patch: { lang?: string; theme?: string; quiet?: boolean } = {}) {
     const changed = []
     for (const key of ['lang', 'theme', 'quiet']) {
       if (!(key in patch) || patch[key] === undefined) continue
@@ -702,7 +716,7 @@ function boot() {
       } catch {}
     },
     log: line => console.log(line),
-    // The capsule's card's view (views.js, this page's), taken away a while.
+    // The capsule's card's view (views.ts, this page's), taken away a while.
     views: on => Island?.views?.pause(!on),
   })
   window.addEventListener('message', e => host.receive(e.source, e.data))

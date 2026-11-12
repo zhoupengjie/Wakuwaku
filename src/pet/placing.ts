@@ -1,9 +1,11 @@
-// Putting widgets in places from the picker (picker.js), as plain data for
+// Putting widgets in places from the picker (picker.ts), as plain data for
 // the tests: where on the taskbar's strip one goes, whether the strip has
 // room for it, how one taken off is put back (undo), and which widgets and
 // plugins are on (placed is on: put somewhere, it runs; taken from its last
 // place, it stops; no switch of its own, the Plugins page has none since
 // 2026-10-17), and where one is for that page.
+import type { Config } from '../shared/config.ts'
+
 const RUNS = ['left', 'center', 'right']
 const keyOf = item => (item.plugin ? `plugin:${item.plugin}` : `widget:${item.id}`)
 const itemOf = key => (key.startsWith('plugin:') ? { plugin: key.slice(7) } : { id: key.slice(key.indexOf(':') + 1) })
@@ -121,7 +123,7 @@ function placedKeys({ taskbar = null, desk = [], home = 'taskbar' } = {}) {
 
 // The settings that turn one on or off: a plugin by its own (plugins[id].on),
 // a widget by widgetsOff (shared.rs is_widget_on). null: already so.
-function switchPatch(config = {}, key, on) {
+function switchPatch(config: Config = {}, key, on) {
   const item = itemOf(key)
   if (item.plugin) {
     const plugins = config.plugins && typeof config.plugins === 'object' ? config.plugins : {}
@@ -134,9 +136,9 @@ function switchPatch(config = {}, key, on) {
 }
 
 // Several of those, one patch (plugins merged).
-function switchesPatch(config = {}, keys, on) {
+function switchesPatch(config: Config = {}, keys, on) {
   let c = { ...config }
-  const patch = {}
+  const patch: Config = {}
   for (const key of keys) {
     const p = switchPatch(c, key, on)
     if (!p) continue
@@ -149,7 +151,7 @@ function switchesPatch(config = {}, keys, on) {
 // Those put on the strip or the desktop and off, turned on (a switch of
 // before turned one off where it stood: its desktop copy said nothing
 // since). null: none.
-const placedOnPatch = (config = {}, where = {}) => switchesPatch(config, [...placedKeys(where)], true)
+const placedOnPatch = (config: Config = {}, where = {}) => switchesPatch(config, [...placedKeys(where)], true)
 
 // --- Where one is (the Plugins page) -------------------------------------------------
 // Where a widget or plugin is put, by its keys (its own, and a plugin's

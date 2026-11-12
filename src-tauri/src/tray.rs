@@ -26,7 +26,7 @@ fn face(mood: &str) -> &'static [u8] {
 }
 
 // Where the menu opens: the tray icon, her, her home's window, or the dock
-// (split: off its programs, bar.js).
+// (split: off its programs, bar.ts).
 #[derive(Clone, Copy, PartialEq)]
 pub enum Over {
     Tray,
@@ -57,7 +57,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
         menu.append(&PredefinedMenuItem::separator(app)?)?;
     }
 
-    // The widgets (picker.js): 添加小工具… opens the picker, with the taskbar's
+    // The widgets (picker.ts): 添加小工具… opens the picker, with the taskbar's
     // layout being edited while the taskbar is her home; 编辑胶囊 (her island
     // at the top of the screen) her capsule's panel. Greyed while her island
     // is not up to show them (she hidden, do not disturb).
@@ -206,21 +206,21 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
         "out" => crate::shared::set_out(sh, !sh.flag(config::OUT)),
         "corner" => crate::shared::come_home(sh),
         "settings" => crate::island::open_settings(sh, None),
-        // The taskbar's parts dragged about, on the strip itself (island.js).
+        // The taskbar's parts dragged about, on the strip itself (island.ts).
         "editTaskbar" => {
             let _ = sh.app.emit_to("island", "taskbar:edit", ());
         }
         // Out of editing it, as its 完成: what was changed is kept as it
-        // went (picker.js), there is no 取消; the picker and the panels close.
+        // went (picker.ts), there is no 取消; the picker and the panels close.
         "endEdit" => {
             let _ = sh.app.emit_to("island", "taskbar:edit", json!({ "end": true }));
         }
-        // The picker (picker.js fromMenu): on the taskbar with its layout
+        // The picker (picker.ts fromMenu): on the taskbar with its layout
         // being edited, at the top of the screen on its own.
         "addWidgets" => {
             let _ = if sh.home() == "taskbar" { sh.app.emit_to("island", "taskbar:edit", json!({ "picker": true })) } else { sh.app.emit_to("island", "island:picker", json!({ "open": "picker" })) };
         }
-        // Her capsule's panel (capsule-panel.js): its members, their order
+        // Her capsule's panel (capsule-panel.ts): its members, their order
         // and how each shows there.
         "editCapsule" => {
             let _ = sh.app.emit_to("island", "island:picker", json!({ "open": "capsule" }));
@@ -281,7 +281,7 @@ pub fn create(sh: &Shared) -> tauri::Result<()> {
                 } else if cfg!(target_os = "macos") && sh.home() == "island" && !sh.flag(config::OUT) {
                     // On a Mac the notch is another app's to hover (Atoll and
                     // the like): her island stays in it, and this drops it
-                    // open, or puts it back (island.js peek).
+                    // open, or puts it back (island.ts peek).
                     let _ = sh.app.emit_to("island", "island:peek", ());
                 } else {
                     sh.set_hidden(sh.is_visible());

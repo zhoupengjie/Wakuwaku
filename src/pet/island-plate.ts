@@ -1,8 +1,8 @@
 // Behind the island and under it: Windows' blur put under the open island
 // (backplate.rs), or a deeper ground of its own; and the island out of the
 // way of the window under it (zhoupengjie/Wakuwaku#49), its size told.
-// Made by island.js in the section's place as the page starts
-// (platePart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (platePart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -84,7 +84,7 @@ export function platePart(core: PlateCore) {
 
   // Where the island will lie at its new size, from where it lies: at the
   // top of the screen from its top, about its middle (at a corner, from its
-  // side there: anchor.js; along the foot of the screen from its foot); on
+  // side there: anchor.ts; along the foot of the screen from its foot); on
   // the taskbar from the strip's edge it grows from, at her end's side
   // (isl-right, isl-low).
   function rectAt(r, width, height) {
@@ -182,7 +182,7 @@ export function platePart(core: PlateCore) {
   // over DEEP_MS (at once as it opens), and back as it closes or the window
   // is no longer maximized.
   const overMax = () => (home() === 'taskbar' ? core.taskWindows.some(a => (a.windows || []).some(w => w.max && !w.min)) : overMaxTop)
-  pet.onOverMax(({ on } = {}) => {
+  pet.onOverMax(({ on }: { on?: boolean } = {}) => {
     overMaxTop = on === true
     if (isOn()) setDeep(true)
   })
@@ -244,11 +244,11 @@ export function platePart(core: PlateCore) {
     if (on !== was) placePlate(!on)
   }
 
-  pet.onUnder(({ on } = {}) => {
+  pet.onUnder(({ on }: { on?: boolean } = {}) => {
     underTop = on === true
     setStow()
   })
-  pet.onCalled(({ on } = {}) => {
+  pet.onCalled(({ on }: { on?: boolean } = {}) => {
     calledDown = on === true
     setStow()
   })

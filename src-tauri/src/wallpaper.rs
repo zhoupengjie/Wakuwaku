@@ -1,5 +1,5 @@
 // The desktop's picture on a display, for the taskbar's Mica (taskbar/
-// sends it, mica.js draws it): which file Windows shows there, how it lays
+// sends it, mica.ts draws it): which file Windows shows there, how it lays
 // it on the display (fill, fit, stretch, center, tile, or one picture across
 // all of them), and the colour round it. Asked of Windows' own
 // IDesktopWallpaper, which knows each display's (they may differ) and the

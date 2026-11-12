@@ -53,3 +53,24 @@ test('no page script declares a function twice in one scope', () => {
     assert.deepEqual(twins(fs.readFileSync(path.join(import.meta.dirname, '..', file), 'utf8')), [], file)
   }
 })
+
+// The page scripts reach each other by import (pages.ts for the big ones'
+// faces, bridge.ts for pet), never through window: what is put there
+// (pages.ts provide, bridge.ts) is for what looks in from outside alone,
+// the preview and /debug/eval. Only Tauri's and the browser's own are read
+// on window.
+test('no page script reaches another through window', () => {
+  const ours = ['pet', 'Island', 'Isle', 'Settings', 'Picker', 'CapsulePanel', 'HerTalk', 'Desk', 'Panel', 'I18n', 'Flow', 'Widgets', 'WCards', 'WDesk', 'DeskGrid', 'Capsule', 'Placing', 'Presses', 'Sprite', 'Status', 'Views', 'Agents', 'AddonUI', 'Addons', 'Anchor', 'Aim', 'Hovers', 'Mica', 'IslandParts', 'SettingsParts']
+  const read = new RegExp(String.raw`\bwindow\??\.(${ours.join('|')})\b`)
+  assert.ok(read.test('if (window.Island?.isOn()) x()') && read.test('window?.pet.menu()') && !read.test('window.addEventListener(') && !read.test('window.Islands'), 'the check itself')
+  const found = []
+  for (const file of scripts) {
+    fs.readFileSync(path.join(import.meta.dirname, '..', file), 'utf8')
+      .split(/\r?\n/)
+      .forEach((line, i) => {
+        const code = line.replace(/\/\/.*$/, '')
+        if (read.test(code)) found.push(`${file}:${i + 1}: ${line.trim()}`)
+      })
+  }
+  assert.deepEqual(found, [])
+})

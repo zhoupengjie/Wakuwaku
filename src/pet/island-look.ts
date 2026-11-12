@@ -1,8 +1,8 @@
-// The taskbar's look: its Mica (the desktop's picture under it, mica.js),
+// The taskbar's look: its Mica (the desktop's picture under it, mica.ts),
 // light or dark and Windows' accent, the ink of its words on what is under
 // them; the clock, the tray drawn and opened, the peek at the desktop.
-// Made by island.js in the section's place as the page starts
-// (lookPart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (lookPart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -20,7 +20,7 @@ export function lookPart(core: LookCore) {
   } = core
 
   // Behind the strip's parts: the desktop's picture under it, blurred and
-  // tinted (mica.js) for Windows' mode, as taskbar/ sent it last; drawn
+  // tinted (mica.ts) for Windows' mode, as taskbar/ sent it last; drawn
   // again only when the picture, the mode or the strip's width changes. None
   // on a solid strip. On a clear one (tb-clear) it is drawn too, unseen, if
   // the strip is to fill in as Mica (tb-clear-mica): it fades in at once
@@ -61,7 +61,7 @@ export function lookPart(core: LookCore) {
   }
   // Her tray icon toggles it; a double-click on her only opens it ({ open }).
   pet.onPeek(p => setPeek(p?.open === true ? true : !core.peek))
-  pet.onTop(({ height, notch } = {}) => {
+  pet.onTop(({ height, notch }: { height?: number; notch?: number } = {}) => {
     const next = height > 0 ? { height, notch: notch > 0 ? notch : 0 } : null
     if (JSON.stringify(next) === JSON.stringify(core.screenTop)) return
     core.screenTop = next
@@ -88,7 +88,7 @@ export function lookPart(core: LookCore) {
     root.style.setProperty('--page-cut-x', `${winPx ? over(r.width, winPx[0]) : 0}px`)
     root.style.setProperty('--page-cut-y', `${winPx ? over(r.height, winPx[1]) : 0}px`)
   }
-  pet.onStrip(({ thick, win, sf } = {}) => {
+  pet.onStrip(({ thick, win, sf }: { thick?: number; win?: number[]; sf?: number } = {}) => {
     if (!(thick > 0)) return
     stripThick = thick
     if (Number.isFinite(sf) && sf > 0) core.stripScale = sf
@@ -152,7 +152,7 @@ export function lookPart(core: LookCore) {
 
   // Each of the strip's parts its own words (style.css ink-light), and
   // Windows' accent in their shade (--strip-accent), by the desktop right
-  // under it on the clear strip (mica.js inkOn): the clock over a dark
+  // under it on the clear strip (mica.ts inkOn): the clock over a dark
   // corner of a picture light in the middle keeps light words, the
   // programs' buttons over the light middle dark ones. Elsewhere, or while
   // it is not known, all as the strip's (isStripLight). Done again once
@@ -260,7 +260,7 @@ export function lookPart(core: LookCore) {
     if (edge) island.style.setProperty('--i-edge', edge)
     else island.style.removeProperty('--i-edge')
     // Bare unless said otherwise in the dark mode (the default since
-    // 2026-10-13, settings-look.js ILOOK_DEFAULT), not in the light.
+    // 2026-10-13, settings-look.ts ILOOK_DEFAULT), not in the light.
     body.classList.toggle('island-bare', isCapsule() && (mine.bare ?? core.look.mode === 'dark') === true)
     core.groundLight = bg === null ? null : lightness(bg) > 0.35
     setInk()
@@ -300,7 +300,7 @@ export function lookPart(core: LookCore) {
   // own words (drawMica), for what is drawn on it: the line under the window
   // in front, a program's count, the privacy marks, where a dragged button
   // lands; on each part, by its own (inkParts). Their own blue until it
-  // comes. Not --accent: that is her mood's colour (pet.js).
+  // comes. Not --accent: that is her mood's colour (pet.ts).
   function setAccent(name, colour, on = document.documentElement) {
     if (colour) on.style.setProperty(name, colour)
     else on.style.removeProperty(name)
@@ -354,7 +354,7 @@ export function lookPart(core: LookCore) {
   // anew at each second's start then, else every five seconds. Its digits
   // as wide as each other (style.css .tclock), so the tray beside it keeps
   // still as they change.
-  let clockTick = 0
+  let clockTick: Timer = 0
   function tickClock() {
     const d = new Date()
     const time = d.toLocaleTimeString(core.lang === 'zh' ? 'zh-CN' : undefined, { hour: '2-digit', minute: '2-digit', second: core.look.seconds ? '2-digit' : undefined })

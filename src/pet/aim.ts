@@ -5,9 +5,9 @@
 // neighbouring buttons: the list changed at once to whichever button it
 // crossed. Now it changes only once the pointer has been on the other
 // button as long as Windows' own taskbar waits, and not while it is on its
-// way into the list (the menus' "safe triangle"). Loaded by the main
-// taskbar's page (island.js) and the other displays' (bar.js), and
-// required by the tests.
+// way into the list (the menus' "safe triangle"). Imported by the main
+// taskbar's page (island.ts) and the other displays' (bar.ts), and by the
+// tests.
 //
 // Windows 11's own taskbar, measured in the test VM (26300, a 2560 x 1440
 // display at 125%, its taskbar at the bottom, 2026-10-16; SendInput moves,
@@ -23,7 +23,7 @@
 // - between the button and the list it stayed, however long (its room
 //   reaches down to the strip: style.css, barpop.css);
 // - gone from both, it went 0.45 to 0.48 s later, its fade counted:
-//   CLOSE_MS (island.js, barpop.js).
+//   CLOSE_MS (island.ts, barpop.ts).
 const OPEN_MS = 500
 const SWITCH_MS = 225
 const CLOSE_MS = 400

@@ -1,5 +1,5 @@
 // The input method in front as Windows' own taskbar knows it, for the
-// taskbar's input-method mark (island.js): which one it is (微软拼音 or
+// taskbar's input-method mark (island.ts): which one it is (微软拼音 or
 // 搜狗拼音, its language, its own icon), its mode as Windows' taskbar draws it
 // (a glyph of Windows' own, 中 or 英, for Microsoft's input methods; the input
 // method's own picture for one such as Sogou's), and the input methods to

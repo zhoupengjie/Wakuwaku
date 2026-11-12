@@ -10,7 +10,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8')
 
 // A settings snapshot as settings.rs makes one: every agent on this
 // computer and not connected, unless changed.
-function snapshot(change = {}) {
+function snapshot(change: Record<string, any> = {}) {
   const block = (status, extra = {}) => ({ hooks: status, file: 'C:\\Users\\me\\x', fileShown: '~\\x', backup: false, seen: false, ...extra })
   // Claude Code's given as before, by itself (connection, hooks,
   // claudeSeen, claudeHere), the others' by their ids: all into agents.
@@ -44,7 +44,7 @@ const absent = { codex: { hooks: 'absent' }, agy: { hooks: 'absent' }, opencode:
 test('each agent in the table is whole, and its words are there in both languages', () => {
   const bridge = read('src/pet/bridge.ts')
   const sites = read('src-tauri/src/settings.rs')
-  const keys = new Set()
+  const keys = new Set<string>()
   // Each written or removed through the bridge's one call, by its id.
   assert.match(bridge, /\n\s+agent: \(id, action\) => invoke\('settings_agent', \{ agent: id, action \}\)/)
   assert.equal(Agents.TABLE.length, 8)
@@ -128,8 +128,8 @@ test('found here or not', () => {
 })
 
 test('how each stands, and its one button', () => {
-  const state = (change, id, known) => Agents.stateOf(snapshot(change), id, known)
-  const action = (change, id, known) => Agents.actionOf(snapshot(change), id, known)
+  const state = (change, id, known?) => Agents.stateOf(snapshot(change), id, known)
+  const action = (change, id, known?) => Agents.actionOf(snapshot(change), id, known)
   // Not connected: Connect.
   assert.equal(state({}, 'codex'), 'none')
   assert.deepEqual(action({}, 'codex'), { act: 'install', label: 'ag.do.install' })

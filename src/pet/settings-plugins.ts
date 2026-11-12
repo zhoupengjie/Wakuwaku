@@ -1,8 +1,8 @@
 // The Plugins page: the built-in ones, those she runs and other people's,
 // where each is placed; and the monitor's settings folded out under it (its
 // sensors: Windows' own, the CPU helper, or LibreHardwareMonitor).
-// Made by settings.js in the section's place as the page starts
-// (pluginsPart(core), imported by settings.js): what it takes of the settings' core
+// Made by settings.ts in the section's place as the page starts
+// (pluginsPart(core), imported by settings.ts): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
@@ -248,7 +248,7 @@ export function pluginsPart(core: PluginsCore) {
   // Plugins: built in, run by her, or anyone's script, none with a switch
   // (the user's call of 2026-10-17: a switch both started one and hid it
   // from her capsule, its desktop copy stopped with it; placed is on now,
-  // picker.js). Each says how it is and where it is put, or, put nowhere,
+  // picker.ts). Each says how it is and where it is put, or, put nowhere,
   // offers 添加小工具…; its settings folded under it. Then how they take
   // turns, whether they may open the island, whether the market's update
   // by themselves, installing one from a file, and how to write one. At the

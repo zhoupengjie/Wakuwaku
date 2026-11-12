@@ -1,7 +1,7 @@
 // A session in words, for her bubble, the island and the settings: what it
 // is called, where it is (the step it is on, how far down its to-do list,
-// for how long) and how its turn ended. Loaded by the page before pet.js,
-// and required by the tests.
+// for how long) and how its turn ended. Imported by the pages and the
+// tests.
 //
 // A session is what state.rs view() makes of one:
 //   { id, project, mood, detail, since, took, name, step, stepSince, todo,
@@ -49,8 +49,16 @@ function stepOf(lang, s, { now = Date.now(), withClock = true } = {}) {
   return parts.join(' · ')
 }
 
+// How a line is said: with its specifics or not, at what time, with the
+// step's clock or without (status's and brief's opts).
+interface SayOpts {
+  detailed?: boolean
+  now?: number
+  withClock?: boolean
+}
+
 // Where it is, in a line. opts: { detailed, now, withClock }.
-function status(lang, s, opts = {}) {
+function status(lang, s, opts: SayOpts = {}) {
   const detailed = opts.detailed !== false
   switch (s.mood) {
     case 'working':
@@ -68,7 +76,7 @@ function status(lang, s, opts = {}) {
 }
 
 // The compact island's few words: where a busy one is, whose an ending is.
-function brief(lang, s, opts = {}) {
+function brief(lang, s, opts: SayOpts = {}) {
   if (!s.mood || s.mood === 'idle') return ''
   if (opts.detailed === false) return [s.project, t(lang, `island.${s.mood}`)].filter(Boolean).join(' · ')
   if (isBusy(s)) return status(lang, s, { ...opts, withClock: false })
@@ -81,7 +89,7 @@ const othersOf = (list, shown) => (list || []).filter(x => x.id !== shown.id && 
 // The one of them that most wants you, if one does.
 const urgentOf = (list, shown) => othersOf(list, shown).find(x => x.mood === 'waiting' || x.mood === 'error')
 
-// What she says over her head out on the desktop (pet.js), as the closed
+// What she says over her head out on the desktop (pet.ts), as the closed
 // island would: nothing at rest; a busy one what it is doing and for how
 // long; an ending how it went, how long it took and (with the specifics)
 // Claude's last words. { mood, name, what, clock, reply, others }, or null.

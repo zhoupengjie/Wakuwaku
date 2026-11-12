@@ -1,7 +1,7 @@
 // The desktop's widgets as a layout (the widget design of 2026-10-16, §3,
 // §7, §10): where each one stands on a display's grid, which display shows
 // it, several stacked into one, and boards holding several as tiles. Plain
-// data in, plain data out, for desk.js to draw and the tests to try; desk.rs
+// data in, plain data out, for desk.ts to draw and the tests to try; desk.rs
 // keeps the layout (deskLayout) and settings.rs checks it the same way
 // (isEntry).
 //
@@ -12,7 +12,7 @@
 // An entry: { id, type: 'widget' | 'plugin', of, size: 's' | 'm' | 'l',
 // name?, icon?, d?, at? } alone, or { id, type: 'stack', items, size, d?,
 // at? } several in one, 2 to 8, each { type, of, name?, icon? } as the
-// taskbar's groups have them (widgets.js isMember), or { id, type: 'board',
+// taskbar's groups have them (widgets.ts isMember), or { id, type: 'board',
 // name?, items, folded?, d?, at? } a board (工作台), 0 to 16 tiles, each a
 // member with its { size, at: [col, row] } on the board's own grid of 8
 // columns and 2 to 4 rows. d: the display it is on (desk.rs key_of); at:
@@ -31,6 +31,17 @@ const MAX_ENTRIES = 32
 const MAX_MEMBERS = 8
 const MAX_AT = 8
 
+// A cell on a grid, [col, row]: a display's, or a board's own, as found
+// here. One given may be any array of the two (the layout's, from JSON).
+type Cell = [number, number]
+// A display's grid (gridOf): its first cell's corner (px), cells across and down.
+interface Grid {
+  x0: number
+  y0: number
+  cols: number
+  rows: number
+}
+
 const cellsOf = size => SIZES[size] || SIZES.s
 const pxOf = n => n * PITCH - GAP
 // A size ('s', 'm', 'l') or a box ({ w, h } in px, a board's): the cells
@@ -43,23 +54,23 @@ const sizePx = size => (isBox(size) ? { w: size.w, h: size.h } : { w: pxOf(cells
 // A display's grid from its work area [x, y, w, h] (the window's CSS px):
 // its first cell 24 px in, as many whole cells as fit with 24 px to spare
 // at the far side too.
-function gridOf(work) {
+function gridOf(work): Grid {
   const [x, y, w, h] = Array.isArray(work) && work.length === 4 ? work : [0, 0, 0, 0]
   const fit = n => Math.max(0, Math.floor((n - 2 * EDGE + GAP) / PITCH))
   return { x0: x + EDGE, y0: y + EDGE, cols: fit(w), rows: fit(h) }
 }
 
 // Where a cell is, and a widget of a size (or a board's box) standing on it.
-const rectAt = (grid, [c, r], size) => ({ x: grid.x0 + c * PITCH, y: grid.y0 + r * PITCH, ...sizePx(size) })
+const rectAt = (grid, [c, r]: number[], size) => ({ x: grid.x0 + c * PITCH, y: grid.y0 + r * PITCH, ...sizePx(size) })
 
 // Whether a widget of a size on this cell is on the grid, whole.
-function fits(grid, [c, r], size) {
+function fits(grid, [c, r]: number[], size) {
   const [cw, ch] = spanOf(size)
   return Number.isInteger(c) && Number.isInteger(r) && c >= 0 && r >= 0 && c + cw <= grid.cols && r + ch <= grid.rows
 }
 
 // The cell nearest a top-left corner (px), kept on the grid.
-function snap(grid, x, y, size) {
+function snap(grid, x, y, size): Cell {
   const [cw, ch] = spanOf(size)
   const c = Math.round((x - grid.x0) / PITCH)
   const r = Math.round((y - grid.y0) / PITCH)
@@ -75,7 +86,7 @@ const isFree = (grid, cell, size, blocks) => fits(grid, cell, size) && !blocks.s
 // The free cell nearest one (by the distance between the two places'
 // corners; the same distance, the higher, then the more to the left);
 // null when there is none.
-function nearestFree(grid, [c0, r0], size, blocks) {
+function nearestFree(grid, [c0, r0]: number[], size, blocks): Cell | null {
   const [cw, ch] = spanOf(size)
   let best = null
   for (let r = 0; r + ch <= grid.rows; r++)
@@ -89,7 +100,7 @@ function nearestFree(grid, [c0, r0], size, blocks) {
 
 // Where a new one goes first: the top right, as the desktop's icons start
 // at the top left.
-const firstSpot = (grid, size) => [Math.max(0, grid.cols - spanOf(size)[0]), 0]
+const firstSpot = (grid, size): Cell => [Math.max(0, grid.cols - spanOf(size)[0]), 0]
 
 // Let go of with its top-left here (px): the cell it snaps to, or, that
 // over another or over icons, the nearest free one; with nothing free,
@@ -215,7 +226,7 @@ function ungroup(layout, stackId, newId) {
 const flip = (top, n, by) => (n ? (((top + by) % n) + n) % n : 0)
 
 // A member with news comes to the top, once (§7): a letter came (its
-// unread grew, widgets.js newsIn). Its index, or -1.
+// unread grew, widgets.ts newsIn). Its index, or -1.
 function newsTop(stack, before, after) {
   if (!isStack(stack)) return -1
   const was = new Map((before || []).map(w => [w.id, w]))
@@ -241,10 +252,10 @@ const boardBox = b => ({ w: BOARD.width, h: b?.folded ? BOARD.head : BOARD.head 
 // What an entry takes on the desktop's grid: its size, or a board's box.
 const boxOf = e => (isBoard(e) ? boardBox(e) : e.size)
 // A tile's place in its board (px from the board's top left).
-const tileRect = ([c, r], size) => ({ x: BOARD.pad + c * PITCH, y: BOARD.head + r * PITCH, ...sizePx(size) })
+const tileRect = ([c, r]: number[], size) => ({ x: BOARD.pad + c * PITCH, y: BOARD.head + r * PITCH, ...sizePx(size) })
 
 // On the board's grid, whole, within so many rows.
-function tileFits([c, r], size, rows) {
+function tileFits([c, r]: number[], size, rows) {
   const [cw, ch] = cellsOf(size)
   return Number.isInteger(c) && Number.isInteger(r) && c >= 0 && r >= 0 && c + cw <= BOARD.cols && r + ch <= rows
 }
@@ -259,7 +270,7 @@ const tileFree = (b, cell, size, rows, skip = -1) => tileFits(cell, size, rows) 
 
 // The empty cell nearest one, within so many rows (the same distance, the
 // higher, then the more to the left); null when there is none.
-function tileNearest(b, [c0, r0], size, rows, skip = -1) {
+function tileNearest(b, [c0, r0]: number[], size, rows, skip = -1): Cell | null {
   const [cw, ch] = cellsOf(size)
   let best = null
   for (let r = 0; r + ch <= rows; r++)
@@ -284,7 +295,7 @@ function boardSpot(b, want, size, skip = -1) {
 }
 // The first empty cell (its Add's pick): the first in reading order, in
 // the rows it has, else a row more; null when full.
-function boardFirst(b, size) {
+function boardFirst(b, size): Cell | null {
   if (!isBoard(b) || b.items.length >= MAX_TILES) return null
   const [cw, ch] = cellsOf(size)
   for (const rows of [boardRows(b), BOARD.maxRows])
@@ -292,7 +303,7 @@ function boardFirst(b, size) {
   return null
 }
 // The board's cell a tile's top left (px from the board's) snaps to.
-function tileAt(x, y, size) {
+function tileAt(x, y, size): Cell {
   const [cw, ch] = cellsOf(size)
   const c = Math.round((x - BOARD.pad) / PITCH)
   const r = Math.round((y - BOARD.head) / PITCH)
@@ -336,7 +347,7 @@ function boardApart(layout, boardId, newId) {
   return layout.flatMap(e => (e.id === boardId ? alone : [e]))
 }
 
-// --- Several made one board (Ctrl-selected on the desktop, desk.js; the user's call of 2026-10-17) ---
+// --- Several made one board (Ctrl-selected on the desktop, desk.ts; the user's call of 2026-10-17) ---
 // What may be selected: one alone or a stack, never a board.
 const isSelectable = e => !!e && !isBoard(e) && (isStack(e) || e.type === 'widget' || e.type === 'plugin')
 // Those a rectangle dragged over the desktop meets (each { id, rect, entry }), boards left out.
@@ -387,7 +398,7 @@ function tilesOf(entries, at) {
 // top-left-most stood, or the nearest place there its box fits, over none
 // of the others here (clear of the icons where it can be). { layout,
 // board }, or { why } as tilesOf says.
-function boardOf(layout, ids, { at, grid, key, icons = [], newId, name } = {}) {
+function boardOf(layout, ids, { at, grid, key, icons = [], newId, name }: { at?: Map<string, number[]>; grid?: Grid; key?: string; icons?: any[]; newId?: () => string; name?: string } = {}) {
   const chosen = layout.filter(e => ids.includes(e.id) && isSelectable(e))
   const tiles = tilesOf(chosen, at)
   if (tiles.why) return { why: tiles.why }
@@ -465,7 +476,7 @@ function restoreSet(list, record) {
 // Put up again: its board (its name, its tiles where they were), those
 // whose widget or plugin is not there any more (known(member): false)
 // left out. { board, skipped }; board null when none is left.
-function boardFromSet(set, { known = () => true, newId } = {}) {
+function boardFromSet(set, { known = () => true, newId }: { known?: (m: { type: string; of: string }) => boolean; newId?: () => string } = {}) {
   const items = (set?.items || []).filter(isSetItem)
   const kept = items.filter(t => known({ type: t.type, of: t.of }))
   const board = kept.length ? { id: newId(), type: 'board', ...(isBoardName(set.name) && set.name ? { name: set.name } : {}), items: kept.map(t => ({ type: t.type, of: t.of, size: t.size, at: [t.at[0], t.at[1]] })) } : null
@@ -474,7 +485,7 @@ function boardFromSet(set, { known = () => true, newId } = {}) {
 // The layout with it there: its widgets out of wherever else they were on
 // the desktop first (one place each), then the board on that cell of this
 // display (key); with no cell, where the display finds room for it (settle).
-function withBoard(layout, board, { key, cell, newId } = {}) {
+function withBoard(layout, board, { key, cell, newId }: { key?: string; cell?: number[]; newId?: () => string } = {}) {
   let out = Array.isArray(layout) ? layout : []
   for (const t of board.items) out = without(out, itemOf(t), newId)
   return [...out, key && cell ? placed(board, key, cell) : board]
@@ -543,11 +554,11 @@ function without(layout, item, newId) {
   })
 }
 
-// --- A widget in one place (§7's note; island.js takeWidgets) -------------------------------
+// --- A widget in one place (§7's note; island.ts takeWidgets) -------------------------------
 // Put on the desktop (alone, stacked, in a board), or on the taskbar while
 // that is her home: out of the closed island, neither taking turns there
 // nor pinned at its end. The rest that are on are her capsule's members
-// (capsule.js: the capsule setting's order and modes, or, without it,
+// (capsule.ts: the capsule setting's order and modes, or, without it,
 // the widgets' order and the monitor's pin): those taking turns, those
 // pinned at its end (five at most), those only in the open island. The
 // taskbar her home, the monitor's readings are the strip's monitor part
@@ -556,8 +567,8 @@ function without(layout, item, newId) {
 // (one widget, one place, as Plasma has it: one on the strip or the
 // desktop is not shown there again; the user's call of 2026-10-17). all:
 // the widgets with something to say (on or off); taskbar: her taskbar's
-// layout as island-layout.js tbLayout makes it whole; capsule: the capsule setting.
-function placement({ all = [], home = 'island', taskbar = null, desk = [], pin, capsule } = {}) {
+// layout as island-layout.ts tbLayout makes it whole; capsule: the capsule setting.
+function placement({ all = [], home = 'island', taskbar = null, desk = [], pin, capsule }: { all?: any[]; home?: string; taskbar?: any; desk?: any[]; pin?: boolean; capsule?: any } = {}) {
   const onBar = home === 'taskbar' && taskbar ? Widgets.shownOn(taskbar, all) : new Set()
   const onDesk = shownOn(desk, all)
   const out = new Set([...onBar, ...onDesk])
@@ -573,11 +584,11 @@ function placement({ all = [], home = 'island', taskbar = null, desk = [], pin, 
   return { out, monitor, pinned, turning, listed, members, pins }
 }
 
-// --- Let go of here from her home (picker.js, desk-drop.js) ---------------------------------
+// --- Let go of here from her home (picker.ts, desk-drop.ts) ---------------------------------
 // From the cell wanted, row by row to the next free one, round to the top
 // again (as Plasma finds a place: not the nearest, the next); null when
 // there is none.
-function nextFree(grid, [c0, r0], size, blocks = []) {
+function nextFree(grid, [c0, r0]: number[], size, blocks = []): Cell | null {
   const [cw, ch] = spanOf(size)
   const cols = grid.cols - cw + 1
   const rows = grid.rows - ch + 1
@@ -586,7 +597,7 @@ function nextFree(grid, [c0, r0], size, blocks = []) {
   const start = Math.max(0, Math.min(rows - 1, r0)) * cols + Math.max(0, Math.min(cols - 1, c0))
   for (let i = 0; i < n; i++) {
     const j = (start + i) % n
-    const cell = [j % cols, Math.floor(j / cols)]
+    const cell: Cell = [j % cols, Math.floor(j / cols)]
     if (isFree(grid, cell, size, blocks)) return cell
   }
   return null
@@ -610,7 +621,7 @@ function landing({ grid, x, y, size, blocks = [], icons = [], board = null, tile
 // The layout with it there (a member: { type, of, name?, icon? }): out of
 // wherever else it was on the desktop first (one place), then into the
 // board, or alone on the cell of this display (key).
-function dropped(layout, land, { m, size, tileSize = 's', key, boardId, newId }) {
+function dropped(layout, land, { m, size, tileSize = 's', key, boardId, newId }: { m: any; size?: any; tileSize?: string; key?: string; boardId?: string; newId: () => string }) {
   if (!land?.ok) return layout
   if (land.where === 'board') return intoBoard(layout, boardId, m, tileSize, land.spot, newId)
   return [...without(layout, itemOf(m), newId), placed({ id: newId(), ...memberOf(m), size }, key, land.cell)]

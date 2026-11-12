@@ -1,7 +1,7 @@
 // Boards on the desktop (§7 工作台): widgets and stacks sent from the island
 // or the taskbar to the desktop (deskLayout), gathered on a board, and back.
-// Made by island.js in the section's place as the page starts
-// (boardsPart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (boardsPart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -63,7 +63,7 @@ export function boardsPart(core: BoardsCore) {
     update()
   }
 
-  // On the desktop (desk.rs, deskgrid.js): medium where it has it; where it
+  // On the desktop (desk.rs, deskgrid.ts): medium where it has it; where it
   // stands the desktop's page says (the display the pointer is on, the top
   // right, clear of the icons).
   function putOnDesk(item) {
@@ -103,7 +103,7 @@ export function boardsPart(core: BoardsCore) {
   }
   // A desktop page's asking (desk.rs desk_ask): a widget's settings, or
   // widgets put elsewhere; a stack onto the taskbar as a stack there.
-  function deskPlace({ items = [], where, stack } = {}) {
+  function deskPlace({ items = [], where, stack }: { items?: { id?: string; plugin?: string }[]; where?: string; stack?: boolean } = {}) {
     if (!['bar', 'isle'].includes(where) || !items.length) return
     if (where === 'bar' && home() !== 'taskbar') return
     if (where === 'bar' && stack && items.length >= 2) {

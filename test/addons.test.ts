@@ -262,8 +262,14 @@ test('its log lines and errors: thirty a minute at most, errors said on the Plug
 
 // --- The watchdog -----------------------------------------------------------------------------
 // Frames up and ready; each answers the pings it is sent when `answers` says.
-function watched(ids, answers = () => true) {
-  const s = setup()
+type Watched = ReturnType<typeof setup> & {
+  answer: (busy?: Record<string, number>) => void
+  pings: () => number
+  stops: () => any[]
+  views: () => any[]
+}
+function watched(ids, answers: (id: string, n: string) => boolean = () => true) {
+  const s = setup() as Watched
   s.host.setEnv({ lang: 'zh' })
   s.host.apply(ids.map(id => item(id)))
   for (const id of ids) s.host.receive(s.win(id), { waku: 1, t: 'ready' })
@@ -616,7 +622,8 @@ function frame({ page = '/hello/__waku/main.html', name = '', observer = null } 
   const timers = []
   const vars = {}
   const sheets = []
-  const window = {
+  // The SDK puts its waku on it.
+  const window: Record<string, any> = {
     parent,
     name,
     location: { href: `http://wakuplugin.localhost${page}`, pathname: page },

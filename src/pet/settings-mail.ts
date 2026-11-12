@@ -2,8 +2,8 @@
 // does (the address and password, the servers found or typed, its proxy),
 // and the inbox: letters by thread, who they are from, their talks with the
 // agents.
-// Made by settings.js in the section's place as the page starts
-// (mailPart(core), imported by settings.js): what it takes of the settings' core
+// Made by settings.ts in the section's place as the page starts
+// (mailPart(core), imported by settings.ts): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
@@ -269,7 +269,7 @@ export function mailPart(core: MailCore) {
   }
 
   // Who a letter goes to first (the setting), and the others that read mail
-  // (agents.js mailAgents): Antigravity only where it is (or set first), as
+  // (agents.ts mailAgents): Antigravity only where it is (or set first), as
   // few have it: its agy found, or Antigravity on this computer as the Agent
   // page has it (agy's folder, or the 2.0 app's: connection/agy.rs agy_here).
   // The app alone brings no agy, which mail runs: Antigravity is listed
@@ -375,7 +375,7 @@ export function mailPart(core: MailCore) {
 
   // The Mail page in two panes, list and letter side by side, as Thunderbird
   // has it (the setting mailPanes, two unless one), where the screen has the
-  // room; the settings as wide as that then (island.js measures them).
+  // room; the settings as wide as that then (island.ts measures them).
   const WIDE_W = 960
   const roomForTwo = () => screen.availWidth >= 820
   const twoPanes = () => core.tab === 'mail' && core.snap?.settings?.mailPanes !== 'one' && roomForTwo()

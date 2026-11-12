@@ -13,8 +13,8 @@ import F from '../tools/preview/fixtures.js'
 import pkg from '../tools/market/package.js'
 import { t, list, STRINGS } from '../src/shared/i18n.ts'
 
-const zh = (key, vars) => t('zh', key, vars)
-const en = (key, vars) => t('en', key, vars)
+const zh = (key, vars?) => t('zh', key, vars)
+const en = (key, vars?) => t('en', key, vars)
 const andZh = names => list('zh', names, 'and')
 const item = id => F.MARKET.find(i => i.id === id)
 

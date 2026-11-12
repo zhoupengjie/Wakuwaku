@@ -11,7 +11,7 @@ use std::sync::Mutex;
 // it changes, and so it is known whether her island sits in a notch.
 static TOLD: Mutex<Option<(f64, f64)>> = Mutex::new(None);
 
-// Her island is in a notch, where it is out of the way (island.js aside):
+// Her island is in a notch, where it is out of the way (island.ts aside):
 // her home there is out of sight, so she is never sent into it by a gesture
 // that is easily made by mistake (a double-click, a drag towards it).
 pub fn in_notch() -> bool {

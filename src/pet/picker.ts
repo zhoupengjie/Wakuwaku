@@ -1,9 +1,9 @@
 // The widget picker (the KDE-like design of 2026-10-17, its prototype the
 // user tried): a sidebar at the screen's side, the full height of the room
 // above her taskbar's strip, with every widget there is, to drag where it
-// should go or to press to add. Loaded after island.js, in her home's page
+// should go or to press to add. Loaded after island.ts, in her home's page
 // (role=island; in her own window it does nothing), and working with
-// island.js through window.Isle (its hooks there are marked "picker.js").
+// island.ts through Isle (pages.ts; its hooks there are marked "picker.ts").
 //
 // Its way in: her taskbar's menu, 添加小工具… (editing the layout, the picker
 // open), or the edit bar's 添加小工具; in the island's home her menu's
@@ -13,16 +13,16 @@
 // card for each widget (its icon, name and what it is, and "已放 N" where it
 // is put), other people's plugins among them in their manifest's kind
 // (@who made it, then what it is; one just installed and put nowhere yet
-// first, marked 新: addonui.js), 获取更多… (Settings, 插件 › 获取更多, its
+// first, marked 新: addonui.ts), 获取更多… (Settings, 插件 › 获取更多, its
 // widgets) and 管理… (Settings, 插件). One instance of each
 // for now: a card put again is the same widget moved. 组合: the boards kept
 // as combos (a board's 存为组合…, settings boardSets), each card its name,
 // how many and their icons; dragged onto the desktop its board is put up
-// again there (desk-drop.js), pressed on the main display's next free
+// again there (desk-drop.ts), pressed on the main display's next free
 // place; its widgets come from wherever they are and are on; on the strip
 // or in her capsule, no. A right press (or its ⋯): 改名, 删除 (with 撤销).
 //
-// Where one goes, by where it is let go of (picker.js hit):
+// Where one goes, by where it is let go of (picker.ts hit):
 //   the strip      a gap opens where it would go, the others make room
 //                  (front half of one: before it; back half: after); a
 //                  full strip has its medium ones made small first, past
@@ -30,7 +30,7 @@
 //   her capsule    the middle half of her slot on the strip (or the island
 //                  at the top, or the capsule's panel): one of its members;
 //   the desktop    anywhere else: the desktop's page shows where it lands
-//                  and puts it there (desk-drop.js, through the host:
+//                  and puts it there (desk-drop.ts, through the host:
 //                  desk_drag_preview, desk_drop);
 //   the picker     taken off (a widget dragged from the strip), or nothing
 //                  (a card);
@@ -40,7 +40,7 @@
 // its widget is on (widgetsOff); taken from its last place, off.
 //
 // Editing the strip, a widget under the pointer has a popover (its size,
-// 设置, 移除); a press on her capsule opens its panel (capsule-panel.js).
+// 设置, 移除); a press on her capsule opens its panel (capsule-panel.ts).
 // Every widget taken off says so in a toast with 撤销 for 5 s, and is put
 // back where it was. Esc: what is open first, then (editing) 完成.
 import * as AddonUI from './addonui.ts'
@@ -53,9 +53,72 @@ import { t } from '../shared/i18n.ts'
 import { CapsulePanel, Isle, provide } from './pages.ts'
 import { pet } from './bridge.ts'
 
-// Only with the island on (island.js made Isle, before this): else none.
+// Only with the island on (island.ts made Isle, before this): else none.
 provide('Picker', Isle?.isOn() ? pickerPage() : null)
 export type PickerFace = ReturnType<typeof pickerPage>
+
+// Room on the strip for one more (placing.ts fitStrip): whether it fits,
+// and the medium widgets made small for it (their ids).
+interface Fit {
+  ok: boolean
+  shrink: string[]
+}
+
+// Where a dragged one is over (hit): its kind ('picker', 'capsule',
+// 'strip', 'desk', 'bare', 'none', 'setNo'); over the capsule's panel, at:
+// the row it would go before; over the strip, at: its slot ({ run, index })
+// and fit: the strip's room for it.
+interface Target {
+  kind: string
+  at?: any
+  fit?: Fit
+}
+
+// A press not yet a drag: on a card or on the strip being edited, its key
+// (a card's, or a part's name), what was pressed, where and by which pointer.
+interface Press {
+  src: string
+  key: string
+  node: HTMLElement
+  x: number
+  y: number
+  id: number
+}
+
+// What is dragged (begin): from a card or the strip, by which pointer;
+// where it is over, and what the desktop's page was last sent of it; its
+// card, or its entry on the strip (by id, or a part's name); its key or
+// keys, what it shows and says, how wide a gap it opens; where it may go;
+// a combo's set, or the member the desktop keeps and its size; the strip's
+// room for it.
+interface Drag {
+  src: string
+  pid: number
+  at: any
+  tgt: Target
+  sig: string
+  hot: any
+  sent: { x: number; y: number; at: number }
+  card?: any
+  key?: string
+  keys?: string[]
+  name?: string
+  mark?: string
+  color?: string
+  strip?: string
+  node?: HTMLElement
+  entry?: any
+  part?: string
+  width?: number
+  stays?: boolean
+  anywhere?: boolean
+  desk?: boolean
+  capsuleKeys?: string[]
+  set?: any
+  item?: any
+  size?: string
+  fit?: Fit
+}
 
 function pickerPage() {
   const el = Isle.el
@@ -131,8 +194,8 @@ function pickerPage() {
   let snap = null
   let cards = []
   // A press not yet a drag; the drag; the desktop's last word on it.
-  let press = null
-  let drag = null
+  let press: Press = null
+  let drag: Drag = null
   let deskSaid = null
   let pending = null
   let tickets = 0
@@ -170,7 +233,7 @@ function pickerPage() {
     const builtIn = { monitor: 'card.monitor', today: 'card.today', tokens: 'widget.tokens' }
     for (const w of all.filter(x => x.builtIn)) out.push({ key: `widget:${w.id}`, kind: 'builtIn', cat: BUILT_IN_CAT[w.id] || 'system', w, name: T(builtIn[w.id] || 'taskbar.w.widget'), note: T(`picker.d.${w.id in BUILT_IN_CAT ? w.id : 'builtIn'}`) })
     for (const p of snap?.plugins || []) out.push({ key: `plugin:${p.id}`, kind: 'plugin', cat: PLUGIN_CAT[p.id] || 'script', w: all.find(x => x.plugin === p.id) || null, plugin: p, name: T(`w.ex.${p.id}`), note: T(`w.ex.${p.id}.note`) })
-    // Other people's (addons.rs): in their manifest's kind (addonui.js
+    // Other people's (addons.rs): in their manifest's kind (addonui.ts
     // catOf), who made each before what it is; placed is on, as for hers.
     for (const a of addonsNow()) {
       const about = a.state === 'unsupported' ? T('addons.newerApp') : a.description
@@ -264,7 +327,7 @@ function pickerPage() {
     return icons.join('') + (set.items.length > 6 ? `<span class="pk-mi pk-mn">+${set.items.length - 6}</span>` : '')
   }
   // 已放 N where it is put; one just installed and put nowhere yet, 新
-  // (once put somewhere, new no more: addonui.js news).
+  // (once put somewhere, new no more: addonui.ts news).
   function drawBadges(at = placesOf()) {
     for (const b of grid.querySelectorAll('.pk-card')) {
       const c = cards.find(x => x.key === b.dataset.key)
@@ -367,7 +430,7 @@ function pickerPage() {
       return Isle.sendSolid()
     }
     if (what === 'reset') return resetParts()
-    // 获取更多…: the market, its widgets (settings.js, widgets:market:widget);
+    // 获取更多…: the market, its widgets (settings.ts, widgets:market:widget);
     // 管理…: the Plugins page.
     if (what === 'more' || what === 'manage') {
       // The settings over her island: editing lets the pointer through it, so done first.
@@ -408,7 +471,7 @@ function pickerPage() {
     Object.assign(Isle.config, clone(patch))
     pet.settings.set(patch)
   }
-  // On or off: the setting (placing.js switchPatch), and the widgets as
+  // On or off: the setting (placing.ts switchPatch), and the widgets as
   // this page has them, at once (the Rust side's word on them comes after:
   // her capsule is those on, and would show one just taken off meanwhile).
   function setSwitch(keys, on) {
@@ -567,7 +630,7 @@ function pickerPage() {
 
   // --- Combos: boards kept to put up again (settings boardSets) ------------------------------
   // Those kept (the settings as this page has them, else as settings_get
-  // said), each checked as settings.rs will check them (deskgrid.js).
+  // said), each checked as settings.rs will check them (deskgrid.ts).
   const setsNow = () => G.setsOf(Array.isArray(Isle.config.boardSets) ? Isle.config.boardSets : snap?.settings?.boardSets)
   // A member still there: a plugin she has (not yet asked: as if), a widget
   // with something to say (a mailbox gone, a script's widget gone: not).
@@ -596,7 +659,7 @@ function pickerPage() {
   }
   // Pressed (or let go of over the desktop with no word from its page): up
   // on the main display, where its page finds room (no place of its own:
-  // deskgrid.js settle, from the top right, the next free one).
+  // deskgrid.ts settle, from the top right, the next free one).
   function putSet(set) {
     const { board, skipped } = G.boardFromSet(set, { known, newId: Isle.newId })
     if (!board) return note1(T('picker.setGone'))
@@ -708,13 +771,13 @@ function pickerPage() {
   }
   const sizeOfCard = card => (card.key === 'widget:monitor' ? 'part' : card.w && !Widgets.sizesOf(card.w).includes('m') ? 'S' : 'M')
 
-  // Room on the strip for one this wide more (placing.js fitStrip): what
+  // Room on the strip for one this wide more (placing.ts fitStrip): what
   // its runs take now, against its length less the show-desktop sliver.
   function fitFor(width, except = null) {
     const L = r => Isle.len(r)
     const strip = Isle.barRest.getBoundingClientRect()
     const edge = Isle.barRest.querySelector('.tdesk')
-    // The middle run stays where it is centred (island-layout.js alignApps keeps
+    // The middle run stays where it is centred (island-layout.ts alignApps keeps
     // it there, never moving it back): what lies before it is used too.
     const mid = getComputedStyle(Isle.zones.center)
     // A side bar's: its programs scroll when crowded (two buttons' room kept), its middle run moves up.
@@ -816,7 +879,7 @@ function pickerPage() {
     theme()
     const node = el('div', undo ? 'pk-toast' : 'pk-toast pk-info')
     node.append(el('span', '', text))
-    let timer = 0
+    let timer: Timer = 0
     const gone = () => {
       clearTimeout(timer)
       node.remove()
@@ -851,7 +914,7 @@ function pickerPage() {
   function askFirst(keys) {
     const ids = keys.filter(k => k.startsWith('plugin:')).map(k => k.slice(7))
     if (!ids.length) return
-    // Hers by her words for them; someone else's by its own (addonui.js labelOf).
+    // Hers by her words for them; someone else's by its own (addonui.ts labelOf).
     const check = got => {
       const addons = (got?.addons || []).filter(a => a.kind === 'plugin')
       for (const id of ids) {
@@ -905,8 +968,8 @@ function pickerPage() {
   // --- The popover over a widget on the strip (editing) ------------------------------------
   let popFor = null
   let popSticky = false
-  let popTimer = 0
-  let popHide = 0
+  let popTimer: Timer = 0
+  let popHide: Timer = 0
   const popEntryOf = node => node?._entry || (node?.dataset.part === 'monitor' ? 'monitor' : null)
   function openPop(node, sticky) {
     const e = popEntryOf(node)
@@ -963,7 +1026,7 @@ function pickerPage() {
   const isWidgetNode = n => !!n && (!!n._entry && (Widgets.isSource(n._entry) || Widgets.isGroup(n._entry)) || n.dataset.part === 'monitor')
   Isle.barRest.addEventListener('pointerover', e => {
     if (!editing() || drag || press || e.pointerType !== 'mouse') return
-    const node = e.target.closest('[data-part]')
+    const node = (e.target as HTMLElement).closest('[data-part]')
     if (node && node === popFor) return clearTimeout(popHide)
     clearTimeout(popTimer)
     if (isWidgetNode(node)) popTimer = setTimeout(() => !drag && openPop(node, false), 260)
@@ -1007,7 +1070,7 @@ function pickerPage() {
 
   // --- Dragging ------------------------------------------------------------------------------
   // A press on a card, or (editing) on a part or a widget of the strip
-  // (island.js gives it here): a drag once it has moved 5 px; let go where
+  // (island.ts gives it here): a drag once it has moved 5 px; let go where
   // it was, a press (a card added, a widget's popover, her capsule's panel).
   grid.addEventListener('pointerdown', e => {
     lastPointer = e.pointerType
@@ -1033,8 +1096,8 @@ function pickerPage() {
   // What is dragged: its key (a widget's or plugin's; a part's name), its
   // entry on the strip (by id, or a part), the member the desktop keeps,
   // what it shows and says, how wide a gap it opens.
-  function begin(p) {
-    const d = { src: p.src, pid: p.id, at: null, tgt: { kind: 'none' }, sig: '', hot: null, sent: null }
+  function begin(p: Press) {
+    const d: Drag = { src: p.src, pid: p.id, at: null, tgt: { kind: 'none' }, sig: '', hot: null, sent: null }
     if (p.src === 'card') {
       const card = cards.find(c => c.key === p.key)
       if (!card) return
@@ -1103,7 +1166,7 @@ function pickerPage() {
   }
 
   // Where the pointer is, as a place to let go.
-  function hit(x, y) {
+  function hit(x, y): Target {
     const d = drag
     const pr = open ? rectOf(pk) : null
     if (pr && inRect(x, y, pr)) return { kind: 'picker' }
@@ -1125,7 +1188,7 @@ function pickerPage() {
     return { kind: 'desk' }
   }
 
-  function stripHit(x, y) {
+  function stripHit(x, y): Target {
     const d = drag
     const a = Isle.along(x, y)
     // Her capsule: the middle half of her slot.
@@ -1193,7 +1256,7 @@ function pickerPage() {
       const last = d.sent
       if (!last || Math.hypot(x - last.x, y - last.y) > 6 || Date.now() - last.at > 120) {
         d.sent = { x, y, at: Date.now() }
-        // A combo as desk-drop.js takes one: those of its widgets still there.
+        // A combo as desk-drop.ts takes one: those of its widgets still there.
         if (d.set) pet.deskPreview({ x: Math.round(x), y: Math.round(y), set: setToSend(d.set).set })
         else pet.deskPreview({ x: Math.round(x), y: Math.round(y), item: d.item, size: d.size })
       }
@@ -1329,7 +1392,7 @@ function pickerPage() {
     }, 240)
   }
 
-  // Over the desktop: its page puts it there (desk-drop.js, through desk.rs),
+  // Over the desktop: its page puts it there (desk-drop.ts, through desk.rs),
   // and says so; from the strip, it is off it then (a move). No word back
   // in 2.5 s (a display's window made as the drag reached it still coming
   // up, its page gone): put on the desktop the island's own way, where the
@@ -1494,7 +1557,7 @@ function pickerPage() {
     e => {
       if (!menu.hidden && !menu.contains(e.target) && !(e.target as HTMLElement).closest('[data-pk="menu"]')) menu.hidden = true
       if (!smenu.hidden && !smenu.contains(e.target) && !(e.target as HTMLElement).closest('[data-cmore]')) closeSetMenu()
-      if (popFor && !pop.contains(e.target) && !popFor.contains(e.target) && !Isle.barRest.contains(e.target)) closePop()
+      if (popFor && !pop.contains(e.target) && !popFor.contains(e.target) && !Isle.barRest.contains(e.target as Node)) closePop()
     },
     true,
   )
@@ -1507,7 +1570,7 @@ function pickerPage() {
   })
   // Her menu in the island's home: 添加小工具… (the picker alone), 编辑胶囊;
   // on the taskbar, the picker comes with editing its layout. The Plugins
-  // page's 添加小工具… (settings.js, in this page) the same.
+  // page's 添加小工具… (settings.ts, in this page) the same.
   // focus: the card to bring into sight (the Plugins page's, a key), shown
   // among all of them.
   function fromMenu(p) {
@@ -1554,7 +1617,7 @@ function pickerPage() {
     if (open) drawGrid()
   })
 
-  // --- For island.js -------------------------------------------------------------------------
+  // --- For island.ts -------------------------------------------------------------------------
   return {
     open: show,
     close: hide,
@@ -1615,7 +1678,7 @@ function pickerPage() {
       if (open) drawBadges()
       CapsulePanel?.refresh()
     },
-    // Where the window takes the mouse (island.js sendSolid).
+    // Where the window takes the mouse (island.ts sendSolid).
     solids: () => [...(open ? [pk] : []), ...(pop.hidden ? [] : [pop]), ...(toasts.children.length ? [toasts] : []), ...(CapsulePanel?.isOpen() ? [CapsulePanel.el] : [])],
     watches: () => (!!popFor && popSticky) || !!CapsulePanel?.isOpen(),
     // The island's home: room in the window for the picker, the panel, a toast under her island.
@@ -1626,7 +1689,7 @@ function pickerPage() {
       const r = room || base
       return { width: Math.max(r.width, base.width), height: Math.max(r.height, want) }
     },
-    // For capsule-panel.js: her capsule's list, written; taken out with a way back.
+    // For capsule-panel.ts: her capsule's list, written; taken out with a way back.
     listNow,
     setConfig,
     writeCapsule,

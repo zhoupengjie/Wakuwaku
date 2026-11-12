@@ -1,10 +1,10 @@
 // Where her island sits at the top of the screen (zhoupengjie/Wakuwaku#59):
 // the top centre, as ever, or a top corner (the islandPos setting: left,
 // center, right). At a corner it keeps as far from the screen's side as from
-// its top (island.js TOP, 8 px), and opens downward and toward the screen's
+// its top (island.ts TOP, 8 px), and opens downward and toward the screen's
 // middle: from the left corner it grows to the right, from the right corner
 // to the left. What hangs under it follows it (the picker, the capsule's
-// panel, the toasts: picker.css, capsule-panel.js), the ring and the dot are
+// panel, the toasts: picker.css, capsule-panel.ts), the ring and the dot are
 // laid over it anyway (style.css #flow), and it slides up out of the way of
 // a window under it wherever it is.
 //
@@ -25,13 +25,13 @@
 // its foot. None said (an older island.rs), the top centre. In the
 // playground, fake-tauri.js says it as island.rs does (tools/preview).
 //
-// Only the sums, so the tests can say them: island.js and the panels use
-// them. Loaded by the page before island.js, and required by the tests.
+// Only the sums, so the tests can say them: island.ts and the panels use
+// them, as do the tests.
 const POSITIONS = ['left', 'center', 'right']
 const EDGES = ['top', 'bottom']
-// From the screen's side at a corner: as far as from its top (island.js TOP).
+// From the screen's side at a corner: as far as from its top (island.ts TOP).
 const SIDE = 8
-// The closed island's height (island.js), centred in a taskbar's strip under it.
+// The closed island's height (island.ts), centred in a taskbar's strip under it.
 const CAPSULE = 36
 
 // The setting as kept (settings.rs is_island_pos): anything else, the centre.
@@ -39,10 +39,19 @@ const posOf = v => (POSITIONS.includes(v) ? v : 'center')
 // The edge as kept (settings.rs is_island_edge): anything else, the top.
 const edgeOf = v => (v === 'bottom' ? 'bottom' : 'top')
 
+// Where the island is (its home, the anchor and edge island.rs put its
+// window at, whether it rounds a Mac's notch): what anchorOf and edgeAt read.
+interface Placed {
+  home?: string
+  at?: string
+  edge?: string
+  notch?: boolean
+}
+
 // The anchor the page lays the island by: where island.rs put its window
 // (at), at the top of the screen; on the taskbar, or round a Mac's notch
 // (only ever in the middle), none: the centre.
-function anchorOf({ home, at, notch = false } = {}) {
+function anchorOf({ home, at, notch = false }: Placed = {}) {
   if (home !== 'island' || notch) return 'center'
   return posOf(at)
 }
@@ -50,7 +59,7 @@ function anchorOf({ home, at, notch = false } = {}) {
 // The edge the page lays the island along: where island.rs put its window
 // (edge), the top or the bottom of the screen; on the taskbar (its strip
 // has its own edge), or round a Mac's notch, the top.
-function edgeAt({ home, edge, notch = false } = {}) {
+function edgeAt({ home, edge, notch = false }: Placed = {}) {
   if (home !== 'island' || notch) return 'top'
   return edgeOf(edge)
 }
@@ -101,11 +110,11 @@ function windowTop(edge, area, winHeight, strip = 0) {
 
 // The closed capsule's width (logical) within the room it has in Windows'
 // taskbar (island.rs islandRoom, embed.rs room_of: a quarter of the strip;
-// 0 or less: no limit). As set (set: island.js WIDTHS narrow, normal or
+// 0 or less: no limit). As set (set: island.ts WIDTHS narrow, normal or
 // wide) while that fits; else the narrowest of widths; else 0, her
-// portrait alone in a round capsule (island.js TIGHT_W). Whether even
+// portrait alone in a round capsule (island.ts TIGHT_W). Whether even
 // that fits is embed.rs's call (the capsule hidden else).
-function capsuleWidth(set, room, widths = {}) {
+function capsuleWidth(set, room, widths: Record<string, number> = {}) {
   if (!(room > 0) || set <= room) return set
   const narrow = Math.min(set, ...Object.values(widths).filter(w => w > 0))
   return narrow <= room ? narrow : 0

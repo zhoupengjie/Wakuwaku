@@ -4,8 +4,8 @@
 // line; medium: two, or a small curve), in its card there (its large size,
 // unfolded in place), and as a line in a stack opened on the taskbar. One
 // colour each, on its glyph, its progress and its glow; numbers in the text's
-// own colour; ups and downs in theirs. Markup as text, for island.js to put
-// in place; loaded before it, and required by the tests.
+// own colour; ups and downs in theirs. Markup as text, for island.ts to put
+// in place; the tests read it too.
 //
 // ctx: { lang, light (a light ground), detailed (the specifics may show),
 // width (a card's), hour (now, for the bars), now (ms) }.
@@ -44,7 +44,7 @@ const UP = ['#34d27b', '#0f7b3f']
 const DOWN = ['#ff6b6b', '#c42b3c']
 const GREY = ['#a1a1a6', '#5d5d5d']
 const pick = (pair, ctx) => pair[ctx.light ? 1 : 0]
-// A script's own colour (deepened on a light ground, widgets.js), else grey.
+// A script's own colour (deepened on a light ground, widgets.ts), else grey.
 function colorOf(w, ctx) {
   const kind = kindOf(w)
   if (COLORS[kind]) return pick(COLORS[kind], ctx)
@@ -69,7 +69,7 @@ function trendOf(w) {
 const trendColor = (trend, ctx) => (trend === 'red' ? pick(DOWN, ctx) : trend === 'green' ? pick(UP, ctx) : '')
 
 // Windows' own glyphs (Segoe Fluent Icons): the weather's by the sky, the
-// rest by kind; a script's own drawn icon (widgets.js), her face for today.
+// rest by kind; a script's own drawn icon (widgets.ts), her face for today.
 const SKY = { sun: 'E706', moon: 'E708', partly: 'E753', cloud: 'E753', fog: 'E753', rain: 'EB42', snow: 'EA38', storm: 'E945' }
 const GLYPH = { monitor: 'E950', stock: 'E9D9', mail: 'E715', pomodoro: 'E916', countdown: 'E787', tokens: 'E943', calendar: 'E8BF', media: 'EC4F' }
 const rowsOf = w => (Array.isArray(Widgets.detailOf(w).rows) ? Widgets.detailOf(w).rows : [])
@@ -79,15 +79,15 @@ function glyphOf(w) {
   if (kind === 'weather') return SKY[skyNow(w)] || 'E753'
   return GLYPH[kind] || ''
 }
-// As markup: a glyph, her face (island.js puts her in .wher), or the
+// As markup: a glyph, her face (island.ts puts her in .wher), or the
 // script's icon; `cls` for its place.
 function glyphHTML(w, cls = '') {
   if (kindOf(w) === 'today') return `<span class="wher ${cls}" aria-hidden="true"></span>`
   const g = glyphOf(w)
   if (g) return `<span class="wgl ${cls}" aria-hidden="true">&#x${g};</span>`
-  // A plugin's own picture (widgets.js maskHTML), drawn as her icons are.
+  // A plugin's own picture (widgets.ts maskHTML), drawn as her icons are.
   if (Widgets.hasPicture(w)) return `<span class="wsvg ${cls}">${Widgets.maskHTML(w.iconUrl)}</span>`
-  // No icon of its own: its name's first character on its colour (widgets.js markHTML).
+  // No icon of its own: its name's first character on its colour (widgets.ts markHTML).
   if (!Widgets.hasIcon(w?.icon)) return Widgets.markHTML(w?.markName ?? (typeof w?.label === 'string' ? w.label : w?.id), w?.color, cls)
   return `<span class="wsvg ${cls}">${Widgets.icon(w.icon)}</span>`
 }
@@ -119,11 +119,24 @@ const priv = (w, text, ctx) => (w?.private && !ctx.detailed ? `<span class="wpri
 // its value over its name), big and unit (a stack's line, 18px), say (a
 // stack's line's sentence), second (an island row's second line). All
 // plain text; a private part says so (lineIsPrivate).
+// Those words (briefOf), whether the specifics are private, and a stock's
+// trend (red, green or none) to colour its change by.
+interface Brief {
+  value: any
+  top: any
+  line: any
+  big: any
+  unit: string
+  say: string
+  second: any
+  private: boolean
+  trend?: string
+}
 function briefOf(w, ctx) {
   const said = Widgets.words(ctx.lang, w, true)
   const extra = Widgets.detailOf(w).extra || ''
   const kind = kindOf(w)
-  const out = { value: said.value, top: said.value, line: said.label, big: said.value, unit: '', say: [said.label, extra].filter(Boolean).join(' · '), second: extra || said.label, private: false }
+  const out: Brief = { value: said.value, top: said.value, line: said.label, big: said.value, unit: '', say: [said.label, extra].filter(Boolean).join(' · '), second: extra || said.label, private: false }
   if (kind === 'weather') {
     const [city, sky] = String(said.label).split(' · ')
     Object.assign(out, { top: [said.value, sky].filter(Boolean).join(' '), line: city || '', say: [sky, city, extra].filter(Boolean).join(' · '), second: [sky, extra].filter(Boolean).join(' · ') })
@@ -205,7 +218,7 @@ const num = v => (Math.round(v * 10) / 10).toString()
 // A line through the points, w by h: its gradient fill under it and a dot
 // at its end (the spec's 1.6px line); lo and hi its scale (else its own
 // least and most).
-function spark(points, w, h, color, { fill = true, dot = true, pad = 3, lo, hi } = {}) {
+function spark(points, w, h, color, { fill = true, dot = true, pad = 3, lo, hi }: { fill?: boolean; dot?: boolean; pad?: number; lo?: number; hi?: number } = {}) {
   const data = (points || []).filter(Number.isFinite)
   if (data.length < 2) return ''
   const min = Number.isFinite(lo) ? Math.min(lo, ...data) : Math.min(...data)
@@ -498,7 +511,7 @@ function genericCard(w, ctx) {
 
 // --- Buttons of a widget's own (widgets.rs actions) ---------------------------------------
 // What is playing has previous, play or pause, next: round buttons with
-// Windows' glyphs, each pressed back to its plugin (island.js, desk.js:
+// Windows' glyphs, each pressed back to its plugin (island.ts, desk.ts:
 // data-wact, data-widget; plugins.rs act); play or pause larger, in the
 // widget's colour; one the player has not, greyed. Any widget with
 // actions gets them, drawn the same wherever its card is.

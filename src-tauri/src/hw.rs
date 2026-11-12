@@ -147,7 +147,7 @@ impl Conf {
     }
 }
 
-// What a piece of hardware is: its glyph on the island (widgets.js
+// What a piece of hardware is: its glyph on the island (widgets.ts
 // PART_GLYPH) and its group in the settings.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Class {
@@ -198,7 +198,7 @@ pub struct Hardware {
 pub struct Reading {
     pub id: String,
     pub hardware_id: String,
-    // Its name, a key in her strings (i18n.js hw.*).
+    // Its name, a key in her strings (i18n.ts hw.*).
     pub label: &'static str,
     pub kind: Kind,
     pub value: Option<f64>,

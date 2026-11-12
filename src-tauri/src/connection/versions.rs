@@ -1,6 +1,6 @@
 // The agents' versions, as their files say them
 //
-// For the Agent page (src/pet/agents.js), where one is cheap to know: the
+// For the Agent page (src/pet/agents.ts), where one is cheap to know: the
 // version a program file carries (Claude Code's own claude.exe, ZCode's and
 // DeepSeek Harness's desktop apps), taken only when the file names that
 // product (omp.exe, built by Bun, says Bun's own, 1.4.3, for omp 18.11), or

@@ -1,7 +1,7 @@
 // Her capsule as a container of widgets (the KDE-like picker of 2026-10-17):
 // which widgets are in it, in what order, and how each shows there. Plain
-// data in, plain data out, for island.js (through deskgrid.js placement),
-// picker.js and capsule-panel.js to use and the tests to try.
+// data in, plain data out, for island.ts (through deskgrid.ts placement),
+// picker.ts and capsule-panel.ts to use and the tests to try.
 //
 // The setting (settings.json "capsule"):
 //   { members: [{ key, mode }], spin? }
@@ -27,6 +27,8 @@
 // monitor pinned while its pin is on, in the island's home (the taskbar's
 // home: its readings are the strip's monitor part, or, without the part, it
 // takes its turns, #53).
+import type { Config } from '../shared/config.ts'
+
 const MODES = ['turn', 'pin', 'open']
 const MAX_PINS = 5
 const MAX_MEMBERS = 64
@@ -60,9 +62,23 @@ function monitorMode(stored, home, pin) {
   return pin !== false ? 'pin' : 'turn'
 }
 
+// The home and the monitor's pin, which the monitor's mode is read by.
+interface HomeOpts {
+  home?: string
+  pin?: boolean
+}
+
+// What effective() reads: the capsule setting, every widget, and whether
+// a widget is in the capsule (placement's call).
+interface EffectiveOpts extends HomeOpts {
+  capsule?: any
+  all?: any[]
+  inCapsule?: (w: any) => boolean
+}
+
 // The members without the setting: in the widgets' order, each its key
 // once (a plugin's at its first widget).
-function derive(all = [], { home = 'island', pin } = {}) {
+function derive(all = [], { home = 'island', pin }: HomeOpts = {}) {
   const seen = new Set()
   const out = []
   for (const w of all) {
@@ -79,7 +95,7 @@ function derive(all = [], { home = 'island', pin } = {}) {
 // those on and not listed, in the widgets' order. inCapsule(w): whether a
 // widget is (placement decides: on, not on the taskbar or the desktop).
 // Five pinned at most: a sixth (a list written by hand) takes turns.
-function effective({ capsule, all = [], home = 'island', pin, inCapsule = w => w.on !== false } = {}) {
+function effective({ capsule, all = [], home = 'island', pin, inCapsule = w => w.on !== false }: EffectiveOpts = {}) {
   const stored = storedOf(capsule)
   const list = stored || derive(all, { home, pin })
   const widgetsOf = new Map()
@@ -157,11 +173,11 @@ function restore(list, record) {
 // the monitor), the order as widgetOrder (each member's widget or plugin
 // id) and, in the island's home, the monitor's pin as monitor.pin. spin:
 // kept, or as widgetSpin says.
-function patchFor(config = {}, list, home = 'island') {
+function patchFor(config: Config = {}, list, home = 'island') {
   const members = plain(list).slice(0, MAX_MEMBERS)
   const spinWas = config.capsule?.spin
   const spin = SPINS.includes(spinWas) ? spinWas : SPINS.includes(Number(config.widgetSpin)) ? Number(config.widgetSpin) : undefined
-  const patch = { capsule: { members, ...(spin !== undefined ? { spin } : {}) }, widgetOrder: members.map(m => idOfKey(m.key)) }
+  const patch: Config = { capsule: { members, ...(spin !== undefined ? { spin } : {}) }, widgetOrder: members.map(m => idOfKey(m.key)) }
   const mon = members.find(m => m.key === 'widget:monitor')
   if (mon && home === 'island' && mon.mode !== 'open') {
     const pin = mon.mode === 'pin'
@@ -176,12 +192,12 @@ const spinOf = config => {
   const s = Number(config?.widgetSpin ?? config?.capsule?.spin ?? 8)
   return SPINS.includes(s) ? s : 8
 }
-function spinPatch(config = {}, sec) {
+function spinPatch(config: Config = {}, sec) {
   if (!SPINS.includes(sec)) return null
   return { widgetSpin: sec, capsule: { ...(config.capsule && typeof config.capsule === 'object' && !Array.isArray(config.capsule) ? config.capsule : {}), spin: sec } }
 }
 
-// --- Its pins in the room there is (island.js, the closed capsule) ----------------------------
+// --- Its pins in the room there is (island.ts, the closed capsule) ----------------------------
 // Five pinned may not fit at its right end (the island at the top within
 // its window, the capsule on the strip before what stands beside it). Each
 // pin's width with its value and as its icon alone (px; the monitor's

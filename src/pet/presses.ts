@@ -1,7 +1,7 @@
 // What a press on a program's button does by the mouse button and the keys
 // held, as on Windows 11's own taskbar (zhoupengjie/Wakuwaku#36): the same
-// on her taskbar (island.js) and on hers on other displays (bar.js). Loaded
-// by their pages before them, and required by the tests.
+// on her taskbar (island.ts) and on hers on other displays (bar.ts), and in
+// the tests.
 // A press (its event's type, click, auxclick or contextmenu, and button)
 // with Shift and Ctrl held or not ({ shift, ctrl }), on a program with
 // this many windows open:
@@ -30,7 +30,7 @@ function pressOf(e, keys, open) {
 // CYCLED_MS (its mark in front may not have come yet); the first when
 // none of them is.
 const CYCLED_MS = 1500
-function nextWindow(windows, last) {
+function nextWindow(windows, last?) {
   if (!windows?.length) return null
   let at = last == null ? -1 : windows.findIndex(w => String(w.id) === String(last))
   if (at < 0) at = windows.findIndex(w => w.front)
@@ -49,7 +49,7 @@ const DRAG_HOLD_MS = 500
 // page's style does the rest: style.css, bar.css). Held in PRESS_MIN_MS at
 // least, so a quick click is seen too; a press that never comes up (a
 // menu of Windows' took the mouse) let go of after PRESS_MAX_MS. Kept on
-// a button its page draws anew in place (island.js, bar.js drawWindows).
+// a button its page draws anew in place (island.ts, bar.ts drawWindows).
 const PRESS_MIN_MS = 110
 const PRESS_MAX_MS = 900
 function pressIn(root, selector) {
@@ -58,8 +58,8 @@ function pressIn(root, selector) {
   let held = null
   let leaving = null
   let at = 0
-  let offTimer = 0
-  let maxTimer = 0
+  let offTimer: Timer = 0
+  let maxTimer: Timer = 0
   const off = node => node?.classList.remove('pressing')
   const letGo = () => {
     clearTimeout(maxTimer)

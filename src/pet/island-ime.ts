@@ -1,8 +1,8 @@
 // The input method on the taskbar: the layout's mark and the mode of its
 // input method (taskbar:keys), Windows' own icons for it where it has them,
 // and the list of input methods a press on it opens.
-// Made by island.js in the section's place as the page starts
-// (imePart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (imePart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.

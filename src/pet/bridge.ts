@@ -25,7 +25,7 @@ function bridge() {
   // modes bounced caught/through 30 times a second (2026-10-11), and every
   // event was handled twice.
   const LABEL = window.__TAURI_INTERNALS__?.metadata?.currentWebview?.label || window.__TAURI__.webviewWindow?.getCurrentWebviewWindow?.()?.label || new URLSearchParams(location.search).get('role') || 'pet'
-  const target = { kind: 'WebviewWindow', label: LABEL }
+  const target: TauriTarget = { kind: 'WebviewWindow', label: LABEL }
   const pending = []
   const on = channel => fn => {
     pending.push(listen(channel, e => fn(e.payload), { target }))
@@ -92,7 +92,7 @@ function bridge() {
     dropHer: () => send('island_drop'),
     holding: isHolding => send('island_holding', { isHolding: isHolding === true }),
     // The taskbar's layout being edited, or not, and where its edit bar and
-    // what picker.js has open are (the picker, its popover, her capsule's
+    // what picker.ts has open are (the picker, its popover, her capsule's
     // panel, the toasts; [[x, y, w, h]], page px, editing or not): the
     // window keeps the mouse there whatever enter and leave say (island.rs
     // set_editing, #53).
@@ -113,12 +113,12 @@ function bridge() {
     // A maximized window on her display, at the top of the screen ({ on }, island.rs look_over_max).
     onOverMax: on('island:over-max'),
     // An app full screen on her display, or none now ({ on }, shared.rs
-    // look_fullscreen): no flow light's ring while one is (island.js).
+    // look_fullscreen): no flow light's ring while one is (island.ts).
     onFullScreen: on('pet:full-screen'),
     // At the top of the screen, a window under her closed island ({ on },
     // island.rs look_under); the pointer has called it down from out of
     // the way, or has gone from it ({ on }, call_look); it is up out of the
-    // way or not, and its closed size (island-plate.js setStow).
+    // way or not, and its closed size (island-plate.ts setStow).
     onUnder: on('island:under'),
     onCalled: on('island:called'),
     stow: (stowed, width, height) => send('island_stow', { stowed: stowed === true, width: Number(width) || 0, height: Number(height) || 0 }),
@@ -130,7 +130,7 @@ function bridge() {
     // taskbar its window is out of the taskbar while something is
     // (island.rs set_opened, embed.rs).
     opened: on => send('island_opened', { on: on === true }),
-    // The settings in the island (settings.js): open them here or from
+    // The settings in the island (settings.ts): open them here or from
     // anywhere else (the tray, her double-click), what they show, what they change.
     onSettings: on('island:settings'),
     onSettingsChanged: on('settings:changed'),
@@ -196,7 +196,7 @@ function bridge() {
       pinFiles: paths => invoke('taskbar_pin_files', { paths: paths.map(String) }).catch(() => 0),
       // Room for windows' live pictures in the page: [[window, x, y, w, h]], or none.
       thumbs: items => send('taskbar_thumbs', { items }),
-      // The handover with Windows' own taskbar (handoff.js): its picture is
+      // The handover with Windows' own taskbar (handoff.ts): its picture is
       // over it (covered), hers is bare for Windows' to show under it (bare),
       // the dust has settled (done). Out of the queue: the program may be
       // waiting on it inside an earlier call (pet_ready waits for covered).
@@ -212,7 +212,7 @@ function bridge() {
     // { height, notch } in px, the notch's width 0 without one.
     onTop: on('island:top'),
     // Her tray icon clicked on a Mac: the island in the notch drops open, or
-    // goes back (island.js peek).
+    // goes back (island.ts peek).
     onPeek: on('island:peek'),
     onHotkey: on('island:hotkey'),
     onShortcutStatus: on('shortcuts:status'),
@@ -233,7 +233,7 @@ function bridge() {
     // her programs' buttons or her tray ({ part: apps | tray, back }).
     onFocusBar: on('taskbar:focus'),
     // The desktop's picture under the strip, for its Mica ({ url, position,
-    // color, mon, screen, sf }; mica.js).
+    // color, mon, screen, sf }; mica.ts).
     onWallpaper: on('taskbar:wallpaper'),
     // Windows' look ({ mode: dark | light, accent: { base, light, dark } }),
     // for the taskbar to be as Windows' own is.
@@ -241,11 +241,11 @@ function bridge() {
     // The taskbar's layout to be edited by dragging (its menu; { picker }:
     // 添加小工具…, the picker open with it).
     onTaskbarEdit: on('taskbar:edit'),
-    // Her menu in the island's home (picker.js): 添加小工具… ({ open:
+    // Her menu in the island's home (picker.ts): 添加小工具… ({ open:
     // 'picker' }) or 编辑胶囊 ({ open: 'capsule' }).
     onPicker: on('island:picker'),
-    // A widget dragged from her home over the desktop (picker.js), for the
-    // desktop's page of the display under it (desk-drop.js; desk.rs
+    // A widget dragged from her home over the desktop (picker.ts), for the
+    // desktop's page of the display under it (desk-drop.ts; desk.rs
     // forwards both, in that page's px): where it would land shown ({ x, y, item,
     // size }, in this page's px; null: off the desktop again), and let go
     // there ({ x, y, item, size, ticket }). What that page said back: {
@@ -263,7 +263,7 @@ function bridge() {
     },
     // Windows' Start menu opened or closed ({ open }), for the Start button.
     onStart: on('taskbar:start'),
-    // Third-party plugins (addons.rs; the island's page runs them, addons.js):
+    // Third-party plugins (addons.rs; the island's page runs them, addons.ts):
     // which to run as that changes ([{ id, version, rev, main, perms, settings }]).
     onAddons: on('addons:changed'),
     // A message of a plugin's view to its main.js ({ id, sub, message }:
@@ -272,10 +272,10 @@ function bridge() {
     addons: {
       running: () => invoke('addons_running').catch(() => []),
       // A running plugin's asking (widget, remove, fetch, storage, notify,
-      // hardware, said), in its name: addons.js knows it by its frame; and
+      // hardware, said), in its name: addons.ts knows it by its frame; and
       // its watchdog's (stop, views).
       call: (what, args) => invoke('addon_call', { id: String(args?.id || ''), what: String(what), args: args || {} }),
-      // A card's view (views.js): what a widget's view shows ({ page, data,
+      // A card's view (views.ts): what a widget's view shows ({ page, data,
       // rev }), a message of it for its main.js.
       view: (what, widget, message?) => invoke('addon_view', { what: String(what), widget: String(widget), message: message ?? null }),
       // From the settings: a package looked at, installed, a plugin taken
@@ -310,10 +310,10 @@ function bridge() {
       showPet: on => invoke('settings_show_pet', { on: on === true }),
       login: on => invoke('settings_login', { on: on === true }),
       // Windows' own mode ({ light }) or accent colour ({ accent: "#rrggbb" }).
-      winLook: ({ light, accent } = {}) => invoke('settings_win_look', { light: typeof light === 'boolean' ? light : null, accent: typeof accent === 'string' ? accent : null }),
+      winLook: ({ light, accent }: { light?: boolean; accent?: string } = {}) => invoke('settings_win_look', { light: typeof light === 'boolean' ? light : null, accent: typeof accent === 'string' ? accent : null }),
       // The desktop's picture: picked (picture, folder), a wallpaper pack's folder by its id (pack), laid (position), its turns (every, shuffle), the next now.
       wallpaper: (what, value) => invoke('settings_wallpaper', { what: String(what), value: value == null ? null : String(value) }),
-      // One agent's (agents.js id) files: 'install', 'remove'; Claude Code's
+      // One agent's (agents.ts id) files: 'install', 'remove'; Claude Code's
       // 'install-http'; DeepSeek Harness's 'install:npmmirror'.
       agent: (id, action) => invoke('settings_agent', { agent: id, action }),
       // DeepSeek Harness's way: 'plugin' or 'bridge', switched (the other
@@ -372,11 +372,11 @@ function bridge() {
   // What the page has had a mouseenter for and no mouseleave since, real or
   // played, in the order entered (heard in the capture phase: neither
   // bubbles). Left by the next word from the Rust side that the pointer is
-  // off it (pointer.rs; hovers.js): entered by a played mouseenter, the leave
+  // off it (pointer.rs; hovers.ts): entered by a played mouseenter, the leave
   // may never come from WebView2 itself.
-  const entered = new Set()
+  const entered = new Set<Element>()
   document.addEventListener('mouseenter', e => e.target instanceof Element && e.target !== document.documentElement && entered.add(e.target), true)
-  document.addEventListener('mouseleave', e => entered.delete(e.target), true)
+  document.addEventListener('mouseleave', e => entered.delete(e.target as Element), true)
 
   function chainAt(x, y) {
     const chain = []
@@ -395,7 +395,7 @@ function bridge() {
         const next = at ? chainAt(at.x, at.y) : []
         // Whatever the page has entered, either way, and the pointer is not
         // on now (gone: all of it) is left; caught, only once the pointer is
-        // clear of its box (hovers.js).
+        // clear of its box (hovers.ts).
         for (const el of [...entered]) if (!el.isConnected) entered.delete(el)
         for (const el of Hovers.stale([...entered], next, at, el => el.getBoundingClientRect())) {
           entered.delete(el)

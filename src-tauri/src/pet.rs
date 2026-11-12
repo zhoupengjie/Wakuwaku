@@ -33,7 +33,7 @@ const CLICK_GOES_MS: u64 = 60_000;
 // Flying back into the island, from wherever she is.
 const FLY_MS: f64 = 380.0;
 // Room under her feet (logical) for the hint while she is carried out of
-// her home: a double-click sends her back (pet.js, style.css #her-hint).
+// her home: a double-click sends her back (pet.ts, style.css #her-hint).
 const HINT_H: f64 = 30.0;
 
 struct Drag {
@@ -71,7 +71,7 @@ pub struct Win {
     // The pointer is on her herself, not on what is over her head.
     on_her: bool,
     // The room (logical) over her head for what is there, as the page
-    // measured it: her words, her list, a prompt panel (pet.js room).
+    // measured it: her words, her list, a prompt panel (pet.ts room).
     panel: Option<(f64, f64)>,
     // How far she sits right of the window's centre: when the screen edge
     // stops the grown window from centring on her, she shifts so she stays put.
@@ -769,7 +769,7 @@ pub fn let_go(sh: &Arc<Shared>) {
 pub fn double_click(sh: &Arc<Shared>) {
     if sh.flag(config::OUT) && crate::notch::in_notch() {
         // Her home in a Mac's notch is out of sight: she stays, and the
-        // island drops open from it to show what is going on (island.js peek):
+        // island drops open from it to show what is going on (island.ts peek):
         // open, not toggled, so a second double-click does not shut it again.
         sh.log("pet: double-click; the island drops open from the notch");
         let _ = sh.app.emit_to("island", "island:peek", serde_json::json!({ "open": true }));

@@ -3,15 +3,15 @@
 // what to know about it; and from the settings' snapshot, how each stands.
 // The Agent page draws from it, the welcome on General, General's status
 // line and the Mail page's picker too, so a new agent is a row here (and its
-// words in i18n.js) besides its connector (connection/<id>.rs, a place in
+// words in i18n.ts) besides its connector (connection/<id>.rs, a place in
 // connection/mod.rs's ALL and its matches, its events_*.rs, its snapshot
-// block in settings.rs). Loaded by
-// the page before settings.js, and required by the tests.
+// block in settings.rs). Imported by
+// the settings and the tests.
 //
 // What she can do, five things, each yes, part or no, with the words that
 // say so (a tooltip; the row's details list them), as the code has it:
 //   status   follows its sessions (events.rs and each events_*.rs)
-//   approve  answers its approvals on the island (asks.rs, panel.js): which
+//   approve  answers its approvals on the island (asks.rs, panel.ts): which
 //            buttons; a PermissionRequest held for her
 //   choose   answers a question with choices on the island (asks.rs
 //            AskUserQuestion: Claude Code's, and DeepSeek Harness's through
@@ -283,12 +283,20 @@ const byId = id => TABLE.find(a => a.id === id) || null
 const WORDS = { stale: 'settings.hooksStale', partial: 'settings.hooksPartial', unreadable: 'ag.st.unreadable', off: 'ag.st.off' }
 const wordOf = (id, status) => byId(id)?.words?.[status] || WORDS[status] || 'settings.hooksStale'
 
+// One's part of the snapshot as its read gives it: the block's fields, its
+// own besides, and whether it is on this computer where it says so.
+interface AgentRead {
+  status: any
+  here?: boolean
+  [field: string]: any
+}
+
 // One's part of the snapshot, as each reads it; here unless its status
 // says it is absent (no folder of its own on this computer).
-function read(snap, id) {
+function read(snap, id): AgentRead {
   const a = byId(id)
   if (!a || !snap) return null
-  const r = a.read(snap)
+  const r: AgentRead = a.read(snap)
   return { ...r, here: r.here ?? (r.status !== undefined && r.status !== 'absent') }
 }
 
@@ -331,7 +339,7 @@ function stateOf(snap, id, { busy = '', failed = {} } = {}) {
 // a write that failed): amber, and the Agent tab's dot.
 const WANTS = ['step', 'repair', 'error', 'failed']
 
-// The mood whose colour a state's dot takes (the island's, settings.js
+// The mood whose colour a state's dot takes (the island's, settings.ts
 // COLOR), four of them: green connected, blue written and waiting for
 // its first turn, amber the person must act, grey not connected (or not
 // to be, this version). Colour says how it stands, never which one it is.
@@ -345,7 +353,7 @@ const MOOD = { on: 'done', set: 'working', busy: 'working', step: 'waiting', rep
 //   null      none: connected, written and waiting, being written, or its
 //             file unreadable (to be put right by hand: its details say so)
 // Reinstall and Remove are in the open row's details.
-function actionOf(snap, id, known) {
+function actionOf(snap, id, known?) {
   const state = stateOf(snap, id, known)
   if (state === 'none' || state === 'failed') return { act: 'install', label: state === 'failed' ? 'wc.toolRetry' : 'ag.do.install' }
   if (state === 'repair') return id === 'claude' && read(snap, id).status === 'both' ? { act: 'remove', label: 'settings.repair' } : { act: 'install', label: 'settings.repair' }
@@ -358,7 +366,7 @@ const here = snap => TABLE.filter(a => read(snap, a.id)?.here).map(a => a.id)
 const elsewhere = snap => TABLE.filter(a => !read(snap, a.id)?.here).map(a => a.id)
 
 // Those on this computer and not connected, for Connect all.
-const toConnect = (snap, known) => here(snap).filter(id => ['none', 'failed'].includes(stateOf(snap, id, known)))
+const toConnect = (snap, known?) => here(snap).filter(id => ['none', 'failed'].includes(stateOf(snap, id, known)))
 
 // What she can do for one, each of CAPS: [cap, level, the words' key].
 // Mail where its command is found (agent.rs available): else no, and why.
@@ -372,12 +380,23 @@ function capsOf(snap, id) {
   })
 }
 
+// What summary gives: the ids on this computer, then those of them by how
+// they stand (connected set last).
+interface Summary {
+  here: string[]
+  on: string[]
+  set: string[]
+  wants: string[]
+  none: string[]
+  connected?: string[]
+}
+
 // General's status line and the Agent tab's dot: the ones on this
 // computer by how they stand. connected: written (Codex's still to be
 // trusted too); wants: those the person must act on (amber); none: those
 // still to connect (one of a version she cannot connect to is not).
-function summary(snap, known) {
-  const out = { here: here(snap), on: [], set: [], wants: [], none: [] }
+function summary(snap, known?) {
+  const out: Summary = { here: here(snap), on: [], set: [], wants: [], none: [] }
   for (const id of out.here) {
     const state = stateOf(snap, id, known)
     if (state === 'on' || state === 'set') out[state].push(id)
@@ -408,7 +427,7 @@ const wordingOf = (snap, id) => byId(id)?.wording?.(read(snap, id) || {}) || nul
 // The standing note at the foot of one's details (ag.note.<id>); while
 // its step shows in amber at their top, the part that does not say it
 // again; its own words for how it stands, given the snapshot.
-const noteOf = (id, state, snap) => (state === 'step' && byId(id)?.stepNote) || (snap && wordingOf(snap, id)?.note) || `ag.note.${id}`
+const noteOf = (id, state, snap?) => (state === 'step' && byId(id)?.stepNote) || (snap && wordingOf(snap, id)?.note) || `ag.note.${id}`
 
 // What it can do and not, in a sentence (ag.what.<id>, or its own words for how it stands).
 const whatOf = (snap, id) => wordingOf(snap, id)?.what || `ag.what.${id}`

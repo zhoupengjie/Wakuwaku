@@ -1,6 +1,6 @@
 // Plugins' own views (tier 2: their view.html, docs/PLUGINS.md) in her cards:
-// the desktop's medium and large ones (desk.js) and the capsule's unfolded
-// card (island.js), nowhere else (docs/design/specs/plugins.md §4). The
+// the desktop's medium and large ones (desk.ts) and the capsule's unfolded
+// card (island.ts), nowhere else (docs/design/specs/plugins.md §4). The
 // card is hers, its glass, corners, buttons and menu; the view's frame (an
 // <iframe sandbox="allow-scripts"> at the plugin's own page, addons.rs
 // serve) lies over the card's body, and lets the pointer through to the
@@ -9,7 +9,7 @@
 // whenever the view is not shown: while nobody is about, while the desktop
 // is covered (desk.rs views, as its words are not sent then), while Windows
 // has animations off, while the island's watchdog has them taken away
-// (addons.js), and for the rest of the session once a view did not load or
+// (addons.ts), and for the rest of the session once a view did not load or
 // did not answer twice in a row.
 //
 // What a view shows: its widget's view (waku.widget.set's view, up to 32 KB)
@@ -59,7 +59,25 @@ const viewable = (w, size) => !!w && w.from === 'addon' && typeof w.plugin === '
 // now(); the timers. canShow: whether this page can keep a frame loaded
 // where it draws it (the island's, drawn anew each second, needs
 // moveBefore).
-function createViews({ ask, send, make, post, move, live = () => true, styleOf = () => ({}), look = () => ({ theme: 'dark', lang: 'zh' }), changed = () => {}, log = () => {}, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout, canShow = true }) {
+// Those deps, as createViews calls them: a frame's el and win are the
+// page's iframe and its window, or the tests' fakes.
+interface ViewDeps {
+  ask: (id: string) => any
+  send: (id: string, message: any) => unknown
+  make: (name: string, src: string) => { el: any; win: any }
+  post: (win: any, message: any) => void
+  move: (card: any, el: any) => unknown
+  live?: (el: any) => boolean
+  styleOf?: (w: any) => any
+  look?: () => { theme: string; lang: string }
+  changed?: () => void
+  log?: (line: string) => void
+  now?: () => number
+  setTimer?: (fn: () => void, ms: number) => any
+  clearTimer?: (timer: any) => void
+  canShow?: boolean
+}
+function createViews({ ask, send, make, post, move, live = () => true, styleOf = () => ({}), look = () => ({ theme: 'dark', lang: 'zh' }), changed = () => {}, log = () => {}, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout, canShow = true }: ViewDeps) {
   const frames = new Map()
   // The plugins whose view failed here, for the session.
   const failed = new Set()
@@ -315,14 +333,14 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
 // none where it cannot so. opts: { ask, send, styleOf, look, changed,
 // log, redrawn: true for a page that draws its cards anew }.
 function boot(opts) {
-  const canMoveBefore = typeof ((((((Element.prototype as HTMLElement as HTMLElement as HTMLElement as HTMLElement as HTMLElement as HTMLElement)))))).moveBefore === 'function'
+  const canMoveBefore = typeof Element.prototype.moveBefore === 'function'
   const holder = document.createElement('div')
   holder.hidden = true
   holder.className = 'wview-park'
   document.body.appendChild(holder)
   // Moves to make once their card is in the page.
   const later = []
-  const host = createViews({
+  const host: ReturnType<typeof createViews> & { park?: () => void; mount?: () => void } = createViews({
     ...opts,
     canShow: !opts.redrawn || canMoveBefore,
     make: (name, src) => {

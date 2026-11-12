@@ -1,5 +1,5 @@
-// Other people's plugins on the Plugins page and in the picker (settings.js,
-// picker.js; docs/design/specs/plugins.md §3), as plain logic for the tests:
+// Other people's plugins on the Plugins page and in the picker (settings.ts,
+// picker.ts; docs/design/specs/plugins.md §3), as plain logic for the tests:
 // what a plugin's row says under its name, the picker's kind it goes under,
 // what it may do in words, which cards come first in the picker (one
 // installed here and never placed since: 新), the steps of installing one
@@ -9,7 +9,7 @@
 // packs' rows on the Plugins page and the Look page (packs.rs; spec §1,
 // §3). The words come from T(key, vars) as the page has them; the markup
 // stays the page's.
-// The picker's kinds (picker.js CATS) for a manifest's category.
+// The picker's kinds (picker.ts CATS) for a manifest's category.
 const CATS = { system: 'system', productivity: 'work', info: 'info' }
 const catOf = a => CATS[a?.category] || 'info'
 
@@ -41,7 +41,7 @@ function stoppedWords(a, T) {
 }
 
 // What its row says under its name (spec §3), as the built-ins' do
-// (settings.js pluginNote), with who made it and its version after: one
+// (settings.ts pluginNote), with who made it and its version after: one
 // that waits for a newer Wakuwaku says so; one the watchdog stopped, why
 // (stoppedWords), with 重新启用; put nowhere, 没放; put somewhere:
 // starting, a setting to fill in first, what went wrong while it shows
@@ -87,8 +87,8 @@ const badgeOf = (n, fresh, T) => (n ? { text: T('picker.placed', { n }), fresh: 
 
 // Those installed while the page has been up and not placed since, by id:
 // 新 in the picker until put somewhere once (spec §2). The page's alone.
-// The page's own: those installed since it came up (settings-mail.js marks
-// them, picker.js shows 新 until placed).
+// The page's own: those installed since it came up (settings-mail.ts marks
+// them, picker.ts shows 新 until placed).
 const news = makeNews()
 function makeNews() {
   const ids = new Set()
@@ -204,7 +204,7 @@ function refusedWords(r, T) {
 // its title, the amber note (head stressed), what it will do, a note,
 // the line under it (a link to the docs: docs), its buttons ([what,
 // label, kind], kind al: the accent one, no: the red one; busy: all off).
-function layerOf(s, T, list) {
+function layerOf(s, T, list?) {
   if (s?.step === 'ask' || s?.step === 'installing') {
     const m = s.summary || {}
     const will = permLines(m.perms, T, list)
@@ -456,7 +456,7 @@ const updatesBanner = (updates, T) => (Array.isArray(updates) && updates.length 
 // 全部更新, asked first when any of them asks for more (spec §5): each of
 // those, its versions and what it newly asks for; how many others there
 // are. null: none asks for more (they go at once).
-function updatesAskOf(updates, T, list) {
+function updatesAskOf(updates, T, list?) {
   const all = Array.isArray(updates) ? updates : []
   const asking = all.filter(u => Array.isArray(u.newPerms) && u.newPerms.length)
   if (!asking.length) return null
@@ -517,16 +517,32 @@ function marketFailOf(err, T) {
 // put it; a pack, the Look page.
 const marketDoneOf = (item, T, lang) => T(item?.kind === 'plugin' ? 'addons.installed' : 'mk.installedPack', { name: wordsIn(item?.name, lang) })
 
+// A plugin's sample widget as sampleWidget makes it, its own .svg as its
+// picture (iconUrl) where its icon is the dot.
+interface SampleWidget {
+  id: any
+  plugin: any
+  from: string
+  on: boolean
+  label: any
+  value: any
+  icon: any
+  color: any
+  private: boolean
+  detail: any
+  iconUrl?: any
+}
+
 // What its widget would say (the index's sample), as her pages take a
 // widget of a plugin's: its name for a label where it gives none, its
 // sizes the manifest's, its colour and icon there unless it gives its
-// own, its own .svg as its picture; for her card templates (wdesk.js) to
+// own, its own .svg as its picture; for her card templates (wdesk.ts) to
 // draw before it is installed. null: no sample.
 function sampleWidget(item, lang) {
   const s = item?.sample
   if (!s || typeof s !== 'object') return null
   const icon = s.icon || item.glyph || 'dot'
-  const w = {
+  const w: SampleWidget = {
     id: item.id,
     plugin: item.id,
     from: 'addon',

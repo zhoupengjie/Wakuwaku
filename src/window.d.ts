@@ -15,6 +15,10 @@ interface TauriTarget {
   label?: string
 }
 
+// What setTimeout and setInterval give back, 0 while none is set: a number
+// in the page, a Timeout where the tests check the pages with Node's types.
+type Timer = ReturnType<typeof setTimeout> | number
+
 interface Window {
   __TAURI__: {
     core: {

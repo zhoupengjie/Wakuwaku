@@ -1,8 +1,8 @@
 // The taskbar's right part: the tray's box, the input method, Caps Lock, the
 // network, the volume and the battery (taskbar:keys), what is using the
 // microphone, camera or location, the clock and the program in front.
-// Made by island.js in the section's place as the page starts
-// (rightPart(core), imported by island.js): what it takes of the island's core
+// Made by island.ts in the section's place as the page starts
+// (rightPart(core), imported by island.ts): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
@@ -121,7 +121,7 @@ export function rightPart(core: RightCore) {
   })
   for (const type of ['pointerup', 'pointerleave', 'pointercancel']) startButton.addEventListener(type, () => startButton.classList.remove('down'))
   startButton.addEventListener('animationend', () => startButton.classList.remove('bounce'))
-  pet.onStart(({ open } = {}) => {
+  pet.onStart(({ open }: { open?: boolean } = {}) => {
     startButton.classList.toggle('open', !!open)
     if (!open || Date.now() - startPressedAt < 800) return
     startButton.classList.remove('bounce')

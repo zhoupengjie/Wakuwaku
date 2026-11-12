@@ -155,7 +155,7 @@ mod kept_tests {
 }
 
 // The icons as the page draws them: each drawn once per handle, and sent
-// to the page once per handle too (the page keeps them, island.js
+// to the page once per handle too (the page keeps them, island.ts
 // onTray): a tip changing (Task Manager's every second) sends the tips,
 // not every picture again.
 pub(super) fn send_icons() {

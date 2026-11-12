@@ -1693,15 +1693,17 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       })
       return true
     }
-    if (at('[data-mail-probe]')) {
+    // The form's own buttons, while it is still there: after 删除's second
+    // press it stays up until mail_remove answers, with no form behind it.
+    if (at('[data-mail-probe]') && st.mailForm) {
       retest()
       return true
     }
-    if (at('[data-mail-find]')) {
+    if (at('[data-mail-find]') && st.mailForm) {
       findServer()
       return true
     }
-    if (at('[data-mail-save]')) {
+    if (at('[data-mail-save]') && st.mailForm) {
       saveAccount()
       return true
     }

@@ -141,7 +141,9 @@ export function next(s: IslandState, e: IslandEvent): IslandState {
       return { ...s, nudge: null }
     case 'seen':
       if (!s.nudge || Number.isFinite(s.nudge.until)) return s
-      return { ...s, nudge: { ...s.nudge, until: e.now + s.nudge.after } }
+      // Held until seen: only island.ts nudgeFor holds one so, and it always
+      // gives it its own time (after).
+      return { ...s, nudge: { ...s.nudge, until: e.now + s.nudge.after! } }
     case 'peek':
       return { ...s, peek: e.on }
     case 'press':

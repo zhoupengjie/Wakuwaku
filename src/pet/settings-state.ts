@@ -14,7 +14,7 @@
 // (PART_OF, settings.ts showPart); connecting while the welcome shows is
 // the welcome, at General's top.
 export const TABS = ['now', 'agents', 'look', 'widgets', 'mail']
-export const PART_OF = { pets: 'look', place: 'look', paper: 'look', shortcuts: 'now', alerts: 'now', connect: 'agents', update: 'now', net: 'now', crash: 'now' }
+export const PART_OF: Record<string, string> = { pets: 'look', place: 'look', paper: 'look', shortcuts: 'now', alerts: 'now', connect: 'agents', update: 'now', net: 'now', crash: 'now' }
 
 // A part of the Plugins page in its place: a plugin's own page, a pack's
 // ({ kind } too), the market, one of the market's (mkItem); back, the one it

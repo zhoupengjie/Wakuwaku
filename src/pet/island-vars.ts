@@ -20,8 +20,8 @@ export interface Now {
   mood: string
   detail: string
   project: string
-  since: number
-  took: number
+  since: number | null
+  took: number | null
   others: number
   sessions: number
   list: any[]

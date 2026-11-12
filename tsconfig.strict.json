@@ -31,6 +31,8 @@
     "src/pet/barpop.ts",
     "src/pet/bridge.ts",
     "src/pet/capsule.ts",
+    "src/pet/desk-drop.ts",
+    "src/pet/desk.ts",
     "src/pet/deskgrid.ts",
     "src/pet/flow.ts",
     "src/pet/handoff.ts",

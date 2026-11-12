@@ -27,7 +27,29 @@
 // (desk.rs): what comes before this page knows its display (desk:state,
 // its icons read first) waits for it, the last preview and the drop.
 import * as G from './deskgrid.ts'
-import type { DeskFace } from './desk.ts'
+import type { BoardNode, DeskFace } from './desk.ts'
+
+// What the picker says (desk.rs forwards it as it is): one widget or
+// plugin (item) and its size, or a combo (set); ticket on a drop alone.
+interface Drop {
+  x: number
+  y: number
+  item?: G.Member
+  size?: string
+  set?: Partial<G.BoardSet>
+  ticket?: string | null
+}
+// A combo's (preview and drop look first).
+type SetDrop = Drop & { set: Partial<G.BoardSet> }
+// What goes back to her home's page (desk_drag_answer, above).
+interface Said {
+  ticket: string | null
+  ok: boolean
+  where?: string
+  why: string
+  name?: string
+  board?: string
+}
 
 // Made by desk-main.ts once desk.ts has made the desktop (its inner parts, D).
 export function deskDrop(D: DeskFace['inner']) {
@@ -46,30 +68,30 @@ export function deskDrop(D: DeskFace['inner']) {
   land.hidden = true
   document.body.append(cells, land)
   let saidLast = ''
-  let lit = null
+  let lit: BoardNode | null = null
   let iconsAsked = false
 
-  const keyOf = m => `${m.type}:${m.of}`
+  const keyOf = (m: G.Member) => `${m.type}:${m.of}`
   // The size it takes in a board: small where it has it.
-  const tileSizeOf = m => {
+  const tileSizeOf = (m: G.Member) => {
     const sizes = G.sizesOfEntry({ type: m.type, of: m.of }, D.all)
     return sizes.includes('s') ? 's' : sizes[0] || 's'
   }
 
   // A combo's board: its box landed as one alone is, over none of those here
   // but the ones that go into it (alone here, every member of theirs in it).
-  function setLanding(p) {
+  function setLanding(p: SetDrop) {
     const grid = D.grid()
     const { board } = G.boardFromSet(p.set, { newId: D.newId })
     if (!board) return null
     const keys = new Set(board.items.map(keyOf))
-    const goes = e => !G.isBoard(e) && G.membersOf(e).every(m => keys.has(keyOf(m)))
+    const goes = (e: G.Entry) => !G.isBoard(e) && G.membersOf(e).every(m => keys.has(keyOf(m)))
     const blocks = [...D.nodes.values()].filter(n => !goes(n.entry)).map(n => n.rect)
     const box = G.boardBox(board)
     return { grid, board, box, land: G.landing({ grid, x: p.x, y: p.y, size: box, blocks, icons: D.icons }) }
   }
 
-  function landingAt(p) {
+  function landingAt(p: Drop | null) {
     if (!D.here || !p?.item) return null
     const grid = D.grid()
     const key = keyOf(p.item)
@@ -77,7 +99,8 @@ export function deskDrop(D: DeskFace['inner']) {
     // Those here but the one it is (alone here already: it moves).
     const blocks = [...D.nodes.values()].filter(n => G.isBoard(n.entry) || G.membersOf(n.entry).length !== 1 || keyOf(G.membersOf(n.entry)[0]) !== key).map(n => n.rect)
     const tileSize = tileSizeOf(p.item)
-    const size = ['s', 'm', 'l'].includes(p.size) ? p.size : 'm'
+    // An item comes with its size (the picker's); one not to be had, medium.
+    const size = ['s', 'm', 'l'].includes(p.size!) ? p.size! : 'm'
     return { grid, board, tileSize, size, land: G.landing({ grid, x: p.x, y: p.y, size, blocks, icons: D.icons, board: board?.entry || null, tileSize }) }
   }
 
@@ -91,12 +114,12 @@ export function deskDrop(D: DeskFace['inner']) {
     }
   }
 
-  function answer(said) {
+  function answer(said: Said) {
     invoke('desk_drag_answer', { said }).catch(() => {})
   }
 
   // Where a combo's board would stand: dashed as one alone's place.
-  function previewSet(p) {
+  function previewSet(p: SetDrop) {
     const r = D.here ? setLanding(p) : null
     if (lit) clear()
     if (!r) {
@@ -104,7 +127,8 @@ export function deskDrop(D: DeskFace['inner']) {
       return
     }
     const { grid, box, land: l } = r
-    const at = G.rectAt(grid, l.cell || l.want, box)
+    // On the desktop: the cell wanted there, always (landing).
+    const at = G.rectAt(grid, l.cell || l.want!, box)
     Object.assign(land.style, { left: `${at.x}px`, top: `${at.y}px`, width: `${at.w}px`, height: `${at.h}px` })
     land.classList.toggle('no', !l.ok)
     land.hidden = false
@@ -115,7 +139,7 @@ export function deskDrop(D: DeskFace['inner']) {
     saidLast = JSON.stringify(said)
     if (saidLast !== was) answer(said)
   }
-  function dropSet(p) {
+  function dropSet(p: SetDrop) {
     const r = D.here ? setLanding(p) : null
     clear()
     saidLast = ''
@@ -123,17 +147,18 @@ export function deskDrop(D: DeskFace['inner']) {
     const ticket = p?.ticket ?? ''
     if (!r) return answer({ ticket, ok: false, where: 'desk', why: 'none' })
     if (!r.land.ok) return answer({ ticket, ok: false, where: 'desk', why: r.land.why || '' })
-    D.keepLayout(G.withBoard(D.layout, r.board, { key: D.here.key, cell: r.land.cell, newId: D.newId }))
+    // r: here was known (above).
+    D.keepLayout(G.withBoard(D.layout, r.board, { key: D.here!.key, cell: r.land.cell, newId: D.newId }))
     answer({ ticket, ok: true, where: 'desk', why: '', name: p.set.name || '', board: r.board.id })
   }
 
-  function preview(p) {
+  function preview(p: Drop | null) {
     if (p?.set) {
       if (!iconsAsked) {
         iconsAsked = true
         D.loadIcons()
       }
-      return previewSet(p)
+      return previewSet(p as SetDrop)
     }
     const r = p ? landingAt(p) : null
     if (!r) {
@@ -147,24 +172,25 @@ export function deskDrop(D: DeskFace['inner']) {
     }
     const { grid, board, land: l } = r
     if (lit && lit !== board) clear()
+    // Over a board: the one landing was given (board), its spot there if ok.
     if (l.where === 'board') {
       land.hidden = true
       cells.hidden = true
       lit = board
-      board.el.classList.toggle('dhot', l.ok)
-      board.el.classList.toggle('dno', !l.ok)
-      if (l.ok && !board.entry.folded) {
-        let ghost = board.el.querySelector('.bghost')
+      board!.el.classList.toggle('dhot', l.ok)
+      board!.el.classList.toggle('dno', !l.ok)
+      if (l.ok && !board!.entry.folded) {
+        let ghost = board!.el.querySelector('.bghost')
         if (!ghost) {
           ghost = document.createElement('div')
           ghost.className = 'bghost'
-          board.el.querySelector('.db')?.append(ghost)
+          board!.el.querySelector('.db')?.append(ghost)
         }
-        const t = G.tileRect(l.spot, r.tileSize)
+        const t = G.tileRect(l.spot!, r.tileSize)
         Object.assign(ghost.style, { left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px` })
       }
     } else {
-      const at = G.rectAt(grid, l.cell || l.want, r.size)
+      const at = G.rectAt(grid, l.cell || l.want!, r.size)
       Object.assign(land.style, { left: `${at.x}px`, top: `${at.y}px`, width: `${at.w}px`, height: `${at.h}px` })
       land.classList.toggle('no', !l.ok)
       land.hidden = false
@@ -177,8 +203,8 @@ export function deskDrop(D: DeskFace['inner']) {
     if (saidLast !== was) answer(said)
   }
 
-  function drop(p) {
-    if (p?.set) return dropSet(p)
+  function drop(p: Drop | null) {
+    if (p?.set) return dropSet(p as SetDrop)
     const r = landingAt(p)
     clear()
     saidLast = ''
@@ -190,20 +216,22 @@ export function deskDrop(D: DeskFace['inner']) {
       if (board) D.shake(board)
       return answer({ ticket, ok: false, where: l.where, why: l.why || '' })
     }
-    D.keepLayout(G.dropped(D.layout, l, { m: p.item, size: r.size, tileSize: r.tileSize, key: D.here.key, boardId: board?.entry.id, newId: D.newId }))
+    // r: p, its item and here were there (landingAt).
+    D.keepLayout(G.dropped(D.layout, l, { m: p!.item!, size: r.size, tileSize: r.tileSize, key: D.here!.key, boardId: board?.entry.id, newId: D.newId }))
     answer({ ticket, ok: true, where: l.where, why: '', name: board ? D.boardLabel(board.entry) : '' })
   }
 
   // Before this page knows its display: the last preview and a drop kept,
   // looked at again every 50 ms for 3 s (a drop then says none).
-  let waiting = null
-  function whenHere(kind, p) {
+  let waiting: { preview: Drop | null; drop: Drop | null; tries: number; timer?: Timer } | null = null
+  function whenHere(kind: 'preview' | 'drop', p: Drop | null) {
     if (D.here) return kind === 'drop' ? drop(p) : preview(p)
     if (!waiting) waiting = { preview: null, drop: null, tries: 0 }
     waiting[kind] = p
     if (waiting.timer) return
     const look = () => {
-      const w = waiting
+      // Kept till look itself lets it go.
+      const w = waiting!
       if (D.here || ++w.tries > 60) {
         waiting = null
         if (w.drop) return drop(w.drop)

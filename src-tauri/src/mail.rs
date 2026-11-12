@@ -61,6 +61,7 @@ mod threads;
 
 use imap::Fail;
 use proxy::Via;
+use crate::config;
 
 // How long a connection may take, how long the server may be quiet while it
 // pushes (then the push is asked for again), how often one that cannot push
@@ -199,7 +200,7 @@ fn name_of(v: &Value) -> String {
 }
 
 fn accounts(sh: &Shared) -> Vec<Account> {
-    let all = sh.setting("mail");
+    let all = sh.setting(config::MAIL);
     let page = proxy::setting(sh);
     all.as_array()
         .into_iter()

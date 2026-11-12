@@ -33,6 +33,7 @@ use crate::Shared;
 mod win;
 #[cfg(windows)]
 use win as imp;
+use crate::config;
 
 #[cfg(not(windows))]
 mod imp {
@@ -451,7 +452,7 @@ pub async fn taskbar_pin_files(app: tauri::AppHandle, paths: Vec<String>) -> usi
             }
         };
         let (target, id) = (pin["path"].as_str().unwrap_or(""), pin["id"].as_str().filter(|s| !s.is_empty()));
-        let kept = sh.setting("taskbarPinned");
+        let kept = sh.setting(config::TASKBAR_PINNED);
         let there = kept.as_array().into_iter().flatten().any(|p| match (id, p["id"].as_str()) {
             (Some(id), Some(theirs)) => theirs.eq_ignore_ascii_case(id),
             (None, None) => p["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(target)),
@@ -477,7 +478,7 @@ pub fn taskbar_tray_pin(app: tauri::AppHandle, name: String, pinned: Option<bool
     let sh = crate::shared(&app);
     let mut change = serde_json::Map::new();
     if let Some(pinned) = pinned {
-        let mut kept = sh.setting("trayPinned").as_object().cloned().unwrap_or_default();
+        let mut kept = sh.setting(config::TRAY_PINNED).as_object().cloned().unwrap_or_default();
         kept.insert(name, serde_json::json!(pinned));
         change.insert("trayPinned".into(), serde_json::Value::Object(kept));
     }

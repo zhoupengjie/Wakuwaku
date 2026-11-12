@@ -23,14 +23,15 @@ use serde_json::{json, Value};
 use super::imap::{Fail, Hop};
 pub use crate::proxy::{Kind, Proxy, Via};
 use crate::Shared;
+use crate::config;
 
 // The way set on the Mail page: the General page's Network proxy (netProxy,
 // Windows' unless set) while it follows that ("follow", and unset: since
 // zhoupengjie/Wakuwaku#68; one set before keeps its way), else its own.
 pub fn setting(sh: &Shared) -> Via {
-    let page = sh.setting("mailProxy");
+    let page = sh.setting(config::MAIL_PROXY);
     if follows(&page) {
-        return Via::of(&sh.setting("netProxy")).unwrap_or_default();
+        return Via::of(&sh.setting(config::NET_PROXY)).unwrap_or_default();
     }
     Via::of(&page).unwrap_or_default()
 }

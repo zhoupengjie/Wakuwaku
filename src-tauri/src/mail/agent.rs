@@ -39,6 +39,7 @@ use super::store::Folder;
 use super::{account, widget_id, Account};
 use crate::scripts::job::Job;
 use crate::{shared, Shared};
+use crate::config;
 
 // The longest a turn of a talk may take, the most one may ask at once
 // (characters), and the most of an attachment (and of them all) kept beside
@@ -1287,7 +1288,7 @@ fn go(sh: &Arc<Shared>, key: &str, mut talk: Talk, exe: &Path, args: Vec<String>
 
 // What a turn runs with, as set for that agent now.
 fn args_for(sh: &Shared, agent: Agent, session: &str, first: bool) -> Vec<String> {
-    let conf = conf_of(&sh.setting("mailAgentConf"), agent);
+    let conf = conf_of(&sh.setting(config::MAIL_AGENT_CONF), agent);
     let restricted = agent == Agent::Claude && conf.access == Access::Read;
     let hooks = if restricted { hooks_file(sh) } else { PathBuf::new() };
     let own = if restricted { claude_own() } else { Default::default() };
@@ -1326,7 +1327,7 @@ pub async fn mail_hand(app: AppHandle, id: String, uid: u32, agent: String, how:
     let zh = sh.lang() == "zh";
     sh.log(&format!("mail: letter {uid} of {id} to {} ({how}) in {folder}", agent.id()));
     if how == "open" {
-        let conf = conf_of(&sh.setting("mailAgentConf"), agent);
+        let conf = conf_of(&sh.setting(config::MAIL_AGENT_CONF), agent);
         let restricted = agent == Agent::Claude && conf.access == Access::Read;
         let hooks = if restricted { hooks_file(&sh) } else { PathBuf::new() };
         let own = if restricted { claude_own() } else { Default::default() };

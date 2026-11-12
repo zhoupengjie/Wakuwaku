@@ -7,6 +7,7 @@ use tauri::{AppHandle, WebviewWindow};
 
 use super::is_island;
 use crate::{backplate, island, pet, shared};
+use crate::config;
 
 #[tauri::command]
 pub async fn island_holding(app: AppHandle, is_holding: bool) {
@@ -90,7 +91,7 @@ pub async fn island_plate(app: AppHandle, rect: Option<Value>, fade: u32) {
 pub async fn island_release(app: AppHandle, offset: Value) {
     let sh = shared(&app);
     sh.log(&format!("island: release {offset}"));
-    if !sh.flag("out") {
+    if !sh.flag(config::OUT) {
         pet::carry(&sh, &offset);
     }
 }

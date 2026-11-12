@@ -59,6 +59,7 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use crate::Shared;
+use crate::config;
 
 // --- What a plugin is ------------------------------------------------------------------
 
@@ -564,7 +565,7 @@ fn clean_up(folder: &Path) -> Vec<String> {
 // Each running as its switch says: started, stopped, started again with new
 // settings (what it showed goes with the old one). True when any changed.
 pub fn sync(sh: &Shared) -> bool {
-    let conf = sh.setting("plugins");
+    let conf = sh.setting(config::PLUGINS);
     let lang = sh.lang();
     let (mut changed, mut stale, mut start, mut woken) = (false, Vec::new(), false, false);
     let clean;
@@ -625,7 +626,7 @@ pub fn sync(sh: &Shared) -> bool {
 //   state  off | needs (a parameter) | running
 //   said   what went wrong in its last turn, if anything
 pub fn view(sh: &Shared) -> Value {
-    let conf = sh.setting("plugins");
+    let conf = sh.setting(config::PLUGINS);
     let lang = sh.lang();
     let r = sh.plugins.lock().unwrap();
     Value::Array(

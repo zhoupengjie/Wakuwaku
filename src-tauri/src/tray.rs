@@ -10,6 +10,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{Emitter, Wry};
 
 use crate::{data, i18n, now_ms, pet, Shared};
+use crate::config;
 
 const TRAY_ID: &str = "main";
 
@@ -139,7 +140,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     }
     // Her home: the island, the taskbar, or the top bar and the dock.
     let homes = Submenu::new(app, t("menu.home"), true)?;
-    let display = sh.setting("display");
+    let display = sh.setting(config::DISPLAY);
     for id in ["island", "taskbar", "split"] {
         let on = if id == "island" { home == "island" } else { display.as_str() == Some(id) };
         homes.append(&CheckMenuItem::with_id(app, format!("display:{id}"), t(&format!("menu.{id}")), true, on, None::<&str>)?)?;
@@ -189,13 +190,20 @@ pub fn part_menu(sh: &Shared, part: &str) -> Option<tauri::Result<Menu<Wry>>> {
 pub fn on_menu(sh: &Arc<Shared>, id: &str) {
     match id {
         "toggle" => sh.set_hidden(sh.is_visible()),
-        "walk" | "look" | "dnd" => sh.change(json!({ id: !sh.flag(id) })),
+        "walk" | "look" | "dnd" => {
+            let key = match id {
+                "walk" => config::WALK,
+                "look" => config::LOOK,
+                _ => config::DND,
+            };
+            sh.change(json!({ id: !sh.flag(key) }))
+        }
         // The dock's 占着位置: keeping its room, or getting out of the way.
         "dockRoom" => {
-            let room = sh.setting("splitDock").as_str() == Some("room");
+            let room = sh.setting(config::SPLIT_DOCK).as_str() == Some("room");
             sh.change(json!({ "splitDock": if room { "hide" } else { "room" } }));
         }
-        "out" => crate::shared::set_out(sh, !sh.flag("out")),
+        "out" => crate::shared::set_out(sh, !sh.flag(config::OUT)),
         "corner" => crate::shared::come_home(sh),
         "settings" => crate::island::open_settings(sh, None),
         // The taskbar's parts dragged about, on the strip itself (island.js).
@@ -268,9 +276,9 @@ pub fn create(sh: &Shared) -> tauri::Result<()> {
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
                 let sh = crate::shared(tray.app_handle());
-                if sh.flag("dnd") {
+                if sh.flag(config::DND) {
                     crate::island::open_settings(&sh, None);
-                } else if cfg!(target_os = "macos") && sh.home() == "island" && !sh.flag("out") {
+                } else if cfg!(target_os = "macos") && sh.home() == "island" && !sh.flag(config::OUT) {
                     // On a Mac the notch is another app's to hover (Atoll and
                     // the like): her island stays in it, and this drops it
                     // open, or puts it back (island.js peek).
@@ -311,8 +319,8 @@ fn refresh_here(sh: &Shared) {
     let lang = sh.lang();
     // Whose: the session's name, unless the specifics are kept off screen.
     let name: String = now["name"].as_str().unwrap_or("").chars().take(40).collect();
-    let project = if name.is_empty() || sh.setting("details") == false { now["project"].as_str().unwrap_or("") } else { &name };
-    let status = if sh.flag("dnd") {
+    let project = if name.is_empty() || sh.setting(config::DETAILS) == false { now["project"].as_str().unwrap_or("") } else { &name };
+    let status = if sh.flag(config::DND) {
         i18n::t(lang, "menu.dnd")
     } else if project.is_empty() {
         i18n::t(lang, &format!("mood.{mood}"))

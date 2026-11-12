@@ -40,6 +40,7 @@ use serde_json::{json, Value};
 use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::{screen::Area, Shared};
+use crate::config;
 
 type Mon = (i32, i32, i32, i32);
 
@@ -94,7 +95,7 @@ fn wanted(sh: &Shared) -> Vec<(Area, String, bool)> {
     if !cfg!(windows) {
         return Vec::new();
     }
-    let layout = sh.setting("deskLayout");
+    let layout = sh.setting(config::DESK_LAYOUT);
     let entries: &[Value] = layout.as_array().map_or(&[], Vec::as_slice);
     let held = DRAG.lock().unwrap().keep.clone();
     if entries.is_empty() && held.is_empty() {
@@ -173,7 +174,7 @@ pub fn refresh(sh: &Shared) {
     }
     let screens = sh.screens();
     let keys: Vec<String> = screens.areas.iter().map(|a| key_of(sh, a.mon)).collect();
-    let layout = sh.setting("deskLayout");
+    let layout = sh.setting(config::DESK_LAYOUT);
     let (light, accent) = look_now();
     let sprite = sprite_url(sh);
     for (label, key, mon, sf) in ready {
@@ -191,10 +192,10 @@ pub fn refresh(sh: &Shared) {
             // Windows' accent, as taskbar:look has it (what is picked with
             // Ctrl, the rectangle: desk.js).
             "accent": accent,
-            "detailed": sh.setting("details") != false,
+            "detailed": sh.setting(config::DETAILS) != false,
             "home": sh.home(),
             // What the taskbar shows while it is her home (a board's Add says where each one is).
-            "bar": if sh.home() == "taskbar" { sh.setting("taskbarLayout") } else { Value::Null },
+            "bar": if sh.home() == "taskbar" { sh.setting(config::TASKBAR_LAYOUT) } else { Value::Null },
             "sprite": sprite,
             "layout": if layout.is_array() { layout.clone() } else { json!([]) },
         });
@@ -223,7 +224,7 @@ pub fn refresh(sh: &Shared) {
 
 // Her sheet, for today's glyph (her face).
 fn sprite_url(sh: &Shared) -> Value {
-    let id = sh.setting("pet");
+    let id = sh.setting(config::PET);
     let id = id.as_str().unwrap_or("");
     crate::data::pets(&sh.dir).iter().find(|p| p.id == id).map_or(Value::Null, |p| json!(p.url()))
 }
@@ -819,7 +820,7 @@ pub fn desk_type(app: tauri::AppHandle, window: WebviewWindow, on: bool) {
 pub async fn desk_keep(app: tauri::AppHandle, entries: Vec<Value>, gone: Vec<String>) -> bool {
     count(&COMMANDS);
     let sh = shared_of(&app);
-    let old = sh.setting("deskLayout");
+    let old = sh.setting(config::DESK_LAYOUT);
     let old = old.as_array().cloned().unwrap_or_default();
     let mut given = entries;
     let pointer_key = || crate::screen::cursor(&sh, 1.0).and_then(|(x, y)| sh.screens().areas.into_iter().find(|a| x >= a.mon.0 && x < a.mon.0 + a.mon.2 && y >= a.mon.1 && y < a.mon.1 + a.mon.3)).map(|a| key_of(&sh, a.mon));

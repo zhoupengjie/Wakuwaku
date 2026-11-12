@@ -17,6 +17,7 @@ use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, Webvie
 
 use crate::pointer::{ClickThrough, Mode};
 use crate::{island, now_ms, Shared};
+use crate::config;
 
 // Window size at scale 1: room for the bubble above a 192x208 cell, and
 // wide enough that the bubble says something before it has to cut it short.
@@ -172,12 +173,12 @@ fn window(sh: &Shared) -> Option<WebviewWindow> {
 }
 
 fn scale(sh: &Shared) -> f64 {
-    sh.setting("scale").as_f64().unwrap_or(0.55)
+    sh.setting(config::SCALE).as_f64().unwrap_or(0.55)
 }
 
 // Up: she is out of her home.
 pub fn is_shown(sh: &Shared) -> bool {
-    sh.is_visible() && sh.flag("out")
+    sh.is_visible() && sh.flag(config::OUT)
 }
 
 // The display her window is on (x, y, w, h).
@@ -254,7 +255,7 @@ fn home_spot(sh: &Shared) -> (i32, i32) {
 
 // Where she was last left, or home.
 fn saved_spot(sh: &Shared) -> (i32, i32) {
-    let spot = match (sh.setting("x").as_i64(), sh.setting("y").as_i64()) {
+    let spot = match (sh.setting(config::X).as_i64(), sh.setting(config::Y).as_i64()) {
         (Some(x), Some(y)) => (x as i32, y as i32),
         _ => home_spot(sh),
     };
@@ -537,7 +538,7 @@ pub fn any_down() -> Option<bool> {
 // page's pointer, her eyes, a drag. Returns ms until the next look.
 pub fn poll(sh: &Arc<Shared>, cursor: (i32, i32)) -> u64 {
     let is_idle = sh.pet.lock().unwrap().mood(now_ms()) == "idle";
-    let look = sh.flag("look");
+    let look = sh.flag(config::LOOK);
     let scale = scale(sh);
     let down = primary_down();
 
@@ -766,13 +767,13 @@ pub fn let_go(sh: &Arc<Shared>) {
 // A double-click: she flies back into her home (else the settings, grown
 // out of a home risen for them).
 pub fn double_click(sh: &Arc<Shared>) {
-    if sh.flag("out") && crate::notch::in_notch() {
+    if sh.flag(config::OUT) && crate::notch::in_notch() {
         // Her home in a Mac's notch is out of sight: she stays, and the
         // island drops open from it to show what is going on (island.js peek):
         // open, not toggled, so a second double-click does not shut it again.
         sh.log("pet: double-click; the island drops open from the notch");
         let _ = sh.app.emit_to("island", "island:peek", serde_json::json!({ "open": true }));
-    } else if sh.flag("out") {
+    } else if sh.flag(config::OUT) {
         fly_home(sh);
     } else {
         island::open_settings(sh, None);

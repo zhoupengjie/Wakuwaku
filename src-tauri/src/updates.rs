@@ -45,6 +45,7 @@ use sha2::{Digest, Sha256};
 
 use crate::proxy::{Answer, Miss};
 use crate::Shared;
+use crate::config;
 
 const GITHUB_LATEST: &str = "https://api.github.com/repos/zhoupengjie/Wakuwaku/releases/latest";
 const GITHUB_REPO: &str = "https://github.com/zhoupengjie/Wakuwaku/";
@@ -189,7 +190,7 @@ pub(crate) fn in_china() -> bool {
 
 // Gitee first: as set (updateFrom), or by itself in China.
 pub(crate) fn gitee_first(sh: &Shared) -> bool {
-    match sh.setting("updateFrom").as_str() {
+    match sh.setting(config::UPDATE_FROM).as_str() {
         Some("gitee") => true,
         Some("github") => false,
         _ => in_china(),
@@ -456,7 +457,7 @@ fn tell(sh: &Arc<Shared>) {
         return;
     }
     let Some(r) = STATE.lock().unwrap().latest.clone().filter(|r| newer(&r.version, current())) else { return };
-    if sh.setting("updateTold").as_str() == Some(r.version.as_str()) {
+    if sh.setting(config::UPDATE_TOLD).as_str() == Some(r.version.as_str()) {
         return;
     }
     let words = crate::i18n::t(lang, "update.out").replace("{version}", &r.version);
@@ -509,7 +510,7 @@ pub fn start(sh: &Arc<Shared>) {
         std::thread::sleep(Duration::from_secs(20));
         loop {
             let due = crate::now_ms() >= STATE.lock().unwrap().next_at;
-            if due && sh.setting("autoUpdateCheck") != false {
+            if due && sh.setting(config::AUTO_UPDATE_CHECK) != false {
                 check_now(&sh);
             } else {
                 tell(&sh);

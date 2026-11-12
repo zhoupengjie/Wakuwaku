@@ -8,14 +8,15 @@
 // (island-vars.ts, read and written as st.<name>), and the parts made
 // before this one in core.pieces (a later one's reached once the page is
 // up). What it hands back is the island's again.
+import * as State from './island-state.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 
 export function dropPart(core: IslandCore) {
   const {
     st, pieces, go, BODY_H, BODY_W, BREAK_PX, CLIPS, DROP_R, PULL_ROOM, REACH_R, REACH_SHARE, atBottom, body,
-    dropHer, dropSheet, gooDrop, gooIsland, gooNeck, her, home, isHome, isNudging, isOn, isSetting, isSide,
-    island, pressNudge, setRoom, sheetImage, showFrame, tbEdge, update,
+    dropHer, dropSheet, endNudge, gooDrop, gooIsland, gooNeck, her, home, isHome, isNudging, isOn, isSetting,
+    isSide, island, pressNudge, setRoom, sheetImage, showFrame, tbEdge, update,
   } = core
   const { hidePlate, setStow } = pieces.plate
 
@@ -169,6 +170,12 @@ export function dropPart(core: IslandCore) {
       // pointer, is this press too: not one to open the settings.
       if (st.view === 'ask') return
       if (!isNudging()) return pet.openSettings()
+      // What was kept and shown as she was looked at: not open by itself
+      // (island-state.ts pressOn), so the settings, as for any other press.
+      if (State.pressOn(st.nudge) === 'press') {
+        endNudge()
+        return pet.openSettings()
+      }
       st.pulledAt = Date.now()
       return pressNudge()
     }

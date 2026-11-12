@@ -13,7 +13,9 @@ export type View = '' | 'compact' | 'expanded' | 'ask' | 'settings'
 // one as it opens next, island-ring.ts takePending): open until `until`
 // (Infinity: until seen), her playing clip, text (a hello) in place of the
 // mood's line, a widget's card; kind, what opened it (an ending's goes as
-// its session is at work again), and after, its own time once seen.
+// its session is at work again), and after, its own time once seen. kept:
+// what was kept for the next look (a hello, a plugin's card), shown as the
+// person opened the island (a hover, the notch's peek): not open by itself.
 export interface Nudge {
   readonly until: number
   readonly clip: string
@@ -21,6 +23,7 @@ export interface Nudge {
   readonly widget: any
   readonly kind?: string | null
   readonly after?: number
+  readonly kept?: boolean
 }
 
 // Her being pulled out of it (island-drop.ts): pressed at (x0, y0); started
@@ -107,6 +110,19 @@ export const nudging = (s: IslandState, now: number): boolean => !!s.nudge && no
 // While she is being pulled out (not yet carried) or taken back in, the
 // pull has the island: its shape is not drawn anew.
 export const held = (s: IslandState): boolean => !!(s.pull?.started && !s.pull.carrying) || s.isAbsorbing
+
+// A press on the island while something is open in it that way (nudging),
+// not on a session's or a widget's row:
+//   there  what its words point to opens (a letter, the updates; #45)
+//   close  it closes: it opened by itself, the press was to put it away (#45)
+//   press  a press as any other (the settings): what was kept, shown as the
+//          person opened the island, did not open it by itself; it goes.
+// After a start her hello is kept so, and the first click on the island
+// closed it instead of opening the settings.
+export function pressOn(nudge: Nudge | null): 'there' | 'close' | 'press' {
+  if (nudge?.widget?.open?.tab) return 'there'
+  return nudge?.kept ? 'press' : 'close'
+}
 
 // Its shape: the settings over all, a prompt, then open while the pointer
 // rests on it, something opened it by itself or the notch's peek is down.

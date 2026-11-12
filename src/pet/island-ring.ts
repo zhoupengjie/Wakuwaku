@@ -332,7 +332,7 @@ export function ringPart(core: IslandCore) {
     const p = st.pending
     st.pending = null
     if (Date.now() > p.until) return
-    go({ type: 'nudge', nudge: { until: Date.now() + p.ms, clip: p.clip, text: p.text, widget: p.widget } })
+    go({ type: 'nudge', nudge: { until: Date.now() + p.ms, clip: p.clip, text: p.text, widget: p.widget, kept: true } })
     clearTimeout(st.nudgeTimer)
     st.nudgeTimer = setTimeout(() => {
       go({ type: 'unnudge' })

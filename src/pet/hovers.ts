@@ -18,8 +18,14 @@ const EDGE_PX = 2
 // it is ({ x, y, caught }, null once gone); boxOf: an element's box
 // ({ left, top, right, bottom }). The elements to leave, innermost first
 // (as a browser leaves them).
-function stale(entered, under, at, boxOf) {
-  const out = []
+interface Box {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+function stale<E>(entered: E[], under: E[], at: { x: number; y: number; caught?: boolean } | null, boxOf: (el: E) => Box | null): E[] {
+  const out: E[] = []
   for (const el of entered) {
     if (under.includes(el)) continue
     if (at?.caught) {

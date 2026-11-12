@@ -39,7 +39,7 @@ const LOOK_ROW = 9
 const DIRECTIONS = 16
 
 // The look cell for a point (dx, dy) away from the pet, screen axes (y down).
-function lookCell(dx, dy) {
+function lookCell(dx: number, dy: number) {
   const degrees = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360
   const index = Math.round(degrees / (360 / DIRECTIONS)) % DIRECTIONS
   return { row: LOOK_ROW + Math.floor(index / 8), frame: index % 8, index }

@@ -914,7 +914,10 @@ pub struct Registry {
     records: Map<String, Value>,
 }
 
-static REGISTRY: LazyLock<crate::lock::RwLock<Registry>> = LazyLock::new(|| crate::lock::RwLock::new("addons::REGISTRY", Registry::default()));
+// Read inside other locks (Shared::widgets_view asks it whose each widget
+// is), and nothing taken inside it: what runs under it reads files and
+// the registry alone (lock.rs LEAF).
+static REGISTRY: LazyLock<crate::lock::RwLock<Registry>> = LazyLock::new(|| crate::lock::RwLock::ranked("addons::REGISTRY", crate::lock::LEAF, Registry::default()));
 
 // One lock per package id, held for the whole of an install, update or
 // uninstall of it (finding 8): a file install, a market install or update,

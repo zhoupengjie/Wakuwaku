@@ -683,12 +683,13 @@ mod imp {
     }
 
     // An icon kept for the page under its key; drawn once.
+    // Drawn with PNGS let go (drawing takes DRAW): one lock at a time.
     fn keep_png(key: &str, make: impl FnOnce() -> Option<String>) -> Option<String> {
-        let mut pngs = PNGS.lock().unwrap();
-        let pngs = pngs.get_or_insert_with(HashMap::new);
-        if !pngs.contains_key(key) {
-            pngs.insert(key.to_string(), (make()?, false));
+        if PNGS.lock().unwrap().as_ref().is_some_and(|p| p.contains_key(key)) {
+            return Some(key.to_string());
         }
+        let png = make()?;
+        PNGS.lock().unwrap().get_or_insert_with(HashMap::new).entry(key.to_string()).or_insert((png, false));
         Some(key.to_string())
     }
 

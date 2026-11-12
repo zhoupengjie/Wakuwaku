@@ -251,8 +251,13 @@ pub struct WriteGuard<'a, T> {
 }
 
 impl<T> RwLock<T> {
+    #[allow(dead_code)]
     pub const fn new(name: &'static str, value: T) -> Self {
         RwLock { name, rank: PLAIN, inner: std::sync::RwLock::new(value) }
+    }
+
+    pub const fn ranked(name: &'static str, rank: u8, value: T) -> Self {
+        RwLock { name, rank, inner: std::sync::RwLock::new(value) }
     }
 
     #[cfg_attr(debug_assertions, track_caller)]

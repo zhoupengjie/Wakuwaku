@@ -332,8 +332,10 @@ mod imp {
     static EMBED: Lock<Embed> = Lock::new("embed::EMBED", Embed { hwnd: 0, tray: 0, parented: false, owned: false, child: None, layered: false, laid: Laid { cap: None, room: 0, embedded: false }, basis: None, said: String::new(), restarting: false });
     static WAKE: (Lock<bool>, Condvar) = (Lock::new("embed::WAKE", false), Condvar::new());
     // One apply at a time (the pointer's thread and the page's command both
-    // call it): two at once both saw the window out and both put it in.
-    static APPLYING: Lock<()> = Lock::new("embed::APPLYING", ());
+    // call it): two at once both saw the window out and both put it in. Only
+    // ever tried (try_lock), never waited for, and held around the apply,
+    // which takes the island's lock and EMBED: an outer lock (lock.rs).
+    static APPLYING: Lock<()> = Lock::ranked("embed::APPLYING", crate::lock::OUTER, ());
     static STARTED: AtomicBool = AtomicBool::new(false);
     // Moves into the taskbar or out of it failing in a row (tried again at
     // every look at the pointer): since when, how many, and when last told.

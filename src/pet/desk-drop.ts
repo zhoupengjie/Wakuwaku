@@ -27,13 +27,10 @@
 // (desk.rs): what comes before this page knows its display (desk:state,
 // its icons read first) waits for it, the last preview and the drop.
 import * as G from './deskgrid.ts'
-import { Desk } from './pages.ts'
+import type { DeskFace } from './desk.ts'
 
-// Once desk.ts has made the desktop (its inner parts, D).
-const D = Desk?.inner
-if (D) deskDrop()
-
-function deskDrop() {
+// Made by desk-main.ts once desk.ts has made the desktop (its inner parts, D).
+export function deskDrop(D: DeskFace['inner']) {
   const { invoke } = window.__TAURI__.core
   const { listen } = window.__TAURI__.event
   const LABEL = window.__TAURI_INTERNALS__?.metadata?.currentWebview?.label || ''

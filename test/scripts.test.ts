@@ -54,11 +54,11 @@ test('no page script declares a function twice in one scope', () => {
   }
 })
 
-// The page scripts reach each other by import (pages.ts for the big ones'
-// faces, bridge.ts for pet), never through window: what is put there
-// (pages.ts provide, bridge.ts) is for what looks in from outside alone,
-// the preview and /debug/eval. Only Tauri's and the browser's own are read
-// on window.
+// The page scripts reach each other by import (bridge.ts for pet) and by
+// what their page's entry hands them (main.ts: the big ones' faces), never
+// through window: what is put there (the entries' expose, bridge.ts) is
+// for what looks in from outside alone, the preview and /debug/eval. Only
+// Tauri's and the browser's own are read on window.
 test('no page script reaches another through window', () => {
   const ours = ['pet', 'Island', 'Isle', 'Settings', 'Picker', 'CapsulePanel', 'HerTalk', 'Desk', 'Panel', 'I18n', 'Flow', 'Widgets', 'WCards', 'WDesk', 'DeskGrid', 'Capsule', 'Placing', 'Presses', 'Sprite', 'Status', 'Views', 'Agents', 'AddonUI', 'Addons', 'Anchor', 'Aim', 'Hovers', 'Mica', 'IslandParts', 'SettingsParts']
   const read = new RegExp(String.raw`\bwindow\??\.(${ours.join('|')})\b`)
@@ -73,4 +73,20 @@ test('no page script reaches another through window', () => {
       })
   }
   assert.deepEqual(found, [])
+})
+
+// Each page is one script, its entry (the composition root): it makes the
+// page's parts in order and hands each what it works with, and it alone
+// puts what they hand back on window (expose, entry.ts). A part that put
+// itself there, or a page that loaded its parts one by one again, would
+// bring back the order they had to be listed in.
+test('each page loads its entry alone, and only the entries put faces on window', () => {
+  const entries = { 'index.html': 'main.js', 'desk.html': 'desk-main.js', 'bar.html': 'bar-main.js', 'barpop.html': 'barpop-main.js' }
+  for (const [page, entry] of Object.entries(entries)) {
+    const html = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'pet', page), 'utf8')
+    assert.deepEqual([...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)].map(m => m[1]), [entry], page)
+  }
+  const puts = /\bexpose\(|Object\.assign\(window\b/
+  const found = scripts.filter(file => puts.test(fs.readFileSync(path.join(import.meta.dirname, '..', file), 'utf8'))).map(f => path.basename(f))
+  assert.deepEqual(found.sort(), ['desk-main.ts', 'entry.ts', 'main.ts'])
 })

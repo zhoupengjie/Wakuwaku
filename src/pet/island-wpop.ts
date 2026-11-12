@@ -9,13 +9,12 @@
 // up). What it hands back is the island's again.
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
-import { Picker, Settings } from './pages.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 
 export function wpopPart(core: IslandCore) {
   const {
-    st, pieces, Widgets, el, home, isDetailed, isSide, newId, t, update,
+    st, pieces, later, Widgets, el, home, isDetailed, isSide, newId, t, update,
   } = core
   const { barRest } = pieces.right
   const { entryNodes, fillHer, memberName, needsSettings, popCtx, tbLayout } = pieces.layout
@@ -130,7 +129,7 @@ export function wpopPart(core: IslandCore) {
     st.arranged = ''
     update()
     // picker.ts: its cards' "已放" anew.
-    Picker?.changed()
+    later.Picker?.changed()
   }
 
   // Off the taskbar, and kept so.
@@ -157,7 +156,7 @@ export function wpopPart(core: IslandCore) {
     if (what === 'remove') {
       // picker.ts: taken off with a way back (undo), off once it is nowhere.
       const at = group && w ? entry.items.findIndex(m => Widgets.sourcesOf(m, st.allWidgets).includes(w)) : -1
-      if (Picker?.remove({ entry: entry.id, member: at })) return closeWidgetPop()
+      if (later.Picker?.remove({ entry: entry.id, member: at })) return closeWidgetPop()
       if (!group) return removeEntry(entry.id)
       const index = w ? entry.items.findIndex(m => Widgets.sourcesOf(m, st.allWidgets).includes(w)) : -1
       return index >= 0 ? removeMember(entry.id, index) : removeEntry(entry.id)
@@ -173,7 +172,7 @@ export function wpopPart(core: IslandCore) {
   function openWidgetSettings(w) {
     if (w.from === 'mail') return pet.openSettings('mail')
     const key = w.plugin || w.id
-    if (w.plugin || key === 'monitor') Settings?.openPlugin?.(key)
+    if (w.plugin || key === 'monitor') later.Settings?.openPlugin?.(key)
     pet.openSettings(key ? `widgets:${key}` : 'widgets')
   }
   wgPop.addEventListener('contextmenu', e => {

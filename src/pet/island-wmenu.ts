@@ -11,13 +11,12 @@ import * as DeskGrid from './deskgrid.ts'
 import * as Placing from './placing.ts'
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
-import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 
 export function wmenuPart(core: IslandCore) {
   const {
-    st, pieces, Widgets, el, home, isDetailed, island, isleCtx, newId, rowSize, setRowSize, showCard, t, update,
+    st, pieces, later, Widgets, el, home, isDetailed, island, isleCtx, newId, rowSize, setRowSize, showCard, t, update,
   } = core
   const { barRest } = pieces.right
   const {
@@ -151,7 +150,7 @@ export function wmenuPart(core: IslandCore) {
     if (w) parts.push(item('settings', t(st.lang, 'menu.settings')))
     // picker.ts: in the open island, a member's way of showing in her
     // capsule (under its name), and out of it (移出胶囊).
-    const isle = !bar && w ? Picker?.isleMenu?.(w, { opt, line }) : null
+    const isle = !bar && w ? later.Picker?.isleMenu?.(w, { opt, line }) : null
     if (isle) parts.splice(1, 0, ...isle.lines)
     parts.push(item('remove', isle?.remove || t(st.lang, bar && entry ? 'menu.remove' : 'capsule.out')))
     parts.push('<div class="wmwhy" hidden></div>')
@@ -262,10 +261,10 @@ export function wmenuPart(core: IslandCore) {
         return w && openWidgetSettings(w)
       // picker.ts: its way of showing in her capsule.
       case 'cmode':
-        return w && Picker?.setMode(w, v)
+        return w && later.Picker?.setMode(w, v)
       case 'remove':
         // picker.ts: taken off, with a way back (undo), and off once it is nowhere.
-        if (Picker?.remove(m.where === 'bar' && entry ? { entry: entry.id, member } : { widget: w })) return
+        if (later.Picker?.remove(m.where === 'bar' && entry ? { entry: entry.id, member } : { widget: w })) return
         if (m.where === 'bar' && entry) return Widgets.isGroup(entry) && member >= 0 ? removeMember(entry.id, member) : removeEntry(entry.id)
         // Out of her capsule with no picker to do it: off (put nowhere now).
         if (w) return pet.settings.set({ widgetsOff: [...new Set([...(st.config.widgetsOff || []), w.id])] })

@@ -8,13 +8,12 @@
 // before this one in core.pieces (a later one's reached once the page is
 // up). What it hands back is the island's again.
 import * as Mica from './mica.ts'
-import { Settings } from './pages.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 
 export function lookPart(core: IslandCore) {
   const {
-    st, pieces, go, PEEK_MS, TASKBAR_H, body, clearWhen, el, endNudge, home, isCapsule, isClear, isFilled,
+    st, pieces, later, go, PEEK_MS, TASKBAR_H, body, clearWhen, el, endNudge, home, isCapsule, isClear, isFilled,
     isLight, isMica, isOn, isSide, isSlim, isStripLight, island, islandViews, placeAnchor, sendSolid, stripH,
     t, update,
   } = core
@@ -46,7 +45,7 @@ export function lookPart(core: IslandCore) {
     fitPage()
     // A monitor's scale or Windows text scaling may have changed while the
     // settings are open; recompute their body height with the new CSS room.
-    if (Settings?.isOpen?.()) Settings.redraw()
+    if (later.Settings?.isOpen?.()) later.Settings.redraw()
     // Once laid out for it (its edge may have just changed too).
     setTimeout(() => {
       const r = island.parentElement.getBoundingClientRect()
@@ -105,7 +104,7 @@ export function lookPart(core: IslandCore) {
     if (!stripThick) return
     document.documentElement.style.setProperty('--strip-h', `${stripThick / (devicePixelRatio || 1)}px`)
     fitPage()
-    if (Settings?.isOpen?.()) Settings.redraw()
+    if (later.Settings?.isOpen?.()) later.Settings.redraw()
     sendSolid()
   })
 

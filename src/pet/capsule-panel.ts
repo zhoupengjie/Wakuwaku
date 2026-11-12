@@ -1,7 +1,7 @@
 // Her capsule's panel (the picker of 2026-10-17): a popover over her
 // capsule on the taskbar (under the island at the top), opened by a press on
 // her capsule while the taskbar's layout is edited, or by her menu's 编辑胶囊.
-// Loaded after picker.ts, which it works with (Picker, pages.ts) as island.ts
+// Made after picker.ts (main.ts), which it works with (Picker) as island.ts
 // does (Isle).
 //
 // It lists the capsule's members (capsule.ts), in their order: each with a
@@ -18,14 +18,14 @@ import * as C from './capsule.ts'
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { t } from '../shared/i18n.ts'
-import { Isle, Picker, provide } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { IsleFace } from './island.ts'
+import type { PickerFace } from './picker.ts'
 
-// Only with the island and the picker there (both made before this): else none.
-provide('CapsulePanel', Isle && Picker ? capsulePanel() : null)
 export type CapsulePanelFace = ReturnType<typeof capsulePanel>
 
-function capsulePanel() {
+// Only with the island and the picker there (main.ts: both made before this).
+export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
   const el = Isle.el
   const T = (key, vars?) => t(Isle.lang, key, vars)
   const esc = WCards.esc

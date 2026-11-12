@@ -7,13 +7,14 @@
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
 import * as Agents from './agents.ts'
-import { Island } from './pages.ts'
+import type { IslandFace } from './island.ts'
 
 // What this part takes of the settings' core: the names it reads (and,
 // of its lets, writes); settings.ts's call is checked against them.
 export interface WelcomeCore {
   Agents: any
   COLOR: any
+  Island: IslandFace
   T: any
   aboutHTML: any
   connecting: any
@@ -47,7 +48,7 @@ export interface WelcomeCore {
 
 export function welcomePart(core: WelcomeCore) {
   const {
-    Agents, COLOR, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
+    Agents, COLOR, Island, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
     pageMail, pageNet, pageNow, pageUpdate, pageWidgets, part, row, sec, seg, sw, thumb, winMode,
   } = core
 

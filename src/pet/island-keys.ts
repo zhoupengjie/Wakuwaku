@@ -7,13 +7,12 @@
 // (island-vars.ts, read and written as st.<name>), and the parts made
 // before this one in core.pieces (a later one's reached once the page is
 // up). What it hands back is the island's again.
-import { Picker, Settings } from './pages.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 
 export function keysPart(core: IslandCore) {
   const {
-    st, pieces, along, body, el, endEdit, hi, home, isOn, isSetting, isSide, lo, t,
+    st, pieces, later, along, body, el, endEdit, hi, home, isOn, isSetting, isSide, lo, t,
   } = core
   const {
     barRest, batMark, clockBox, netMark, quickBox, trayBox, volMark, windowsBox,
@@ -177,7 +176,7 @@ export function keysPart(core: IslandCore) {
     keyedAt = 0
     if (isSetting()) {
       keyedAt = Date.now()
-      Settings?.close?.('keys')
+      later.Settings?.close?.('keys')
     }
     const want = part === 'tray' ? 'tray' : 'apps'
     // Win+T again with the keyboard on the buttons: the next one (Shift: the one before), as Windows' does.
@@ -211,7 +210,7 @@ export function keysPart(core: IslandCore) {
       // then ends it, as 完成: kept as it goes, there is no 取消 (#53).
       if (st.editLayout && e.key === 'Escape') {
         e.preventDefault()
-        if (Picker?.escape()) return
+        if (later.Picker?.escape()) return
         return endEdit(true)
       }
       if (!keyPart) return

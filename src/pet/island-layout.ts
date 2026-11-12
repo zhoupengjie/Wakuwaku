@@ -9,7 +9,6 @@
 // up). What it hands back is the island's again.
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
-import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 import type { TbLayout } from './island-vars.ts'
@@ -19,7 +18,7 @@ type CarouselNode = HTMLElement & { _held?: boolean }
 
 export function layoutPart(core: IslandCore) {
   const {
-    st, pieces, CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, body, el, face, home,
+    st, pieces, later, CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, body, el, face, home,
     isCapsule, isDetailed, isLight, isOn, isSide, isSlim, isSplit, isStripLight, island, len, lo, sheetImage,
     showFrame, sizeOf, t, takeWidgets, taskCompactH,
   } = core
@@ -533,7 +532,7 @@ export function layoutPart(core: IslandCore) {
     snapStart()
     pieces.look.inkParts()
     // Editing: picker.ts's popover over its widget, where it is now.
-    if (st.editLayout) Picker?.relaid()
+    if (st.editLayout) later.Picker?.relaid()
   }
 
   // The middle run in the middle of the screen, as Windows 11 has Start and
@@ -611,7 +610,7 @@ export function layoutPart(core: IslandCore) {
     placeSlot()
     snapStart()
     pieces.look.inkParts()
-    if (st.editLayout) Picker?.relaid()
+    if (st.editLayout) later.Picker?.relaid()
     if (st.wgFor) pieces.wpop.drawWidgetPop()
     requestAnimationFrame(pieces.look.sendTrayRects)
   })

@@ -27,7 +27,6 @@ import * as Status from './status.ts'
 import * as Widgets from './widgets.ts'
 import { t, list as nameList, render } from '../shared/i18n.ts'
 import { CLIPS } from './sprite.ts'
-import { Island, Picker, provide } from './pages.ts'
 import { pet } from './bridge.ts'
 import { lookPart } from './settings-look.ts'
 import { addonsPart } from './settings-addons.ts'
@@ -37,16 +36,15 @@ import { mailPart } from './settings-mail.ts'
 import { letterPart } from './settings-letter.ts'
 import { agentsPart } from './settings-agents.ts'
 import { welcomePart } from './settings-welcome.ts'
+import type { IslandFace } from './island.ts'
+import type { PickerFace } from './picker.ts'
 
-// Her own window's page (role=pet) has none: isOpen alone, always false.
-const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
-provide('Settings', ROLE === 'island' ? settingsPage() : { isOpen: () => false })
 export type SettingsFace = ReturnType<typeof settingsPage>
 
-// The settings, on the island's page: made as it starts; what the others see of them.
-function settingsPage() {
-
-
+// The settings, on the island's page: made as it starts (main.ts), after the
+// island and the picker (none unless the island is on); what the others see
+// of them.
+export function settingsPage(Island: IslandFace | null, Picker: PickerFace | null) {
   // The island's colours (on black), the same as island.ts.
   const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
   // Five pages: General (the sessions, the alerts, startup and the
@@ -463,7 +461,7 @@ function settingsPage() {
     ACCENT_PICKER, ilookDefault, ilookFor, ilookInput, ilookOf, ilookPresets, ilookSave, lhmAsks, pageLook,
     paperDo, winMode,
   } = lookPart({
-    AddonUI, COLOR, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
+    AddonUI, COLOR, Island, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
     get displaysRow() { return displaysRow },
     get ilookMode() { return ilookMode },
     get ilookOpen() { return ilookOpen },
@@ -743,7 +741,7 @@ function settingsPage() {
   const {
     PAGES, cardShows, displaysRow, failedHTML, screenRow, toolNames, toolsHere,
   } = welcomePart({
-    Agents, COLOR, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
+    Agents, COLOR, Island, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
     pageMail, pageNet, pageNow, pageUpdate, pageWidgets, part, row, sec, seg, sw, thumb, winMode,
     get connecting() { return connecting },
     get failedShortcuts() { return failedShortcuts },

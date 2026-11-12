@@ -8,13 +8,12 @@
 // before this one in core.pieces (a later one's reached once the page is
 // up). What it hands back is the island's again.
 import * as Presses from './presses.ts'
-import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 
 export function glidePart(core: IslandCore) {
   const {
-    st, pieces, body, crossLo, el, hi, home, isOn, isSide, lo, openedUp, t,
+    st, pieces, later, body, crossLo, el, hi, home, isOn, isSide, lo, openedUp, t,
   } = core
   const { barRest, imeMark, trayBox, windowsBox } = pieces.right
   const { alignApps, entryNodes, flashSince, placeSlot } = pieces.layout
@@ -285,7 +284,7 @@ export function glidePart(core: IslandCore) {
   let watching = false
   function watchPresses() {
     // picker.ts: its capsule panel, its popover, closed by a press elsewhere too.
-    const want = !!st.popFor || st.trayOpen || !!st.wgFor || !!st.stackFor || st.menuFor?.where === 'bar' || st.imeOpen || !!Picker?.watches()
+    const want = !!st.popFor || st.trayOpen || !!st.wgFor || !!st.stackFor || st.menuFor?.where === 'bar' || st.imeOpen || !!later.Picker?.watches()
     if (want === watching) return
     watching = want
     pet.taskbar.watch(want)

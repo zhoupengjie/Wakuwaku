@@ -1,9 +1,9 @@
 // The widget picker (the KDE-like design of 2026-10-17, its prototype the
 // user tried): a sidebar at the screen's side, the full height of the room
 // above her taskbar's strip, with every widget there is, to drag where it
-// should go or to press to add. Loaded after island.ts, in her home's page
-// (role=island; in her own window it does nothing), and working with
-// island.ts through Isle (pages.ts; its hooks there are marked "picker.ts").
+// should go or to press to add. Made after island.ts, in her home's page
+// (role=island, the island on; main.ts), and working with island.ts
+// through Isle (its hooks there are marked "picker.ts").
 //
 // Its way in: her taskbar's menu, 添加小工具… (editing the layout, the picker
 // open), or the edit bar's 添加小工具; in the island's home her menu's
@@ -50,11 +50,15 @@ import * as P from './placing.ts'
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { t } from '../shared/i18n.ts'
-import { CapsulePanel, Isle, provide } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { CapsulePanelFace } from './capsule-panel.ts'
+import type { IsleFace } from './island.ts'
 
-// Only with the island on (island.ts made Isle, before this): else none.
-provide('Picker', Isle?.isOn() ? pickerPage() : null)
+// What the picker is given once it is made, after it (main.ts): her
+// capsule's panel (capsule-panel.ts), null until then.
+export interface PickerLater {
+  CapsulePanel: CapsulePanelFace | null
+}
 export type PickerFace = ReturnType<typeof pickerPage>
 
 // Room on the strip for one more (placing.ts fitStrip): whether it fits,
@@ -120,7 +124,8 @@ interface Drag {
   fit?: Fit
 }
 
-function pickerPage() {
+// Only with the island on (main.ts, once island.ts has made Isle).
+export function pickerPage(Isle: IsleFace, later: PickerLater) {
   const el = Isle.el
   const T = (key, vars?) => t(Isle.lang, key, vars)
   const esc = WCards.esc
@@ -401,7 +406,7 @@ function pickerPage() {
     search.blur()
     // Out by the side, then gone (or at once, motion reduced).
     setTimeout(() => !open && (pk.hidden = true), reduced() ? 0 : 220)
-    if (home() === 'island' && !CapsulePanel?.isOpen()) pet.keyboard(false)
+    if (home() === 'island' && !later.CapsulePanel?.isOpen()) pet.keyboard(false)
     after()
   }
   // What it changed: the edit bar's 添加小工具, the window's room and where
@@ -579,7 +584,7 @@ function pickerPage() {
     Isle.takeWidgets(Isle.allWidgets)
     Isle.update()
     if (open) drawBadges()
-    CapsulePanel?.refresh()
+    later.CapsulePanel?.refresh()
   }
 
   // Into the strip at a place (moved there from elsewhere on it, or new);
@@ -1170,8 +1175,8 @@ function pickerPage() {
     const d = drag
     const pr = open ? rectOf(pk) : null
     if (pr && inRect(x, y, pr)) return { kind: 'picker' }
-    const panel = CapsulePanel?.isOpen() ? rectOf(CapsulePanel.el) : null
-    if (panel && inRect(x, y, panel)) return { kind: 'capsule', at: CapsulePanel.indexAt(y) }
+    const panel = later.CapsulePanel?.isOpen() ? rectOf(later.CapsulePanel.el) : null
+    if (panel && inRect(x, y, panel)) return { kind: 'capsule', at: later.CapsulePanel.indexAt(y) }
     if (home() !== 'taskbar') {
       const r = Isle.island.getBoundingClientRect()
       if (inRect(x, y, { left: r.left - 14, right: r.right + 14, top: r.top - 14, bottom: r.bottom + 14 })) return { kind: 'capsule' }
@@ -1247,7 +1252,7 @@ function pickerPage() {
     // Her capsule lit, the picker, the band.
     const capsuleHot = tg.kind === 'capsule'
     Isle.island.classList.toggle('pk-hot', capsuleHot)
-    CapsulePanel?.hot(capsuleHot)
+    later.CapsulePanel?.hot(capsuleHot)
     pk.classList.toggle('pk-hot', tg.kind === 'picker')
     pk.dataset.drop = tg.kind === 'picker' ? labelOf(tg)[0] : ''
     band.classList.toggle('pk-hot', tg.kind === 'bare')
@@ -1331,7 +1336,7 @@ function pickerPage() {
     band.hidden = true
     band.classList.remove('pk-hot')
     Isle.island.classList.remove('pk-hot')
-    CapsulePanel?.hot(false)
+    later.CapsulePanel?.hot(false)
     if (d.sent && tg.kind !== 'desk') pet.deskPreview(null)
     let landed = false
     switch (tg.kind) {
@@ -1479,7 +1484,7 @@ function pickerPage() {
       // A press on her capsule: its panel; on a widget: its popover, kept.
       if (p.key === 'her') {
         closePop()
-        return CapsulePanel?.toggle()
+        return later.CapsulePanel?.toggle()
       }
       if (isWidgetNode(p.node)) return popFor === p.node && popSticky ? closePop() : openPop(p.node, true)
       closePop()
@@ -1529,8 +1534,8 @@ function pickerPage() {
       drawGrid()
       return true
     }
-    if (CapsulePanel?.isOpen()) {
-      CapsulePanel.close()
+    if (later.CapsulePanel?.isOpen()) {
+      later.CapsulePanel.close()
       return true
     }
     if (open) {
@@ -1550,7 +1555,7 @@ function pickerPage() {
     // Its own (the picker, a toast, the edit bar, the strip being edited) are not elsewhere.
     const ours = over?.closest?.('.pk, .pk-toasts, .pk-pop, .cp, .tbedit, #bar-rest, #island')
     if (popFor && !(over && (pop.contains(over) || popFor.contains(over))) && !over?.closest?.('.pk-toasts')) closePop()
-    if (CapsulePanel?.isOpen() && !ours) CapsulePanel.close()
+    if (later.CapsulePanel?.isOpen() && !ours) later.CapsulePanel.close()
   })
   document.addEventListener(
     'pointerdown',
@@ -1566,7 +1571,7 @@ function pickerPage() {
   pet.onBlur(() => {
     if (home() !== 'island' || drag) return
     hide()
-    CapsulePanel?.close()
+    later.CapsulePanel?.close()
   })
   // Her menu in the island's home: 添加小工具… (the picker alone), 编辑胶囊;
   // on the taskbar, the picker comes with editing its layout. The Plugins
@@ -1577,7 +1582,7 @@ function pickerPage() {
     const what = p?.open === 'capsule' ? 'capsule' : 'picker'
     if (what === 'capsule') {
       if (home() === 'island') hide()
-      return CapsulePanel?.open()
+      return later.CapsulePanel?.open()
     }
     if (typeof p?.focus === 'string' && p.focus) {
       focusKey = p.focus
@@ -1587,7 +1592,7 @@ function pickerPage() {
       if (open) drawPicker()
     }
     if (home() === 'taskbar') return Isle.editTaskbar({ picker: true })
-    CapsulePanel?.close()
+    later.CapsulePanel?.close()
     show()
   }
   pet.onPicker(fromMenu)
@@ -1662,12 +1667,12 @@ function pickerPage() {
       press = null
       closePop()
       if (home() === 'taskbar') hide()
-      CapsulePanel?.close()
+      later.CapsulePanel?.close()
     },
     closeAll() {
       hide()
       closePop()
-      CapsulePanel?.close()
+      later.CapsulePanel?.close()
     },
     // The strip laid out anew: the popover over its widget again.
     relaid() {
@@ -1676,15 +1681,15 @@ function pickerPage() {
     },
     changed() {
       if (open) drawBadges()
-      CapsulePanel?.refresh()
+      later.CapsulePanel?.refresh()
     },
     // Where the window takes the mouse (island.ts sendSolid).
-    solids: () => [...(open ? [pk] : []), ...(pop.hidden ? [] : [pop]), ...(toasts.children.length ? [toasts] : []), ...(CapsulePanel?.isOpen() ? [CapsulePanel.el] : [])],
-    watches: () => (!!popFor && popSticky) || !!CapsulePanel?.isOpen(),
+    solids: () => [...(open ? [pk] : []), ...(pop.hidden ? [] : [pop]), ...(toasts.children.length ? [toasts] : []), ...(later.CapsulePanel?.isOpen() ? [later.CapsulePanel.el] : [])],
+    watches: () => (!!popFor && popSticky) || !!later.CapsulePanel?.isOpen(),
     // The island's home: room in the window for the picker, the panel, a toast under her island.
     roomOver(room, base) {
       if (home() !== 'island') return room
-      const want = open ? 640 : CapsulePanel?.isOpen() ? CapsulePanel.height() + 72 : toasts.children.length ? 120 : 0
+      const want = open ? 640 : later.CapsulePanel?.isOpen() ? later.CapsulePanel.height() + 72 : toasts.children.length ? 120 : 0
       if (!want) return room
       const r = room || base
       return { width: Math.max(r.width, base.width), height: Math.max(r.height, want) }

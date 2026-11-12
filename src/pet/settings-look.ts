@@ -7,14 +7,15 @@
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
 import * as AddonUI from './addonui.ts'
-import { Island } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { IslandFace } from './island.ts'
 
 // What this part takes of the settings' core: the names it reads (and,
 // of its lets, writes); settings.ts's call is checked against them.
 export interface LookCore {
   AddonUI: any
   COLOR: any
+  Island: IslandFace
   SIZES: any
   T: any
   displaysRow: any
@@ -40,7 +41,7 @@ export interface LookCore {
 
 export function lookPart(core: LookCore) {
   const {
-    AddonUI, COLOR, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
+    AddonUI, COLOR, Island, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
   } = core
 
   // By Windows' mode: a preset, or its parts one by one, over Windows' own

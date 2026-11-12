@@ -68,8 +68,8 @@ function bridge() {
     onCarried: on('pet:carried'),
     onAsks: on('pet:asks'),
     onShift: on('pet:shift'),
-    answer: (id: string, choice: string) => send('pet_answer', { id, choice }),
-    dismiss: (id: string) => send('pet_dismiss', { id }),
+    answer: (id: number, choice: unknown) => send('pet_answer', { id, choice }),
+    dismiss: (id: number) => send('pet_dismiss', { id }),
     keyboard: (needs: boolean) => send('pet_keyboard', { needs: needs === true }),
     // A shortcut being recorded: her global ones let go meanwhile (shortcuts.rs).
     shortcutsPause: (on: boolean) => send('pet_shortcuts_pause', { on: on === true }),

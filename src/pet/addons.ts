@@ -78,20 +78,74 @@ const STAGGER_MS = 2000
 const HUNT_MAX_MS = 60_000
 const RELOAD_MS = 4000
 
-const pageOf = id => `${ORIGIN}/${id}/__waku/main.html`
-const json = v => {
+const pageOf = (id: string) => `${ORIGIN}/${id}/__waku/main.html`
+const json = (v: unknown) => {
   try {
     return JSON.stringify(v) ?? null
   } catch {
     return null
   }
 }
-const str = (v, max = 4096) => String(v ?? '').slice(0, max)
+const str = (v: unknown, max = 4096) => String(v ?? '').slice(0, max)
+
+// A plugin she says to run (addons.rs running): its manifest's version and
+// main, its rev (another whenever any of it changes), what it may do, its
+// settings. From her side; its id is looked at before it is taken (apply).
+interface Item {
+  id: string
+  version: string
+  rev: string
+  main: string
+  perms: { net: string[]; agents: boolean; hardware: boolean; notify: boolean }
+  settings: Record<string, unknown>
+}
+// A widget's words on their way (widget): when last sent, the timer, the
+// last words, the askings they answer.
+interface WidgetSend {
+  at: number
+  timer: any
+  data: unknown
+  waiting: unknown[]
+}
+// A plugin's frame as the host keeps it. Its el and win are make's (the
+// page's iframe and its window, or a test's stand-ins); a ping is the nonce
+// she last sent it, ponged the one it last answered.
+interface Rec {
+  id: string
+  item: Item
+  el: unknown
+  win: unknown
+  ready: boolean
+  loads: number
+  restarts: number[]
+  fetches: number
+  inflight: number
+  logs: number[]
+  msgs: number[]
+  listens: Set<string>
+  widgets: Map<string, WidgetSend>
+  startedAt: number
+  ping: string | null
+  ponged: string | null
+  flooding?: boolean
+}
+// Starting the frames again one at a time (recover, step, probe).
+interface Recovering {
+  queue: Item[]
+  started: Rec[]
+  timer: any
+  since: number
+  wait: number
+  at: number
+  answered?: boolean
+  again?: boolean
+  found?: boolean
+}
 
 // The agents' sessions as a plugin sees them (waku.agents): each one's id,
 // agent, project, mood, since, and the line beside it; no more.
 const MOODS = ['idle', 'working', 'waiting', 'done', 'review', 'error']
-function agentsOf(list) {
+function agentsOf(list: unknown) {
   return (Array.isArray(list) ? list : [])
     .filter(s => s && typeof s === 'object' && typeof s.id === 'string' && s.id)
     .map(s => ({
@@ -123,28 +177,31 @@ interface HostDeps {
   rand?: () => number
 }
 function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout, views = () => {}, rand = Math.random }: HostDeps) {
-  const recs = new Map()
-  const bySource = new Map()
+  const recs = new Map<string, Rec>()
+  const bySource = new Map<unknown, Rec>()
   // Kept stopped (given up on), by id: its rev then, until she sends it changed.
-  const held = new Map()
+  const held = new Map<string, string | undefined>()
   // The last list she sent, by id.
-  const want = new Map()
+  const want = new Map<string, Item>()
   const env = { lang: 'zh', theme: 'dark', quiet: false }
   let known = false
-  let pending = null
-  let agents = []
-  let agentsJson = '[]'
+  let pending: Item[] | null = null
+  let agents: ReturnType<typeof agentsOf> = []
+  let agentsJson: string | null = '[]'
   let agentsAt = -Infinity
   let agentsTimer = 0
   let hardwareTimer = 0
 
-  const tell = (rec, what, value) => post(rec.win, { waku: 1, t: 'event', what, value })
-  const reply = (rec, n, ok, value) => post(rec.win, ok ? { waku: 1, t: 'reply', n, ok: true, value } : { waku: 1, t: 'reply', n, ok: false, error: String(value?.message ?? value) })
-  const refusal = r => (r && typeof r === 'object' && r.error ? String(r.error) : null)
+  // A reply's n: the asking's number, as the frame gave it; its value, what
+  // goes back or why not (an Error, or what was thrown or refused): any.
+  const tell = (rec: Rec, what: string, value: unknown) => post(rec.win, { waku: 1, t: 'event', what, value })
+  const reply = (rec: Rec, n: unknown, ok: boolean, value: any) => post(rec.win, ok ? { waku: 1, t: 'reply', n, ok: true, value } : { waku: 1, t: 'reply', n, ok: false, error: String(value?.message ?? value) })
+  // r: her answer, whatever JSON it is.
+  const refusal = (r: any) => (r && typeof r === 'object' && r.error ? String(r.error) : null)
   // Asked of her in its name: { error } a refusal, else its value (pick).
   // One slot of its in-flight budget held until the answer comes, so a
   // plugin cannot have more than INFLIGHT asking at once (whatever the kind).
-  function ask(rec, n, cmd, args, pick = r => r ?? null) {
+  function ask(rec: Rec, n: unknown, cmd: string, args: Record<string, unknown>, pick = (r: any): unknown => r ?? null) {
     if (rec.inflight >= INFLIGHT) return reply(rec, n, false, `${INFLIGHT} requests at once at most`)
     rec.inflight++
     return Promise.resolve()
@@ -155,17 +212,17 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
       )
       .finally(() => rec.inflight--)
   }
-  const quietly = promise => Promise.resolve(promise).catch(() => {})
+  const quietly = (promise: unknown) => Promise.resolve(promise).catch(() => {})
 
-  function start(item) {
+  function start(item: Item) {
     const { el, win } = make(item.id, pageOf(item.id))
-    const rec = { id: item.id, item, el, win, ready: false, loads: 0, restarts: [], fetches: 0, inflight: 0, logs: [], msgs: [], listens: new Set(), widgets: new Map(), startedAt: now(), ping: null, ponged: null }
+    const rec: Rec = { id: item.id, item, el, win, ready: false, loads: 0, restarts: [], fetches: 0, inflight: 0, logs: [], msgs: [], listens: new Set(), widgets: new Map(), startedAt: now(), ping: null, ponged: null }
     recs.set(item.id, rec)
     bySource.set(win, rec)
     keepWatch()
     return rec
   }
-  function stop(rec) {
+  function stop(rec: Rec) {
     recs.delete(rec.id)
     bySource.delete(rec.win)
     for (const w of rec.widgets.values()) clearTimer(w.timer)
@@ -178,8 +235,8 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
   // started over, one whose settings changed told them. While the frames
   // start again one by one (recovering), the new and the changed wait their
   // turn there.
-  function apply(list) {
-    const items = (Array.isArray(list) ? list : []).filter(i => i && typeof i.id === 'string' && /^[a-z][a-z0-9-]{1,39}$/.test(i.id))
+  function apply(list: unknown) {
+    const items: Item[] = (Array.isArray(list) ? list : []).filter(i => i && typeof i.id === 'string' && /^[a-z][a-z0-9-]{1,39}$/.test(i.id))
     if (!known) {
       pending = items
       return
@@ -187,9 +244,9 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
     want.clear()
     for (const item of items) want.set(item.id, item)
     for (const rec of [...recs.values()]) if (!want.has(rec.id)) stop(rec)
-    for (const [id, rev] of [...held]) if (!want.has(id) || want.get(id).rev !== rev) held.delete(id)
+    for (const [id, rev] of [...held]) if (!want.has(id) || want.get(id)!.rev !== rev) held.delete(id)
     for (const id of [...trouble.keys()]) if (!want.has(id)) trouble.delete(id)
-    if (recovering) recovering.queue = recovering.queue.filter(i => want.has(i.id)).map(i => want.get(i.id))
+    if (recovering) recovering.queue = recovering.queue.filter(i => want.has(i.id)).map(i => want.get(i.id)!)
     for (const item of items) {
       if (held.has(item.id)) continue
       const rec = recs.get(item.id)
@@ -214,12 +271,13 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
 
   // Her language, theme, quiet as they are now: those changed told.
   function setEnv(patch: { lang?: string; theme?: string; quiet?: boolean } = {}) {
-    const changed = []
-    for (const key of ['lang', 'theme', 'quiet']) {
+    const changed: (keyof typeof env)[] = []
+    for (const key of ['lang', 'theme', 'quiet'] as const) {
       if (!(key in patch) || patch[key] === undefined) continue
       const v = key === 'quiet' ? patch.quiet === true : key === 'lang' ? (patch.lang === 'en' ? 'en' : 'zh') : patch.theme === 'light' ? 'light' : 'dark'
       if (env[key] !== v) {
-        env[key] = v
+        // (v is the key's own kind: a boolean for quiet, else a string.)
+        (env as Record<string, unknown>)[key] = v
         changed.push(key)
       }
     }
@@ -238,7 +296,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
 
   // The agents' sessions as the page heard them: told to those that may
   // and listen, when they changed, once a second at most.
-  function setAgents(list) {
+  function setAgents(list: unknown) {
     const next = agentsOf(list)
     const text = json(next)
     if (text === agentsJson) return
@@ -280,7 +338,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
     )
   }
 
-  function logLine(rec, line) {
+  function logLine(rec: Rec, line: unknown) {
     const t = now()
     rec.logs = rec.logs.filter(at => t - at < 60_000)
     if (rec.logs.length >= LOGS) return false
@@ -291,7 +349,8 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
 
   // A widget's words: sent at once, or once its second is up (the last
   // words then); each asking answered as that send is.
-  function widget(rec, m) {
+  // m: the frame's message (handle).
+  function widget(rec: Rec, m: any) {
     const sub = typeof m.sub === 'string' ? m.sub : ''
     const text = json(m.data)
     if (text === null || text.length > DATA_MAX) return reply(rec, m.n, false, 'a widget is JSON, up to 64 KB')
@@ -327,8 +386,10 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
     else w.timer = setTimer(go, wait)
   }
 
-  function handle(rec, m) {
-    const perms = rec.item.perms || {}
+  // m: a frame's message, anything it sent (receive has looked at waku
+  // and t alone): each field checked here as it is read.
+  function handle(rec: Rec, m: any) {
+    const perms: Partial<Item['perms']> = rec.item.perms || {}
     switch (m.t) {
       case 'ready':
         rec.ready = true
@@ -341,7 +402,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
       case 'fetch': {
         if (rec.fetches >= FETCHES) return reply(rec, m.n, false, `${FETCHES} requests at once at most`)
         rec.fetches++
-        const headers = {}
+        const headers: Record<string, string> = {}
         if (m.headers && typeof m.headers === 'object') for (const [k, v] of Object.entries(m.headers).slice(0, 32)) headers[str(k, 64)] = str(v)
         const body = m.body == null ? null : String(m.body)
         if (body && body.length > 1 << 20) {
@@ -389,7 +450,8 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
   // A message from a frame: the plugin whose frame sent it, or nobody's.
   // Counted per second before its data is looked at, so a flood of
   // messages is dropped early, one line said the first time in a window.
-  function receive(source, data) {
+  // data: anything a frame posts, looked at here before it is taken.
+  function receive(source: unknown, data: any) {
     const rec = bySource.get(source)
     if (!rec || !data || typeof data !== 'object' || data.waku !== 1 || typeof data.t !== 'string') return false
     const t = now()
@@ -409,7 +471,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
 
   // A message of a plugin's view (her addons:view: who it is, the view's
   // card known by its frame where it is), to its main.js as it runs.
-  function fromView(id, sub, message) {
+  function fromView(id: string, sub: unknown, message: unknown) {
     const rec = recs.get(id)
     if (!rec?.ready) return false
     tell(rec, 'view', { message: message ?? null, sub: typeof sub === 'string' ? sub : '' })
@@ -419,7 +481,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
   // A frame's page loaded: the first time, as it should; again (sent
   // elsewhere and kept back, or reloaded), it starts over, and one that
   // keeps doing so is stopped (crashed).
-  function loaded(id, el) {
+  function loaded(id: string, el: unknown) {
     const rec = recs.get(id)
     if (!rec || rec.el !== el) return
     rec.loads++
@@ -438,24 +500,24 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
   // --- The watchdog ----------------------------------------------------------------------
   // Each plugin's misses (unanswered pings, by when) and its long tasks
   // ([when, ms]), kept across its frames; the pings' count; the timers.
-  const trouble = new Map()
-  const tasks = new Map()
+  const trouble = new Map<string, number[]>()
+  const tasks = new Map<string, [number, number][]>()
   // A fresh unguessable nonce for each ping, so only the frame it was sent
   // to can answer it (not a plugin forging a pong). Whether a frame has
   // answered the nonce she last sent it.
   let seq = 0
   const nonce = () => `${++seq}.${Math.floor(rand() * 0x100000000).toString(36)}`
-  const answered = rec => rec.ping != null && rec.ponged === rec.ping
+  const answered = (rec: Rec) => rec.ping != null && rec.ponged === rec.ping
   let pingTimer = 0
   let checkTimer = 0
   let reloadTimer = 0
   // Starting them again one at a time: { queue, started, timer }, or null.
-  let recovering = null
+  let recovering: Recovering | null = null
   let viewsOn = true
 
   // The cards' views here and on the desktop: taken away while frames are
   // started again (they may share their process), back after.
-  function setViews(on) {
+  function setViews(on: boolean) {
     if (viewsOn === on) return
     viewsOn = on
     views(on)
@@ -495,7 +557,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
     keepWatch()
   }
 
-  function check(at, asked) {
+  function check(at: number, asked: Rec[]) {
     checkTimer = 0
     const live = asked.filter(rec => recs.get(rec.id) === rec)
     const missed = live.filter(rec => !answered(rec))
@@ -513,20 +575,20 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
 
   // A miss, kept; the second within ten minutes stops it (hung), the
   // first loads it again.
-  function missed(id) {
+  function missed(id: string) {
     const t = now()
     const times = [...(trouble.get(id) || []).filter(at => t - at < AGAIN_MS), t]
     trouble.set(id, times)
     return times
   }
-  function miss(rec) {
+  function miss(rec: Rec) {
     const times = missed(rec.id)
     if (times.length >= 2) return giveUp(rec.id, 'hung', times)
     log(`plugin ${rec.id}: did not answer: loaded again`)
     reload(rec)
   }
   // Its frame taken away, the views with it; started again a moment later.
-  function reload(rec) {
+  function reload(rec: Rec) {
     const item = rec.item
     stop(rec)
     setViews(false)
@@ -541,7 +603,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
 
   // Stopped in her (stop: why, since its first miss, how many), its frame
   // gone, not started again here until she sends it changed.
-  function giveUp(id, why, times = []) {
+  function giveUp(id: string, why: string, times: number[] = []) {
     const rec = recs.get(id)
     if (rec) stop(rec)
     held.set(id, want.get(id)?.rev ?? rec?.item.rev)
@@ -553,10 +615,11 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
 
   // Its own long tasks since the last ping: over 2 s in the last minute,
   // stopped (busy).
-  function busy(rec, ms) {
-    if (!Number.isFinite(ms) || ms <= 0) return
+  // ms: as the frame said it, a number only once looked at.
+  function busy(rec: Rec, ms: unknown) {
+    if (!Number.isFinite(ms) || (ms as number) <= 0) return
     const t = now()
-    const list = [...(tasks.get(rec.id) || []).filter(([at]) => t - at < 60_000), [t, ms]]
+    const list: [number, number][] = [...(tasks.get(rec.id) || []).filter(([at]) => t - at < 60_000), [t, ms as number]]
     tasks.set(rec.id, list)
     if (list.reduce((sum, [, x]) => sum + x, 0) > BUSY_MS) giveUp(rec.id, 'busy')
   }
@@ -567,7 +630,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
   // and they all fall silent again once all are up: the next time within
   // ten minutes, each is given as long as that took (a minute at most)
   // before the next starts.
-  let fruitless = null
+  let fruitless: number | null = null
   function recover() {
     const order = [...recs.values()].map(rec => rec.item)
     const t = now()
@@ -598,7 +661,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
     r.at = now()
     probe(r, rec)
   }
-  function probe(r, rec) {
+  function probe(r: Recovering, rec: Rec) {
     r.timer = setTimer(() => {
       r.timer = 0
       const up = r.started.filter(x => recs.get(x.id) === x)
@@ -648,7 +711,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
   }
 
   // One pinged now, by hand (the tests): the nonce kept, so its pong counts.
-  function ping(id, n = nonce()) {
+  function ping(id: string, n = nonce()) {
     const rec = recs.get(id)
     if (rec?.ready) {
       rec.ping = n
@@ -694,8 +757,9 @@ export function addonsPage(Island: IslandFace | null) {
   box.setAttribute('aria-hidden', 'true')
   box.style.cssText = 'position:fixed;left:-10000px;top:0;width:300px;height:150px;overflow:hidden;pointer-events:none;contain:strict'
   document.body.appendChild(box)
-  let payload = null
-  let look = null
+  // pet:update's and the taskbar's look: loose JSON from Rust.
+  let payload: any = null
+  let look: any = null
   // Her theme as her island shows it: Windows' mode, from the taskbar's
   // look there, else from pet:update at the top of the screen.
   const themeNow = () => (['taskbar', 'split'].includes(payload?.config?.display) ? (look?.mode === 'light' ? 'light' : 'dark') : payload?.winLight === true ? 'light' : 'dark')

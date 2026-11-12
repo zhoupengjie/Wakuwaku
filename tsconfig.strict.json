@@ -22,6 +22,7 @@
     "src/pet/island-vars.ts",
     "src/pet/settings-state.ts",
     "src/pet/settings-vars.ts",
+    "src/pet/addons.ts",
     "src/pet/addonui.ts",
     "src/pet/agents.ts",
     "src/pet/aim.ts",

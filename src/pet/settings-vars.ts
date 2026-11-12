@@ -10,10 +10,122 @@
 import type * as AddonUI from './addonui.ts'
 import { initial, type SettingsState } from './settings-state.ts'
 
+// Taken away once asked again over the panel: a plugin by its id, a pack
+// by its kind too, a pet deleted (del); busy while it goes.
+export interface Gone {
+  id: string
+  kind?: string
+  del?: boolean
+  busy: boolean
+}
+
+// Asked over the panel in the market: installing one, or 全部更新.
+export type MarketAsk = { kind: 'install'; id: string } | { kind: 'updates'; id?: undefined }
+
+// A word for a few seconds (bad: what went wrong).
+export interface Note {
+  text: string
+  bad?: boolean
+}
+
+// What a server answered to Re-test: how it is reached, how one signs in.
+export interface Probed {
+  security: string
+  port: number | string
+  auths: string[]
+}
+
+// A mail account as its form has it. A port is a number as found, a
+// string as typed. step: start (the address and password), found (the
+// servers looked up), manual (their fields to fill in); busy: find,
+// probe, save or ''. result: what came of the last try, the server's own
+// words (said) and where to put it right (fix).
+export interface MailForm {
+  id: string
+  address: string
+  name: string
+  password: string
+  host: string
+  port: number | string
+  security: string
+  auth: string
+  username: string
+  smtpHost: string
+  smtpPort: number | string
+  smtpSecurity: string
+  smtpAuth: string
+  smtpUser: string
+  proxyMode: string
+  proxyKind: string
+  proxyAddress: string
+  step: string
+  source?: string
+  notFound?: boolean
+  oauth?: boolean
+  advanced: boolean
+  probed: Probed | null
+  probedOut: Probed | null
+  findingOut?: boolean
+  busy: string
+  result: { bad: boolean; text: string; said?: string; fix?: { site: string; label: string } | null } | null
+}
+// Its boxes typed in (data-mf), and its choices picked from a list (data-mfpick).
+export type MailBox = 'address' | 'name' | 'password' | 'host' | 'port' | 'username' | 'smtpHost' | 'smtpPort' | 'smtpUser' | 'proxyAddress'
+export type MailPick = 'security' | 'auth' | 'smtpSecurity' | 'smtpAuth' | 'proxyMode' | 'proxyKind'
+
+// A letter by where it is: its account, its folder, its UID there.
+export interface LetterAt {
+  account: string
+  folder: string
+  uid: number
+}
+
+// The letter open: busy while it is read, then the letter and its talk
+// (letters.rs, agent.rs: loose JSON), or what went wrong.
+export interface Reading extends LetterAt {
+  busy?: boolean
+  letter?: any
+  talk?: any
+  error?: any
+}
+
+// A file added to a letter: read whole, as base64.
+export interface DraftFile {
+  name: string
+  type: string
+  size: number
+  data: string
+}
+
+// The letter being written: new, reply, all or forward; from which
+// account, to whom, the subject and text, the letter it answers or passes
+// on (that one's files, each by its index there), files added; touched
+// once typed in; sending, what went wrong, a word about it.
+export interface Draft {
+  kind: string
+  account: string
+  to: string
+  cc: string
+  bcc: string
+  showCc: boolean
+  subject: string
+  text: string
+  reply: (LetterAt & { messageId?: string; references: string[] }) | null
+  forward: (LetterAt & { files: { index: number; name: string; size: number }[] }) | null
+  files: DraftFile[]
+  touched: boolean
+  busy: boolean
+  error: string | null
+  note: string | null
+}
+// Its boxes typed in (data-w).
+export type DraftBox = 'to' | 'cc' | 'bcc' | 'subject' | 'text'
+
 export interface SettingsVars extends SettingsState {
   // --- Open --------------------------------------------------------------------------
   // What main last sent (settings.rs snapshot: the settings, the sessions,
-  // the agents, the plugins...), and the language it is in.
+  // the agents, the plugins...: the Rust side's JSON, any), and the
+  // language it is in.
   snap: any
   lang: string
   // The seconds' clock while open (tick).
@@ -36,7 +148,7 @@ export interface SettingsVars extends SettingsState {
   // --- Look --------------------------------------------------------------------------
   // The download box: what is typed, and how the last download went.
   typedRef: string
-  fetching: any
+  fetching: string | null
   fetchNote: { text: string; isError: boolean }
   // The gallery's search waiting for the typing to stop, and its thumbnails'.
   searchTimer: Timer | undefined
@@ -61,34 +173,34 @@ export interface SettingsVars extends SettingsState {
   // the panel (installing from a file, by AddonUI.next's steps; taking one
   // away: gone { id, busy }, a pack's with its kind), Windows' dialog open
   // for a .zip (its focus does not close them).
-  flow: any
-  gone: any
+  flow: typeof AddonUI.IDLE
+  gone: Gone | null
   pickingZip: boolean
   // A plugin whose newly-asked permissions are being allowed (finding 1).
-  approveFor: any
+  approveFor: string | null
   // Asked over the panel in the market: installing one that asks for more
   // than the web ({ kind: 'install', id }), or 全部更新 when one asks for
   // more ({ kind: 'updates' }).
-  mkAsk: any
+  mkAsk: MarketAsk | null
 
   // --- Mail ----------------------------------------------------------------------------
   // The mail account being set up or changed, as Thunderbird's dialog has
   // it: the address and password; then (step found) the server looked up,
   // or (step manual) the server's fields; busy while looking or signing in;
   // what came of the last try. Null while none is.
-  mailForm: any
+  mailForm: MailForm | null
   // An account's delete asked once: asked again, it goes.
   mailDelete: string
   // A proxy address as typed and not yet kept (key: mailProxy, netProxy): being typed,
   // or (bad) not read as address:port.
-  proxyTyped: any
+  proxyTyped: { key: string; text: string; bad: boolean } | null
   // A letter to open once the Mail page shows (a click on the island's word
   // that an agent answered); the letter open ({ uid, busy | letter, summary
   // | error }, null while the list shows); what came of handing one to an
   // agent, for a few seconds.
-  letterToOpen: any
-  reading: any
-  handNote: any
+  letterToOpen: { account: string; uid: number; folder?: string } | null
+  reading: Reading | null
+  handNote: Note | null
   handNoteTimer: Timer | undefined
   // The letter being written, one at a time: from which account, to whom,
   // the subject and text, the letter it answers or passes on, files added;
@@ -97,7 +209,7 @@ export interface SettingsVars extends SettingsState {
   // mail_draft: each copy of the pet its own, which the page's storage is
   // not; its files left out). writing: it shows; else the inbox does, with
   // a line to go back to it. A discard asked once: asked again, it goes.
-  draft: any
+  draft: Draft | null
   writing: boolean
   dropSure: boolean
   draftTimer: Timer | undefined
@@ -105,7 +217,7 @@ export interface SettingsVars extends SettingsState {
   // not close the settings (the desktop's picture has its own, pickingPaper).
   picking: boolean
   // The same menu as a picker: a model or an effort, the one set ticked.
-  menuPick: any
+  menuPick: ((value: string) => void) | null
 }
 
 export function settingsVars(idleFlow: typeof AddonUI.IDLE): SettingsVars {

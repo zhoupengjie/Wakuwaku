@@ -43,6 +43,77 @@ import type { SettingsVars } from './settings-vars.ts'
 import type { SettingsEvent } from './settings-state.ts'
 import type { IslandFace } from './island.ts'
 import type { PickerFace } from './picker.ts'
+import type { Config } from '../shared/config.ts'
+
+// A change to her settings (settings.rs settings_set): the config's keys,
+// and the Mail page's that mail.rs reads besides.
+export type Patch = Partial<Config> & { mailAgent?: string; mailPictures?: string[] }
+
+// Where one is put (island-wmenu.ts placeNow): its place (null: nowhere),
+// a board's name.
+export interface Place {
+  at: string | null
+  name?: string
+}
+
+// A row of the Plugins page (widgetRows): its key, its place in the order,
+// and what it is, from the snapshot (settings.rs: loose JSON): a widget, a
+// plugin she runs or someone else's, with its widgets up now (mine).
+export interface WidgetRow {
+  key: string
+  i: number
+  widget?: any
+  plugin?: any
+  addon?: any
+  mine?: any
+}
+
+// The Mail page's inbox (settingsPage inbox): its conversations
+// (threads.rs) and what went wrong (mail.rs) are the Rust side's JSON.
+export interface Inbox {
+  id: string
+  for: string
+  filter: string
+  threads: any[]
+  total: number
+  letters: number
+  count: number
+  busy: boolean
+  error: any
+  errors: any[]
+  rev: number
+  syncing: boolean
+}
+
+// A download's last word (market.rs, market:progress).
+export interface MarketJob {
+  id?: string
+  stage: string
+  got?: number
+  total?: number
+}
+
+// The plugin market (settingsPage market): its index's items and what went
+// wrong reading it are the Rust side's JSON.
+export interface Market {
+  items: any[] | null
+  at: number
+  error: any
+  loading: boolean
+  cat: string
+  query: string
+  jobs: Record<string, MarketJob>
+  updating: boolean
+}
+
+// A pet of codex-pets.net's gallery, as settings.rs lists them.
+interface GalleryPet {
+  id: string
+  name: string
+  author: string
+  likes: number
+  preview?: string
+}
 
 // The settings' parts as each is made (settingsPage, in its section's
 // place): what each hands back, reached by a part made before it
@@ -68,54 +139,55 @@ export interface SettingsCore {
   st: SettingsVars
   pieces: SettingsParts
   go: (e: SettingsEvent) => void
-  AGENTS: { [k: string]: string }
-  AGENT_NAMES: { [k: string]: string }
+  AGENTS: Record<string, string>
+  AGENT_NAMES: Record<string, string>
   AddonUI: typeof AddonUI
   Agents: typeof Agents
   COLOR: Record<string, string>
   Island: IslandFace | null
   MOST_FILES: number
-  SIZES: (string | number)[][]
+  SIZES: [name: string, scale: number][]
   SPINS: number[]
-  T: (key: any, vars?: any) => any
+  T: (key: string, vars?: Record<string, unknown>) => string
   Widgets: typeof Widgets
   body: HTMLElement
-  drafts: Record<string, any>
+  drafts: Record<string, string>
   draw: (reset?: boolean) => void
-  esc: (value: any) => string
-  expanded: Set<unknown>
-  freshRows: Set<unknown>
-  inbox: any
+  esc: (value: unknown) => string
+  expanded: Set<string>
+  freshRows: Set<string>
+  inbox: Inbox
   keepDraft: () => void
   layer: HTMLElement
-  loadGallery: (more: any) => Promise<void>
-  market: any
-  nameList: (lang: any, names: any, kind?: string) => any
-  onTaskbar: (s: any) => boolean
-  openHardware: Set<unknown>
+  loadGallery: (more: boolean) => Promise<void>
+  market: Market
+  nameList: typeof nameList
+  onTaskbar: (s: Config) => boolean
+  openHardware: Set<string>
   pageAlerts: () => string
   pageNow: () => string
   pagePets: () => string
-  part: (id: any, html: any) => string
-  patch: (change: any) => void
-  placeHTML: (place: any, key?: string) => string
-  placeOf: (item: any, on: any) => { at: string; name?: any }
+  part: (id: string, html: string) => string
+  patch: (change: Patch) => void
+  placeHTML: (place: Place, key?: string) => string
+  placeOf: (item: { plugin?: string; id?: string }, on: boolean) => Place
+  // A plugin she runs (plugins.rs view: the snapshot's JSON).
   pluginFields: (p: any) => string
-  pluginNote: (p: any, mine: any, placed: any) => { text: any; bad?: boolean }
-  redrawMail: (focus?: any) => void
+  pluginNote: (p: any, mine: unknown[], placed: boolean) => { text: string; bad?: boolean }
+  redrawMail: (focus?: string | null) => void
   relayout: () => number
-  render: (lang: any, text: any) => any
-  row: (title: any, note: any, control: any) => string
-  sec: (text: any) => string
-  seg: (key: any, options: any, current: any) => string
-  setHTML: (el: any, html: any) => boolean
+  render: typeof render
+  row: (title: string, note: string, control: string) => string
+  sec: (text: string) => string
+  seg: (key: string, options: readonly (readonly unknown[])[], current: unknown) => string
+  setHTML: (el: HTMLElement, html: string) => boolean
   sheet: HTMLElement
   showPart: () => void
-  sw: (key: any, on: any, extra?: string) => string
-  thumb: (px: any, url: any, version: any, clip?: string) => string
-  toMarketRow: (kind: any, title: any, note: any) => string
+  sw: (key: string, on: unknown, extra?: string) => string
+  thumb: (px: number, url: string, version: unknown, clip?: string) => string
+  toMarketRow: (kind: string, title: string, note: string) => string
   toastEl: HTMLElement
-  widgetRows: () => any[]
+  widgetRows: () => WidgetRow[]
 }
 
 export type SettingsFace = ReturnType<typeof settingsPage>
@@ -133,11 +205,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     Object.assign(st, State.next(State.stateOf(st), e))
   }
   // The island's colours (on black), the same as island.ts.
-  const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
+  const COLOR: Record<string, string> = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
   // The five pages' names (TABS, PART_OF: settings-state.ts).
   const TAB_KEY = { now: 's.tabGeneral', agents: 's.tabAgents', look: 's.tabLook', widgets: 's.tabWidgets', mail: 's.tabMail' }
   const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
-  const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
+  const SIZES: [string, number][] = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
   const HOMES = ['island', 'taskbar', 'split']
   const HOME_KEY = { island: 's.displayIsland', taskbar: 's.displayTaskbar', split: 's.displaySplit' }
   // Her taskbar the home: along an edge, or split into the top bar and the dock.
@@ -166,21 +238,21 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // is downloaded, any other words are looked for as the site's own search
   // box looks: a name, part of one, a word of its description). Each ask
   // numbered: a slower answer to an earlier search never lands over a later.
-  const gallery = { sort: 'popular', query: '', items: [], page: 0, totalPages: 1, total: 0, loading: false, error: '', getting: '', asked: 0 }
+  const gallery = { sort: 'popular', query: '', items: [] as GalleryPet[], page: 0, totalPages: 1, total: 0, loading: false, error: '', getting: '', asked: 0 }
   const isLink = text => /:\/\/|codex-pets\.net/i.test(text)
   // The plugins page: what is typed in a plugin's settings folded out
   // (st.openPlugin) and not yet kept ("weather.City": "上海").
-  const drafts = {}
+  const drafts: Record<string, string> = {}
   // Other people's plugins installed while the settings are open (their
   // rows edged in the accent until they close; a pack's by AddonUI.packKey).
-  const freshRows = new Set()
+  const freshRows = new Set<string>()
   // The plugin market (market.rs; addonui.ts its words and steps), a part
   // of the Plugins page (sub market, an item's page mkItem): its index as
   // last read (items null until one was), when, what went wrong reading it,
   // being read; the category and the words looked for; each download's last
   // word (market:progress) by id; 全部更新 under way. (What is asked over
   // the panel is st.mkAsk.)
-  const market = { items: null, at: 0, error: null, loading: false, cat: 'all', query: '', jobs: {}, updating: false }
+  const market: Market = { items: null, at: 0, error: null, loading: false, cat: 'all', query: '', jobs: {}, updating: false }
   // Recording one: her global shortcuts let go meanwhile, so the keys
   // pressed reach this page (shortcuts.rs pause).
   const setRecording = key => {
@@ -194,7 +266,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     draw()
   })
   // The monitor's hardware (LibreHardwareMonitor's) folded out, by its id.
-  const openHardware = new Set()
+  const openHardware = new Set<string>()
   // The Mail page's inbox: whose (an account id), its newest letters and how
   // many there are, how many asked for, busy, what went wrong (the letter
   // open is st.reading).
@@ -202,11 +274,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // total: how many there are; letters: how many letters the inbox holds;
   // rev: the store's revision they are of (a newer one, asked again);
   // syncing: a first sync still under way. The conversations folded out.
-  const inbox = { id: '', for: '', filter: 'all', threads: [], total: 0, letters: 0, count: 50, busy: false, error: null, errors: [], rev: 0, syncing: false }
-  const expanded = new Set()
+  const inbox: Inbox = { id: '', for: '', filter: 'all', threads: [], total: 0, letters: 0, count: 50, busy: false, error: null, errors: [], rev: 0, syncing: false }
+  const expanded = new Set<string>()
   // The agents that read mail (agents.ts mail): their short names, and
   // their names on the Mail page's settings.
-  const AGENTS = Object.fromEntries(Agents.TABLE.filter(a => a.mail).map(a => [a.id, a.mail]))
+  const AGENTS = Object.fromEntries(Agents.TABLE.filter(a => a.mail).map(a => [a.id, a.mail!]))
   const AGENT_NAMES = Object.fromEntries(Agents.TABLE.filter(a => a.mail).map(a => [a.id, a.name]))
   // The most a letter takes with it (as send.rs has it).
   const MOST_FILES = 25 << 20
@@ -982,7 +1054,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         const asked = st.mkAsk
         st.mkAsk = null
         drawSheet()
-        return what === 'mkgo' ? marketInstall(asked?.id, true) : updateAll(true)
+        // mkgo is the install's button: asked is { kind: 'install', id }.
+        return what === 'mkgo' ? marketInstall(asked?.id!, true) : updateAll(true)
       }
       if (what === 'cancel') cancelAsked()
       return

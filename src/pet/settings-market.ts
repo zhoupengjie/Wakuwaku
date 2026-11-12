@@ -262,7 +262,8 @@ export function marketPart(core: SettingsCore) {
       st.pickingZip = false
     }
     flowStep({ type: 'picked', path })
-    if (st.flow.step !== 'looking') return
+    // flowStep moved it on: not the 'idle' found above.
+    if ((st.flow.step as string) !== 'looking') return
     const summary = await pet.addons.inspect(path).catch(() => null)
     flowStep({ type: 'looked', path, summary })
   }

@@ -166,7 +166,7 @@ export function letterPart(core: SettingsCore) {
 
   // Files picked, read for the letter; no more than it may take.
   const readBase64 = file =>
-    new Promise((ok, no) => {
+    new Promise<string>((ok, no) => {
       const r = new FileReader()
       r.onload = () => ok(String(r.result).split(',')[1] || '')
       r.onerror = () => no(r.error)

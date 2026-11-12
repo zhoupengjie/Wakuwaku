@@ -72,6 +72,25 @@ export interface TaskWindow {
   flash?: boolean
 }
 
+// A widget or a plugin she runs, as one is put somewhere (island-wmenu.ts
+// placeWidget, the desktop's asks): by its id or its plugin's, its icon
+// as it was put there.
+export interface WidgetItem {
+  id?: string
+  plugin?: string
+  icon?: string
+}
+
+// A widget's menu (island-wmenu.ts): on the strip or in the open island,
+// for an entry there (a group's member by its index; -1, the group) or a
+// widget.
+export interface MenuFor {
+  where: 'bar' | 'isle'
+  entry?: string
+  member?: number
+  widget?: string | null
+}
+
 // A layout of the strip (widgets.ts layoutOf): its three runs, each its
 // parts by name and the widgets put there.
 export interface TbLayout {
@@ -287,7 +306,7 @@ export interface IslandVars extends IslandState {
   imeOpen: boolean
   // A widget's menu open (the spec's §10), and the open island's height for
   // it (0: none open).
-  menuFor: any
+  menuFor: MenuFor | null
   menuRoom: number
   // What the window was last told to catch the mouse over (sendSolid).
   solidSent: string

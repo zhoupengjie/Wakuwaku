@@ -471,5 +471,9 @@ function bridge() {
       .catch(err => console.log('listeners failed:', err))
   })
 
+
+  // On window too, for what looks in from outside alone (/debug/eval, the
+  // preview): the page's own scripts import it.
+  ;(window as unknown as Record<string, unknown>).pet = pet
   return pet
 }

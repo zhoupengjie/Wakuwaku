@@ -8,6 +8,7 @@
 import type * as Flow from './flow.ts'
 import { initial, type IslandState } from './island-state.ts'
 import type { Config } from '../shared/config.ts'
+import type { Widget } from './widgets.ts'
 
 // The compact island at its narrowest: just her, when there is nothing to say.
 export const MIN_W = 112
@@ -109,6 +110,18 @@ export interface MenuFor {
   entry?: string
   member?: number
   widget?: string | null
+}
+
+// What something that opens the island by itself would show in it
+// (island-ring.ts cue): her clip, words in place of the mood's (null:
+// none), for how long, a widget's card; for a reaction inside a turn, its
+// name (react).
+export interface Show {
+  clip: string
+  text: string | null
+  ms: number
+  widget?: Widget | null
+  react?: string
 }
 
 // A layout of the strip (widgets.ts layoutOf): its three runs, each its
@@ -236,15 +249,16 @@ export interface IslandVars extends IslandState {
   // The dot's event: its kind and (a plugin's) colour, and whether it shows
   // yet (it comes as the ring fades).
   news: { kind: string; colour?: string; shown: boolean } | null
-  // What the island would have shown by itself: { clip, text, ms, widget,
-  // until }, shown as it next opens (takePending), until then.
-  pending: any
-  // Its state (flow.ts), its animations running, its colours' blends, its
-  // dot's and its end's timers.
+  // What the island would have shown by itself (a Show), shown as it
+  // next opens (takePending), until then.
+  pending: (Show & { until: number }) | null
+  // Its state (flow.ts), its animations running, its colours' blends (the
+  // lower layer of a spin, the colours it takes, the upper one coming up),
+  // its dot's and its end's timers.
   flowState: ReturnType<typeof Flow.idle>
-  flowAnims: any[]
-  blends: any[]
-  flowTimers: any[]
+  flowAnims: Animation[]
+  blends: { under: HTMLElement; stops: string; anim: Animation }[]
+  flowTimers: Timer[]
 
   // --- The widgets -----------------------------------------------------------------
   // The widgets that are on, the one shown, and the turn to the next; all

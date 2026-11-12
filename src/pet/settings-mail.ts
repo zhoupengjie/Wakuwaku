@@ -10,6 +10,40 @@
 // are up). What it hands back is the settings' again.
 import * as Agents from './agents.ts'
 import type { SettingsCore } from './settings.ts'
+import type { Letter, MailAccount, MailBox, MailForm, MailPick, Probed, Talk, Thread } from './settings-vars.ts'
+
+// What went wrong with a mail account (mail.rs and its parts: their
+// JSON): its kind, why a server said no to signing in, its own words, a
+// hint, which proxy.
+interface MailError {
+  kind?: string
+  why?: string
+  text?: string
+  hint?: string
+  proxy?: string
+}
+// A server as the words name it: its host and port, the way to it.
+interface Server {
+  host?: string
+  port?: unknown
+  proxy?: { mode?: string } | null
+}
+// An outgoing server as found (discover.rs) or kept with an account.
+interface OutServer {
+  host: string
+  port: number
+  security: string
+  auth?: string
+  username: string
+}
+// A model an agent reads mail with (agent.rs), and the efforts it takes.
+interface MailModel {
+  id: string
+  name: string
+  efforts: string[]
+}
+// The choices of a list: [value, label, why it can't be picked].
+export type Choices = readonly (readonly unknown[])[]
 
 export function mailPart(core: SettingsCore) {
   const {
@@ -18,7 +52,7 @@ export function mailPart(core: SettingsCore) {
 
   // What went wrong with a mail account, in words: through a proxy, which
   // hop (mail/proxy.rs), and what to try then.
-  function mailError(err, server?) {
+  function mailError(err: MailError | null | undefined, server?: Server | null) {
     const kind = err?.kind || 'other'
     const why = loginWhy(err)
     if (why) return T(whyKey(why, server?.host))
@@ -36,15 +70,16 @@ export function mailPart(core: SettingsCore) {
   // its own), with the server's words under them (mailSaid), and where to
   // put it right (mailFix).
   const WHYS = ['appPassword', 'badPassword', 'webLogin', 'tooMany', 'imapOff']
-  const loginWhy = err => (err?.kind === 'login' && WHYS.includes(err.why) ? err.why : '')
-  function whyKey(why, host) {
+  const loginWhy = (err: MailError | null | undefined) => (err?.kind === 'login' && WHYS.includes(err.why as string) ? err.why : '')
+  function whyKey(why: string, host: unknown) {
     const p = providerOf(host)
     if (why === 'badPassword' && p) return `mail.why.badPassword.${p === 'netease' ? 'qq' : p === 'yahoo' ? 'apple' : p}`
     if ((why === 'appPassword' || why === 'webLogin') && p === 'google') return `mail.why.${why}.google`
     return `mail.why.${why}`
   }
-  const mailSaid = err => (loginWhy(err) && err.text ? err.text : '')
-  function mailFix(err, host) {
+  // (loginWhy is '' with no err.)
+  const mailSaid = (err: MailError | null | undefined) => (loginWhy(err) && err!.text ? err!.text : '')
+  function mailFix(err: MailError | null | undefined, host: unknown) {
     const why = loginWhy(err)
     const p = providerOf(host)
     if (why === 'webLogin' && p === 'google') return { site: 'gmailWeb', label: T('mail.openGmail') }
@@ -54,13 +89,13 @@ export function mailPart(core: SettingsCore) {
 
   // Whether an account reaches its servers with no proxy on the way: its
   // own setting, else the Mail page's (Windows' proxy, while there is one).
-  function straight(own) {
+  function straight(own: { mode?: string } | null | undefined) {
     const mode = own?.mode || pieces.letter.proxySetting().mode
     return mode === 'none' || (mode === 'system' && !st.snap.mailSystemProxy)
   }
 
   // An account's line: how its inbox is, or why it is not.
-  function mailNote(a) {
+  function mailNote(a: MailAccount) {
     if (!a.on) return { text: T('mail.off') }
     const status = a.status || {}
     // How much is kept whole on this computer, while it is still coming down.
@@ -88,11 +123,11 @@ export function mailPart(core: SettingsCore) {
     ['ntlm', 'NTLM', true],
     ['oauth2', 'OAuth2', true],
   ]
-  const labelOf = (list, value) => list.find(x => x[0] === value)?.[1] || value
+  const labelOf = (list: Choices, value: unknown) => list.find(x => x[0] === value)?.[1] || value
 
   // Where a provider takes an app password (or a code) instead of the one
   // its users sign in with, by its IMAP host; and where it makes one.
-  function providerOf(host) {
+  function providerOf(host: unknown) {
     const h = String(host || '').toLowerCase()
     if (/(^|\.)(gmail|googlemail)\.com$/.test(h)) return 'google'
     if (/(^|\.)mail\.me\.com$/.test(h)) return 'apple'
@@ -101,7 +136,7 @@ export function mailPart(core: SettingsCore) {
     if (/(^|\.)(163|126)\.com$|(^|\.)yeah\.net$/.test(h)) return 'netease'
     return ''
   }
-  const HINT_SITE = { google: 'googleAppPasswords', apple: 'appleAppPasswords', yahoo: 'yahooAppPasswords' }
+  const HINT_SITE: Record<string, string> = { google: 'googleAppPasswords', apple: 'appleAppPasswords', yahoo: 'yahooAppPasswords' }
 
   // Why Gmail takes an app password here (Google's review for its browser
   // sign-in, no need of it for a one-person project); then the app password
@@ -109,20 +144,20 @@ export function mailPart(core: SettingsCore) {
   // several Google accounts are signed in): 2-Step Verification on, an app
   // password made, pasted above; what 2-Step Verification takes (an
   // authenticator app will do); and why Google may not make one.
-  function googleStepsHTML(address) {
-    const step = (n, site?) =>
+  function googleStepsHTML(address: string) {
+    const step = (n: number, site?: string) =>
       `<div class="st"><span class="n">${n}</span><span>${esc(T(`mail.google.step${n}`))}${site ? ` <span class="link" data-site="${site}" data-for="${esc(address)}">${esc(T(`mail.google.open${n}`))}</span>` : ''}</span></div>`
     return `<div class="note">${marked(T('mail.google.why'))}</div><div class="note steps">${step(1, 'google2sv')}${step(2, 'googleAppPasswords')}${step(3)}</div><div class="note">${marked(T('mail.google.how2sv'))}</div><div class="note">${esc(T('mail.google.none'))}</div>`
   }
 
   // A note's words with *these* stressed (em.key: what is Google's to
   // decide, and what to have ready before turning 2-Step Verification on).
-  const marked = text => esc(text).replace(/\*([^*]+)\*/g, '<em class="key">$1</em>')
+  const marked = (text: string) => esc(text).replace(/\*([^*]+)\*/g, '<em class="key">$1</em>')
 
   // Google's app password, as it shows it (four fours) or without the spaces.
   const APP_PASSWORD = /^[a-z]{4}(\s?[a-z]{4}){3}$/i
 
-  function hintHTML(host) {
+  function hintHTML(host: unknown) {
     const p = providerOf(host)
     if (!p) return ''
     const site = HINT_SITE[p]
@@ -130,7 +165,7 @@ export function mailPart(core: SettingsCore) {
   }
 
   // The outgoing server's fields, from what was found (or none).
-  const outFields = o =>
+  const outFields = (o: OutServer | null | undefined) =>
     o
       ? { smtpHost: o.host, smtpPort: o.port, smtpSecurity: o.security, smtpAuth: o.auth || 'auto', smtpUser: o.username }
       : { smtpHost: '', smtpPort: '', smtpSecurity: 'auto', smtpAuth: 'auto', smtpUser: '' }
@@ -138,8 +173,8 @@ export function mailPart(core: SettingsCore) {
   // An account's own way to its servers (its "proxy", mail/proxy.rs) as the
   // form has it: a mode ('' for the Mail page's), and a manual one's kind
   // and address; and back, as sent (null: the Mail page's).
-  const proxyFields = p => ({ proxyMode: p?.mode || '', proxyKind: p?.kind === 'socks5' ? 'socks5' : 'http', proxyAddress: p?.address || '' })
-  const formProxy = f =>
+  const proxyFields = (p: { mode?: string; kind?: string; address?: string } | null | undefined) => ({ proxyMode: p?.mode || '', proxyKind: p?.kind === 'socks5' ? 'socks5' : 'http', proxyAddress: p?.address || '' })
+  const formProxy = (f: MailForm) =>
     !f.proxyMode ? null : f.proxyMode === 'manual' ? { mode: 'manual', kind: f.proxyKind || 'http', address: String(f.proxyAddress || '').trim() } : { mode: f.proxyMode }
   const PROXY_KINDS = [
     ['http', 'HTTP'],
@@ -156,9 +191,10 @@ export function mailPart(core: SettingsCore) {
   // then the servers found (a line each) or not, and what the provider
   // wants for a password; and, folded as Thunderbird's manual setup, the
   // incoming and the outgoing server's every setting, with Re-test.
+  // Drawn only while there is one (accountsHTML).
   function mailFormHTML() {
-    const f = st.mailForm
-    const field = (key, label, attrs = '') =>
+    const f = st.mailForm!
+    const field = (key: MailBox, label: string, attrs = '') =>
       `<label class="fr"><span class="fl">${esc(label)}</span><input class="in" data-mf="${key}" value="${esc(f[key] ?? '')}" spellcheck="false" ${attrs}></label>`
     // Gmail (found, or typed in): its app password asked for by name, and how to make one.
     const google = f.step !== 'start' && providerOf(f.host) === 'google'
@@ -170,7 +206,7 @@ export function mailPart(core: SettingsCore) {
       google ? googleStepsHTML(String(f.address || '').trim()) : `<div class="note">${esc(T('mail.passwordNote'))}</div>`,
       f.step === 'start' || google ? '' : hintHTML(f.host),
     ].join('')
-    const line = (proto, host, port, security, auth) => `${proto} · ${host}:${port} · ${labelOf(SECURITIES(), security)}${auth && auth !== 'auto' ? ` · ${labelOf(AUTHS(), auth)}` : ''}`
+    const line = (proto: string, host: string, port: unknown, security: string, auth: string) => `${proto} · ${host}:${port} · ${labelOf(SECURITIES(), security)}${auth && auth !== 'auto' ? ` · ${labelOf(AUTHS(), auth)}` : ''}`
     const out = f.smtpHost ? `<div class="ellip">${esc(line('SMTP', f.smtpHost, f.smtpPort, f.smtpSecurity, f.smtpAuth))}</div>` : ''
     const noOut = f.smtpHost || f.findingOut ? '' : `<div class="note">${esc(T('mail.found.noOut'))}</div>`
     const found =
@@ -179,7 +215,7 @@ export function mailPart(core: SettingsCore) {
         : ''
     const notFound = f.step === 'manual' && f.notFound ? `<div class="note">${esc(T(f.oauth ? 'mail.oauth' : 'mail.notFound'))}</div>` : ''
     const adv = f.step === 'start' ? '' : advancedHTML(field)
-    const busy = f.busy ? `<div class="note">${esc(T({ find: 'mail.finding', probe: 'mail.adv.testing' }[f.busy] || 'mail.signingIn'))}</div>` : ''
+    const busy = f.busy ? `<div class="note">${esc(T({ find: 'mail.finding', probe: 'mail.adv.testing' }[f.busy as 'find' | 'probe'] || 'mail.signingIn'))}</div>` : ''
     const fix = f.result?.fix ? ` <span class="link" data-site="${esc(f.result.fix.site)}" data-for="${esc(String(f.address || '').trim())}">${esc(f.result.fix.label)}</span>` : ''
     const said = f.result?.said ? `<div class="said">${esc(f.result.said)}</div>` : ''
     const result = f.result ? `<div class="note${f.result.bad ? ' err' : ''}">${esc(f.result.text)}${fix}${said}</div>` : ''
@@ -195,11 +231,11 @@ export function mailPart(core: SettingsCore) {
   // The fold: Thunderbird's manual setup for the incoming server and the
   // outgoing one (protocol, host name, port, connection security,
   // authentication method, user name), what Re-test found of each.
-  function advancedHTML(field) {
-    const f = st.mailForm
+  function advancedHTML(field: (key: MailBox, label: string, attrs?: string) => string) {
+    const f = st.mailForm!
     const toggle = `<button class="adv-h${f.advanced ? ' on' : ''}" data-mail-adv><span class="chev">›</span>${esc(T('mail.adv'))}</button>`
     if (!f.advanced) return `<div class="adv">${toggle}</div>`
-    const pick = (key, list) => `<button class="pick" data-mfpick="${key}">${esc(labelOf(list, f[key] || 'auto'))} ▾</button>`
+    const pick = (key: MailPick, list: Choices) => `<button class="pick" data-mfpick="${key}">${esc(labelOf(list, f[key] || 'auto'))} ▾</button>`
     const rows = [
       `<div class="adv-sec">${esc(T('mail.adv.in'))}</div>`,
       `<div class="fr"><span class="fl">${esc(T('mail.adv.protocol'))}</span><button class="pick" disabled>IMAP</button></div>`,
@@ -231,7 +267,7 @@ export function mailPart(core: SettingsCore) {
 
   // What Re-test found: how it is reached, how it lets one sign in, and,
   // for a Windows domain's server (Exchange), what the user name may be.
-  function probedHTML(p) {
+  function probedHTML(p: Probed | null) {
     if (!p) return ''
     const names = p.auths.map(a => {
       const [, label, off] = AUTHS().find(x => x[0] === a) || [a, a, true]
@@ -251,13 +287,13 @@ export function mailPart(core: SettingsCore) {
   // then, greyed, with a line on why (zhoupengjie/Wakuwaku#42). agent.rs
   // looks for agy again while the settings are open, and once installed it
   // can be picked.
-  const firstAgent = () => (AGENTS[st.snap.settings.mailAgent] ? st.snap.settings.mailAgent : 'claude')
+  const firstAgent = () => (AGENTS[st.snap.settings.mailAgent as string] ? st.snap.settings.mailAgent! : 'claude')
   const mailList = () => Agents.mailAgents(st.snap, firstAgent())
   const agyWanted = () => mailList().some(a => a.id === 'agy' && !a.found)
   // A letter's talk going on now, by its key (agent.rs).
-  const talkOf = key => (key && (st.snap.mailTalks || {})[key]) || null
-  const letterKey = l => l.messageId || `${l.account}:${l.uid}`
-  const accountOf = id => (st.snap.mail || []).find(a => a.id === id) || null
+  const talkOf = (key: string | undefined): Talk | null => (key && (st.snap.mailTalks || {})[key]) || null
+  const letterKey = (l: Letter) => l.messageId || `${l.account}:${l.uid}`
+  const accountOf = (id: string | undefined) => (st.snap.mail || []).find(a => a.id === id) || null
 
   // The inbox shown: "*" (every account's as one) where there are several,
   // else the one; one picked before stays while it is there.
@@ -268,9 +304,9 @@ export function mailPart(core: SettingsCore) {
     return all.length > 1 ? '*' : all[0]?.id || ''
   }
 
-  const unreadOf = a => (a.on && a.status?.state === 'ok' ? a.status.unread || 0 : 0)
+  const unreadOf = (a: MailAccount) => (a.on && a.status?.state === 'ok' ? a.status.unread || 0 : 0)
 
-  function mailDate(ms, full?) {
+  function mailDate(ms: number | null | undefined, full?: boolean) {
     if (!ms) return ''
     const d = new Date(ms)
     const now = new Date()
@@ -282,28 +318,28 @@ export function mailPart(core: SettingsCore) {
     return d.toLocaleDateString(locale, { year: 'numeric', month: 'numeric', day: 'numeric' })
   }
 
-  const mailSize = n =>
+  const mailSize = (n: number) =>
     n >= 1 << 30 ? `${(n / (1 << 30)).toFixed(1)} GB` : n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`
-  const people = list => (list || []).map(p => (p.name ? `${p.name} <${p.address}>` : p.address)).join(', ')
-  const starHTML = (account, uid, on, folder = 'inbox') =>
+  const people = (list: { name?: string; address: string }[] | null | undefined) => (list || []).map(p => (p.name ? `${p.name} <${p.address}>` : p.address)).join(', ')
+  const starHTML = (account: string, uid: number, on: boolean, folder = 'inbox') =>
     `<button class="star${on ? ' on' : ''}" data-star="${esc(account)}" data-folder="${folder}" data-uid="${uid}" title="${esc(T(on ? 'mail.unstar' : 'mail.star'))}">${on ? '★' : '☆'}</button>`
 
   // A letter by where it is: its account, its folder (inbox, sent), its UID
   // there (the inbox's and Sent's UIDs are their own).
-  const isLetter = (l, account, folder, uid) => !!l && l.account === account && (l.folder || 'inbox') === (folder || 'inbox') && l.uid === uid
-  const isReading = (account, folder, uid) => isLetter(st.reading, account, folder, uid)
-  const listed = (account, folder, uid) => inbox.threads.flatMap(t => t.letters).find(l => isLetter(l, account, folder, uid)) || null
-  const where = l => `data-letter="${l.uid}" data-folder="${l.folder || 'inbox'}" data-account="${esc(l.account)}"`
-  const whoOf = l => (l.me ? T('mail.me') : l.from || l.address || '?')
-  const chipOf = l => {
+  const isLetter = (l: Letter | null, account: string, folder: string | undefined, uid: number | undefined) => !!l && l.account === account && (l.folder || 'inbox') === (folder || 'inbox') && l.uid === uid
+  const isReading = (account: string, folder: string | undefined, uid: number) => isLetter(st.reading, account, folder, uid)
+  const listed = (account: string, folder: string, uid: number): Letter | null => inbox.threads.flatMap(t => t.letters).find(l => isLetter(l, account, folder, uid)) || null
+  const where = (l: Letter) => `data-letter="${l.uid}" data-folder="${l.folder || 'inbox'}" data-account="${esc(l.account)}"`
+  const whoOf = (l: Letter) => (l.me ? T('mail.me') : l.from || l.address || '?')
+  const chipOf = (l: Letter) => {
     const talk = talkOf(letterKey(l))
     return talk ? `<span class="chip ${talk.state}">${esc(T(`mail.chip.${talk.state}`, { agent: AGENTS[talk.agent] || 'Agent' }))}</span>` : ''
   }
-  const marks = l => `${l.answered ? `<span class="answered" title="${esc(T('mail.answered'))}">↩</span> ` : ''}${l.attached ? '📎 ' : ''}`
+  const marks = (l: Letter) => `${l.answered ? `<span class="answered" title="${esc(T('mail.answered'))}">↩</span> ` : ''}${l.attached ? '📎 ' : ''}`
 
   // A letter's card in the inbox: unread or not, who, when, what about, its
   // star, whose (in every account's), and whether an agent is on it.
-  function letterRow(l, every) {
+  function letterRow(l: Letter, every: boolean) {
     const whose = every ? `<span class="acct ellip">${esc(accountOf(l.account)?.address || '')}</span>` : ''
     const open = isReading(l.account, l.folder, l.uid) ? ' open' : ''
     return `<div class="r letter${l.seen ? '' : ' unread'}${open}" ${where(l)}><span class="udot"></span>
@@ -316,7 +352,7 @@ export function mailPart(core: SettingsCore) {
   // letters under it in the order they answer one another, each indented by
   // how deep it is, with the start of its text. A click on it opens its
   // newest unread letter (else its newest) and folds it out; › folds it.
-  function threadHTML(t, every) {
+  function threadHTML(t: Thread, every: boolean) {
     const out = expanded.has(t.key)
     const target = t.letters.find(l => isLetter(l, t.account, t.open?.folder, t.open?.uid)) || t.letters.at(-1)
     const open = !out && t.letters.some(l => isReading(l.account, l.folder, l.uid)) ? ' open' : ''
@@ -341,7 +377,7 @@ export function mailPart(core: SettingsCore) {
 
   // Which inbox, as the picker names it: every account's (with all their
   // unread), or one (with its).
-  function boxName(id) {
+  function boxName(id: string) {
     const all = st.snap.mail || []
     if (id === '*') return T('mail.box.all', { n: all.reduce((n, a) => n + unreadOf(a), 0) })
     const a = accountOf(id)
@@ -357,7 +393,7 @@ export function mailPart(core: SettingsCore) {
 
   // The inbox: which (every account's, or one), all, unread or starred, its
   // newest letters, more on asking; one pane or two.
-  function inboxHTML(id) {
+  function inboxHTML(id: string) {
     const all = st.snap.mail || []
     const every = id === '*'
     const two = twoPanes()
@@ -405,18 +441,18 @@ export function mailPart(core: SettingsCore) {
 
   // How a letter goes to an agent (mailAgentConf, agent.rs): its model and
   // effort; empty is the agent's own setting.
-  const confOf = ag => ((st.snap.settings.mailAgentConf || {})[ag] || {})
-  const modelsOf = ag => (st.snap.mailModels || {})[ag] || []
+  const confOf = (ag: string) => ((st.snap.settings.mailAgentConf || {})[ag] || {})
+  const modelsOf = (ag: string): MailModel[] => (st.snap.mailModels || {})[ag] || []
 
   // The efforts a model takes (all of them while it is the agent's own).
-  function effortsOf(ag, model) {
+  function effortsOf(ag: string, model: unknown) {
     const all = modelsOf(ag)
     const m = all.find(x => x.id === model)
     return m ? m.efforts : [...new Set(all.flatMap(x => x.efforts))]
   }
 
   // A picker's choices: the agent's own first, then each model or effort.
-  function choicesOf(ag, key) {
+  function choicesOf(ag: string, key: string) {
     const c = confOf(ag)
     const list = key === 'model' ? modelsOf(ag).map(m => [m.id, m.name]) : effortsOf(ag, c.model).map(e => [e, effortName(e)])
     // One set before and no longer listed stays a choice.
@@ -424,9 +460,9 @@ export function mailPart(core: SettingsCore) {
     return [['', T('mail.conf.own')], ...list]
   }
 
-  const effortName = e => (T(`mail.effort.${e}`) === `mail.effort.${e}` ? e : T(`mail.effort.${e}`))
+  const effortName = (e: string) => (T(`mail.effort.${e}`) === `mail.effort.${e}` ? e : T(`mail.effort.${e}`))
 
-  function pickerHTML(ag, key) {
+  function pickerHTML(ag: string, key: string) {
     const value = confOf(ag)[key] || ''
     const label = choicesOf(ag, key).find(([v]) => v === value)?.[1] || value
     return `<button class="pick" data-picker="${ag}.${key}">${esc(label)} ▾</button>`
@@ -434,7 +470,7 @@ export function mailPart(core: SettingsCore) {
 
   // One of them changed; an effort the new model does not take goes back
   // to the agent's own.
-  function setConf(ag, key, value) {
+  function setConf(ag: string, key: string, value: string) {
     const all = st.snap.settings.mailAgentConf || {}
     const next = { ...(all[ag] || {}), [key]: value }
     if (key === 'model' && next.effort && !effortsOf(ag, value).includes(next.effort)) next.effort = ''
@@ -445,16 +481,16 @@ export function mailPart(core: SettingsCore) {
   // headings, lists, quotes (indented under a list item too, or within
   // bold: **> …**), ``` blocks (a reply it wrote, often). The text is
   // escaped first.
-  const inline = s =>
+  const inline = (s: string) =>
     s
       .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
       .replace(/(^|[^*\w])\*(?!\s)([^*]+?)\*(?![*\w])/g, '$1<i>$2</i>')
       .replace(/`([^`]+)`/g, '<code>$1</code>')
 
-  function md(text) {
+  function md(text: string) {
     let html = ''
-    let block = null
-    const pre = lines => `<pre class="md-pre">${lines.join('\n')}</pre>`
+    let block: string[] | null = null
+    const pre = (lines: string[]) => `<pre class="md-pre">${lines.join('\n')}</pre>`
     for (const raw of esc(text).split('\n')) {
       if (/^\s*```/.test(raw)) {
         if (block) html += pre(block)
@@ -481,7 +517,7 @@ export function mailPart(core: SettingsCore) {
 
   // The talk under a letter: who with, how it is going, what was said (the
   // agent's words as they come, what it did in small), and a box to ask more.
-  function talkHTML(talk, letter) {
+  function talkHTML(talk: Talk, letter: Letter) {
     const agent = AGENTS[talk.agent] || 'Agent'
     const going = talk.state === 'running'
     const state = going ? T('mail.talk.going', { agent }) : talk.state === 'failed' ? T('mail.talk.failed', { agent, why: talk.error || '' }) : T('mail.talk.done', { agent })
@@ -507,7 +543,7 @@ export function mailPart(core: SettingsCore) {
   // agent (when no talk is there yet), and ⋯ for the rest. Handing it is a
   // split button: its left part to the first agent, ▾ to another one found
   // for this letter only, or that one made the first (handMenu).
-  function handButtons(l, talk) {
+  function handButtons(l: Letter, talk: Talk | null | undefined) {
     const ag = firstAgent()
     const off = !(st.snap.mailAgents || {})[ag] ? 'disabled' : ''
     const others = mailList().filter(a => a.found && a.id !== ag)

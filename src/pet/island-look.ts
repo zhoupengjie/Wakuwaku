@@ -10,6 +10,19 @@
 import * as Mica from './mica.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
+import type { PartNode } from './island-layout.ts'
+import type { ScreenTop, TrayIcon } from './island-vars.ts'
+
+// Her island's look as the settings keep it for one of Windows' modes
+// (islandLook, islandTopLook): its ground's colour, how solid and how
+// blurred, its edge, bare.
+interface IslandLook {
+  bg?: string
+  op?: number
+  blur?: number
+  edge?: string
+  bare?: boolean
+}
 
 export function lookPart(core: IslandCore) {
   const {
@@ -45,10 +58,11 @@ export function lookPart(core: IslandCore) {
     fitPage()
     // A monitor's scale or Windows text scaling may have changed while the
     // settings are open; recompute their body height with the new CSS room.
-    if (later.Settings?.isOpen?.()) later.Settings.redraw()
+    // (Open: the settings' whole face, not her own window's stand-in.)
+    if (later.Settings?.isOpen?.()) later.Settings.redraw!()
     // Once laid out for it (its edge may have just changed too).
     setTimeout(() => {
-      const r = island.parentElement.getBoundingClientRect()
+      const r = island.parentElement!.getBoundingClientRect()
       const dpr = devicePixelRatio || 1
       console.log(`taskbar: strip in the page ${[r.left, r.top, r.right, r.bottom].map(v => +(v * dpr).toFixed(2)).join(', ')} (x ${dpr}, told ${stripThick} px)`)
     }, 400)
@@ -56,7 +70,7 @@ export function lookPart(core: IslandCore) {
   // Her tray icon clicked on a Mac: the island in the notch drops open, or
   // goes back. Open, it goes back once the pointer has been in it and left,
   // or after a while if the pointer never comes.
-  function setPeek(on) {
+  function setPeek(on: boolean) {
     if (on !== st.peek) console.log(`island: peek ${on ? 'open' : 'closed'}`)
     if (!on) endNudge()
     go({ type: 'peek', on })
@@ -66,7 +80,8 @@ export function lookPart(core: IslandCore) {
   }
   // Her tray icon toggles it; a double-click on her only opens it ({ open }).
   pet.onPeek(p => setPeek(p?.open === true ? true : !st.peek))
-  pet.onTop(({ height, notch }: { height?: number; notch?: number } = {}) => {
+  // notch.rs says both, always (none at all: no height above 0).
+  pet.onTop(({ height, notch }: ScreenTop = {} as ScreenTop) => {
     const next = height > 0 ? { height, notch: notch > 0 ? notch : 0 } : null
     if (JSON.stringify(next) === JSON.stringify(st.screenTop)) return
     st.screenTop = next
@@ -84,19 +99,20 @@ export function lookPart(core: IslandCore) {
   // the strip 2 px low and a gap above it (zhoupengjie/Wakuwaku#19). The
   // overhang cut off (style.css body.home-taskbar); a few px at most, else
   // it is the window being resized under a size told before.
-  let winPx = null
+  let winPx: number[] | null = null
   function fitPage() {
     const root = document.documentElement
     const r = root.getBoundingClientRect()
     const dpr = devicePixelRatio || 1
-    const over = (have, want) => (have - want / dpr > 0.01 && have - want / dpr < 4 ? have - want / dpr : 0)
+    const over = (have: number, want: number) => (have - want / dpr > 0.01 && have - want / dpr < 4 ? have - want / dpr : 0)
     root.style.setProperty('--page-cut-x', `${winPx ? over(r.width, winPx[0]) : 0}px`)
     root.style.setProperty('--page-cut-y', `${winPx ? over(r.height, winPx[1]) : 0}px`)
   }
   pet.onStrip(({ thick, win, sf }: { thick?: number; win?: number[]; sf?: number } = {}) => {
-    if (!(thick > 0)) return
-    stripThick = thick
-    if (Number.isFinite(sf) && sf > 0) st.stripScale = sf
+    // None said: not above 0.
+    if (!(thick! > 0)) return
+    stripThick = thick!
+    if (Number.isFinite(sf) && sf! > 0) st.stripScale = sf!
     if (Array.isArray(win) && win[0] > 0 && win[1] > 0) winPx = win
     setStrip()
   })
@@ -104,15 +120,16 @@ export function lookPart(core: IslandCore) {
     if (!stripThick) return
     document.documentElement.style.setProperty('--strip-h', `${stripThick / (devicePixelRatio || 1)}px`)
     fitPage()
-    if (later.Settings?.isOpen?.()) later.Settings.redraw()
+    if (later.Settings?.isOpen?.()) later.Settings.redraw!()
     sendSolid()
   })
 
   const micaBox = el('div')
   micaBox.id = 'mica'
-  island.parentElement.prepend(micaBox)
+  // Her island's row (index.html).
+  island.parentElement!.prepend(micaBox)
   const mica = Mica.mount(micaBox)
-  let paper = null
+  let paper: Parameters<typeof Mica.lightness>[0] = null
 
   // The settings as Windows' own Settings in every home, her island's too:
   // its light panel in Windows' light mode (settings.css set-light), its
@@ -153,7 +170,7 @@ export function lookPart(core: IslandCore) {
       requestAnimationFrame(() => update())
     }
   }
-  let stripWasLight = null
+  let stripWasLight: boolean | null = null
 
   // Each of the strip's parts its own words (style.css ink-light), and
   // Windows' accent in their shade (--strip-accent), by the desktop right
@@ -165,15 +182,15 @@ export function lookPart(core: IslandCore) {
   // or the picture is known; a widget's face is drawn in its part's
   // (drawEntries), so it is drawn again when that turns. The glide over a
   // part as it is.
-  const stripParts = () => [...barRest.querySelectorAll(':scope > .tzone > [data-part]'), deskEdge]
-  function partLight(node) {
+  const stripParts = (): PartNode[] => [...barRest.querySelectorAll(':scope > .tzone > [data-part]'), deskEdge]
+  function partLight(node: HTMLElement) {
     if (!st.backdrop || !isClear() || isFilled()) return isStripLight()
-    const strip = island.parentElement.getBoundingClientRect()
+    const strip = island.parentElement!.getBoundingClientRect()
     const r = node.getBoundingClientRect()
     const [from, to] = isSide() ? [r.top - strip.top, r.bottom - strip.top] : [r.left - strip.left, r.right - strip.left]
     return Mica.stripInkLight({ light: isLight(), clear: true, filled: false, backdrop: Mica.inkOn(st.backdrop, from, to) })
   }
-  const inkOf = node => (node.closest('[data-part]') || node).classList.contains('ink-light')
+  const inkOf = (node: HTMLElement) => (node.closest('[data-part]') || node).classList.contains('ink-light')
   function inkParts() {
     if (!st.taskbarBuilt) return
     let turned = false
@@ -220,11 +237,11 @@ export function lookPart(core: IslandCore) {
   // screen its own (islandTopLook, zhoupengjie/Wakuwaku#27); and its
   // ground's colour (null: none given), how solid (0.2 to 1; solid when no
   // colour is given) and blurred.
-  const lookNow = () => (home() === 'taskbar' ? (isCapsule() && st.config.islandLook?.[st.look.mode]) || {} : st.config.islandTopLook?.[modeNow()] || {})
-  function groundOf(mine) {
-    const bg = /^#[0-9a-f]{6}$/i.test(mine.bg || '') ? parseInt(mine.bg.slice(1), 16) : null
-    const op = bg !== null && Number.isFinite(mine.op) ? Math.min(100, Math.max(20, mine.op)) / 100 : 1
-    const blur = Number.isFinite(mine.blur) ? Math.min(60, Math.max(0, mine.blur)) : 0
+  const lookNow = (): IslandLook => (home() === 'taskbar' ? (isCapsule() && st.config.islandLook?.[st.look.mode]) || {} : st.config.islandTopLook?.[modeNow()] || {})
+  function groundOf(mine: IslandLook) {
+    const bg = /^#[0-9a-f]{6}$/i.test(mine.bg || '') ? parseInt(mine.bg!.slice(1), 16) : null
+    const op = bg !== null && Number.isFinite(mine.op) ? Math.min(100, Math.max(20, mine.op!)) / 100 : 1
+    const blur = Number.isFinite(mine.blur) ? Math.min(60, Math.max(0, mine.blur!)) : 0
     return { bg, op, blur }
   }
 
@@ -240,7 +257,8 @@ export function lookPart(core: IslandCore) {
   function drawIslandLook() {
     const mine = lookNow()
     const { bg, op, blur } = groundOf(mine)
-    const rgba = a => `rgba(${(bg >> 16) & 255}, ${(bg >> 8) & 255}, ${bg & 255}, ${a})`
+    // Called only with a ground's colour given.
+    const rgba = (a: number | string) => `rgba(${(bg! >> 16) & 255}, ${(bg! >> 8) & 255}, ${bg! & 255}, ${a})`
     if (bg === null) body.style.removeProperty('--i-bg')
     else body.style.setProperty('--i-bg', rgba(op))
     // Deeper over a maximized window, with nothing to blur it (setDeep).
@@ -261,7 +279,7 @@ export function lookPart(core: IslandCore) {
     const edge = {
       ring: '0 0 0 1.5px var(--ring), 0 0 12px color-mix(in srgb, var(--ring) 35%, transparent)',
       none: '0 0 0 0 transparent',
-    }[mine.edge]
+    }[mine.edge as 'ring' | 'none']
     if (edge) island.style.setProperty('--i-edge', edge)
     else island.style.removeProperty('--i-edge')
     // Bare unless said otherwise in the dark mode (the default since
@@ -272,7 +290,7 @@ export function lookPart(core: IslandCore) {
   }
 
   // A colour's relative lightness (WCAG), 0 to 1.
-  function lightness(rgb) {
+  function lightness(rgb: number) {
     const [r, g, b] = [(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255].map(v => {
       v /= 255
       return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
@@ -306,7 +324,7 @@ export function lookPart(core: IslandCore) {
   // in front, a program's count, the privacy marks, where a dragged button
   // lands; on each part, by its own (inkParts). Their own blue until it
   // comes. Not --accent: that is her mood's colour (pet.ts).
-  function setAccent(name, colour, on = document.documentElement) {
+  function setAccent(name: string, colour: string | null | undefined, on = document.documentElement) {
     if (colour) on.style.setProperty(name, colour)
     else on.style.removeProperty(name)
   }
@@ -399,13 +417,13 @@ export function lookPart(core: IslandCore) {
   // kept: the person's choice (dragged from one to the other, trayPinned),
   // else Windows' own (windowsOut). In what order: as dragged (trayOrder,
   // names, those not running kept too), the rest after, as they came.
-  const isOut = i => st.config.trayPinned?.[i.name] ?? i.windowsOut === true
+  const isOut = (i: TrayIcon) => st.config.trayPinned?.[i.name] ?? i.windowsOut === true
   const trayOrder = () => (Array.isArray(st.config.trayOrder) ? st.config.trayOrder.map(String) : [])
   function orderedTray() {
     const order = trayOrder()
-    const rank = i => (order.includes(i.name) ? order.indexOf(i.name) : Infinity)
+    const rank = (i: TrayIcon) => (order.includes(i.name) ? order.indexOf(i.name) : Infinity)
     return st.trayIcons
-      .map((i, n) => [i, n])
+      .map((i, n): [TrayIcon, number] => [i, n])
       .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
       .map(([i]) => i)
   }
@@ -418,9 +436,10 @@ export function lookPart(core: IslandCore) {
   // One a press does not reach (reach false: its program handed its icon to
   // Windows' own taskbar only, before hers was up, and never named hers the
   // message to send it; systray.rs) says so in its tip.
-  function trayIcon(i) {
+  function trayIcon(i: TrayIcon) {
     const slot = el('span', 'ticon')
-    slot.dataset.tray = i.key
+    // Its key, a number, made a string as data-* are.
+    slot.dataset.tray = i.key as unknown as string
     slot.dataset.name = i.name
     const unreached = i.reach === false ? `\n${t(st.lang, 'taskbar.trayUnreached')}` : ''
     slot.title = (i.tip || i.exe) + unreached
@@ -442,8 +461,8 @@ export function lookPart(core: IslandCore) {
   // the other kind turns it over to read (style.css). Each picture looked at
   // once.
   const monoOf = new Map()
-  function markMono(slot, img) {
-    const mark = mono => {
+  function markMono(slot: HTMLElement, img: HTMLImageElement) {
+    const mark = (mono: string) => {
       if (mono) slot.dataset.mono = mono
       else delete slot.dataset.mono
     }
@@ -452,7 +471,7 @@ export function lookPart(core: IslandCore) {
       const c = document.createElement('canvas')
       c.width = img.naturalWidth
       c.height = img.naturalHeight
-      const g = c.getContext('2d')
+      const g = c.getContext('2d')!
       g.drawImage(img, 0, 0)
       const d = g.getImageData(0, 0, c.width, c.height).data
       let seen = 0
@@ -479,7 +498,7 @@ export function lookPart(core: IslandCore) {
   // never jumps leftwards as the last ones come. Kept here, as it is, while
   // on the taskbar.
   const TRAY_KEPT = 'trayWidth'
-  let trayHold = null
+  let trayHold: { w: number; n: number } | null = null
   try {
     const kept = JSON.parse(localStorage.getItem(TRAY_KEPT) || 'null')
     if (kept?.w > 0 && kept.w < 2000 && kept.n > 0) trayHold = kept
@@ -523,7 +542,7 @@ export function lookPart(core: IslandCore) {
     requestAnimationFrame(sendTrayRects)
   }
 
-  function openTray(open) {
+  function openTray(open: boolean) {
     if (st.trayOpen === open) return
     st.trayOpen = open
     trayBox.classList.toggle('upper', isSide() && trayBox.getBoundingClientRect().top < innerHeight / 2)
@@ -532,7 +551,7 @@ export function lookPart(core: IslandCore) {
   }
   chevron.addEventListener('click', () => openTray(!st.trayOpen))
   // Folded away again once the pointer has been gone from it a moment.
-  let trayCloseTimer
+  let trayCloseTimer: Timer | undefined
   trayBox.addEventListener('mouseleave', () => {
     clearTimeout(trayCloseTimer)
     trayCloseTimer = setTimeout(() => openTray(false), 1200)
@@ -543,7 +562,7 @@ export function lookPart(core: IslandCore) {
   // one, while folded, is where ^ is.
   function sendTrayRects() {
     if (home() !== 'taskbar') return
-    const at = node => {
+    const at = (node: HTMLElement) => {
       const r = node.getBoundingClientRect()
       return [r.left, r.top, r.width, r.height]
     }
@@ -565,7 +584,7 @@ export function lookPart(core: IslandCore) {
   // The icons' pictures kept here: taskbar/ (send_icons) sends each once,
   // and again only when it is another; a list without one's png means the
   // one kept.
-  const trayPngs = new Map()
+  const trayPngs = new Map<number, string>()
   pet.onTray(list => {
     st.trayIcons = (Array.isArray(list) ? list : []).map(i => {
       if (i.png === undefined) i.png = trayPngs.get(i.key) ?? ''

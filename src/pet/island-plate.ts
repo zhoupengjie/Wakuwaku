@@ -9,7 +9,13 @@
 // up). What it hands back is the island's again.
 import * as Anchor from './anchor.ts'
 import { pet } from './bridge.ts'
-import type { IslandCore } from './island.ts'
+import type { IslandCore, Room } from './island.ts'
+
+// Where the plate goes, in the page's px.
+interface Box extends Room {
+  x: number
+  y: number
+}
 
 export function platePart(core: IslandCore) {
   const {
@@ -39,14 +45,14 @@ export function platePart(core: IslandCore) {
   // least (4.1 under the taskbar's 22 px). The band left the page paints
   // (plated, style.css #island::before, its rim).
   const DWM_CORNER = 8
-  const plateInset = radius => Math.max(1, (radius - DWM_CORNER) * (1 - Math.SQRT1_2))
+  const plateInset = (radius: number) => Math.max(1, (radius - DWM_CORNER) * (1 - Math.SQRT1_2))
   // While it springs to another size, this much further in, and as much
   // again as the spring may carry an edge past where it goes (style.css's
   // curve: some 7 % of the way it moves).
   const PLATE_SLACK = 3
   const SPRING_OVER = 0.07
-  let plateWait = null
-  let plateMove = null
+  let plateWait: (() => void) | null = null
+  let plateMove: (() => void) | null = null
   // A maximized window on her display, at the top of the screen (island.rs
   // look_over_max; on the taskbar, its windows' list says).
   let overMaxTop = false
@@ -60,7 +66,7 @@ export function platePart(core: IslandCore) {
 
   // After the island is laid out; resized: from its box and corners then
   // (from, fromRadius) to its new size.
-  function placePlate(resized, from?, fromRadius?) {
+  function placePlate(resized: boolean, from?: DOMRect | null, fromRadius?: number) {
     if (!plateWanted()) return hidePlate(PLATE_OUT_MS)
     if (!st.plateSent) {
       if (resized || !plateWait) {
@@ -88,7 +94,7 @@ export function platePart(core: IslandCore) {
   // side there: anchor.ts; along the foot of the screen from its foot); on
   // the taskbar from the strip's edge it grows from, at her end's side
   // (isl-right, isl-low).
-  function rectAt(r, width, height) {
+  function rectAt(r: DOMRect, width: number, height: number): Box {
     // About her capsule's middle in Windows' taskbar (isEmbedded, placeMid):
     // grown upward from a taskbar along the bottom, downward from one along the top.
     if (isEmbedded() && st.slotMiddle != null) return { x: pieces.layout.midLeft(width), y: atBottom() ? r.top + r.height - height : r.top, width, height }
@@ -107,13 +113,13 @@ export function platePart(core: IslandCore) {
   // the open island's words stood clear over the desktop as it closed;
   // the appearance session, 2026-10-14). Once it settles, the plate where
   // the island has come to and the ground back over DEEP_MS, together.
-  function movePlate(from, fromRadius) {
+  function movePlate(from: DOMRect, fromRadius?: number) {
     const to = rectAt(from, parseFloat(island.style.width), parseFloat(island.style.height))
     const x = Math.max(from.left, to.x)
     const y = Math.max(from.top, to.y)
     const box = { x, y, width: Math.min(from.right, to.x + to.width) - x, height: Math.min(from.bottom, to.y + to.height) - y }
     const inset = plateInset(Math.max(fromRadius || 0, parseFloat(island.style.borderRadius) || 0))
-    const edge = moved => inset + PLATE_SLACK + SPRING_OVER * Math.abs(moved)
+    const edge = (moved: number) => inset + PLATE_SLACK + SPRING_OVER * Math.abs(moved)
     const sides = [edge(to.x - from.left), edge(to.y - from.top), edge(to.x + to.width - from.right), edge(to.y + to.height - from.bottom)]
     firmGround()
     sendPlate(box, sides, inset, 0)
@@ -132,7 +138,7 @@ export function platePart(core: IslandCore) {
     body.classList.add('isl-firm')
   }
 
-  function softenGround(ms) {
+  function softenGround(ms: number) {
     if (!body.classList.contains('isl-firm')) return
     const firm = getComputedStyle(island).backgroundColor
     body.classList.remove('isl-firm')
@@ -140,7 +146,7 @@ export function platePart(core: IslandCore) {
   }
 
   // Under the island as it is now (moved: told again, no fade).
-  function showPlate(fade) {
+  function showPlate(fade: number) {
     if (!plateWanted()) return hidePlate(0)
     const r = island.getBoundingClientRect()
     const inset = plateInset(parseFloat(getComputedStyle(island).borderTopLeftRadius) || 0)
@@ -150,7 +156,7 @@ export function platePart(core: IslandCore) {
   // The plate in box, its edges set in by sides (left, top, right, bottom;
   // never to nothing: it stays), the rim over the corners' band (rim wide);
   // faded in when new.
-  function sendPlate(box, sides, rim, fade) {
+  function sendPlate(box: Box, sides: number[], rim: number, fade: number) {
     const across = Math.min(1, (box.width - 2) / (sides[0] + sides[2]))
     const down = Math.min(1, (box.height - 2) / (sides[1] + sides[3]))
     const [left, top, right, bottom] = [sides[0] * across, sides[1] * down, sides[2] * across, sides[3] * down]
@@ -164,7 +170,7 @@ export function platePart(core: IslandCore) {
     pet.plate(rect, first && !stillMotion() ? fade : 0)
   }
 
-  function hidePlate(fade) {
+  function hidePlate(fade: number) {
     plateWait?.()
     plateWait = null
     plateMove?.()
@@ -194,7 +200,7 @@ export function platePart(core: IslandCore) {
     return op < DEEP_OP && !(st.now.plate === true && blur > 0) && overMax()
   }
 
-  function setDeep(fades) {
+  function setDeep(fades: boolean) {
     const on = deepWanted()
     if (body.classList.contains('isl-deep') === on) return
     const from = getComputedStyle(island).backgroundColor
@@ -254,7 +260,7 @@ export function platePart(core: IslandCore) {
     setStow()
   })
 
-  function setSize({ width, height }) {
+  function setSize({ width, height }: Room) {
     island.style.width = `${width}px`
     island.style.height = `${height}px`
     if ((home() === 'taskbar' && !isSide()) || isEmbedded()) pieces.layout.placeMid(width)
@@ -262,7 +268,7 @@ export function platePart(core: IslandCore) {
     // above (on its Mica, her capsule and all it grows into round).
     // What grows from her end is flat where it meets the strip: the strip's
     // own end on the black one (its corners at the screen's edge square).
-    const flat = { bottom: '22px 22px 0 0', top: '0 0 22px 22px', left: '0 22px 22px 0', right: '22px 0 0 22px' }
+    const flat: Record<string, string> = { bottom: '22px 22px 0 0', top: '0 0 22px 22px', left: '0 22px 22px 0', right: '22px 0 0 22px' }
     island.style.borderRadius =
       home() === 'taskbar'
         ? st.view === 'compact'

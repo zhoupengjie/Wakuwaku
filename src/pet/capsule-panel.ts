@@ -27,12 +27,12 @@ export type CapsulePanelFace = ReturnType<typeof capsulePanel>
 // Only with the island and the picker there (main.ts: both made before this).
 export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
   const el = Isle.el
-  const T = (key, vars?) => t(Isle.lang, key, vars)
+  const T = (key: string, vars?: Record<string, unknown>) => t(Isle.lang, key, vars)
   const esc = WCards.esc
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
   const GRIP = '<svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="3" cy="13" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg>'
 
-  const panel = el('div', 'cp')
+  const panel: HTMLElement = el('div', 'cp')
   panel.hidden = true
   panel.setAttribute('role', 'dialog')
   for (const type of ['mouseenter', 'mouseleave']) panel.addEventListener(type, () => pet.hover(type === 'mouseenter'))
@@ -40,14 +40,16 @@ export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
   document.body.append(panel)
   let open = false
   let drawn = ''
-  let rowDrag = null
+  // A row dragged by its grip: from where to where, the pointer's start and
+  // its pointer, a row's height.
+  let rowDrag: { row: HTMLElement; from: number; to: number; y0: number; id: number; h: number } | null = null
 
   const home = () => Isle.home()
 
   // Its members as they are now (picker.ts listNow), each with its widgets.
   function members() {
     const list = Picker.listNow()
-    const all = Isle.allWidgets
+    const all: Widgets.Widget[] = Isle.allWidgets
     return list.map(m => {
       const id = m.key.slice(m.key.indexOf(':') + 1)
       const ws = m.key.startsWith('plugin:') ? all.filter(w => w.plugin === id) : all.filter(w => w.id === id)
@@ -61,7 +63,7 @@ export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
     const detailed = Isle.isDetailed()
     const count = C.MODES.map(mode => [mode, ms.filter(m => m.mode === mode).length]).filter(([, n]) => n)
     const head = `<div class="cp-head"><b>${esc(T('capsule.title'))}</b><span class="cp-count">${esc(count.map(([mode, n]) => T(`capsule.count.${mode}`, { n })).join(' · '))}</span><button type="button" class="pk-ib" data-cp="close" title="${esc(T('picker.close'))}"><span class="pk-fi" aria-hidden="true">&#xE8BB;</span></button></div>`
-    const seg = (key, mode, on, why = '') => `<button type="button" class="pk-seg${on ? ' on' : ''}" data-cp="mode" data-key="${esc(key)}" data-v="${mode}"${why ? ` aria-disabled="true" title="${esc(why)}"` : ''}>${esc(T(`capsule.${mode === 'open' ? 'openOnly' : mode}`))}</button>`
+    const seg = (key: string, mode: string, on: boolean, why = '') => `<button type="button" class="pk-seg${on ? ' on' : ''}" data-cp="mode" data-key="${esc(key)}" data-v="${mode}"${why ? ` aria-disabled="true" title="${esc(why)}"` : ''}>${esc(T(`capsule.${mode === 'open' ? 'openOnly' : mode}`))}</button>`
     const rows = ms.map(m => {
       const w = m.w
       const name = Picker.nameOfKey(m.key)
@@ -95,8 +97,8 @@ export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
   function place() {
     const w = panel.offsetWidth
     const h = panel.offsetHeight
-    let x
-    let y
+    let x: number
+    let y: number
     if (home() === 'taskbar') {
       const r = Isle.herSlot.getBoundingClientRect()
       const edge = Isle.tbEdge()
@@ -107,7 +109,7 @@ export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
       if (edge === 'right') [x, y] = [r.left - w - 10, r.top]
     } else {
       // Along the foot of the screen (zhoupengjie/Wakuwaku#105), above it.
-      const r = Isle.island.getBoundingClientRect()
+      const r = Isle.island!.getBoundingClientRect()
       x = Anchor.under(r, w, Isle.anchor(), innerWidth)
       y = Isle.islandEdge?.() === 'bottom' ? r.top - h - 12 : Math.max(r.bottom, 44) + 12
     }
@@ -144,14 +146,15 @@ export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
   }
 
   panel.addEventListener('click', e => {
-    const b = e.target.closest('[data-cp]')
+    const b = (e.target as HTMLElement).closest('[data-cp]')
     if (!b || b.getAttribute('aria-disabled') === 'true') return
     const what = b.dataset.cp
     if (what === 'close') return hide()
-    if (what === 'out') return Picker.removeFromCapsule(b.dataset.key)
+    // Each made with its key, a mode's with its v (html).
+    if (what === 'out') return Picker.removeFromCapsule(b.dataset.key!)
     if (what === 'mode') {
       const list = Picker.listNow()
-      return Picker.writeCapsule(C.setMode(list, b.dataset.key, b.dataset.v))
+      return Picker.writeCapsule(C.setMode(list, b.dataset.key!, b.dataset.v!))
     }
     if (what === 'spin') {
       Picker.setConfig(C.spinPatch(Isle.config, Number(b.dataset.v)))
@@ -163,10 +166,11 @@ export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
   // A row dragged by its grip: moved up or down among the others (they make
   // room), let go: that order kept.
   panel.addEventListener('pointerdown', e => {
-    const grip = e.target.closest('.cp-grip')
+    const grip = (e.target as HTMLElement).closest('.cp-grip')
     if (!grip || e.button !== 0) return
     e.preventDefault()
-    const row = grip.closest('.cp-row')
+    // Each grip is in its row (html).
+    const row = grip.closest('.cp-row')!
     const rows = [...panel.querySelectorAll('.cp-row')]
     rowDrag = { row, from: rows.indexOf(row), to: rows.indexOf(row), y0: e.clientY, id: e.pointerId, h: row.offsetHeight + 2 }
     row.classList.add('cp-lift')
@@ -190,7 +194,7 @@ export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
       r.style.transform = shift ? `translateY(${shift}px)` : ''
     })
   })
-  const dropRow = e => {
+  const dropRow = (e: PointerEvent) => {
     const d = rowDrag
     if (!d || e.pointerId !== d.id) return
     rowDrag = null
@@ -205,7 +209,7 @@ export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
   document.addEventListener(
     'pointerdown',
     e => {
-      if (!open || panel.contains(e.target) || Isle.island.contains(e.target as Node) || (e.target as HTMLElement).closest('.pk, .pk-toasts, .pk-pop, .tbedit, #bar-rest')) return
+      if (!open || panel.contains(e.target as Node) || Isle.island!.contains(e.target as Node) || (e.target as HTMLElement).closest('.pk, .pk-toasts, .pk-pop, .tbedit, #bar-rest')) return
       hide()
     },
     true,
@@ -223,8 +227,8 @@ export function capsulePanel(Isle: IsleFace, Picker: PickerFace) {
     refresh: () => draw(true),
     height: () => (open ? panel.offsetHeight : 0),
     // A widget from the picker over it: lit; let go of at y, the place in its list.
-    hot: on => panel.classList.toggle('cp-hot', !!on && open),
-    indexAt(y) {
+    hot: (on: boolean) => panel.classList.toggle('cp-hot', !!on && open),
+    indexAt(y: number) {
       const rows = [...panel.querySelectorAll('.cp-row')]
       const at = rows.findIndex(r => {
         const b = r.getBoundingClientRect()

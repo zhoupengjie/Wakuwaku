@@ -11,6 +11,31 @@
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
 import type { SettingsCore } from './settings.ts'
+import type { Choices } from './settings-mail.ts'
+import type { Draft, DraftBox, Letter, Note } from './settings-vars.ts'
+
+// Someone a letter is from or to: a name, and the address.
+interface Person {
+  name?: string
+  address: string
+}
+// A way out (proxy.rs, mail/proxy.rs): the General page's Network proxy,
+// or the Mail page's.
+export type Way = 'netProxy' | 'mailProxy'
+// What the Network proxy's Test found (proxy.rs test): running, or GitHub
+// reached (through which proxy, how fast) or not (why; a proxy heard on
+// this computer at a usual port).
+interface NetTest {
+  running?: boolean
+  ok?: boolean
+  via?: string
+  ms?: number
+  error?: string
+  listening?: { address: string } | null
+}
+// A letter's frame (mailBodyHTML), with what fitFrames keeps on it: the
+// page it watches, its measure, whether it hears its loads, its timers.
+type LetterFrame = HTMLIFrameElement & { _fitDoc?: Document; _fit?: () => void; _fitHooked?: boolean; _fitTimers?: Timer[] }
 
 // Whether a letter's HTML (as letters.rs leaves it) asks for something from
 // elsewhere: a picture's address, a background, a url() in its styles
@@ -30,14 +55,14 @@ export function letterPart(core: SettingsCore) {
     mailSize, people, providerOf, setConf, talkHTML, talkOf, twoPanes, where,
   } = pieces.mail
 
-  const personLine = p => (p.name ? `${/[,;"<>]/.test(p.name) ? `"${p.name.replace(/"/g, '')}"` : p.name} <${p.address}>` : p.address)
-  const peopleLine = list => list.map(personLine).join(', ')
-  const samePerson = (a, b) => a.address.toLowerCase() === b.address.toLowerCase()
-  const eachOnce = list => list.filter((p, i) => p.address && list.findIndex(q => samePerson(p, q)) === i)
-  const quoted = text => String(text || '').split('\n').map(line => (line ? `> ${line}` : '>')).join('\n')
+  const personLine = (p: Person) => (p.name ? `${/[,;"<>]/.test(p.name) ? `"${p.name.replace(/"/g, '')}"` : p.name} <${p.address}>` : p.address)
+  const peopleLine = (list: Person[]) => list.map(personLine).join(', ')
+  const samePerson = (a: Person, b: Person) => a.address.toLowerCase() === b.address.toLowerCase()
+  const eachOnce = (list: Person[]) => list.filter((p, i) => p.address && list.findIndex(q => samePerson(p, q)) === i)
+  const quoted = (text: unknown) => String(text || '').split('\n').map(line => (line ? `> ${line}` : '>')).join('\n')
 
   // The letter passed on, as mail programs write it under the new one.
-  function forwarded(l) {
+  function forwarded(l: Letter) {
     const head = [
       `---------- ${T('mail.w.fwdHead')} ----------`,
       `${T('mail.w.from')}: ${people(l.from)}`,
@@ -64,7 +89,7 @@ export function letterPart(core: SettingsCore) {
   // under it, words an agent wrote on top, if given), or one passed on
   // (with its attachments). One half written is not thrown away for it:
   // it shows.
-  function write(kind, l?, words?) {
+  function write(kind: string, l?: Letter, words?: string) {
     closeMenu()
     if (st.draft && (st.draft.touched || st.draft.files.length)) {
       st.draft.note = T('mail.w.unsent')
@@ -74,13 +99,13 @@ export function letterPart(core: SettingsCore) {
     const account = accountOf(l?.account)?.id || fromAccount()
     if (!account) return
     const me = (accountOf(account)?.address || '').toLowerCase()
-    const notMe = list => (list || []).filter(p => p.address && p.address.toLowerCase() !== me)
-    const d = { kind, account, to: '', cc: '', bcc: '', showCc: false, subject: '', text: '', reply: null, forward: null, files: [], touched: !!words, busy: false, error: null, note: null }
+    const notMe = (list: Person[] | null | undefined) => (list || []).filter(p => p.address && p.address.toLowerCase() !== me)
+    const d: Draft = { kind, account, to: '', cc: '', bcc: '', showCc: false, subject: '', text: '', reply: null, forward: null, files: [], touched: !!words, busy: false, error: null, note: null }
     if (l && (kind === 'reply' || kind === 'all')) {
       // To whom it asks replies to go, else who wrote it; one's own letter
       // (in Sent), to whom it went.
-      const mine = (l.from || []).some(p => (p.address || '').toLowerCase() === me)
-      const back = l.replyTo?.length ? l.replyTo : mine && l.to?.length ? l.to : l.from
+      const mine = (l.from || []).some((p: Person) => (p.address || '').toLowerCase() === me)
+      const back: Person[] = l.replyTo?.length ? l.replyTo : mine && l.to?.length ? l.to : l.from
       const everyone = eachOnce([...notMe(back), ...notMe(l.to)])
       const to = kind === 'all' && everyone.length ? everyone : back
       d.to = peopleLine(to)
@@ -93,7 +118,7 @@ export function letterPart(core: SettingsCore) {
     if (l && kind === 'forward') {
       d.subject = /^\s*(fwd?|wg|转发)\s*[:：]/i.test(l.subject || '') ? l.subject : `Fwd: ${l.subject || ''}`
       d.text = `\n\n${forwarded(l)}`
-      d.forward = { account: l.account, folder: l.folder || 'inbox', uid: l.uid, files: (l.attachments || []).map((f, i) => ({ index: i, name: f.name, size: f.size })) }
+      d.forward = { account: l.account, folder: l.folder || 'inbox', uid: l.uid, files: (l.attachments || []).map((f: { name: string; size: number }, i: number) => ({ index: i, name: f.name, size: f.size })) }
     }
     st.draft = d
     st.writing = true
@@ -113,13 +138,13 @@ export function letterPart(core: SettingsCore) {
   }
 
   // The same about a letter in the list: opened first (for its text).
-  async function writeAbout(kind, account, uid, folder, words?) {
+  async function writeAbout(kind: string, account: string, uid: number, folder: string, words?: string) {
     if (!(st.reading?.letter && isReading(account, folder, uid))) await openLetter(account, uid, folder)
     if (st.reading?.letter && isReading(account, folder, uid)) write(kind, st.reading.letter, words)
   }
 
   // The reply in an agent's words: the longest ``` block, if it wrote one; else all of it.
-  function replyIn(text) {
+  function replyIn(text: unknown) {
     const blocks = [...String(text || '').matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map(m => m[1].trim())
     return (blocks.sort((a, b) => b.length - a.length)[0] || String(text || '')).trim()
   }
@@ -127,8 +152,9 @@ export function letterPart(core: SettingsCore) {
   // The letter being written: back (it stays), discard, send; from
   // (where there are several accounts), to, cc and bcc (when asked for),
   // the subject, the text; the files, each with ×, and more.
+  // Drawn only while there is one (pageMail).
   function writeHTML(note = '') {
-    const d = st.draft
+    const d = st.draft!
     const all = st.snap.mail || []
     const off = d.busy ? 'disabled' : ''
     const two = twoPanes()
@@ -138,7 +164,7 @@ export function letterPart(core: SettingsCore) {
     const bar = `<div class="mail-bar"><span class="link" data-w-back>‹ ${esc(T(back))}</span><span class="grow"></span>
       <button class="pbtn sm" data-w-drop ${off}>${esc(T(st.dropSure ? 'mail.w.dropSure' : 'mail.w.drop'))}</button>
       <button class="pbtn sm al" data-w-send title="${esc(T('mail.w.ctrlEnter'))}" ${off}>${esc(T(d.busy ? 'mail.w.sending' : 'mail.w.send'))}</button></div>`
-    const box = (key, label, extra = '') =>
+    const box = (key: DraftBox, label: string, extra = '') =>
       `<div class="fr"><span class="fl">${esc(label)}</span><input class="in" data-w="${key}" value="${esc(d[key] ?? '')}" spellcheck="false" autocomplete="off" ${off}>${extra}</div>`
     const address = accountOf(d.account)?.address || ''
     const from =
@@ -165,15 +191,15 @@ export function letterPart(core: SettingsCore) {
   }
 
   // Files picked, read for the letter; no more than it may take.
-  const readBase64 = file =>
-    new Promise((ok, no) => {
+  const readBase64 = (file: File) =>
+    new Promise<string>((ok, no) => {
       const r = new FileReader()
       r.onload = () => ok(String(r.result).split(',')[1] || '')
       r.onerror = () => no(r.error)
       r.readAsDataURL(file)
     })
 
-  async function addFiles(input) {
+  async function addFiles(input: HTMLInputElement) {
     st.picking = false
     const d = st.draft
     const list = [...(input.files || [])]
@@ -199,13 +225,14 @@ export function letterPart(core: SettingsCore) {
 
   // Why a letter did not go, in words: the page's own reasons, or the
   // outgoing server's.
-  function sendError(got) {
+  // got: what send.rs answered (its error, whether the outgoing server's).
+  function sendError(got: { error?: any; out?: boolean }) {
     const err = got.error || {}
     const own = ['address', 'noOne', 'tooMany', 'tooBig', 'tooLong', 'file', 'noSmtp', 'gone', 'noLetter']
     if (own.includes(err.kind)) return T(`mail.err.${err.kind}`, { what: err.text || '' })
     const a = accountOf(st.draft?.account)
     if (!got.out) return mailError(err, a)
-    const hint = err.kind === 'login' && !loginWhy(err) && providerOf(a?.host) ? ` ${T(`mail.hint.${providerOf(a.host)}`)}` : ''
+    const hint = err.kind === 'login' && !loginWhy(err) && providerOf(a?.host) ? ` ${T(`mail.hint.${providerOf(a!.host)}`)}` : ''
     return T('mail.w.outPrefix') + mailError(err, a?.smtp ? { ...a.smtp, proxy: a.proxy } : { host: '?', port: '' }) + hint
   }
 
@@ -255,7 +282,7 @@ export function letterPart(core: SettingsCore) {
   // is read without telling its sender it was opened): the first letter of
   // the name, on the colour of the address, the same address always the
   // same one.
-  function avatarHTML(l) {
+  function avatarHTML(l: Letter) {
     const from = (l.from || [])[0] || {}
     const name = String(from.name || from.address || '').trim()
     const first = Array.from(name)[0] || '?'
@@ -266,8 +293,9 @@ export function letterPart(core: SettingsCore) {
 
   // A letter open: back to the inbox, its star and the hand-off, who, when,
   // its attachments, the talk about it, the text or HTML.
+  // Drawn only while one is open (pageMail).
   function readingHTML(note = '') {
-    const r = st.reading
+    const r = st.reading!
     const l = r.letter
     const talk = l ? talkOf(l.key) || r.talk : null
     // Beside the list (two panes) there is no inbox to go back to.
@@ -277,10 +305,10 @@ export function letterPart(core: SettingsCore) {
     const hand = st.handNote && !two ? `<div class="note${st.handNote.bad ? ' err' : ''}">${esc(st.handNote.text)}</div>` : ''
     // Two panes: the bar stays, the letter (and the note about its hand-off)
     // scrolls under it. One pane: the whole page scrolls, as it did.
-    const wrap = inner => (two ? `${bar}<div class="pane-r-body">${note}${inner}</div>` : `${bar}${hand}${inner}`)
+    const wrap = (inner: string) => (two ? `${bar}<div class="pane-r-body">${note}${inner}</div>` : `${bar}${hand}${inner}`)
     if (r.busy) return wrap(`<div class="grp"><div class="note">${esc(T('mail.opening'))}</div></div>`)
     if (r.error) return wrap(`<div class="grp"><div class="note err">${esc(handError(r.error))}</div></div>`)
-    const files = l.attachments.length ? `<div class="m-files">${l.attachments.map(f => `<span class="chip">📎 ${esc(f.name || '?')} · ${mailSize(f.size)}</span>`).join('')}</div>` : ''
+    const files = l.attachments.length ? `<div class="m-files">${l.attachments.map((f: { name?: string; size: number }) => `<span class="chip">📎 ${esc(f.name || '?')} · ${mailSize(f.size)}</span>`).join('')}</div>` : ''
     // Whose (several accounts), and one's own, from Sent.
     const address = accountOf(l.account)?.address || ''
     const inSent = l.folder === 'sent' ? T('mail.inSent', { address }) : ''
@@ -307,15 +335,15 @@ export function letterPart(core: SettingsCore) {
   // for this letter (显示图片, until the page goes), or for its sender
   // always (the setting mailPictures, their addresses in lower case).
   const picturesOnce = new Set<string>()
-  const letterKey = l => `${l.account}|${l.folder || 'inbox'}|${l.uid}`
-  const senderOf = l => String(l.from?.[0]?.address || '').trim().toLowerCase()
+  const letterKey = (l: Letter) => `${l.account}|${l.folder || 'inbox'}|${l.uid}`
+  const senderOf = (l: Letter) => String(l.from?.[0]?.address || '').trim().toLowerCase()
   const picturesFrom = (): string[] => (Array.isArray(st.snap.settings?.mailPictures) ? st.snap.settings.mailPictures : [])
-  const isSenderShown = l => !!senderOf(l) && picturesFrom().includes(senderOf(l))
-  const isPicturesShown = l => picturesOnce.has(letterKey(l)) || isSenderShown(l)
+  const isSenderShown = (l: Letter) => !!senderOf(l) && picturesFrom().includes(senderOf(l))
+  const isPicturesShown = (l: Letter) => picturesOnce.has(letterKey(l)) || isSenderShown(l)
 
   // 显示图片 for this letter, for its sender always, or not for its sender
   // any more (the letter back to none at once).
-  function setPictures(how) {
+  function setPictures(how: string) {
     const l = st.reading?.letter
     if (!l) return
     const key = letterKey(l)
@@ -345,7 +373,7 @@ export function letterPart(core: SettingsCore) {
   // srcdoc was kept from loading by the island's frame guard and would have
   // kept the island's policy (zhoupengjie/Wakuwaku#129). Pictures it has
   // from elsewhere and not shown: a bar over it to show them.
-  function mailBodyHTML(l) {
+  function mailBodyHTML(l: Letter) {
     const html = String(l.html || '')
     if (!html.trim()) {
       return `<div class="m-text">${esc(l.text)}</div>${l.cut ? `<div class="d">${esc(T('mail.cut'))}</div>` : ''}`
@@ -387,7 +415,7 @@ export function letterPart(core: SettingsCore) {
   // the page's. DOMParser reads it here without fetching or running
   // anything, so its pictures are first asked for in the letter's page,
   // under that page's policy and with no referrer.
-  function fillFrame(frame, doc) {
+  function fillFrame(frame: HTMLIFrameElement, doc: Document) {
     const id = frame.dataset.doc
     const page = doc.documentElement
     if (!id || !page.hasAttribute('data-letter') || page.getAttribute('data-filled') === id) return
@@ -406,8 +434,8 @@ export function letterPart(core: SettingsCore) {
   // of a letter whose pictures are not there yet, and a letter 3,000px tall
   // was left showing its first 160 (the user's letter, 2026-10-20).
   function fitFrames() {
-    for (const frame of body.querySelectorAll<any>('iframe.m-html')) {
-      const fitWidth = doc => {
+    for (const frame of body.querySelectorAll<LetterFrame>('iframe.m-html')) {
+      const fitWidth = (doc: Document) => {
         const w = doc.documentElement.clientWidth
         if (!w) return
         for (const el of doc.body.querySelectorAll('table,img,div')) {
@@ -447,7 +475,7 @@ export function letterPart(core: SettingsCore) {
           doc.addEventListener('load', fit, true)
           doc.addEventListener('error', fit, true)
           doc.addEventListener('click', e => {
-            const a = e.target.closest?.('a[href]')
+            const a = (e.target as Element).closest?.('a[href]')
             if (!a) return
             const href = a.getAttribute('href') || ''
             if (href.startsWith('#') && href.length > 1) {
@@ -481,7 +509,7 @@ export function letterPart(core: SettingsCore) {
       if (id && inbox.for !== `${id}|${inbox.filter}` && !inbox.busy) setTimeout(() => loadInbox(false))
       const left = id ? inboxHTML(id) : `<div class="note">${esc(T('mail.noBox'))}</div>`
       const note = st.handNote ? `<div class="note${st.handNote.bad ? ' err' : ''}">${esc(st.handNote.text)}</div>` : ''
-      const body = inner => `<div class="pane-r-body">${note}${inner}</div>`
+      const body = (inner: string) => `<div class="pane-r-body">${note}${inner}</div>`
       const right = st.writing && st.draft ? writeHTML(note) : st.reading ? readingHTML(note) : body(`${accountsHTML()}${id ? agentsHTML() : ''}`)
       return `<div class="panes"><div class="pane-l">${left}</div><div class="pane-r">${right}</div></div>`
     }
@@ -529,8 +557,8 @@ export function letterPart(core: SettingsCore) {
   // straight; mail's may follow the General page's (its default since
   // zhoupengjie/Wakuwaku#68; one set before keeps its way). A manual one's
   // kind and address are kept while another is on.
-  const WAY_MODES = { netProxy: ['system', 'manual', 'none'], mailProxy: ['follow', 'system', 'manual', 'none'] }
-  function waySetting(key) {
+  const WAY_MODES: Record<Way, string[]> = { netProxy: ['system', 'manual', 'none'], mailProxy: ['follow', 'system', 'manual', 'none'] }
+  function waySetting(key: Way) {
     const p = st.snap.settings[key] || {}
     const modes = WAY_MODES[key]
     return { mode: modes.includes(p.mode) ? p.mode : modes[0], kind: p.kind === 'socks5' ? 'socks5' : 'http', address: p.address || '' }
@@ -547,13 +575,13 @@ export function letterPart(core: SettingsCore) {
   function netNow() {
     const p = waySetting('netProxy')
     const sys = st.snap.netSystemProxy
-    const at = x => T('s.net.at', { proxy: x.address, kind: labelOf(PROXY_KINDS, x.kind) })
+    const at = (x: { address: string; kind: string }) => T('s.net.at', { proxy: x.address, kind: labelOf(PROXY_KINDS, x.kind) })
     const how = p.mode === 'manual' ? at(p) : p.mode === 'none' ? T('s.net.straight') : sys ? at(sys) : T('s.net.noSystem')
     return `${T(`s.net.mode.${p.mode}`)} · ${how}`
   }
 
   // A manual one's kind and address (its box: data-proxy-at, the setting's key); `extra` after the box.
-  function manualRow(key, p, extra = '') {
+  function manualRow(key: Way, p: ReturnType<typeof waySetting>, extra = '') {
     const typed = st.proxyTyped?.key === key ? st.proxyTyped.text : p.address
     const bad = st.proxyTyped?.key === key && st.proxyTyped.bad ? `<div class="note err">${esc(T('mail.proxy.bad'))}</div>` : ''
     return `<div class="r">${seg(`${key}.kind`, PROXY_KINDS, p.kind)}<input class="in grow" data-proxy-at="${key}" value="${esc(typed)}" placeholder="127.0.0.1:7890" spellcheck="false" autocomplete="off">${extra}</div>${bad}`
@@ -576,7 +604,7 @@ export function letterPart(core: SettingsCore) {
   }
 
   // The Network proxy's Test (proxy.rs test): running, or what it found.
-  let netTest = null
+  let netTest: NetTest | null = null
 
   // The General page's Network proxy: its way, a manual one's kind and
   // address, the Test and what it found (Windows' way: on a row of its own).
@@ -594,7 +622,7 @@ export function letterPart(core: SettingsCore) {
 
   // What the Test found: GitHub reached (through which proxy, how fast), or
   // not (and a proxy heard on this computer at a usual port, to try).
-  function netTestHTML(p) {
+  function netTestHTML(p: ReturnType<typeof waySetting>) {
     const t = netTest
     if (!t) return ''
     if (t.running) return `<div class="note">${esc(T('s.net.testing'))}</div>`
@@ -605,7 +633,7 @@ export function letterPart(core: SettingsCore) {
 
   // A way changed, kept whole; manual for the first time: the address known
   // (the General page's typed one, for mail; Windows' proxy), else Clash's usual port, to change.
-  function setProxy(key, change) {
+  function setProxy(key: Way, change: { mode?: string; kind?: string; address?: string }) {
     const next = { ...waySetting(key), ...change }
     if (next.mode === 'manual' && !next.address) {
       const net = waySetting('netProxy')
@@ -619,7 +647,7 @@ export function letterPart(core: SettingsCore) {
 
   // An address as typed (Enter, or leaving the box): a scheme before it
   // (socks5://, http://) says the kind; kept once it reads as address:port.
-  function proxyAddress(key, text) {
+  function proxyAddress(key: Way, text: string) {
     let address = String(text || '').trim()
     let kind = waySetting(key).kind
     const scheme = /^([a-z0-9]+):\/\//i.exec(address)
@@ -662,7 +690,7 @@ export function letterPart(core: SettingsCore) {
   }
 
   // The letter beside this one in the list (two panes, ↑ ↓), opened.
-  function step(by) {
+  function step(by: number) {
     const all = shown()
     const at = all.findIndex(({ l, t }) => isReading(l.account, l.folder, l.uid) || (!expanded.has(t.key) && t.letters.some(x => isReading(x.account, x.folder, x.uid))))
     const next = all[at < 0 ? (by > 0 ? 0 : all.length - 1) : at + by]?.l
@@ -673,7 +701,7 @@ export function letterPart(core: SettingsCore) {
 
   // The inbox's conversations as kept, as filtered; with more, 50 more.
   // Asked again, quietly, whenever what is kept changed (snap.mailRev).
-  async function loadInbox(more, quiet = false) {
+  async function loadInbox(more: boolean, quiet = false) {
     const id = inboxId()
     if (!id || inbox.busy) return
     const which = `${id}|${inbox.filter}`
@@ -694,7 +722,7 @@ export function letterPart(core: SettingsCore) {
 
   // A letter opened: read whole, from what is kept (or the server), and
   // marked read.
-  async function openLetter(account, uid, folder = 'inbox') {
+  async function openLetter(account: string, uid: number, folder = 'inbox') {
     if (!accountOf(account)) return
     st.reading = { account, folder, uid, busy: true }
     draw(true)
@@ -709,14 +737,16 @@ export function letterPart(core: SettingsCore) {
   }
 
   // Why a letter could not be had or handed on, in words.
-  function handError(err, agent?) {
+  // err: what mail.rs or agent.rs said went wrong (its JSON).
+  function handError(err: { kind?: string; text?: string } | null | undefined, agent?: string) {
     const kind = err?.kind || 'other'
     const own = ['noAgent', 'start', 'save', 'noLetter', 'gone', 'busy', 'noTalk', 'noSession', 'empty']
     if (!own.includes(kind)) return mailError(err, accountOf(st.reading?.account))
-    return T(`mail.err.${kind}`, { agent: AGENTS[agent] || err.text || '' }) + (kind === 'start' || kind === 'save' ? `${st.lang === 'zh' ? '：' : ': '}${err.text}` : '')
+    // (No err: its kind is other, answered above.)
+    return T(`mail.err.${kind}`, { agent: AGENTS[agent as string] || err!.text || '' }) + (kind === 'start' || kind === 'save' ? `${st.lang === 'zh' ? '：' : ': '}${err!.text}` : '')
   }
 
-  function noteFor(note) {
+  function noteFor(note: Note | null) {
     clearTimeout(st.handNoteTimer)
     st.handNote = note
     redrawMail()
@@ -725,7 +755,7 @@ export function letterPart(core: SettingsCore) {
 
   // A letter handed to an agent: a talk about it under the letter (opened,
   // if it was not), or a session in a terminal.
-  async function hand(account, uid, agent, how, folder = 'inbox') {
+  async function hand(account: string, uid: number, agent: string, how: string, folder = 'inbox') {
     closeMenu()
     if (how === 'talk' && !isReading(account, folder, uid)) await openLetter(account, uid, folder)
     noteFor({ text: T('mail.hand.busy', { agent: AGENTS[agent] }) })
@@ -735,7 +765,7 @@ export function letterPart(core: SettingsCore) {
   }
 
   // More asked in a letter's talk.
-  async function say(box) {
+  async function say(box: HTMLInputElement) {
     const text = box.value.trim()
     if (!text) return
     box.value = ''
@@ -748,7 +778,7 @@ export function letterPart(core: SettingsCore) {
 
   // A star put on a letter or taken off: at once on the page, then on the
   // server (back as it was if that failed).
-  async function star(account, uid, folder = 'inbox') {
+  async function star(account: string, uid: number, folder = 'inbox') {
     const inList = listed(account, folder, uid)
     const open = st.reading?.letter && isReading(account, folder, uid) ? st.reading.letter : null
     const on = !(inList || open)?.flagged
@@ -768,15 +798,15 @@ export function letterPart(core: SettingsCore) {
   menuEl.hidden = true
   layer.append(menuEl)
 
-  function openMenu(account, uid, folder, x, y) {
+  function openMenu(account: string, uid: number, folder: string, x: number, y: number) {
     const found = st.snap.mailAgents || {}
     const at = `data-account="${esc(account)}" data-folder="${folder || 'inbox'}" data-uid="${uid}"`
-    const item = (ag, how, label) =>
+    const item = (ag: string, how: string, label: string) =>
       `<button class="mi" data-hand="${ag}:${how}" ${at} ${found[ag] ? '' : 'disabled'}>${esc(label)}${found[ag] ? '' : ` <span class="d">${esc(T('mail.hand.missing'))}</span>`}</button>`
     const ag = firstAgent()
     const talks = item(ag, 'talk', T('mail.hand.talk', { agent: AGENTS[ag] }))
     const terminals = item(ag, 'open', T('mail.hand.open', { agent: AGENTS[ag] }))
-    const l = listed(account, folder, uid) || (isReading(account, folder, uid) ? st.reading.letter : null)
+    const l = listed(account, folder, uid) || (isReading(account, folder, uid) ? st.reading!.letter : null)
     const starItem = `<button class="mi" data-star="${esc(account)}" data-folder="${folder || 'inbox'}" data-uid="${uid}">${esc(T(l?.flagged ? 'mail.unstar' : 'mail.star'))}</button>`
     const replies = [
       ['reply', 'mail.reply'],
@@ -787,14 +817,14 @@ export function letterPart(core: SettingsCore) {
       .join('')
     // The letter open, from a sender whose pictures are always shown: not
     // any more (the list's rows have no address to go by).
-    const open = isReading(account, folder, uid) ? st.reading.letter : null
+    const open = isReading(account, folder, uid) ? st.reading!.letter : null
     const never = open && isSenderShown(open) ? `<button class="mi" data-pics="never" title="${esc(senderOf(open))}">${esc(T('mail.pics.never'))}</button>` : ''
     menuEl.innerHTML = `${replies}<div class="mi-sep"></div>${talks}<div class="mi-sep"></div>${terminals}<div class="mi-sep"></div>${starItem}${never}`
     st.menuPick = null
     placeMenu(x, y)
   }
 
-  function placeMenu(x, y) {
+  function placeMenu(x: number, y: number) {
     menuEl.hidden = false
     const box = layer.getBoundingClientRect()
     menuEl.style.left = `${Math.max(4, Math.min(x - box.left, box.width - menuEl.offsetWidth - 4))}px`
@@ -805,7 +835,7 @@ export function letterPart(core: SettingsCore) {
   // server's own, autodetect, every account) apart unless `together`; one
   // that is off is there, greyed, with why (off's words, else "not
   // supported").
-  function openChoices(button, choices, value, onPick, together = false) {
+  function openChoices(button: HTMLElement, choices: Choices, value: unknown, onPick: (value: string) => void, together = false) {
     menuEl.innerHTML = choices
       .map(
         ([v, label, off], i) =>
@@ -820,7 +850,7 @@ export function letterPart(core: SettingsCore) {
   // The split button's ▾ on an open letter: the other agents found, each
   // to hand this letter to (the first agent stays as it is), and under
   // them each made the first instead.
-  function handMenu(button) {
+  function handMenu(button: HTMLElement) {
     const ag = firstAgent()
     const others = mailList().filter(a => a.found && a.id !== ag)
     menuEl.innerHTML = `${others.map(a => `<button class="mi" data-pick="hand:${a.id}">${esc(T('mail.hand.talk', { agent: a.short }))}</button>`).join('')}<div class="mi-sep"></div>${others
@@ -835,8 +865,9 @@ export function letterPart(core: SettingsCore) {
     placeMenu(r.right - 220, r.bottom + 4)
   }
 
-  function openPicker(button) {
-    const [ag, key] = button.dataset.picker.split('.')
+  // (A model's or an effort's button: its data-picker says which.)
+  function openPicker(button: HTMLElement) {
+    const [ag, key] = button.dataset.picker!.split('.')
     openChoices(button, choicesOf(ag, key), confOf(ag)[key] || '', v => setConf(ag, key, v))
   }
 
@@ -851,7 +882,8 @@ export function letterPart(core: SettingsCore) {
     // Ours, not the island's menu.
     e.preventDefault()
     e.stopPropagation()
-    openMenu(letter.dataset.account, Number(letter.dataset.letter), letter.dataset.folder || 'inbox', e.clientX, e.clientY)
+    // A letter's row has its account with it (where).
+    openMenu(letter.dataset.account!, Number(letter.dataset.letter), letter.dataset.folder || 'inbox', e.clientX, e.clientY)
   })
   body.addEventListener('scroll', closeMenu)
 

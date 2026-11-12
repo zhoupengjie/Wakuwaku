@@ -10,6 +10,9 @@
 import * as AddonUI from './addonui.ts'
 import * as Widgets from './widgets.ts'
 import type { SettingsCore } from './settings.ts'
+import type { Sub } from './settings-state.ts'
+import type { Addon, Pack } from './settings-vars.ts'
+import type { Widget } from './widgets.ts'
 
 export function addonsPart(core: SettingsCore) {
   const {
@@ -18,16 +21,16 @@ export function addonsPart(core: SettingsCore) {
   } = core
 
   const addonsNow = () => (st.snap?.addons || []).filter(a => a.kind === 'plugin')
-  const addonById = id => addonsNow().find(a => a.id === id) || null
-  const addonField = (id, key) => (addonById(id)?.settings || []).find(f => f.key === key) || null
+  const addonById = (id: string | undefined) => addonsNow().find(a => a.id === id) || null
+  const addonField = (id: string, key: string) => (addonById(id)?.settings || []).find(f => f.key === key) || null
   // Names in a row as her language says them (「a、b 和 c」).
-  const andList = names => nameList(st.lang, names, 'and')
+  const andList = (names: string[]) => nameList(st.lang, names, 'and')
   // Its icon: its own picture (one colour, as hers are), one of hers, or
   // the first letter of its name on its colour.
-  const addonIcon = a => (a.icon?.url ? Widgets.maskHTML(a.icon.url) : a.icon?.name && Widgets.hasIcon(a.icon.name) ? Widgets.icon(a.icon.name) : Widgets.markHTML(a.name, a.color))
-  const addonColor = (a, mine = []) => a.color || mine[0]?.color || (a.on ? '#5e9bff' : COLOR.idle)
+  const addonIcon = (a: Addon) => (a.icon?.url ? Widgets.maskHTML(a.icon.url) : a.icon?.name && Widgets.hasIcon(a.icon.name) ? Widgets.icon(a.icon.name) : Widgets.markHTML(a.name, a.color))
+  const addonColor = (a: Addon, mine: Widget[] = []) => a.color || mine[0]?.color || (a.on ? '#5e9bff' : COLOR.idle)
   // 未经审核, for one from a file (spec §3).
-  const unreviewedChip = a => (a.reviewed ? '' : ` <span class="chip warn">${esc(T('addons.unreviewed'))}</span>`)
+  const unreviewedChip = (a: Addon | Pack) => (a.reviewed ? '' : ` <span class="chip warn">${esc(T('addons.unreviewed'))}</span>`)
 
   // Its row, among hers (spec §3): its icon, its name (a press opens its
   // page), 未经审核 for one from a file, what its widgets say now; under it
@@ -35,7 +38,7 @@ export function addonsPart(core: SettingsCore) {
   // settings' fold and where it is (or 添加小工具…), as hers have; one not
   // responding, 重新启用 there instead. Installed while the panel is open:
   // an accent edge at its left until it closes.
-  function addonRow(a, mine) {
+  function addonRow(a: Addon, mine: Widget[]) {
     const detailed = st.snap.settings.details !== false
     const place = placeOf({ plugin: a.id }, a.on)
     const says = mine
@@ -60,7 +63,7 @@ export function addonsPart(core: SettingsCore) {
   // (pluginFields): each as set, else its default; what is being typed
   // stays. A choice of more than a few: a list under a button, as the Mail
   // page has (openChoices). Kept through the same patch (setPlugin).
-  function addonFields(a) {
+  function addonFields(a: Addon) {
     const fields = (a.settings || []).map(f => {
       const key = `${a.id}.${f.key}`
       const label = esc(f.label || f.key)
@@ -84,18 +87,18 @@ export function addonsPart(core: SettingsCore) {
   // name: a plugin's own, the market, one of the market's; null: it is gone
   // (a plugin taken away meanwhile, an item no longer listed), the page
   // itself then.
-  const SUBS = {
-    addon: s => addonById(s.id) && addonPage(addonById(s.id)),
-    pack: s => packById(s.kind, s.id) && packPage(packById(s.kind, s.id)),
+  const SUBS: Record<string, (s: Sub) => string | null> = {
+    addon: s => addonById(s.id) && addonPage(addonById(s.id)!),
+    pack: s => packById(s.kind, s.id) && packPage(packById(s.kind, s.id)!),
     market: () => pieces.market.marketPage(),
-    mkItem: s => pieces.market.marketItem(s.id) && pieces.market.marketItemPage(pieces.market.marketItem(s.id)),
+    mkItem: s => pieces.market.marketItem(s.id) && pieces.market.marketItemPage(pieces.market.marketItem(s.id)!),
   }
-  function crumbHTML(path) {
+  function crumbHTML(path: string[]) {
     const last = path.length - 1
     const parts = path.map((p, i) => (i === last ? `<b>${esc(p)}</b>` : esc(p))).join(' › ')
     return `<div class="crumb"><button class="crumb-b" data-sub-back title="${esc(T('addons.back'))}" aria-label="${esc(T('addons.back'))}">&#xE76B;</button><span class="path ellip">${parts}</span></div>`
   }
-  function openSub(next) {
+  function openSub(next: { page: string; id?: string; kind?: string }) {
     go({ type: 'sub', sub: next })
     draw(true)
     core.relayout()
@@ -111,8 +114,8 @@ export function addonsPart(core: SettingsCore) {
   // of its own), and where it is (or 添加小工具…); what it says it is; what
   // it may do, a line each, then what no plugin can; 卸载 (asked first,
   // over the panel).
-  const PERM_GLYPH = { net: 'E774', agents: 'E756', hardware: 'E950', notify: 'EA8F', none: 'EA18' }
-  function addonPage(a) {
+  const PERM_GLYPH: Record<string, string> = { net: 'E774', agents: 'E756', hardware: 'E950', notify: 'EA8F', none: 'EA18' }
+  function addonPage(a: Addon) {
     const mine = (st.snap.widgets || []).filter(w => w.plugin === a.id)
     const place = placeOf({ plugin: a.id }, a.on)
     const about = AddonUI.aboutOf(a, T)
@@ -122,8 +125,8 @@ export function addonsPart(core: SettingsCore) {
   }
   // 它能做的 (spec §2, §3): what it may do, a line each, then what no plugin
   // can; a pack: pictures only, no code.
-  function canDoHTML(perms, kind = 'plugin') {
-    const line = (glyph, text, no = false) => `<div class="r ad-perm${no ? ' no' : ''}"><span class="g">&#x${glyph};</span><div class="grow">${esc(text)}</div></div>`
+  function canDoHTML(perms: Parameters<typeof AddonUI.permLines>[0], kind = 'plugin') {
+    const line = (glyph: string, text: string, no = false) => `<div class="r ad-perm${no ? ' no' : ''}"><span class="g">&#x${glyph};</span><div class="grow">${esc(text)}</div></div>`
     if (kind !== 'plugin') return line('E72E', T('mk.packOnly'), true)
     const list = AddonUI.permLines(perms, T, andList)
     return (list.length ? list : [{ icon: 'none', text: T('addons.perm.none') }]).map(p => line(PERM_GLYPH[p.icon], p.text)).join('') + line('E72E', T('addons.cannotDo'), true)
@@ -131,13 +134,13 @@ export function addonsPart(core: SettingsCore) {
 
   // --- Packs (packs.rs view; addonui.ts) ------------------------------------------------------
   // The pets and wallpapers installed as packs, each by its kind and id.
-  const packsNow = () => st.snap?.packs || []
-  const packById = (kind, id) => packsNow().find(p => p.kind === kind && p.id === id) || null
+  const packsNow = (): Pack[] => st.snap?.packs || []
+  const packById = (kind: string | undefined, id: string | undefined) => packsNow().find(p => p.kind === kind && p.id === id) || null
   // Its tile: its preview, else the first letter of its name.
-  const packTile = (p, big = false) => `<span class="pk-tile${big ? ' big' : ''}">${p.preview ? `<img src="${esc(p.preview)}" alt="" loading="lazy">` : Widgets.markHTML(p.name, null)}</span>`
+  const packTile = (p: Pack, big = false) => `<span class="pk-tile${big ? ' big' : ''}">${p.preview ? `<img src="${esc(p.preview)}" alt="" loading="lazy">` : Widgets.markHTML(p.name, null)}</span>`
   // Its 在「外观」里选: the Look page, at its kind's part (her pets, the wallpaper).
-  const toLookButton = kind => `<button class="pbtn sm" data-pack-look="${esc(kind)}">${esc(T('packs.toLook'))}</button>`
-  function toLook(kind) {
+  const toLookButton = (kind: string) => `<button class="pbtn sm" data-pack-look="${esc(kind)}">${esc(T('packs.toLook'))}</button>`
+  function toLook(kind: string) {
     go({ type: 'page', tab: 'look', part: AddonUI.lookPartOf(kind) })
     draw(true)
     loadGallery(false)
@@ -161,7 +164,7 @@ export function addonsPart(core: SettingsCore) {
   // a tile, its name and 未经审核, who made it, its version, size and kind,
   // 在「外观」里选; its picture, what it is, 它能做的 (只有图片，没有代码), 卸载
   // (asked first).
-  function packPage(p) {
+  function packPage(p: Pack) {
     const top = `<div class="ad-head">${packTile(p, true)}<div class="grow"><div class="ad-name ellip">${esc(p.name)}${unreviewedChip(p)}</div><div class="d ellip">${esc(AddonUI.packByline(p, T))}</div></div>${toLookButton(p.kind)}</div>`
     const picture = p.preview ? `${sec(T('mk.picture'))}<div class="mk-preview"><img src="${esc(p.preview)}" alt=""></div>` : ''
     const said = p.description ? `${sec(T('addons.about'))}<div class="grp"><div class="ad-text">${esc(p.description)}</div></div>` : ''

@@ -12,6 +12,50 @@
 // On the island's page alone: made there by main.ts.
 import { pet } from './bridge.ts'
 
+// A point of dust, in the page's px, and its colour; on her part it comes
+// to, if it is one.
+interface Dot {
+  x: number
+  y: number
+  c: string
+  el?: HTMLElement
+}
+// A grain: where it sets out from, its time (ms, since it came) and its
+// colour; then where it lifts to and lands, or how it drifts away. Each
+// says the other's are not there: one with no tx drifts (frame), and tsc
+// sees which also with null checks off (tsc -p test).
+interface GrainBase {
+  sx: number
+  sy: number
+  max: number
+  delay: number
+  life: number
+  glint: boolean
+  c: string
+  showWait: boolean
+}
+interface Landing extends GrainBase {
+  lx: number
+  ly: number
+  tx: number
+  ty: number
+  dx?: undefined
+  rise?: undefined
+  ph?: undefined
+}
+interface Drifting extends GrainBase {
+  lx?: undefined
+  ly?: undefined
+  tx?: undefined
+  ty?: undefined
+  dx: number
+  rise: number
+  ph: number
+}
+type Grain = Landing | Drifting
+// Windows' strip's picture, and how tall it is laid (the page's px).
+type Picture = HTMLCanvasElement & { tall: number }
+
 export function handoff() {
 
   // Her strip's parts that the dust becomes (and crumbles from).
@@ -28,19 +72,19 @@ export function handoff() {
   const quiet = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
   // --- The layers: the picture where the strip is, the dust over the whole window ------
-  function canvasLayer(css) {
+  function canvasLayer(css: string) {
     const c = document.createElement('canvas')
     c.style.cssText = `position:fixed;pointer-events:none;${css}`
     document.body.append(c)
     return c
   }
 
-  let picture = null
-  let dust = null
+  let picture: Picture | null = null
+  let dust: HTMLCanvasElement | null = null
   // Each step its own: a picture still loading when the next step comes is
   // not laid (it would stay over hers).
   let step = 0
-  const wait = ms => new Promise(r => setTimeout(r, ms))
+  const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
 
   // Windows' strip, as its picture shows it (the display's whole width in its
   // pixels, as tall as Windows' strip is: not always hers), laid over where
@@ -51,7 +95,7 @@ export function handoff() {
   // showed under the strip for two or three frames (2026-10-13). 600 ms at
   // most, as no frames come while the window is hidden (the program waits
   // 800 for its answer anyway).
-  async function cover(url, size) {
+  async function cover(url: string, size?: number[]) {
     const mine = ++step
     drop()
     const img = new Image()
@@ -60,11 +104,11 @@ export function handoff() {
     await sized(size)
     if (mine !== step) return
     const tall = (img.naturalHeight * innerWidth) / img.naturalWidth
-    picture = canvasLayer(`left:0;bottom:0;width:100%;height:${tall}px;z-index:2147483000`)
+    picture = canvasLayer(`left:0;bottom:0;width:100%;height:${tall}px;z-index:2147483000`) as Picture
     picture.tall = tall
     picture.width = img.naturalWidth
     picture.height = img.naturalHeight
-    picture.getContext('2d', { willReadFrequently: true }).drawImage(img, 0, 0)
+    picture.getContext('2d', { willReadFrequently: true })!.drawImage(img, 0, 0)
     const drawn = await Promise.race([new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(true)))), wait(600).then(() => false)])
     if (!drawn) console.log('handoff: the picture laid, no frame drawn in 600 ms')
   }
@@ -73,7 +117,7 @@ export function handoff() {
   // second gone: a window just made bigger reaches the page some frames
   // later, and the picture laid at the old size sat too small, up and to the
   // left, Windows' clock showing past its end.
-  async function sized(size, ms = 500) {
+  async function sized(size?: number[], ms = 500) {
     const [w, h] = Array.isArray(size) ? size : []
     if (!(w > 0 && h > 0)) return
     const there = () => Math.abs(innerWidth * devicePixelRatio - w) <= 2 && Math.abs(innerHeight * devicePixelRatio - h) <= 2
@@ -96,20 +140,21 @@ export function handoff() {
 
   // What is on the picture, as grains (where, in the page's px, and their
   // colour), and the picture left bare: each column its ground's colour (as
-  // a little below its top edge, which no icon reaches).
+  // a little below its top edge, which no icon reaches). Only with the
+  // picture laid (the go step looks).
   function crumble() {
-    const c = picture.getContext('2d', { willReadFrequently: true })
-    const { width: w, height: h } = picture
+    const c = picture!.getContext('2d', { willReadFrequently: true })!
+    const { width: w, height: h } = picture!
     const sx = w / innerWidth
-    const sy = h / picture.tall
+    const sy = h / picture!.tall
     const img = c.getImageData(0, 0, w, h)
     const d = img.data
     const groundRow = Math.min(h - 1, Math.round(4 * sy))
     const ground = new Uint8ClampedArray(w * 3)
     for (let x = 0; x < w; x++) for (let k = 0; k < 3; k++) ground[x * 3 + k] = d[(groundRow * w + x) * 4 + k]
     const stride = Math.max(1, Math.round(1.5 * sy))
-    const top = innerHeight - picture.tall
-    const grains = []
+    const top = innerHeight - picture!.tall
+    const grains: Dot[] = []
     for (let y = Math.round(2 * sy); y < h; y += stride)
       for (let x = 0; x < w; x += stride) {
         const i = (y * w + x) * 4
@@ -139,11 +184,11 @@ export function handoff() {
     return { x: r() * innerWidth, y: r() * (innerHeight - clear) }
   }
 
-  const thin = list => (list.length <= MOST ? list : list.filter((_, i) => i % Math.ceil(list.length / MOST) === 0))
+  const thin = <T>(list: T[]) => (list.length <= MOST ? list : list.filter((_, i) => i % Math.ceil(list.length / MOST) === 0))
 
   // Points on her parts, as many as each one's size asks, each with a
   // colour: an icon's own (its picture's pixels), else the words' colour.
-  function partsPoints(n) {
+  function partsPoints(n: number) {
     const parts = [...document.querySelectorAll(PARTS)].filter(el => el.getClientRects().length && el.offsetWidth)
     const boxes = parts.map(el => ({ el, r: el.getBoundingClientRect() }))
     const total = boxes.reduce((a, b) => a + b.r.width * b.r.height, 0) || 1
@@ -151,7 +196,7 @@ export function handoff() {
   }
 
   // k points on one part, each with a colour of its own.
-  function pointsOn(el, k, r = el.getBoundingClientRect()) {
+  function pointsOn(el: HTMLElement, k: number, r = el.getBoundingClientRect()): Dot[] {
     const colours = coloursOf(el)
     return Array.from({ length: k }, () => ({ el, x: r.left + r.width * (0.15 + 0.7 * Math.random()), y: r.top + r.height * (0.2 + 0.6 * Math.random()), c: colours[(Math.random() * colours.length) | 0] }))
   }
@@ -160,7 +205,7 @@ export function handoff() {
   // moment after the taskbar is taken, the tray's icons later): they come
   // in as the rest did, no dust of their own. Each had a burst of its own,
   // and the start looked as if it came in batches (the user, 2026-11-02).
-  let late = null
+  let late: MutationObserver | null = null
   // When the last of it lands (performance.now()).
   let lateEnd = 0
   function watchLate() {
@@ -170,7 +215,7 @@ export function handoff() {
     if (!bar) return
     late = new MutationObserver(records => {
       const fresh = records.flatMap(r => [...r.addedNodes]).filter(n => n.nodeType === 1 && (n as Element).matches(PARTS) && (n as Element).getClientRects().length)
-      for (const el of fresh) comeAt(el, 160)
+      for (const el of fresh) comeAt(el as Element, 160)
     })
     late.observe(bar, { childList: true, subtree: true })
   }
@@ -182,7 +227,7 @@ export function handoff() {
   function settled() {
     return new Promise<void>(resolve => {
       const bar = document.getElementById('bar-rest')
-      const fresh = records => records.some(r => [...r.addedNodes].some(n => n.nodeType === 1 && (n.matches(PARTS) || !!n.querySelector?.(PARTS))))
+      const fresh = (records: MutationRecord[]) => records.some(r => [...r.addedNodes].some(n => n.nodeType === 1 && ((n as Element).matches(PARTS) || !!(n as Element).querySelector?.(PARTS))))
       const done = () => {
         clearTimeout(quietly)
         clearTimeout(most)
@@ -198,23 +243,24 @@ export function handoff() {
           clearTimeout(quietly)
           quietly = setTimeout(done, SETTLED_MS)
         })
-      watch?.observe(bar, { childList: true, subtree: true })
+      // (A watch only with the bar there.)
+      watch?.observe(bar!, { childList: true, subtree: true })
     })
   }
 
   // A part coming as its dust lands (hidden till then).
-  const comeAt = (el, at) => el.animate([{ opacity: 0, transform: 'scale(0.6)' }, { opacity: 1, transform: 'none' }], { duration: 320, delay: Math.max(0, at - 160), easing: 'cubic-bezier(0.3, 1.4, 0.5, 1)', fill: 'backwards' })
+  const comeAt = (el: Element, at: number) => el.animate([{ opacity: 0, transform: 'scale(0.6)' }, { opacity: 1, transform: 'none' }], { duration: 320, delay: Math.max(0, at - 160), easing: 'cubic-bezier(0.3, 1.4, 0.5, 1)', fill: 'backwards' })
 
-  function coloursOf(el) {
-    const img = el.querySelector('img')
+  function coloursOf(el: Element) {
+    const img = el.querySelector<HTMLImageElement>('img')
     if (img?.complete && img.naturalWidth) {
       try {
         const c = document.createElement('canvas')
         c.width = c.height = 16
-        const x = c.getContext('2d', { willReadFrequently: true })
+        const x = c.getContext('2d', { willReadFrequently: true })!
         x.drawImage(img, 0, 0, 16, 16)
         const d = x.getImageData(0, 0, 16, 16).data
-        const out = []
+        const out: string[] = []
         for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 160) out.push(`rgb(${d[i]},${d[i + 1]},${d[i + 2]})`)
         if (out.length) return out
       } catch {}
@@ -225,7 +271,7 @@ export function handoff() {
   // --- The dust ------------------------------------------------------------------------
   // A grain: from where it was, up to a point a little above, then down to
   // where it goes, a flash there; or, with nowhere to go, up and away.
-  let grains = []
+  let grains: Grain[] = []
   let raf = 0
   let last = 0
   let dpr = 1
@@ -240,10 +286,12 @@ export function handoff() {
     if (!raf) raf = requestAnimationFrame(frame)
   }
 
-  function frame(now) {
+  // (The dust is there while frames come: stop() takes the next one off as
+  // it takes the dust away.)
+  function frame(now: number) {
     const dt = Math.min(50, now - (last || now))
     last = now
-    const c = dust.getContext('2d')
+    const c = dust!.getContext('2d')!
     c.setTransform(dpr, 0, 0, dpr, 0, 0)
     c.clearRect(0, 0, innerWidth, innerHeight)
     c.globalCompositeOperation = 'lighter'
@@ -285,7 +333,7 @@ export function handoff() {
     else stop()
   }
 
-  function dotAt(c, g, x, y, a, r) {
+  function dotAt(c: CanvasRenderingContext2D, g: Grain, x: number, y: number, a: number, r: number) {
     c.globalAlpha = Math.max(0, Math.min(1, a))
     if (g.glint) {
       const grad = c.createRadialGradient(x, y, 0, x, y, r * 3)
@@ -313,8 +361,8 @@ export function handoff() {
   // Grains from these points to those, the later the farther right they
   // start (shown where they are while they wait: they are what was there,
   // unless they come from nowhere); when each part's last grain lands.
-  function settle(from, to, showWait = true) {
-    const lands = new Map()
+  function settle(from: Dot[], to: Dot[], showWait = true) {
+    const lands = new Map<HTMLElement, number>()
     from.forEach((p, i) => {
       const t = to[(i * 7919) % to.length]
       const max = SETTLE_MS + Math.random() * 250
@@ -329,7 +377,7 @@ export function handoff() {
 
   // Her parts come as their dust lands (hidden till then), the picture's
   // bare ground fading into hers meanwhile.
-  function arrive(lands) {
+  function arrive(lands: Map<HTMLElement, number>) {
     for (const el of document.querySelectorAll(PARTS)) comeAt(el, lands.get(el) ?? SETTLE_MS)
     watchLate()
     picture?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 600, delay: 320, easing: 'ease', fill: 'forwards' })

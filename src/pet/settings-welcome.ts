@@ -33,8 +33,9 @@ export function welcomePart(core: SettingsCore) {
     return here.length ? here : ['claude', 'codex', 'agy', 'opencode']
   }
 
-  // Their names as one says them: 「A、B 或 C」, "A, B and C".
-  const toolNames = (tools, kind = 'or') => nameList(st.lang, tools.map(tool => Agents.byId(tool).name), kind)
+  // Their names as one says them: 「A、B 或 C」, "A, B and C". (The tools
+  // named here are ids of agents.ts's table: byId and read find each.)
+  const toolNames = (tools: string[], kind = 'or') => nameList(st.lang, tools.map(tool => Agents.byId(tool)!.name), kind)
 
   // Codex trusts her hooks as they are, by its own settings (zhoupengjie/Wakuwaku#66).
   const codexTrusted = () => Agents.read(st.snap, 'codex')?.trusted === true
@@ -42,10 +43,10 @@ export function welcomePart(core: SettingsCore) {
   // How one stands on the card: busy, seen (a session's event came, or the
   // plugin in), set (written, no session yet: Codex's to be trusted first,
   // unless they are; ours there to repair counts as written), failed, none.
-  function toolState(tool) {
+  function toolState(tool: string) {
     const state = Agents.stateOf(st.snap, tool, known())
     if (state === 'on') return 'seen'
-    if (state === 'repair' && Agents.isIn(st.snap, tool)) return Agents.read(st.snap, tool).seen ? 'seen' : 'set'
+    if (state === 'repair' && Agents.isIn(st.snap, tool)) return Agents.read(st.snap, tool)!.seen ? 'seen' : 'set'
     if (state === 'step') return 'set'
     return ['busy', 'set', 'failed'].includes(state) ? state : 'none'
   }
@@ -60,10 +61,10 @@ export function welcomePart(core: SettingsCore) {
 
   // One's button: its name, and under it how it stands; set up and
   // connected in green, a step left (Codex) in amber, and those do nothing.
-  function toolButton(tool) {
+  function toolButton(tool: string) {
     const state = toolState(tool)
-    const name = `<span class="wt-name">${esc(Agents.byId(tool).name)}</span>`
-    const line = text => `<span class="wt-state">${text}</span>`
+    const name = `<span class="wt-name">${esc(Agents.byId(tool)!.name)}</span>`
+    const line = (text: string) => `<span class="wt-state">${text}</span>`
     if (state === 'busy') return `<button class="wc-tool" disabled>${name}${line(`<span class="spin"></span>${esc(T('wc.busy'))}`)}</button>`
     if (state === 'seen') return `<button class="wc-tool done" disabled>${name}${line(esc(T('wc.toolOn')))}</button>`
     if (state === 'set' && tool === 'codex' && !codexTrusted()) return `<button class="wc-tool warn" disabled>${name}${line(esc(T('wc.toolStep')))}</button>`
@@ -73,9 +74,9 @@ export function welcomePart(core: SettingsCore) {
 
   // Why one could not be written (the card's and the Agent page's): which
   // file, the whole path, the reason, what to do.
-  function failedHTML(tool) {
+  function failedHTML(tool: string) {
     const { error, kind, folder } = failed[tool]
-    const name = Agents.byId(tool).name
+    const name = Agents.byId(tool)!.name
     // Her folder's path has a space, which agy can't run: not a file not
     // written, but where she is (the appearance session's words).
     if (kind === 'path') return `<div class="wc-err"><div><b>${esc(T('wc.errConnect', { name }))}</b></div><div>${esc(T('wc.way.path', { folder: folder || '' }))}</div></div>`
@@ -88,17 +89,17 @@ export function welcomePart(core: SettingsCore) {
       return `<div class="wc-err"><div><b>${esc(T('s.dshBridgeFailed'))}</b></div><div>${esc(T(`s.dshBK.${kind}`, { version: st.snap.agents?.dsh?.dshVersion || '' }))}</div>${said ? `<div class="mono">${esc(said)}</div>` : ''}${mirror}</div>`
     }
     const way = `${T(`wc.way.${kind}`)}${T(tool === 'claude' ? 'wc.wayPlugin' : 'wc.wayEnd')}`
-    const file = Agents.read(st.snap, tool).shown
+    const file = Agents.read(st.snap, tool)!.shown
     return `<div class="wc-err"><div><b>${esc(T('wc.errLead', { name, file: file.split(/[\\/]/).pop() }))}</b></div>
         <div class="mono">${esc(file)}</div><div>${esc(error)}</div><div>${esc(way)}</div></div>`
   }
 
   // Under the buttons: what each still needs (where it was written, and
   // undone), or why it could not be written.
-  function toolNote(tool) {
+  function toolNote(tool: string) {
     const state = toolState(tool)
-    const mono = text => `<span class="mono">${esc(text)}</span>`
-    const { shown: file, backup } = Agents.read(st.snap, tool)
+    const mono = (text: string) => `<span class="mono">${esc(text)}</span>`
+    const { shown: file, backup } = Agents.read(st.snap, tool)!
     const undo = `<span class="link" data-agent="${tool}:remove">${esc(T('wc.undo'))}</span>`
     if (['claude', 'agy', 'zcode', 'dsh', 'reasonix'].includes(tool) && state === 'set') {
       const where = backup ? T('wc.written', { path: mono(file), backup: mono(`${file.split(/[\\/]/).pop()}.wakuwaku.bak`) }) : T('wc.created', { path: mono(file) })
@@ -120,7 +121,7 @@ export function welcomePart(core: SettingsCore) {
     const chosen = (st.snap.pets || []).find(p => p.id === st.snap.settings.pet)
     const face = chosen ? `<span class="wc-face">${thumb(40, chosen.url, chosen.version)}</span>` : ''
     // A nudge to approve only where one of them can ask (agents.ts approve).
-    const sub = `${T('wc.sub1')}${tools.some(tool => Agents.byId(tool).caps.approve[0] !== 'no') ? T('wc.subAsk') : ''}${T('wc.sub2')}${many ? T('wc.subMany') : ''}`
+    const sub = `${T('wc.sub1')}${tools.some(tool => Agents.byId(tool)!.caps.approve[0] !== 'no') ? T('wc.subAsk') : ''}${T('wc.sub2')}${many ? T('wc.subMany') : ''}`
     // OpenCode alone: a file of ours, nothing backed up, and she is not woken
     // by it; omp alone: a file of its own is written, nothing to back up.
     const safeKeys = many ? ['wc.safeMany', 'wc.safe2', 'wc.safe3'] : tools[0] === 'opencode' ? ['wc.safe.opencode', 'wc.safeOc2', 'wc.safeOc3'] : tools[0] === 'omp' ? ['wc.safe.omp', 'wc.safe3'] : [`wc.safe.${tools[0]}`, 'wc.safe2', 'wc.safe3']
@@ -128,7 +129,7 @@ export function welcomePart(core: SettingsCore) {
     // Claude Code's plugin, while it is here and not written.
     const commands = st.snap.agents?.claude?.pluginCommands || []
     const plugBody = st.pluginOpen
-      ? `<div class="wc-plugbody"><div class="d">${esc(T('wc.plugHow'))}</div>${commands.map(c => `<div class="wc-cmd mono">${esc(c)}</div>`).join('')}
+      ? `<div class="wc-plugbody"><div class="d">${esc(T('wc.plugHow'))}</div>${commands.map((c: string) => `<div class="wc-cmd mono">${esc(c)}</div>`).join('')}
           <div class="wc-copy"><button class="pbtn" data-copy="${esc(commands.join('\n'))}" data-label="${esc(T('wc.copyBoth'))}">${esc(T('wc.copyBoth'))}</button><span class="d">${esc(T('wc.plugWake'))}</span></div></div>`
       : ''
     const plugin =
@@ -152,9 +153,10 @@ export function welcomePart(core: SettingsCore) {
   // page. Its dot: amber while one wants a repair, else green (one seen) or
   // blue (written, waiting).
   function agentsLine() {
+    // (summary fills connected in.)
     const s = Agents.summary(st.snap, known())
-    const n = s.connected.length
-    const what = [n ? toolNames(s.connected, 'and') : '', s.wants.length ? T('ag.lineFix', { n: s.wants.length }) : '', s.none.length ? T('ag.lineMore', { n: s.none.length }) : '']
+    const n = s.connected!.length
+    const what = [n ? toolNames(s.connected!, 'and') : '', s.wants.length ? T('ag.lineFix', { n: s.wants.length }) : '', s.none.length ? T('ag.lineMore', { n: s.none.length }) : '']
     const mood = s.wants.length ? 'waiting' : s.on.length ? 'done' : 'working'
     const title = n ? T(n === 1 ? 'ag.line1' : 'ag.line', { n }) : T('ag.lineRepair')
     return `<div class="grp"><div class="r go" data-tab="agents"><span class="dot" style="background:${COLOR[mood]}"></span><div class="grow"><div>${esc(title)}</div><div class="d ellip">${esc(what.filter(Boolean).join(' · '))}</div></div><span class="link">${esc(T('wc.manage'))}</span></div></div>`
@@ -194,7 +196,7 @@ export function welcomePart(core: SettingsCore) {
   // connected, the sessions and the quick switches, the alerts, startup and
   // the language, her updates, her crash reports and what this is.
   // Connecting them is the Agent page's.
-  function shortcutRow(key, title, note, value) {
+  function shortcutRow(key: string, title: string, note: string, value: string | undefined) {
     const isRecording = st.recordingShortcut === key
     const displayVal = isRecording ? esc(T('s.shortcutRecording')) : (value ? esc(value) : `<span class="empty">${esc(T('s.shortcutNone'))}</span>`)
     const clearBtn = !isRecording && value ? `<button class="kclear" data-key-clear="${key}" title="${esc(T('s.shortcutNone'))}">✕</button>` : ''
@@ -231,7 +233,7 @@ export function welcomePart(core: SettingsCore) {
       ${aboutHTML()}`
   }
 
-  const PAGES = { now: pageGeneral, agents: pageAgents, look: pageLook, widgets: pageWidgets, mail: pageMail }
+  const PAGES: Record<string, () => string> = { now: pageGeneral, agents: pageAgents, look: pageLook, widgets: pageWidgets, mail: pageMail }
 
   return { PAGES, cardShows, displaysRow, failedHTML, screenRow, toolNames, toolsHere }
 }

@@ -39,10 +39,112 @@ import { welcomePart } from './settings-welcome.ts'
 import { settingsVars } from './settings-vars.ts'
 import * as State from './settings-state.ts'
 import { TABS, PART_OF } from './settings-state.ts'
-import type { SettingsVars } from './settings-vars.ts'
+import type { Addon, DraftBox, MailBox, MailForm, MailPick, Plugin, Settings, SettingsVars, Thread, WinMode } from './settings-vars.ts'
+import type { Choices } from './settings-mail.ts'
+import type { Widget } from './widgets.ts'
 import type { SettingsEvent } from './settings-state.ts'
 import type { IslandFace } from './island.ts'
 import type { PickerFace } from './picker.ts'
+import type { Way } from './settings-letter.ts'
+import type { Config } from '../shared/config.ts'
+
+// Where one is put (island-wmenu.ts placeNow): its place (null: nowhere),
+// a board's name.
+export interface Place {
+  at: string | null
+  name?: string
+}
+
+// A row of the Plugins page (widgetRows): its key, its place in the order,
+// and what it is: a widget, or a plugin she runs or someone else's, with
+// its widgets up now (mine).
+export type WidgetRow = { key: string; i: number } & (
+  | { widget: Widget; plugin?: undefined; addon?: undefined; mine?: undefined }
+  | { plugin: Plugin; mine: Widget[]; widget?: undefined; addon?: undefined }
+  | { addon: Addon; mine: Widget[]; widget?: undefined; plugin?: undefined }
+)
+
+// The Mail page's inbox (settingsPage inbox): its conversations
+// (threads.rs) and what went wrong (mail.rs) are the Rust side's JSON.
+export interface Inbox {
+  id: string
+  for: string
+  filter: string
+  threads: Thread[]
+  total: number
+  letters: number
+  count: number
+  busy: boolean
+  error: any
+  errors: any[]
+  rev: number
+  syncing: boolean
+}
+
+// A download's last word (market.rs, market:progress).
+export interface MarketJob {
+  id?: string
+  stage: string
+  got?: number
+  total?: number
+}
+
+// One of the market's index (market.rs): the Rust side's JSON, its id
+// read by name.
+export interface MarketItem {
+  id: string
+  [field: string]: any
+}
+
+// The plugin market (settingsPage market): what went wrong reading its
+// index is the Rust side's JSON.
+export interface Market {
+  items: MarketItem[] | null
+  at: number
+  error: any
+  loading: boolean
+  cat: string
+  query: string
+  jobs: Record<string, MarketJob>
+  updating: boolean
+}
+
+// One of a plugin's parameters (plugins.rs view): text, number, flag or
+// choice (its options), as set.
+interface PluginParam {
+  name: string
+  kind?: string
+  value?: unknown
+  required?: boolean
+  options?: string[]
+}
+
+// A clock drawn for a session (clockTag, tick): how it is, since when its
+// turn runs, how long it took.
+interface Clocked {
+  mood: string
+  since?: number | null
+  took?: number | null
+}
+
+// The page's markup kept on what setHTML draws into, to change in place.
+type Morphed = HTMLElement & { _html?: string }
+
+// The element a click is on, or the nearest round it, by a selector (the
+// click handler's at); a button's or another kind's by its type.
+type At = <E extends Element = HTMLElement>(selector: string) => E | null
+
+// Her three shortcuts' settings.
+type ShortcutKey = 'shortcutApprove' | 'shortcutDeny' | 'shortcutIsland'
+
+// A pet of codex-pets.net's gallery, as settings.rs lists them.
+interface GalleryPet {
+  id: string
+  name: string
+  author: string
+  likes: number
+  preview?: string
+}
 
 // The settings' parts as each is made (settingsPage, in its section's
 // place): what each hands back, reached by a part made before it
@@ -68,54 +170,54 @@ export interface SettingsCore {
   st: SettingsVars
   pieces: SettingsParts
   go: (e: SettingsEvent) => void
-  AGENTS: { [k: string]: string }
-  AGENT_NAMES: { [k: string]: string }
+  AGENTS: Record<string, string>
+  AGENT_NAMES: Record<string, string>
   AddonUI: typeof AddonUI
   Agents: typeof Agents
   COLOR: Record<string, string>
   Island: IslandFace | null
   MOST_FILES: number
-  SIZES: (string | number)[][]
+  SIZES: [name: string, scale: number][]
   SPINS: number[]
-  T: (key: any, vars?: any) => any
+  T: (key: string, vars?: Record<string, unknown>) => string
   Widgets: typeof Widgets
   body: HTMLElement
-  drafts: Record<string, any>
+  drafts: Record<string, string>
   draw: (reset?: boolean) => void
-  esc: (value: any) => string
-  expanded: Set<unknown>
-  freshRows: Set<unknown>
-  inbox: any
+  esc: (value: unknown) => string
+  expanded: Set<string>
+  freshRows: Set<string>
+  inbox: Inbox
   keepDraft: () => void
   layer: HTMLElement
-  loadGallery: (more: any) => Promise<void>
-  market: any
-  nameList: (lang: any, names: any, kind?: string) => any
-  onTaskbar: (s: any) => boolean
-  openHardware: Set<unknown>
+  loadGallery: (more: boolean) => Promise<void>
+  market: Market
+  nameList: typeof nameList
+  onTaskbar: (s: Config) => boolean
+  openHardware: Set<string>
   pageAlerts: () => string
   pageNow: () => string
   pagePets: () => string
-  part: (id: any, html: any) => string
-  patch: (change: any) => void
-  placeHTML: (place: any, key?: string) => string
-  placeOf: (item: any, on: any) => { at: string; name?: any }
-  pluginFields: (p: any) => string
-  pluginNote: (p: any, mine: any, placed: any) => { text: any; bad?: boolean }
-  redrawMail: (focus?: any) => void
+  part: (id: string, html: string) => string
+  patch: (change: Settings) => void
+  placeHTML: (place: Place, key?: string) => string
+  placeOf: (item: { plugin?: string; id?: string }, on: boolean | undefined) => Place
+  pluginFields: (p: Plugin) => string
+  pluginNote: (p: Plugin, mine: Widget[], placed: boolean) => { text: string; bad?: boolean }
+  redrawMail: (focus?: string | null) => void
   relayout: () => number
-  render: (lang: any, text: any) => any
-  row: (title: any, note: any, control: any) => string
-  sec: (text: any) => string
-  seg: (key: any, options: any, current: any) => string
-  setHTML: (el: any, html: any) => boolean
+  render: typeof render
+  row: (title: string, note: string, control: string) => string
+  sec: (text: string) => string
+  seg: (key: string, options: Choices, current: unknown) => string
+  setHTML: (el: Morphed, html: string) => boolean
   sheet: HTMLElement
   showPart: () => void
-  sw: (key: any, on: any, extra?: string) => string
-  thumb: (px: any, url: any, version: any, clip?: string) => string
-  toMarketRow: (kind: any, title: any, note: any) => string
+  sw: (key: string, on: unknown, extra?: string) => string
+  thumb: (px: number, url: string, version: unknown, clip?: string) => string
+  toMarketRow: (kind: string, title: string, note: string) => string
   toastEl: HTMLElement
-  widgetRows: () => any[]
+  widgetRows: () => WidgetRow[]
 }
 
 export type SettingsFace = ReturnType<typeof settingsPage>
@@ -133,15 +235,15 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     Object.assign(st, State.next(State.stateOf(st), e))
   }
   // The island's colours (on black), the same as island.ts.
-  const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
+  const COLOR: Record<string, string> = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
   // The five pages' names (TABS, PART_OF: settings-state.ts).
-  const TAB_KEY = { now: 's.tabGeneral', agents: 's.tabAgents', look: 's.tabLook', widgets: 's.tabWidgets', mail: 's.tabMail' }
-  const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
-  const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
+  const TAB_KEY: Record<string, string> = { now: 's.tabGeneral', agents: 's.tabAgents', look: 's.tabLook', widgets: 's.tabWidgets', mail: 's.tabMail' }
+  const HEAD_KEY: Record<string, string> = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
+  const SIZES: [string, number][] = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
   const HOMES = ['island', 'taskbar', 'split']
-  const HOME_KEY = { island: 's.displayIsland', taskbar: 's.displayTaskbar', split: 's.displaySplit' }
+  const HOME_KEY: Record<string, string> = { island: 's.displayIsland', taskbar: 's.displayTaskbar', split: 's.displaySplit' }
   // Her taskbar the home: along an edge, or split into the top bar and the dock.
-  const onTaskbar = s => s.display === 'taskbar' || s.display === 'split'
+  const onTaskbar = (s: Config) => s.display === 'taskbar' || s.display === 'split'
   // How long what she tells stays (停留多久): the quick choices, until seen,
   // and Custom, whole seconds typed in a box beside them (flow.ts holdSecs,
   // zhoupengjie/Wakuwaku#59).
@@ -150,14 +252,14 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   const IDLE_HIDES = [15, 30, 60, 120, 0]
   const WAITS = [30, 60, 120, 290]
   const SPINS = [0, 5, 8, 15]
-  const ICON = {
+  const ICON: Record<string, string> = {
     eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
     moon: '<path d="M20 14A8 8 0 1 1 10 4a7 7 0 0 0 10 10z"/>',
     sound: '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6"/>',
     pill: '<rect x="3" y="8" width="18" height="8" rx="4"/>',
   }
 
-  const layer = document.getElementById('island-settings')
+  const layer = document.getElementById('island-settings')!
   // On a Mac, a blur this soon after they opened (st.openedAt) is the
   // keyboard taken, not a click outside.
   const BLUR_GRACE_MS = 500
@@ -166,24 +268,24 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // is downloaded, any other words are looked for as the site's own search
   // box looks: a name, part of one, a word of its description). Each ask
   // numbered: a slower answer to an earlier search never lands over a later.
-  const gallery = { sort: 'popular', query: '', items: [], page: 0, totalPages: 1, total: 0, loading: false, error: '', getting: '', asked: 0 }
-  const isLink = text => /:\/\/|codex-pets\.net/i.test(text)
+  const gallery = { sort: 'popular', query: '', items: [] as GalleryPet[], page: 0, totalPages: 1, total: 0, loading: false, error: '', getting: '', asked: 0 }
+  const isLink = (text: string) => /:\/\/|codex-pets\.net/i.test(text)
   // The plugins page: what is typed in a plugin's settings folded out
   // (st.openPlugin) and not yet kept ("weather.City": "上海").
-  const drafts = {}
+  const drafts: Record<string, string> = {}
   // Other people's plugins installed while the settings are open (their
   // rows edged in the accent until they close; a pack's by AddonUI.packKey).
-  const freshRows = new Set()
+  const freshRows = new Set<string>()
   // The plugin market (market.rs; addonui.ts its words and steps), a part
   // of the Plugins page (sub market, an item's page mkItem): its index as
   // last read (items null until one was), when, what went wrong reading it,
   // being read; the category and the words looked for; each download's last
   // word (market:progress) by id; 全部更新 under way. (What is asked over
   // the panel is st.mkAsk.)
-  const market = { items: null, at: 0, error: null, loading: false, cat: 'all', query: '', jobs: {}, updating: false }
+  const market: Market = { items: null, at: 0, error: null, loading: false, cat: 'all', query: '', jobs: {}, updating: false }
   // Recording one: her global shortcuts let go meanwhile, so the keys
   // pressed reach this page (shortcuts.rs pause).
-  const setRecording = key => {
+  const setRecording = (key: string | null) => {
     if (key === st.recordingShortcut) return
     st.recordingShortcut = key
     pet.shortcutsPause?.(key !== null)
@@ -194,7 +296,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     draw()
   })
   // The monitor's hardware (LibreHardwareMonitor's) folded out, by its id.
-  const openHardware = new Set()
+  const openHardware = new Set<string>()
   // The Mail page's inbox: whose (an account id), its newest letters and how
   // many there are, how many asked for, busy, what went wrong (the letter
   // open is st.reading).
@@ -202,11 +304,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // total: how many there are; letters: how many letters the inbox holds;
   // rev: the store's revision they are of (a newer one, asked again);
   // syncing: a first sync still under way. The conversations folded out.
-  const inbox = { id: '', for: '', filter: 'all', threads: [], total: 0, letters: 0, count: 50, busy: false, error: null, errors: [], rev: 0, syncing: false }
-  const expanded = new Set()
+  const inbox: Inbox = { id: '', for: '', filter: 'all', threads: [], total: 0, letters: 0, count: 50, busy: false, error: null, errors: [], rev: 0, syncing: false }
+  const expanded = new Set<string>()
   // The agents that read mail (agents.ts mail): their short names, and
   // their names on the Mail page's settings.
-  const AGENTS = Object.fromEntries(Agents.TABLE.filter(a => a.mail).map(a => [a.id, a.mail]))
+  const AGENTS = Object.fromEntries(Agents.TABLE.filter(a => a.mail).map(a => [a.id, a.mail!]))
   const AGENT_NAMES = Object.fromEntries(Agents.TABLE.filter(a => a.mail).map(a => [a.id, a.name]))
   // The most a letter takes with it (as send.rs has it).
   const MOST_FILES = 25 << 20
@@ -223,10 +325,10 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     st.draftTimer = setTimeout(() => pet.mail.keepDraft(st.draft ? { ...st.draft, files: [], busy: false, error: null, note: null } : null), 300)
   }
 
-  const T = (key, vars?) => t(st.lang, key, vars)
-  const esc = value =>
-    String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
-  const svg = name => `<svg class="ic" viewBox="0 0 24 24">${ICON[name]}</svg>`
+  const T = (key: string, vars?: Record<string, unknown>) => t(st.lang, key, vars)
+  const esc = (value: unknown) =>
+    String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c])
+  const svg = (name: string) => `<svg class="ic" viewBox="0 0 24 24">${ICON[name]}</svg>`
 
   layer.innerHTML = `
     <div class="s-head" data-close></div>
@@ -236,21 +338,22 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     <div class="s-foot"><span class="foot-text"></span><span class="grow"></span><span class="ver"></span></div>
     <div class="s-sheet" hidden></div>
     <div class="s-toast" role="status" hidden></div>`
-  const head = layer.querySelector('.s-head')
-  const tabs = layer.querySelector('.s-tabs')
+  // (All just made above.)
+  const head = layer.querySelector('.s-head')!
+  const tabs = layer.querySelector('.s-tabs')!
   tabs.style.setProperty('--tabs', TABS.length as any)
-  const askSlot = layer.querySelector('.s-ask')
-  const body = layer.querySelector('.s-body')
-  const foot = layer.querySelector('.s-foot')
+  const askSlot = layer.querySelector('.s-ask')!
+  const body = layer.querySelector('.s-body')!
+  const foot = layer.querySelector('.s-foot')!
   // A question over the whole panel (installing a plugin, taking one away),
   // in place of a dialog of Windows'; a word for a few seconds at its foot.
-  const sheet = layer.querySelector('.s-sheet')
-  const toastEl = layer.querySelector('.s-toast')
+  const sheet = layer.querySelector('.s-sheet')!
+  const toastEl = layer.querySelector('.s-toast')!
 
   // The new markup, changed in place: only what differs is touched, so a
   // number that changed (a plugin's reading) does not redraw the page around
   // it, and a box being typed in keeps its focus and caret.
-  function setHTML(el, html) {
+  function setHTML(el: Morphed, html: string) {
     if (el._html === html) return false
     el._html = html
     const next = document.createElement('template')
@@ -259,7 +362,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     return true
   }
 
-  function morph(from, to) {
+  // An element, or a text node or comment, which are read only for their
+  // kind, name and text (the attributes and value: an element's).
+  function morph(from: Element, to: Element) {
     if (from.nodeType !== to.nodeType || from.nodeName !== to.nodeName) return from.replaceWith(to.cloneNode(true))
     // A letter's frame with the same letter in it (settings-letter.ts
     // mailBodyHTML, its data-doc) is left as it is: its height and scrolling
@@ -274,19 +379,19 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     for (const { name } of [...from.attributes]) if (!to.hasAttribute(name)) from.removeAttribute(name)
     for (const { name, value } of to.attributes) if (from.getAttribute(name) !== value) from.setAttribute(name, value)
     // A box's text, once typed in, is its own: set while it is not being typed in.
-    if (from.nodeName === 'INPUT' && from !== document.activeElement && from.value !== (to.getAttribute('value') ?? '')) from.value = to.getAttribute('value') ?? ''
+    if (from.nodeName === 'INPUT' && from !== document.activeElement && (from as HTMLInputElement).value !== (to.getAttribute('value') ?? '')) (from as HTMLInputElement).value = to.getAttribute('value') ?? ''
     morphChildren(from, to)
-    if (from.nodeName === 'TEXTAREA' && from !== document.activeElement && from.value !== to.textContent) from.value = to.textContent
+    if (from.nodeName === 'TEXTAREA' && from !== document.activeElement && (from as HTMLTextAreaElement).value !== to.textContent) (from as HTMLTextAreaElement).value = to.textContent
   }
 
-  function morphChildren(from, to) {
+  function morphChildren(from: Node, to: Node) {
     const have = [...from.childNodes]
     const want = [...to.childNodes]
-    want.forEach((node, i) => (i < have.length ? morph(have[i], node) : from.appendChild(node.cloneNode(true))))
+    want.forEach((node, i) => (i < have.length ? morph(have[i] as Element, node as Element) : from.appendChild(node.cloneNode(true))))
     for (const extra of have.slice(want.length)) extra.remove()
   }
 
-  function clock(ms) {
+  function clock(ms: number) {
     const s = Math.max(0, Math.floor(ms / 1000))
     const h = Math.floor(s / 3600)
     const m = Math.floor((s % 3600) / 60)
@@ -295,38 +400,38 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   // How long a turn has run, or how long the finished one took.
-  function timeOf(s) {
+  function timeOf(s: Clocked) {
     if ((s.mood === 'working' || s.mood === 'waiting') && s.since) return clock(Date.now() - s.since)
     if ((s.mood === 'done' || s.mood === 'review' || s.mood === 'error') && s.took) return clock(s.took)
     return ''
   }
 
   // A clock as markup that tick() keeps current, so a redraw is not needed for it.
-  const clockTag = (s, cls = 'clock') =>
+  const clockTag = (s: Clocked, cls = 'clock') =>
     `<span class="${cls}" data-mood="${esc(s.mood)}" data-since="${s.since || ''}" data-took="${s.took || ''}" style="color:${COLOR[s.mood] || COLOR.idle}">${timeOf(s)}</span>`
 
   function tick() {
     for (const c of layer.querySelectorAll('[data-mood][data-since]')) {
-      c.textContent = timeOf({ mood: c.dataset.mood, since: Number(c.dataset.since) || null, took: Number(c.dataset.took) || null })
+      c.textContent = timeOf({ mood: c.dataset.mood!, since: Number(c.dataset.since) || null, took: Number(c.dataset.took) || null })
     }
   }
 
   // --- Small parts -------------------------------------------------------------------
 
-  const sw = (key, on, extra = '') => `<button class="sw${on ? ' on' : ''}" data-sw="${key}" ${extra}></button>`
+  const sw = (key: string, on: unknown, extra = '') => `<button class="sw${on ? ' on' : ''}" data-sw="${key}" ${extra}></button>`
   // A few choices side by side; one marked off ([value, label, true]) is
   // there, greyed, and can't be picked.
-  const seg = (key, options, current) =>
+  const seg = (key: string, options: Choices, current: unknown) =>
     `<span class="seg" data-seg="${key}">${options
       .map(([value, label, off]) => `<span data-value="${esc(value)}" class="${String(value) === String(current) ? 'on' : off ? 'off' : ''}"${off ? ' aria-disabled="true"' : ''}>${esc(label)}</span>`)
       .join('')}</span>`
-  const row = (title, note, control) =>
+  const row = (title: string, note: string, control: string) =>
     `<div class="r"><div class="grow"><div>${title}</div>${note ? `<div class="d">${note}</div>` : ''}</div>${control}</div>`
-  const sec = text => `<div class="sec">${esc(text)}</div>`
+  const sec = (text: string) => `<div class="sec">${esc(text)}</div>`
   // Where a part of a page begins, to scroll to (PART_OF).
-  const part = (id, html) => `<i class="part" data-part="${id}"></i>${html}`
+  const part = (id: string, html: string) => `<i class="part" data-part="${id}"></i>${html}`
 
-  function thumb(px, url, version, clip = 'idle') {
+  function thumb(px: number, url: string, version: unknown, clip = 'idle') {
     const s = px / 192
     const sheetH = version === 1 ? 1872 : 2288
     return `<div class="thumb" data-clip="${clip}" style="width:${px}px;height:${Math.round(208 * s)}px"><div class="sheet" style="background-image:url(&quot;${esc(url)}&quot;);background-size:1536px ${sheetH}px;transform:scale(${s})"></div></div>`
@@ -336,8 +441,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     for (const timer of st.thumbTimers) clearTimeout(timer)
     st.thumbTimers = []
     for (const el of layer.querySelectorAll('.thumb')) {
-      const { row: r, frames, ms } = CLIPS[el.dataset.clip] || CLIPS.idle
-      const sheet = el.querySelector('.sheet')
+      const { row: r, frames, ms } = CLIPS[el.dataset.clip as keyof typeof CLIPS] || CLIPS.idle
+      const sheet = el.querySelector('.sheet')!
       let frame = 0
       const step = () => {
         sheet.style.backgroundPosition = `${-frame * 192}px ${-r * 208}px`
@@ -351,9 +456,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   // --- The pages -------------------------------------------------------------------------
 
-  function sessionDetails(det) {
-    const kv = (key, val) => `<div class="kv"><span class="k">${esc(T(key))}</span><span class="v">${val}</span></div>`
-    const rows = []
+  function sessionDetails(det: NonNullable<ReturnType<typeof Status.detailsOf>>) {
+    const kv = (key: string, val: string) => `<div class="kv"><span class="k">${esc(T(key))}</span><span class="v">${val}</span></div>`
+    const rows: string[] = []
     if (det.files.length) {
       const list = det.files.map(f => `<span class="s-file mono path">${esc(f)}</span>`).join('')
       const more = det.moreFiles > 0 ? `<span class="d s-more">${esc(T('s.filesMore', { n: det.moreFiles, total: det.totalFiles }))}</span>` : ''
@@ -400,11 +505,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
           .join('')
       : `<div class="note">${esc(T('home.noSessions', { list: toolNames(toolsHere()) }))}</div>`
     // Her out on the desktop; and her home, the next one at a press.
-    const tiles = [
+    const tiles: [key: string, icon: string, label: string, on: unknown][] = [
       ['show', 'eye', T('s.outTile'), !st.snap.hidden && s.out === true],
       ['dnd', 'moon', T('menu.dnd'), s.dnd],
       ['sound', 'sound', T('settings.sound'), s.sound],
-      ['home', 'pill', T(HOME_KEY[s.display] || 's.displayIsland'), true],
+      ['home', 'pill', T(HOME_KEY[s.display as string] || 's.displayIsland'), true],
     ]
     return `${sec(T('home.sessions'))}<div class="grp">${list}</div>
       ${sec(T('s.quick'))}<div class="tiles">${tiles
@@ -414,7 +519,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   // A row to the market on its kind (spec §1: 获取更多宠物…, 获取更多壁纸…),
   // at the end of what is installed: widgets:market:pet or :wallpaper.
-  const toMarketRow = (kind, title, note) =>
+  const toMarketRow = (kind: string, title: string, note: string) =>
     `<div class="r jumps mk-more" data-look-market="${kind}" role="button" tabindex="0"><span class="mk-big sm">&#xE719;</span><div class="grow"><div>${esc(T(title))}</div><div class="d">${esc(T(note))}</div></div><span class="chev">&#xE76C;</span></div>`
 
   // Her pets: each with who made it and where it came from (a pack's:
@@ -426,7 +531,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // 删除 on those in her own folder (downloaded, or the market's), asked
     // first (petDeleteLayerOf); never Codex's, nor the only one (the user,
     // 2026-11-08: 宠物增加删除按钮).
-    const canDelete = p => p.mine && st.snap.pets.length > 1
+    const canDelete = (p: { mine?: boolean }) => p.mine && st.snap.pets.length > 1
     const installed = st.snap.pets.length
       ? st.snap.pets
           .map(
@@ -534,8 +639,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // built-in ones, the plugins she runs (with what their widgets say),
   // other people's (addons.rs: plugins; the packs are a group of their
   // own, packsGroup), and the widgets of anyone else's scripts.
-  function widgetRows() {
-    const rank = key => {
+  function widgetRows(): WidgetRow[] {
+    const rank = (key: string) => {
       const i = (st.snap.settings.widgetOrder || []).indexOf(key)
       return i < 0 ? Infinity : i
     }
@@ -553,7 +658,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // put nowhere is off): 没放; running, 运行中 and what it does; else why it
   // shows nothing (a parameter to fill in, 出错 with its last line). Put
   // somewhere and not on yet (picker.ts turns it on): starting.
-  function pluginNote(p, mine, placed) {
+  function pluginNote(p: Plugin, mine: Widget[], placed: boolean) {
     if (!placed) return { text: T('pl.unplaced') }
     if (p.state === 'off') return { text: T('pl.starting') }
     if (p.state === 'needs') return { text: T('pl.needs', { what: T(`pl.${p.id}.${p.missing}`) }), bad: true }
@@ -568,18 +673,18 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // Where one is put (island-wmenu.ts placeNow): its place in a quiet word, or,
   // put nowhere, 添加小工具… (the picker, as her menu opens it, on its card:
   // key, picker.ts fromMenu focus).
-  function placeOf(item, on) {
+  function placeOf(item: { plugin?: string; id?: string }, on: boolean | undefined): Place {
     return Island?.placeNow?.(item, on) || { at: on ? 'isle' : null }
   }
-  function placeHTML(place, key = '') {
+  function placeHTML(place: Place, key = '') {
     if (!place.at) return `<button class="pbtn sm" data-padd="${esc(key)}">${esc(T('pl.add'))}</button>`
     const where = esc(T(`pl.at.${place.at}`, { name: place.name || '' }))
     return `<span class="pl-at" title="${where}">${where}</span>`
   }
 
   // A plugin's settings, folded out under it: what is being typed stays.
-  function pluginFields(p) {
-    const fields = p.params.map(f => {
+  function pluginFields(p: Plugin) {
+    const fields = p.params.map((f: PluginParam) => {
       const key = `${p.id}.${f.name}`
       const label = esc(T(`pl.${key}`))
       if (f.kind === 'flag') return `<div class="fr"><span class="fl">${label}</span><span class="grow"></span>${sw('pf:' + key, f.value === true)}</div>`
@@ -699,21 +804,21 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   function drawTabs() {
     const i = TABS.indexOf(st.tab)
-    tabs.querySelector('.ind').style.transform = `translateX(${i * 100}%)`
+    tabs.querySelector('.ind')!.style.transform = `translateX(${i * 100}%)`
     for (const b of tabs.querySelectorAll('button')) {
       b.classList.toggle('on', b.dataset.tab === st.tab)
-      b.querySelector('span').textContent = T(TAB_KEY[b.dataset.tab])
+      b.querySelector('span')!.textContent = T(TAB_KEY[b.dataset.tab!])
     }
-    tabs.querySelector('[data-tab="now"] .n').hidden = !(st.snap.asks || []).length
+    tabs.querySelector('[data-tab="now"] .n')!.hidden = !(st.snap.asks || []).length
     // An agent that wants the person (amber): the same dot on the Agent page's.
-    tabs.querySelector('[data-tab="agents"] .n').hidden = !Agents.summary(st.snap, known()).wants.length
+    tabs.querySelector('[data-tab="agents"] .n')!.hidden = !Agents.summary(st.snap, known()).wants.length
   }
 
   // The page, kept as it is when nothing changed; redrawn, the box being
   // typed in (the download box, a plugin's setting, the mail proxy's
   // address) gets the focus and the caret back.
-  function drawBody(reset) {
-    const box = body.contains(document.activeElement) && document.activeElement.matches('input, textarea') ? (document.activeElement as HTMLInputElement | HTMLTextAreaElement) : null
+  function drawBody(reset: boolean) {
+    const box = body.contains(document.activeElement) && document.activeElement!.matches('input, textarea') ? (document.activeElement as HTMLInputElement | HTMLTextAreaElement) : null
     const which =
       box &&
       (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : box.dataset.mon ? `[data-mon="${box.dataset.mon}"]` : box.dataset.hold ? '[data-hold]' : box.dataset.mf ? `[data-mf="${box.dataset.mf}"]` : box.dataset.w ? `[data-w="${box.dataset.w}"]` : box.dataset.proxyAt !== undefined ? `[data-proxy-at="${box.dataset.proxyAt}"]` : null)
@@ -754,8 +859,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     drawBody(reset)
     drawSheet()
     // Locked (the button by ✕), a click outside closes them no more.
-    foot.querySelector('.foot-text').textContent = T(st.snap.settings.settingsPin ? 's.footLocked' : 's.foot')
-    foot.querySelector('.ver').textContent = `v${st.snap.version}`
+    foot.querySelector('.foot-text')!.textContent = T(st.snap.settings.settingsPin ? 's.footLocked' : 's.foot')
+    foot.querySelector('.ver')!.textContent = `v${st.snap.version}`
     tick()
     // The same height on every page, however much it holds: the head and
     // the tabs stay where they are from one page to the next (on the
@@ -796,7 +901,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
   }
 
-  function open(next) {
+  function open(next: string) {
     // At what was asked (settings-state.ts open): connecting (the welcome
     // open, folded or not), the market by category (widgets:market[:widget|
     // pet|wallpaper]: the picker's 获取更多…, the Look page's: on the
@@ -862,7 +967,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     Island?.changed()
   }
 
-  function setTab(next) {
+  function setTab(next: string) {
     if (next === st.tab || !TABS.includes(next)) return
     go({ type: 'tab', to: next })
     draw(true)
@@ -871,7 +976,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   // A change: shown at once, then whatever main makes of it.
-  function patch(change) {
+  function patch(change: Settings) {
     Object.assign(st.snap.settings, change)
     draw()
     pet.settings.set(change).then(got => {
@@ -880,7 +985,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     })
   }
 
-  async function loadGallery(more) {
+  async function loadGallery(more: boolean) {
     if (more ? gallery.loading : gallery.page > 0) return
     const asked = ++gallery.asked
     gallery.loading = true
@@ -903,7 +1008,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   // The gallery as a search finds it (no words: the gallery itself), from
   // its first page.
-  function search(text) {
+  function search(text: string) {
     clearTimeout(st.searchTimer)
     const query = text.trim()
     if (query === gallery.query) return
@@ -924,7 +1029,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     if (!isLink(text)) st.searchTimer = setTimeout(() => search(text), 400)
   }
 
-  async function fetchPet(reference, fromGallery) {
+  async function fetchPet(reference: string, fromGallery: boolean) {
     if (st.fetching || gallery.getting) return
     if (fromGallery) gallery.getting = reference
     else st.fetching = reference
@@ -944,7 +1049,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     relayout()
   }
 
-  function copy(text, button) {
+  function copy(text: string, button: HTMLElement) {
     const done = () => {
       button.textContent = T('home.copied')
       setTimeout(() => (button.textContent = button.dataset.label || T('home.copy')), 1800)
@@ -962,16 +1067,18 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   // --- Clicks and keys ----------------------------------------------------------------------------
 
+  // Each element found below by a data- attribute has it: its dataset's
+  // entry is there (!).
   layer.addEventListener('click', e => {
-    const at = selector => (e.target as HTMLElement).closest(selector)
+    const at: At = selector => (e.target as HTMLElement).closest(selector)
     // A click anywhere but on it closes the letter menu.
     if (!menuEl.hidden && !at('.mmenu')) closeMenu()
     // The question over the panel (installing a plugin, taking one away):
     // its buttons, its link to the developer docs; a press beside it is 取消.
     if (!sheet.hidden && sheet.contains(e.target as Node)) {
       const site = at('[data-site]')
-      if (site) return pet.settings.openSite(site.dataset.site)
-      const b = at('[data-sheet]')
+      if (site) return pet.settings.openSite(site.dataset.site!)
+      const b = at<HTMLButtonElement>('[data-sheet]')
       if (b?.disabled) return
       const what = b ? b.dataset.sheet : at('.sh') ? '' : 'cancel'
       if (what === 'go') return installGo()
@@ -982,7 +1089,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         const asked = st.mkAsk
         st.mkAsk = null
         drawSheet()
-        return what === 'mkgo' ? marketInstall(asked?.id, true) : updateAll(true)
+        // mkgo is the install's button: asked is { kind: 'install', id }.
+        return what === 'mkgo' ? marketInstall(asked?.id!, true) : updateAll(true)
       }
       if (what === 'cancel') cancelAsked()
       return
@@ -996,13 +1104,13 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
     const keyBind = at('[data-key-bind]')
     if (keyBind) {
-      const key = keyBind.dataset.keyBind
+      const key = keyBind.dataset.keyBind!
       setRecording(st.recordingShortcut === key ? null : key)
       return draw()
     }
     const keyClear = at('[data-key-clear]')
     if (keyClear) {
-      const key = keyClear.dataset.keyClear
+      const key = keyClear.dataset.keyClear!
       setRecording(null)
       return patch({ [key]: '' })
     }
@@ -1011,10 +1119,10 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       draw()
     }
     const tabButton = at('[data-tab]')
-    if (tabButton) return setTab(tabButton.dataset.tab)
+    if (tabButton) return setTab(tabButton.dataset.tab!)
     const sessToggle = at('[data-sess-open]')
     if (sessToggle) {
-      const id = sessToggle.dataset.sessOpen
+      const id = sessToggle.dataset.sessOpen!
       if (sessionOpen.has(id)) sessionOpen.delete(id)
       else sessionOpen.add(id)
       draw()
@@ -1024,7 +1132,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const session = at('[data-jump]')
     if (session) {
       return pet.jump(session.dataset.jump).then(went => {
-        if (!went) session.querySelector('.d').textContent = T('jump.notFound')
+        if (!went) session.querySelector('.d')!.textContent = T('jump.notFound')
       })
     }
     const s = st.snap?.settings
@@ -1033,9 +1141,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // Mail: an account set up, changed, kept, removed; its server looked
     // up, or typed in.
     if (handleMail(at)) return
-    const toggle = at('[data-sw]')
+    const toggle = at<HTMLButtonElement>('[data-sw]')
     if (toggle && !toggle.disabled) {
-      const key = toggle.dataset.sw
+      const key = toggle.dataset.sw!
       if (key === 'login') return pet.settings.login(!st.snap.loginAtStart).then(got => ((st.snap = got), draw()))
       // Crash reports: sent by themselves, or never (not asked again).
       if (key === 'crashReports') return patch({ crashReports: st.snap.crash?.mode === 'auto' ? 'off' : 'auto' })
@@ -1057,8 +1165,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         const source = key.startsWith('lhms:') ? 'lhm' : 'builtin'
         const id = key.slice(key.indexOf(':') + 1)
         const name = picksKey(source)
-        const view = source === 'lhm' ? st.snap.lhm : st.snap.hw
-        const picked = Array.isArray(s.monitor?.[name]) ? s.monitor[name] : (view?.sensors || []).filter(x => x.on && !x.toggle).map(x => x.id)
+        const view: { sensors?: { id: string; on?: boolean; toggle?: string }[] } | undefined = source === 'lhm' ? st.snap.lhm : st.snap.hw
+        const picked: string[] = Array.isArray(s.monitor?.[name]) ? s.monitor[name] : (view?.sensors || []).filter(x => x.on && !x.toggle).map(x => x.id)
         return patch({ monitor: { ...(s.monitor || {}), [name]: picked.includes(id) ? picked.filter(x => x !== id) : [...picked, id].slice(-32) } })
       }
       // A plugin's yes-or-no setting; someone else's (its manifest's flag:
@@ -1066,26 +1174,26 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       if (key.startsWith('pf:')) {
         const [id, name] = key.slice(3).split('.')
         const p = (st.snap.plugins || []).find(x => x.id === id)
-        return p && setPlugin(id, { [name]: !(p.params.find(f => f.name === name) || {}).value })
+        return p && setPlugin(id, { [name]: !(p.params.find((f: PluginParam) => f.name === name) || {}).value })
       }
       if (key.startsWith('af:')) {
         const [id, name] = key.slice(3).split('.')
         const f = addonField(id, name)
         return f && setPlugin(id, { [name]: (f.value ?? f.default) !== true })
       }
-      return patch({ [key]: !s[key] })
+      return patch({ [key]: !s[key as keyof Settings] })
     }
     // A hardware's sensors folded out, or in.
     const hardware = at('[data-lhw]')
     if (hardware) {
-      const id = hardware.dataset.lhw
+      const id = hardware.dataset.lhw!
       if (!openHardware.delete(id)) openHardware.add(id)
       return draw()
     }
     // LibreHardwareMonitor's password forgotten.
     if (at('[data-lhm-forget]')) return patch({ monitor: { ...(s.monitor || {}), lhmPass: '' } })
     // The monitor a second faster or slower.
-    const pace = at('[data-every]')
+    const pace = at<HTMLButtonElement>('[data-every]')
     if (pace && !pace.disabled) {
       const every = Math.min(10, Math.max(1, (s.monitor?.every || 2) + Number(pace.dataset.every)))
       return patch({ monitor: { ...(s.monitor || {}), every } })
@@ -1093,7 +1201,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // A plugin's settings folded out, or in.
     const fold = at('[data-pexp]')
     if (fold) {
-      st.openPlugin = st.openPlugin === fold.dataset.pexp ? '' : fold.dataset.pexp
+      st.openPlugin = st.openPlugin === fold.dataset.pexp ? '' : fold.dataset.pexp!
       draw()
       return relayout()
     }
@@ -1114,21 +1222,21 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // kind's part; 卸载 there, asked first.
     const pack = at('[data-pack]')
     if (pack) {
-      const [kind, id] = pack.dataset.pack.split(':')
+      const [kind, id] = pack.dataset.pack!.split(':')
       return openSub({ page: 'pack', kind, id })
     }
     const look = at('[data-pack-look]')
-    if (look) return toLook(look.dataset.packLook)
+    if (look) return toLook(look.dataset.packLook!)
     const packOut = at('[data-pack-uninstall]')
     if (packOut) {
-      const [kind, id] = packOut.dataset.packUninstall.split(':')
+      const [kind, id] = packOut.dataset.packUninstall!.split(':')
       st.gone = { id, kind, busy: false }
       return drawSheet()
     }
     // A pet's 删除 in the Look page's list: as a pack's 卸载, in its own words.
     const petOut = at('[data-pet-delete]')
     if (petOut) {
-      st.gone = { id: petOut.dataset.petDelete, kind: 'pet', busy: false, del: true }
+      st.gone = { id: petOut.dataset.petDelete!, kind: 'pet', busy: false, del: true }
       return drawSheet()
     }
     // The Look page's 获取更多宠物… and 获取更多壁纸…: the market on its kind.
@@ -1145,10 +1253,10 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       openSub({ page: 'market' })
       return loadMarket(false)
     }
-    const mkDo = at('[data-mk-do]')
+    const mkDo = at<HTMLButtonElement>('[data-mk-do]')
     if (mkDo) {
       if (mkDo.disabled) return
-      const id = mkDo.dataset.id
+      const id = mkDo.dataset.id!
       if (mkDo.dataset.mkDo === 'install' || mkDo.dataset.mkDo === 'update') return marketInstall(id)
       if (mkDo.dataset.mkDo === 'look') return toLook(marketItem(id)?.kind)
       if (mkDo.dataset.mkDo === 'add') {
@@ -1167,9 +1275,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       go({ type: 'part', part: 'net' })
       return showPart()
     }
-    const mkAll = at('[data-mk-all]')
+    const mkAll = at<HTMLButtonElement>('[data-mk-all]')
     if (mkAll && !mkAll.disabled) return updateAll()
-    const revive = at('[data-revive]')
+    const revive = at<HTMLButtonElement>('[data-revive]')
     if (revive && !revive.disabled) {
       revive.disabled = true
       return pet.addons.revive(revive.dataset.revive).then(got => {
@@ -1177,20 +1285,20 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         draw()
       })
     }
-    const allow = at('[data-approve]')
+    const allow = at<HTMLButtonElement>('[data-approve]')
     if (allow && !allow.disabled) {
-      st.approveFor = allow.dataset.approve
+      st.approveFor = allow.dataset.approve!
       return drawSheet()
     }
     const out = at('[data-uninstall]')
     if (out) {
-      st.gone = { id: out.dataset.uninstall, busy: false }
+      st.gone = { id: out.dataset.uninstall!, busy: false }
       return drawSheet()
     }
     if (at('[data-addon-file]')) return installFromFile()
     const many = at('[data-achoice]')
     if (many) {
-      const [id, name] = many.dataset.achoice.split('.')
+      const [id, name] = many.dataset.achoice!.split('.')
       const f = addonField(id, name)
       if (!f) return
       const choices = (f.options || []).map((o, i) => [o, f.optionLabels?.[i] || o])
@@ -1199,8 +1307,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const option = at('[data-seg] > span')
     if (option) {
       if (option.classList.contains('off')) return
-      const key = option.parentElement.dataset.seg
-      const raw = option.dataset.value
+      const key = option.parentElement!.dataset.seg!
+      const raw = option.dataset.value!
       // A plugin's choice (pc:<plugin>.<param>; someone else's ac:), kept:
       // the plugin started again with it (plugins.rs sync), or told it.
       if (key.startsWith('pc:') || key.startsWith('ac:')) {
@@ -1218,7 +1326,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         return layout && patch({ taskbarLayout: layout })
       }
       if (key === 'ilookMode') {
-        st.ilookMode = raw === winMode() ? '' : raw
+        st.ilookMode = raw === winMode() ? '' : raw as WinMode
         return draw()
       }
       if (key === 'ilookEdge') return ilookSave(ilookFor(), { ...ilookOf(ilookFor()), edge: raw })
@@ -1255,13 +1363,13 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
     const tile = at('[data-tile]')
     if (tile) {
-      const key = tile.dataset.tile
+      const key = tile.dataset.tile!
       if (key === 'show') {
         if (!st.snap.hidden) return patch({ out: s.out !== true })
         return pet.settings.showPet(true).then(got => ((st.snap = got), draw()))
       }
-      if (key === 'home') return patch({ display: HOMES[(HOMES.indexOf(s.display) + 1) % HOMES.length] })
-      return patch({ [key]: !s[key] })
+      if (key === 'home') return patch({ display: HOMES[(HOMES.indexOf(s.display as string) + 1) % HOMES.length] })
+      return patch({ [key]: !s[key as keyof Settings] })
     }
     const mode = at('[data-mode]')
     if (mode) return mode.dataset.mode !== s.display && patch({ display: mode.dataset.mode })
@@ -1279,31 +1387,32 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const ilookPick = at('[data-ilook-preset]')
     if (ilookPick) {
       const mode = ilookFor()
-      return ilookSave(mode, { ...ilookPresets(mode).find(([id]) => id === ilookPick.dataset.ilookPreset)[1] })
+      // (Its card was drawn from the same presets.)
+      return ilookSave(mode, { ...ilookPresets(mode).find(([id]) => id === ilookPick.dataset.ilookPreset)![1] })
     }
     const ilookBg = at('[data-ilook-bg]')
-    if (ilookBg) return ilookSave(ilookFor(), { ...ilookOf(ilookFor()), bg: ilookBg.dataset.ilookBg })
+    if (ilookBg) return ilookSave(ilookFor(), { ...ilookOf(ilookFor()), bg: ilookBg.dataset.ilookBg! })
     if (at('[data-ilook-reset]')) return ilookSave(ilookFor(), ilookDefault(ilookFor()))
     // Windows' colour dialog takes the focus: not a click outside.
     if ((e.target as HTMLElement).matches('input[type="color"]')) st.picking = true
     // LibreHardwareMonitor: downloaded, started, its task, its folder (lhm_setup.rs).
-    const lhmButton = at('[data-lhm]')
+    const lhmButton = at<HTMLButtonElement>('[data-lhm]')
     if (lhmButton && !lhmButton.disabled) {
-      if (['get', 'start', 'startup', 'noStartup', 'remove'].includes(lhmButton.dataset.lhm)) st.lhmAsking = Date.now()
-      return pet.settings.lhm(lhmButton.dataset.lhm).then(got => ((st.snap = got), draw()))
+      if (['get', 'start', 'startup', 'noStartup', 'remove'].includes(lhmButton.dataset.lhm!)) st.lhmAsking = Date.now()
+      return pet.settings.lhm(lhmButton.dataset.lhm!).then(got => ((st.snap = got), draw()))
     }
     // Her updates: look now, the release's notes, Update.
-    const updateButton = at('[data-update]')
-    if (updateButton && !updateButton.disabled) return pet.settings.update(updateButton.dataset.update).then(got => ((st.snap = got), draw()))
+    const updateButton = at<HTMLButtonElement>('[data-update]')
+    if (updateButton && !updateButton.disabled) return pet.settings.update(updateButton.dataset.update!).then(got => ((st.snap = got), draw()))
     // The Network proxy: shown (from an update not reached), tried.
     if (at('[data-net-go]')) return (go({ type: 'part', part: 'net' }), showPart())
-    const netButton = at('[data-net-test]')
+    const netButton = at<HTMLButtonElement>('[data-net-test]')
     if (netButton && !netButton.disabled) return runNetTest()
     if (at('[data-crash-show]')) return ((st.crashShown = !st.crashShown), draw())
-    const crashButton = at('[data-crash]')
-    if (crashButton && !crashButton.disabled) return pet.settings.crash(crashButton.dataset.crash).then(got => ((st.snap = got), draw()))
-    const paperButton = at('[data-paper]')
-    if (paperButton && !paperButton.disabled) return paperDo(paperButton.dataset.paper, paperButton.dataset.packId)
+    const crashButton = at<HTMLButtonElement>('[data-crash]')
+    if (crashButton && !crashButton.disabled) return pet.settings.crash(crashButton.dataset.crash!).then(got => ((st.snap = got), draw()))
+    const paperButton = at<HTMLButtonElement>('[data-paper]')
+    if (paperButton && !paperButton.disabled) return paperDo(paperButton.dataset.paper!, paperButton.dataset.packId)
     const accent = at('[data-accent]')
     if (accent && ACCENT_PICKER) return pet.settings.winLook({ accent: accent.dataset.accent }).then(got => ((st.snap = got), draw()))
     const use = at('[data-use]')
@@ -1314,27 +1423,27 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       return isLink(text) ? fetchPet(text, false) : search(text)
     }
     const get = at('[data-get]')
-    if (get) return fetchPet(get.dataset.get, true)
+    if (get) return fetchPet(get.dataset.get!, true)
     if (at('[data-more]')) return loadGallery(true)
     const copyButton = at('[data-copy]')
-    if (copyButton) return copy(copyButton.dataset.copy, copyButton)
+    if (copyButton) return copy(copyButton.dataset.copy!, copyButton)
     // An agent connected, repaired, removed (the welcome's buttons and the
     // Agent page's: data-agent="<id>:<install | remove>"); before a row's
     // own click, which opens it.
-    const agentButton = at('[data-agent]')
+    const agentButton = at<HTMLButtonElement>('[data-agent]')
     if (agentButton) {
       if (agentButton.disabled) return
-      const [id, action] = agentButton.dataset.agent.split(':')
+      const [id, action] = agentButton.dataset.agent!.split(':')
       return agentDo(id, action)
     }
     if (at('[data-ag-all]')) return connectAll()
     // DSH's hook bridge again, its packages from npmmirror (picked by the person).
-    const mirror = at('[data-dsh-mirror]')
+    const mirror = at<HTMLButtonElement>('[data-dsh-mirror]')
     if (mirror) return mirror.disabled ? undefined : dshSwitch(failed.dsh?.via || 'bridge', 'npmmirror')
     // A row opened in place, or closed; one at a time. Its 怎么信任 (Codex's step) opens it.
     const agentRowAt = at('[data-ag-open]')
     if (agentRowAt) {
-      const id = agentRowAt.dataset.agOpen
+      const id = agentRowAt.dataset.agOpen!
       go({ type: 'agent', id, keep: agentRowAt.hasAttribute('data-ag-keep') })
       draw()
       relayout()
@@ -1351,7 +1460,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // are open).
     const cpuSensors = at('[data-cpu-sensors]')
     if (cpuSensors) {
-      return pet.settings.cpuSensors(cpuSensors.dataset.cpuSensors).then(got => {
+      return pet.settings.cpuSensors(cpuSensors.dataset.cpuSensors!).then(got => {
         st.snap = got.snapshot
         draw()
         relayout()
@@ -1377,18 +1486,18 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
     const site = at('[data-site]')
     // Google's pages for the address being added (data-for), when it says.
-    if (site) return pet.settings.openSite(site.dataset.site, site.dataset.for)
+    if (site) return pet.settings.openSite(site.dataset.site!, site.dataset.for)
   })
 
   // A mail account's setup: what was clicked, if it was its. True when it was.
-  function handleMail(at) {
+  function handleMail(at: At) {
     // How a letter goes to an agent: a model or effort picked, a picker
     // opened.
     const picked = at('[data-pick]')
     if (picked && st.menuPick) {
       const pick = st.menuPick
       closeMenu()
-      pick(picked.dataset.pick)
+      pick(picked.dataset.pick!)
       return true
     }
     const picker = at('[data-picker]')
@@ -1410,35 +1519,36 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // The Mail page's proxy, the General page's Network proxy: its mode, a manual one's kind.
     const way = at('[data-seg^="mailProxy."] > span, [data-seg^="netProxy."] > span')
     if (way) {
-      const [key, field] = way.parentElement.dataset.seg.split('.')
-      setProxy(key, { [field]: way.dataset.value })
+      const [key, field] = way.parentElement!.dataset.seg!.split('.')
+      setProxy(key as Way, { [field]: way.dataset.value })
       return true
     }
     // The inbox and a letter: handed to an agent (from a button or the
     // menu), starred, the menu, back, again, more, another inbox or filter,
     // one opened; more asked in a talk.
-    const handing = at('[data-hand]')
+    // (A button with no account of its own is the open letter's.)
+    const handing = at<HTMLButtonElement>('[data-hand]')
     if (handing) {
-      const [agent, how] = handing.dataset.hand.split(':')
+      const [agent, how] = handing.dataset.hand!.split(':')
       const ref = handing.dataset.account ? handing.dataset : { account: st.reading?.account, uid: st.reading?.uid, folder: st.reading?.folder }
-      if (!handing.disabled) hand(ref.account, Number(ref.uid), agent, how, ref.folder || 'inbox')
+      if (!handing.disabled) hand(ref.account!, Number(ref.uid), agent, how, ref.folder || 'inbox')
       return true
     }
     // An open letter's pictures from elsewhere: shown this once, for its
     // sender always, or not for its sender any more.
     const pictures = at('[data-pics]')
     if (pictures) {
-      setPictures(pictures.dataset.pics)
+      setPictures(pictures.dataset.pics!)
       return true
     }
     const starring = at('[data-star]')
     if (starring) {
       closeMenu()
-      star(starring.dataset.star, Number(starring.dataset.uid), starring.dataset.folder || 'inbox')
+      star(starring.dataset.star!, Number(starring.dataset.uid), starring.dataset.folder || 'inbox')
       return true
     }
     if (at('[data-talk-send]')) {
-      const box = body.querySelector<HTMLButtonElement>('[data-talk]')
+      const box = body.querySelector<HTMLInputElement>('[data-talk]')
       if (box && !box.disabled) say(box)
       return true
     }
@@ -1463,7 +1573,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
     const filter = at('[data-seg="mail.filter"] > span')
     if (filter) {
-      inbox.filter = filter.dataset.value
+      inbox.filter = filter.dataset.value!
       loadInbox(false)
       return true
     }
@@ -1501,7 +1611,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // A conversation folded out or in (its ›).
     const twisty = at('[data-twisty]')
     if (twisty) {
-      const key = twisty.dataset.twisty
+      const key = twisty.dataset.twisty!
       if (!expanded.delete(key)) expanded.add(key)
       redrawMail()
       return true
@@ -1512,12 +1622,12 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       if (twoPanes()) st.writing = false
       // A conversation folds out as its letter opens.
       if (letter.dataset.thread) expanded.add(letter.dataset.thread)
-      openLetter(letter.dataset.account, Number(letter.dataset.letter), letter.dataset.folder || 'inbox')
+      openLetter(letter.dataset.account!, Number(letter.dataset.letter), letter.dataset.folder || 'inbox')
       return true
     }
     const turned = at('[data-sw^="mail:"]')
     if (turned) {
-      const a = (st.snap.mail || []).find(x => x.id === turned.dataset.sw.slice(5))
+      const a = (st.snap.mail || []).find(x => x.id === turned.dataset.sw!.slice(5))
       if (a) pet.mail.switch(a.id, !a.on).then(got => ((st.snap = got), draw()))
       return true
     }
@@ -1553,7 +1663,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const mfpick = at('[data-mfpick]')
     if (mfpick && st.mailForm) {
       const f = st.mailForm
-      const key = mfpick.dataset.mfpick
+      const key = mfpick.dataset.mfpick as MailPick
       // The account's own way to its servers; manual for the first time,
       // the address the Mail page or Windows has.
       if (key === 'proxyMode' || key === 'proxyKind') {
@@ -1576,28 +1686,30 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         // The usual port for the way, if the port was the other way's.
         const usual = out ? { ssl: 465, starttls: 587, plain: 587, auto: '' } : { ssl: 993, starttls: 143, plain: 143, auto: '' }
         const portKey = out ? 'smtpPort' : 'port'
-        if (isWay && (out ? ['465', '587', '25', ''] : ['993', '143', '']).includes(String(f[portKey] ?? ''))) f[portKey] = usual[value]
+        if (isWay && (out ? ['465', '587', '25', ''] : ['993', '143', '']).includes(String(f[portKey] ?? ''))) f[portKey] = usual[value as keyof typeof usual]
         if (out) f.probedOut = null
         else f.probed = null
         draw()
       })
       return true
     }
-    if (at('[data-mail-probe]')) {
+    // The form's own buttons, while it is still there: after 删除's second
+    // press it stays up until mail_remove answers, with no form behind it.
+    if (at('[data-mail-probe]') && st.mailForm) {
       retest()
       return true
     }
-    if (at('[data-mail-find]')) {
+    if (at('[data-mail-find]') && st.mailForm) {
       findServer()
       return true
     }
-    if (at('[data-mail-save]')) {
+    if (at('[data-mail-save]') && st.mailForm) {
       saveAccount()
       return true
     }
     const remove = at('[data-mail-remove]')
     if (remove) {
-      const id = remove.dataset.mailRemove
+      const id = remove.dataset.mailRemove!
       if (st.mailDelete !== id) {
         st.mailDelete = id
         draw()
@@ -1611,7 +1723,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     return false
   }
 
-  function handleWriting(at) {
+  function handleWriting(at: At) {
     if (at('[data-w-new]')) {
       write('new')
       return true
@@ -1620,7 +1732,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     if (re) {
       closeMenu()
       const ref = re.dataset.account ? re.dataset : { account: st.reading?.account, uid: st.reading?.uid, folder: st.reading?.folder }
-      writeAbout(re.dataset.wReply, ref.account, Number(ref.uid), ref.folder || 'inbox')
+      // (A reply with no account of its own is the open letter's.)
+      writeAbout(re.dataset.wReply!, ref.account!, Number(ref.uid), ref.folder || 'inbox')
       return true
     }
     const use = at('[data-w-use]')
@@ -1688,7 +1801,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
     const unfile = at('[data-w-unfile]')
     if (unfile) {
-      const key = unfile.dataset.wUnfile
+      const key = unfile.dataset.wUnfile!
       const list = key[0] === 'o' ? st.draft.forward?.files : st.draft.files
       list?.splice(Number(key.slice(1)), 1)
       st.draft.touched = true
@@ -1699,7 +1812,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     return false
   }
 
-  function redrawMail(focus?) {
+  function redrawMail(focus?: string | null) {
     draw()
     relayout()
     if (focus) requestAnimationFrame(() => body.querySelector(focus)?.focus())
@@ -1707,8 +1820,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   // The server for the address, looked up as Thunderbird does; filled in
   // when found, else the fields to fill.
+  // (These are pressed in the form, or Enter in its boxes: there is one.)
   async function findServer() {
-    const f = st.mailForm
+    const f = st.mailForm!
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.address.trim())) {
       f.result = { bad: true, text: T('mail.badAddress') }
       return redrawMail('[data-mf="address"]')
@@ -1737,7 +1851,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   // The outgoing server of an account from before the pet sent mail,
   // looked up while its settings are open; filled in if none was typed.
-  async function findOutgoing(f) {
+  async function findOutgoing(f: MailForm) {
     f.findingOut = true
     const got = await pet.mail.discover(f.address, formProxy(f))
     f.findingOut = false
@@ -1748,14 +1862,14 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   // Re-test: both servers, the outgoing one where there is one.
   async function retest() {
-    const f = st.mailForm
+    const f = st.mailForm!
     await probeServer()
     if (st.mailForm === f && String(f.smtpHost || '').trim()) await probeOut()
   }
 
   // The outgoing server tried as the incoming one is below.
   async function probeOut() {
-    const f = st.mailForm
+    const f = st.mailForm!
     f.busy = 'probe'
     f.probedOut = null
     redrawMail()
@@ -1775,7 +1889,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // Re-test: the server tried without signing in; the way and port, when
   // they were to be detected, set to what answered. True when it did.
   async function probeServer() {
-    const f = st.mailForm
+    const f = st.mailForm!
     if (!String(f.host || '').trim()) {
       f.result = { bad: true, text: T('mail.err.fields') }
       redrawMail('[data-mf="host"]')
@@ -1802,7 +1916,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // domain's server, what the user name may be). A way or port still to be
   // detected is, first.
   async function saveAccount() {
-    const f = st.mailForm
+    const f = st.mailForm!
     if (!f.id && !f.password) {
       f.result = { bad: true, text: T('mail.err.password') }
       return redrawMail('[data-mf="password"]')
@@ -1835,7 +1949,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       st.mailForm = null
       st.snap = got.snapshot
     } else {
-      const domain = got.error?.kind === 'login' && (got.auths || []).some(a => a === 'ntlm' || a === 'gssapi')
+      const domain = got.error?.kind === 'login' && (got.auths || []).some((a: string) => a === 'ntlm' || a === 'gssapi')
       const where = got.out ? { host: outHost, port: f.smtpPort, proxy: account.proxy } : account
       f.result = {
         bad: true,
@@ -1848,15 +1962,15 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   layer.addEventListener('input', e => {
-    if ((e.target as HTMLElement).dataset.mf && st.mailForm) st.mailForm[(e.target as HTMLElement).dataset.mf] = (e.target as HTMLInputElement).value
-    if ((e.target as HTMLElement).dataset.proxyAt !== undefined) st.proxyTyped = { key: (e.target as HTMLElement).dataset.proxyAt, text: (e.target as HTMLInputElement).value, bad: false }
+    if ((e.target as HTMLElement).dataset.mf && st.mailForm) st.mailForm[(e.target as HTMLElement).dataset.mf as MailBox] = (e.target as HTMLInputElement).value
+    if ((e.target as HTMLElement).dataset.proxyAt !== undefined) st.proxyTyped = { key: (e.target as HTMLElement).dataset.proxyAt!, text: (e.target as HTMLInputElement).value, bad: false }
     if ((e.target as HTMLElement).dataset.w && st.draft) {
-      st.draft[(e.target as HTMLElement).dataset.w] = (e.target as HTMLInputElement).value
+      st.draft[(e.target as HTMLElement).dataset.w as DraftBox] = (e.target as HTMLInputElement).value
       st.draft.touched = true
       st.dropSure = false
       keepDraft()
     }
-    if ((e.target as HTMLElement).dataset.ilook) ilookInput(e.target, false)
+    if ((e.target as HTMLElement).dataset.ilook) ilookInput(e.target as HTMLInputElement, false)
     if ((e.target as HTMLElement).id === 's-ref') {
       st.typedRef = (e.target as HTMLInputElement).value
       // Not mid-word in an input method: once the word is chosen.
@@ -1867,7 +1981,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       market.query = (e.target as HTMLInputElement).value
       draw()
     }
-    if ((e.target as HTMLElement).dataset.field) drafts[(e.target as HTMLElement).dataset.field] = (e.target as HTMLInputElement).value
+    if ((e.target as HTMLElement).dataset.field) drafts[(e.target as HTMLElement).dataset.field!] = (e.target as HTMLInputElement).value
     if ((e.target as HTMLElement).dataset.mon) drafts[`mon:${(e.target as HTMLElement).dataset.mon}`] = (e.target as HTMLInputElement).value
     if ((e.target as HTMLElement).dataset.hold) drafts['hold:secs'] = (e.target as HTMLInputElement).value
   })
@@ -1882,11 +1996,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // A plugin's setting kept once typed (Enter, or leaving the box); a
   // number that is none goes back to what it was.
   layer.addEventListener('change', e => {
-    if ((e.target as HTMLElement).matches('[data-w-file]')) return addFiles(e.target)
-    if ((e.target as HTMLElement).dataset.ilook) return ilookInput(e.target, true)
-    if ((e.target as HTMLElement).dataset.proxyAt !== undefined) return proxyAddress((e.target as HTMLElement).dataset.proxyAt, (e.target as HTMLInputElement).value)
-    if ((e.target as HTMLElement).dataset.mon) return monitorField((e.target as HTMLElement).dataset.mon)
-    if ((e.target as HTMLElement).dataset.hold) return holdTyped(e.target)
+    if ((e.target as HTMLElement).matches('[data-w-file]')) return addFiles(e.target as HTMLInputElement)
+    if ((e.target as HTMLElement).dataset.ilook) return ilookInput(e.target as HTMLInputElement, true)
+    if ((e.target as HTMLElement).dataset.proxyAt !== undefined) return proxyAddress((e.target as HTMLElement).dataset.proxyAt as Way, (e.target as HTMLInputElement).value)
+    if ((e.target as HTMLElement).dataset.mon) return monitorField((e.target as HTMLElement).dataset.mon!)
+    if ((e.target as HTMLElement).dataset.hold) return holdTyped(e.target as HTMLInputElement)
     const key = (e.target as HTMLElement).dataset.field
     if (!key || !(key in drafts)) return
     const value = drafts[key].trim()
@@ -1900,7 +2014,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       if (own.type === 'number' && value && !Number.isFinite(n)) return draw()
       return setPlugin(id, { [name]: own.type === 'number' && value ? n : value })
     }
-    const field = ((st.snap.plugins || []).find(p => p.id === id)?.params || []).find(f => f.name === name)
+    const field = ((st.snap.plugins || []).find(p => p.id === id)?.params || []).find((f: PluginParam) => f.name === name)
     if (!field || (field.kind === 'number' && value && !(Number(value) > 0))) return draw()
     setPlugin(id, { [name]: value })
   })
@@ -1908,7 +2022,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // How the monitor reaches LibreHardwareMonitor, kept once typed: a port
   // that is none goes back to what it was; the password goes to Windows'
   // Credential Manager (lhm.rs keep_password), an empty one changes nothing.
-  function monitorField(name) {
+  function monitorField(name: string) {
     const key = `mon:${name}`
     if (!(key in drafts)) return
     const typed = drafts[key]
@@ -1926,7 +2040,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // The seconds typed for how long endings stay, kept once Enter is pressed
   // or the box is left: rounded, within 3 to 600 (Flow.holdSecs), shown so
   // at once; no number goes back to what is kept.
-  function holdTyped(box) {
+  function holdTyped(box: HTMLInputElement) {
     delete drafts['hold:secs']
     const secs = Flow.holdSecs(box.value)
     const kept = st.snap.settings.hold
@@ -1945,7 +2059,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   })
 
   // A plugin's settings changed, the others kept.
-  function setPlugin(id, change) {
+  function setPlugin(id: string, change: Record<string, unknown>) {
     const all = st.snap.settings.plugins || {}
     return patch({ plugins: { ...all, [id]: { ...(all[id] || {}), ...change } } })
   }
@@ -1978,7 +2092,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         return draw()
       }
 
-      const parts = []
+      const parts: string[] = []
       if (e.ctrlKey) parts.push('Ctrl')
       if (e.altKey) parts.push('Alt')
       if (e.shiftKey) parts.push('Shift')
@@ -1997,9 +2111,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       const combo = parts.join('+')
 
       const s = st.snap.settings
-      const defaults = { shortcutApprove: 'Alt+Y', shortcutDeny: 'Alt+N', shortcutIsland: 'Alt+W' }
+      const defaults: Record<string, string> = { shortcutApprove: 'Alt+Y', shortcutDeny: 'Alt+N', shortcutIsland: 'Alt+W' }
       const others = ['shortcutApprove', 'shortcutDeny', 'shortcutIsland'].filter(k => k !== key)
-      if (others.some(k => (s[k] ?? defaults[k]).toLowerCase() === combo.toLowerCase())) {
+      if (others.some(k => (s[k as ShortcutKey] ?? defaults[k]).toLowerCase() === combo.toLowerCase())) {
         setRecording(null)
         toast(T('s.shortcutDuplicate'))
         return draw()
@@ -2032,7 +2146,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       if (e.key === 'Enter' && (e.target as HTMLElement).id === 's-ref' && !e.isComposing) layer.querySelector('[data-fetch]')?.click()
       if (e.key === 'Enter' && ((e.target as HTMLElement).dataset.field || (e.target as HTMLElement).dataset.mon || (e.target as HTMLElement).dataset.hold || (e.target as HTMLElement).dataset.proxyAt !== undefined)) (e.target as HTMLElement).blur()
       if (e.key === 'Enter' && (e.target as HTMLElement).dataset.mf) layer.querySelector('[data-mail-find]:not([disabled]), [data-mail-save]:not([disabled])')?.click()
-      if (e.key === 'Enter' && (e.target as HTMLElement).dataset.talk && !e.isComposing) say(e.target)
+      if (e.key === 'Enter' && (e.target as HTMLElement).dataset.talk && !e.isComposing) say(e.target as HTMLInputElement)
       return
     }
     // Two panes: the letter above or below in the list.
@@ -2051,7 +2165,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
   })
 
-  pet.onSettings(({ tab: next }: { tab?: string } = {}) => open(next))
+  // (island/front.rs and stow.rs always send a tab: '' for none.)
+  pet.onSettings(({ tab: next }: { tab?: string } = {}) => open(next!))
   pet.onSettingsChanged(got => {
     if (!st.isOpen) return
     st.snap = got
@@ -2075,8 +2190,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     redraw: () => draw(),
     close,
     // The letter to show once the Mail page opens ({ account, uid }).
-    openLetter: target => (st.letterToOpen = target),
+    openLetter: (target: { account: string; uid: number; folder?: string }) => (st.letterToOpen = target),
     // The plugin whose settings are folded out once the plugins page opens.
-    openPlugin: id => (st.openPlugin = String(id || '')),
+    openPlugin: (id: unknown) => (st.openPlugin = String(id || '')),
   }
 }

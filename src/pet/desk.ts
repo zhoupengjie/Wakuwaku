@@ -35,6 +35,41 @@ import * as WCards from './wcards.ts'
 import * as WDesk from './wdesk.ts'
 import * as Widgets from './widgets.ts'
 
+// What desk.rs says of this display (desk:state; what each is, below).
+export interface DeskHere extends G.Here {
+  sf?: number
+  size?: number[]
+  work: number[]
+  lang?: string
+  light?: boolean
+  accent?: { base?: string; light?: string; dark?: string } | null
+  detailed?: boolean
+  home?: string
+  bar?: Widgets.Runs | null
+  sprite?: string | null
+  layout?: G.Entry[]
+}
+// An entry drawn here: its element, its rect on the grid and where it is
+// now (x, y: as it is dragged too); key, shape, painted: what it shows,
+// how it is built, where its glass was painted. Every entry but a board
+// has its size (deskgrid.ts isEntry): size! where it is not one.
+export interface DeskNode<E extends G.Entry = G.Entry> {
+  el: HTMLDivElement
+  entry: E
+  rect: G.Rect
+  key: string
+  x: number
+  y: number
+  shape?: string
+  painted?: string
+  loadingTimer?: Timer
+  shakeTimer?: Timer
+}
+export type BoardNode = DeskNode<G.Board>
+// desk:paper's picture, and it blurred (mica.ts glassPaper).
+type Paper = Parameters<typeof Mica.glassPaper>[0]
+type Glass = ReturnType<typeof Mica.glassPaper>
+
 // The desktop's page (desk.html, a window on each display with widgets):
 // made by desk-main.ts. What it hands back: what is drawn where, for the
 // tests' eyes and the drop from her picker (desk-drop.ts, Desk.inner).
@@ -43,40 +78,41 @@ export function deskPage() {
   const { listen } = window.__TAURI__.event
   const LABEL = window.__TAURI_INTERNALS__?.metadata?.currentWebview?.label || ''
   const target: TauriTarget = { kind: 'WebviewWindow', label: LABEL }
-  const desk = document.getElementById('desk')
+  const desk = document.getElementById('desk')!
 
   // What desk.rs says: this display (key, primary, keys of those there,
   // work area, size), her language, Windows' mode, the specifics setting,
   // her home and what its taskbar shows, her sheet; the layout (deskLayout,
-  // every display's).
-  let here = null
-  let layout = []
-  let all = []
+  // every display's). null until it first says so; what reads here! runs
+  // only after that (draw looks first).
+  let here: DeskHere | null = null
+  let layout: G.Entry[] = []
+  let all: Widgets.Widget[] = []
   // The wallpaper blurred: for the widgets (30) and, while a board is here,
   // for the boards (40); { canvas, margin, scale } each.
-  let paper = null
-  let paper40 = null
+  let paper: Glass | null = null
+  let paper40: Glass | null = null
   let paperTurn = 0
-  let lastPaper = null
-  let paper40For = null
+  let lastPaper: Paper | null = null
+  let paper40For: Paper | null = null
   // The icons on this display (desk_icons), as rects.
-  let icons = []
-  const nodes = new Map()
-  const tops = new Map()
-  let spots = new Map()
-  const drawn = new Set()
-  const firstSeen = new Map()
-  let menu = null
-  let drag = null
+  let icons: G.Rect[] = []
+  const nodes = new Map<string, DeskNode>()
+  const tops = new Map<string, number>()
+  let spots = new Map<string, number[]>()
+  const drawn = new Set<string>()
+  const firstSeen = new Map<string, number>()
+  let menu: { id: string; kind: string; tile: number } | null = null
+  let drag: Drag | null = null
   let turnedAt = 0
-  let renaming = null
+  let renaming: { n: BoardNode; input: HTMLInputElement; save: boolean } | null = null
   // A board's 移除 being asked ({ id }), or null.
-  let asking = null
+  let asking: { id: string } | null = null
   // Those picked with Ctrl (entry ids: ones alone, stacks), the rectangle
   // being dragged for them, a new board to name once it is drawn.
-  const selected = new Set()
-  let marquee = null
-  let renameNext = null
+  const selected = new Set<string>()
+  let marquee: { x0: number; y0: number; id: number; base: Set<string> } | null = null
+  let renameNext: string | null = null
   // The keyboard taken (desk_type), while something here wants it: a name
   // being typed, a board's 移除 asked, widgets picked (Esc lets them go).
   let keysTaken = false
@@ -88,23 +124,23 @@ export function deskPage() {
   }
 
   const lang = () => here?.lang || 'zh'
-  const t = (key, vars?) => I18n.t(lang(), key, vars)
+  const t = (key: string, vars?: Record<string, unknown>) => I18n.t(lang(), key, vars)
   const esc = WCards.esc
   const ctx = () => ({ lang: lang(), light: !!here?.light, detailed: here?.detailed !== false, now: Date.now(), all })
   const newId = () => `w${Date.now().toString(36).slice(-6)}${Math.random().toString(36).slice(2, 6)}`
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
-  const grid = () => G.gridOf(here.work)
+  const grid = () => G.gridOf(here!.work)
   const shown = () => (here ? G.shownHere(layout, here) : [])
-  const visiting = e => !!e.d && e.d !== here.key
-  const find = id => layout.find(e => e.id === id)
-  const isBoard = n => !!n && G.isBoard(n.entry)
+  const visiting = (e: G.Entry) => !!e.d && e.d !== here!.key
+  const find = (id: string) => layout.find(e => e.id === id)
+  const isBoard = (n: DeskNode | null | undefined): n is BoardNode => !!n && G.isBoard(n.entry)
 
   // Plugins' own views in the medium and large cards (views.ts): their data
   // asked of her as it changes, what they send their main.js passed on, the
   // card's colours and fonts given them; the cards drawn again as one comes
   // or goes. Not while desk.rs says this desktop is not seen or nobody is
   // about (desk:views).
-  const cssOf = name => getComputedStyle(document.body).getPropertyValue(name).trim()
+  const cssOf = (name: string) => getComputedStyle(document.body).getPropertyValue(name).trim()
   const views = Views
     ? Views.boot({
         ask: widget => invoke('addon_view', { what: 'data', widget, message: null }),
@@ -137,7 +173,7 @@ export function deskPage() {
       drawn.add(e.id)
       for (const m of G.membersOf(e)) if (!firstSeen.has(seenKey(e, m))) firstSeen.set(seenKey(e, m), Date.now())
     }
-    if (moved.length) keep(entries.filter(e => moved.includes(e.id)).map(e => G.placed(e, here.key, at.get(e.id), visiting(e))))
+    if (moved.length) keep(entries.filter(e => moved.includes(e.id)).map(e => G.placed(e, here!.key, at.get(e.id)!, visiting(e))))
     const ids = new Set(entries.map(e => e.id))
     for (const [id, n] of nodes)
       if (!ids.has(id)) {
@@ -148,7 +184,7 @@ export function deskPage() {
         drawn.delete(id)
       }
     for (const id of [...selected]) if (!ids.has(id)) selected.delete(id)
-    for (const e of entries) drawEntry(e, at.get(e.id))
+    for (const e of entries) drawEntry(e, at.get(e.id)!)
     // The plugins' views whose card went with what was drawn anew.
     views?.sweep()
     if (menu && !nodes.has(menu.id)) closeMenu()
@@ -156,7 +192,7 @@ export function deskPage() {
     if (asking) nodes.has(asking.id) ? placeAsk() : endAsk(false)
     // A board just made of those picked: its name typed at once (as 改名).
     if (renameNext && nodes.has(renameNext)) {
-      const n = nodes.get(renameNext)
+      const n = nodes.get(renameNext)!
       renameNext = null
       startRename(n)
     }
@@ -168,10 +204,11 @@ export function deskPage() {
     shapes()
   }
 
-  function drawEntry(e, cell) {
+  function drawEntry(e: G.Entry, cell: number[]) {
     let n = nodes.get(e.id)
     if (!n) {
-      n = { el: document.createElement('div'), key: '', x: 0, y: 0 }
+      // Its entry and rect given just below.
+      n = { el: document.createElement('div'), key: '', x: 0, y: 0 } as DeskNode
       n.el.dataset.id = e.id
       desk.append(n.el)
       nodes.set(e.id, n)
@@ -182,7 +219,7 @@ export function deskPage() {
     const key = contentKey(e)
     if (key !== n.key) {
       n.key = key
-      if (G.isBoard(e)) fillBoard(n)
+      if (G.isBoard(e)) fillBoard(n as BoardNode)
       else fill(n)
     }
     if (!(drag && drag.n === n && drag.mode !== 'press' && drag.tile < 0)) place(n, n.rect.x, n.rect.y)
@@ -192,23 +229,23 @@ export function deskPage() {
   // its widgets, the mode, the language, the specifics, and a member just
   // put there (loading) or not; a board's name as shown too; the plugins'
   // views here (made, gone, allowed or not: views.stamp).
-  function contentKey(e) {
+  function contentKey(e: G.Entry) {
     const ws = G.membersOf(e).map(m => Widgets.sourcesOf(m, all).map(w => [w.id, w.label, w.value, w.detail, w.color, w.private, w.viewRev != null]))
     const loading = G.membersOf(e).map(m => isLoading(e, m))
     const board = G.isBoard(e) ? [boardLabel(e), e.folded, e.items.map(x => [x.size, x.at])] : null
-    return JSON.stringify([e.type, e.size, G.membersOf(e), topOf(e), ws, here.light, lang(), here.detailed, here.sprite, loading, board, views?.stamp || 0])
+    return JSON.stringify([e.type, e.size, G.membersOf(e), topOf(e), ws, here!.light, lang(), here!.detailed, here!.sprite, loading, board, views?.stamp || 0])
   }
-  const topOf = e => (G.isStack(e) ? Math.min(tops.get(e.id) || 0, e.items.length - 1) : 0)
+  const topOf = (e: G.Entry) => (G.isStack(e) ? Math.min(tops.get(e.id) || 0, e.items.length - 1) : 0)
   // Just put there, its plugin starting: a glint where its value goes, five
   // seconds at most (the design session), then greyed with "no data".
   const LOADING_MS = 5000
-  const seenKey = (e, m) => `${e.id}/${G.keyOf(m)}`
-  const isLoading = (e, m) => !Widgets.sourcesOf(m, all).length && Date.now() - (firstSeen.get(seenKey(e, m)) || 0) < LOADING_MS
+  const seenKey = (e: G.Entry, m: G.Member) => `${e.id}/${G.keyOf(m)}`
+  const isLoading = (e: G.Entry, m: G.Member) => !Widgets.sourcesOf(m, all).length && Date.now() - (firstSeen.get(seenKey(e, m)) || 0) < LOADING_MS
 
   // A member's face at a size (the entry's, or a tile's): its widget's (a
   // plugin's first, which shows the others), or, with nothing to say, its
   // name greyed.
-  function face(e, m, size = e.size) {
+  function face(e: G.Entry, m: G.Member, size = e.size!) {
     const ws = Widgets.sourcesOf(m, all)
     const c = ctx()
     if (!ws.length) {
@@ -224,7 +261,7 @@ export function deskPage() {
   // A member with nothing to say: the name it was put there with, else its
   // plugin's (a built-in one's), numbered when several here would read the
   // same (wdesk.ts memberName): never an id, never a bare "widget".
-  function emptyName(e, m, c) {
+  function emptyName(e: G.Entry, m: G.Member, c: WCards.Ctx) {
     if (m.name) return m.name
     const empty = shown().flatMap(x => G.membersOf(x)).filter(x => !x.name && !Widgets.sourcesOf(x, all).length)
     const base = WDesk.memberName(m, c)
@@ -233,20 +270,20 @@ export function deskPage() {
   }
 
   const TOOLS = `<div class="tools"><button type="button" data-act="size" title="">&#xE740;</button><button type="button" data-act="more" title="">&#xE712;</button></div>`
-  const CARD = size => `<div class="wd ${size}"><canvas class="wpaper"></canvas><div class="wtint"></div><div class="wbody"></div></div>`
+  const CARD = (size: string) => `<div class="wd ${size}"><canvas class="wpaper"></canvas><div class="wtint"></div><div class="wbody"></div></div>`
   // Each member's place under the one on top: 0 on top, then the two
   // layers that show, then the rest unseen behind them.
   const LAYERS = ['top', 'b1', 'b2']
-  const layerOf = (i, top, n) => LAYERS[(i - top + n) % n] || 'rest'
-  const toolTitles = root => {
+  const layerOf = (i: number, top: number, n: number) => LAYERS[(i - top + n) % n] || 'rest'
+  const toolTitles = (root: HTMLElement) => {
     for (const b of root.querySelectorAll('.tools button')) b.title = t(b.dataset.act === 'size' ? 'menu.size' : 'desk.more')
   }
   // A member's words into its card's body, as they changed; drawn by its
   // plugin's own view over that, where it has one and this card may show it
   // (medium or large, alone, on top of a stack, a tile of a board unfolded:
   // views.ts). key: the card's, its entry's id and its place in it.
-  function fillBody(wd, e, m, size, key, mayView = true) {
-    const body = wd?.querySelector('.wbody')
+  function fillBody(wd: HTMLElement | null, e: G.Entry, m: G.Member, size: string, key: string, mayView = true) {
+    const body = wd?.querySelector<HTMLElement & { _html?: string }>('.wbody')
     if (!body) return
     const f = face(e, m, size)
     if (body._html !== f.html) {
@@ -254,14 +291,15 @@ export function deskPage() {
       body._html = f.html
       fillHer(body)
     }
-    wd.classList.toggle('empty-w', !f.w)
-    if (f.color) wd.style.setProperty('--c', f.color)
-    else wd.style.removeProperty('--c')
+    // body is in it, so wd is there.
+    wd!.classList.toggle('empty-w', !f.w)
+    if (f.color) wd!.style.setProperty('--c', f.color)
+    else wd!.style.removeProperty('--c')
     views?.place(wd, key, mayView ? f.w : null, size)
   }
   // Loading (just put there, its plugin starting): drawn again once that is
   // over, no data then greyed; one timer, not a loop.
-  function loadingTimer(n, e) {
+  function loadingTimer(n: DeskNode, e: G.Entry) {
     const left = G.membersOf(e).filter(m => isLoading(e, m)).map(m => LOADING_MS + 50 - (Date.now() - (firstSeen.get(seenKey(e, m)) || 0)))
     clearTimeout(n.loadingTimer)
     if (left.length) n.loadingTimer = setTimeout(draw, Math.max(0, Math.max(...left)))
@@ -270,7 +308,7 @@ export function deskPage() {
   // Built anew only when its shape changes (alone or stacked, its size, its
   // members); else only the words that changed, in place (the monitor's
   // every two seconds: its words alone, not its glass).
-  function fill(n) {
+  function fill(n: DeskNode) {
     const e = n.entry
     const shape = JSON.stringify([e.type, e.size, G.membersOf(e).map(G.keyOf)])
     const top = topOf(e)
@@ -278,9 +316,9 @@ export function deskPage() {
     n.el.style.width = n.el.style.height = ''
     if (shape !== n.shape) {
       n.shape = shape
-      if (!G.isStack(e)) n.el.innerHTML = CARD(e.size)
+      if (!G.isStack(e)) n.el.innerHTML = CARD(e.size!)
       else {
-        const layers = e.items.map((m, i) => `<div class="layer ${layerOf(i, top, e.items.length)}" data-i="${i}">${CARD(e.size)}</div>`).join('')
+        const layers = e.items.map((m, i) => `<div class="layer ${layerOf(i, top, e.items.length)}" data-i="${i}">${CARD(e.size!)}</div>`).join('')
         const dots = e.items.map((_, i) => `<button type="button" data-p="${i}" aria-label="${i + 1}"></button>`).join('')
         n.el.innerHTML = `${layers}<div class="sdots">${dots}</div>`
       }
@@ -289,7 +327,7 @@ export function deskPage() {
       toolTitles(n.el)
       n.painted = ''
     }
-    G.membersOf(e).forEach((m, i) => fillBody(n.el.querySelectorAll('.wd')[i], e, m, e.size, `${e.id}:${i}`, !G.isStack(e) || i === top))
+    G.membersOf(e).forEach((m, i) => fillBody(n.el.querySelectorAll('.wd')[i], e, m, e.size!, `${e.id}:${i}`, !G.isStack(e) || i === top))
     if (G.isStack(e)) {
       n.el.querySelectorAll('.layer').forEach((l, i) => {
         for (const k of ['top', 'b1', 'b2', 'rest', 'gone']) l.classList.toggle(k, k === layerOf(i, top, e.items.length))
@@ -306,7 +344,7 @@ export function deskPage() {
   // --- A board ---------------------------------------------------------------------------------
   // Its name: its own, else 工作台; when several have none, the first is
   // still 工作台 and the others 工作台 2, 工作台 3 (the design session).
-  function boardLabel(b) {
+  function boardLabel(b: G.Entry) {
     if (b.name) return b.name
     const at = layout.filter(x => G.isBoard(x) && !x.name).findIndex(x => x.id === b.id)
     return at > 0 ? t('desk.boardN', { n: at + 1 }) : t('desk.board')
@@ -315,7 +353,7 @@ export function deskPage() {
   // Its pane: its own picture of the wallpaper (blurred 40), its glass, its
   // title bar; its tiles flat on it, each where its cell is, no glass of their
   // own; an empty one a dashed box to drop into.
-  function fillBoard(n) {
+  function fillBoard(n: BoardNode) {
     const e = n.entry
     const box = G.boardBox(e)
     const shape = JSON.stringify(['board', !!e.folded, e.items.map(x => [G.keyOf(x), x.size, x.at])])
@@ -346,8 +384,8 @@ export function deskPage() {
       const more = e.items.length > BOARD_ICONS ? `<span class="bmore">+${e.items.length - BOARD_ICONS}</span>` : ''
       // Empty: its name alone (no 「0 个小工具」).
       const after = e.folded ? `<span class="bicons">${glyphs.join('')}${more}</span>` : e.items.length ? `<span class="bcount">${esc(t('desk.boardCount', { n: e.items.length }))}</span>` : ''
-      n.el.querySelector('.btitle').innerHTML = `<b class="bname">${esc(boardLabel(e))}</b>${after}`
-      fillHer(n.el.querySelector('.btitle'))
+      n.el.querySelector('.btitle')!.innerHTML = `<b class="bname">${esc(boardLabel(e))}</b>${after}`
+      fillHer(n.el.querySelector('.btitle')!)
     }
     const [add, more, fold] = n.el.querySelectorAll('.bbtns button')
     add.title = t('desk.add')
@@ -362,12 +400,12 @@ export function deskPage() {
   }
 
   // Her face where today's glyph goes: the still first frame of her sheet.
-  function fillHer(root) {
+  function fillHer(root: HTMLElement) {
     for (const slot of root.querySelectorAll('.wher')) {
-      if (!here.sprite) continue
+      if (!here!.sprite) continue
       const px = slot.closest('.wmh, .bgl') ? 16 : 14
       const s = px * 0.00875
-      slot.style.backgroundImage = `url("${here.sprite}")`
+      slot.style.backgroundImage = `url("${here!.sprite}")`
       slot.style.backgroundSize = `${1536 * s}px ${2288 * s}px`
       slot.style.backgroundPosition = `${-(192 * s - px) / 2}px -2px`
     }
@@ -378,13 +416,13 @@ export function deskPage() {
   // down by dy (a stack's layers): its canvas given the part of the blurred
   // picture (src) that lies under it on the screen, so the two line up.
   const LAYER_FORM = { top: [1, 0], b1: [0.94, 13], b2: [0.88, 25], rest: [0.88, 25], gone: [0.96, -30] }
-  function paperFor(canvas, x, y, w, h, s = 1, dy = 0, src = paper) {
+  function paperFor(canvas: HTMLCanvasElement, x: number, y: number, w: number, h: number, s = 1, dy = 0, src = paper) {
     const dpr = devicePixelRatio || 1
     const cw = Math.round(w * dpr)
     const ch = Math.round(h * dpr)
     if (canvas.width !== cw) canvas.width = cw
     if (canvas.height !== ch) canvas.height = ch
-    const c = canvas.getContext('2d')
+    const c = canvas.getContext('2d')!
     if (!src) return c.clearRect(0, 0, cw, ch)
     const k = src.scale
     const sx = (x + (w / 2) * (1 - s) + src.margin) * k
@@ -396,17 +434,17 @@ export function deskPage() {
   // Each of its cards painted for where it is now; not again while that is
   // so (the words changing leave its glass as it is). A board: its pane, at
   // blur 40 (that of 30 until it is there); its tiles have none.
-  function paint(n, force = false) {
+  function paint(n: DeskNode, force = false) {
     if (isBoard(n)) {
       const box = G.boardBox(n.entry)
       const now = JSON.stringify([n.x, n.y, box.w, box.h, paperTurn, !!paper40, devicePixelRatio])
       if (!force && now === n.painted) return
       n.painted = now
-      const canvas = n.el.querySelector('.db > .wpaper')
+      const canvas = n.el.querySelector<HTMLCanvasElement>('.db > .wpaper')
       if (canvas) paperFor(canvas, n.x, n.y, box.w, box.h, 1, 0, paper40 || paper)
       return
     }
-    const { w, h } = G.sizePx(n.entry.size)
+    const { w, h } = G.sizePx(n.entry.size!)
     const cards = [...n.el.querySelectorAll('.wd')]
     const forms = cards.map(wd => {
       const layer = wd.parentElement?.classList.contains('layer') ? wd.parentElement : null
@@ -417,14 +455,14 @@ export function deskPage() {
     if (!force && now === n.painted) return
     n.painted = now
     cards.forEach((wd, i) => {
-      const canvas = wd.querySelector('.wpaper')
+      const canvas = wd.querySelector<HTMLCanvasElement>('.wpaper')
       if (!canvas) return
       const kind = forms[i]
-      const [s, dy] = LAYER_FORM[kind]
+      const [s, dy] = LAYER_FORM[kind as keyof typeof LAYER_FORM]
       paperFor(canvas, n.x, n.y, w, h, s, dy)
     })
   }
-  function place(n, x, y) {
+  function place(n: DeskNode, x: number, y: number) {
     n.x = Math.round(x)
     n.y = Math.round(y)
     n.el.style.transform = `translate(${n.x}px, ${n.y}px)`
@@ -433,14 +471,14 @@ export function deskPage() {
 
   // A new picture (desk:paper): blurred once, for all of them; once more at
   // 40 while a board is here.
-  async function setPaper(p) {
+  async function setPaper(p: Paper | null) {
     const mine = ++paperTurn
     if (!p) {
       paper = paper40 = null
       for (const n of nodes.values()) paint(n, true)
       return
     }
-    let img = null
+    let img: HTMLImageElement | null = null
     if (p.url) {
       img = new Image()
       img.src = p.url
@@ -452,7 +490,7 @@ export function deskPage() {
     }
     if (mine !== paperTurn) return
     lastPaper = p
-    const blurred = blur => {
+    const blurred = (blur: number) => {
       const { canvas, margin, scale } = Mica.glassPaper(p, img, { blur, saturate: 1.6 })
       return { canvas, margin, scale }
     }
@@ -469,14 +507,14 @@ export function deskPage() {
   // while one is open, a press elsewhere closes it).
   let sentShapes = ''
   function shapes() {
-    const list = []
+    const list: number[][] = []
     for (const n of nodes.values()) {
       if (isBoard(n)) {
         const { w, h } = G.boardBox(n.entry)
         list.push([n.x, n.y, w, h, 28])
         continue
       }
-      const { w, h } = G.sizePx(n.entry.size)
+      const { w, h } = G.sizePx(n.entry.size!)
       if (G.isStack(n.entry)) list.push([n.x, n.y, w + 18, h + 28, 22])
       else list.push([n.x, n.y, w, h, 22])
     }
@@ -491,13 +529,13 @@ export function deskPage() {
     sentShapes = now
     invoke('desk_shapes', { shapes: JSON.parse(now) }).catch(() => {})
   }
-  const hold = on => invoke('desk_hold', { on }).catch(() => {})
+  const hold = (on: boolean) => invoke('desk_hold', { on }).catch(() => {})
 
   // --- Kept: what changed, merged with the others' (desk.rs desk_keep) ------------------------
-  function keep(entries, gone = []) {
+  function keep(entries: G.Entry[], gone: string[] = []) {
     if (!entries.length && !gone.length) return
     const given = new Map(entries.map(e => [e.id, e]))
-    const out = []
+    const out: G.Entry[] = []
     for (const e of layout) {
       if (gone.includes(e.id)) continue
       out.push(given.get(e.id) || e)
@@ -507,7 +545,7 @@ export function deskPage() {
     invoke('desk_keep', { entries, gone }).catch(err => console.log('desk: not kept', err))
   }
   // A whole new layout kept as what changed in it.
-  function keepLayout(next) {
+  function keepLayout(next: G.Entry[]) {
     const was = new Map(layout.map(e => [e.id, JSON.stringify(e)]))
     const ids = new Set(next.map(e => e.id))
     keep(
@@ -519,11 +557,11 @@ export function deskPage() {
 
   // --- The pointer: hover, press, drag, drop -----------------------------------------------------
   // A board's tile under the pointer shows its buttons, as one alone does.
-  function hoverTile(n, tile) {
+  function hoverTile(n: DeskNode, tile: HTMLElement | null) {
     if (!isBoard(n)) return
     for (const x of n.el.querySelectorAll('.tile')) x.classList.toggle('hover', x === tile)
   }
-  function wire(n) {
+  function wire(n: DeskNode) {
     const el = n.el
     el.addEventListener('mouseenter', () => el.classList.add('hover'))
     el.addEventListener('mouseleave', () => {
@@ -532,7 +570,7 @@ export function deskPage() {
       hoverTile(n, null)
     })
     el.addEventListener('mouseover', ev => {
-      if (!drag) hoverTile(n, ev.target.closest('.tile'))
+      if (!drag) hoverTile(n, (ev.target as HTMLElement).closest('.tile'))
     })
     el.addEventListener('pointerdown', ev => press(ev, n))
     el.addEventListener('pointermove', ev => move(ev))
@@ -542,7 +580,7 @@ export function deskPage() {
       // What is under the pointer: the press took the pointer (press:
       // setPointerCapture), so the click and the double-click come to the
       // node itself, not to its name or tile (the VM, 2026-10-16).
-      const under = document.elementFromPoint(ev.clientX, ev.clientY) || ev.target
+      const under = document.elementFromPoint(ev.clientX, ev.clientY) || (ev.target as HTMLElement)
       if (under.closest('.tools, .sdots, .bbtns, input')) return
       if (isBoard(n) && under.closest('.bname')) return startRename(n)
       const tile = tileOf(under)
@@ -551,7 +589,7 @@ export function deskPage() {
     })
     el.addEventListener('contextmenu', ev => {
       ev.preventDefault()
-      if (ev.target.closest('input')) return
+      if ((ev.target as HTMLElement).closest('input')) return
       // One of several picked: the menu for all of them.
       if (selected.size > 1 && selected.has(n.entry.id)) return openMenu(n.entry.id, 'sel', { x: ev.clientX, y: ev.clientY })
       clearSelection()
@@ -561,7 +599,7 @@ export function deskPage() {
     el.addEventListener('click', ev => {
       // A button of the widget's own (what is playing: previous, play or
       // pause, next; wcards.ts actionsHTML): to its plugin, nothing else.
-      const wa = ev.target.closest('[data-wact]')
+      const wa = (ev.target as HTMLElement).closest('[data-wact]')
       if (wa) {
         ev.stopPropagation()
         // Asked of Rust here: this page has no bridge (bridge.ts is her
@@ -569,14 +607,14 @@ export function deskPage() {
         if (!wa.classList.contains('off')) invoke('widget_act', { id: String(wa.dataset.widget || ''), action: String(wa.dataset.wact || '') }).catch(() => false)
         return
       }
-      const b = ev.target.closest('.tools button')
+      const b = (ev.target as HTMLElement).closest('.tools button')
       if (b) {
         ev.stopPropagation()
         const r = b.getBoundingClientRect()
         const tile = isBoard(n) ? tileOf(b) : -1
-        return menu?.id === n.entry.id && menu.kind === b.dataset.act && menu.tile === tile ? closeMenu() : openMenu(n.entry.id, b.dataset.act, { x: r.left, y: r.bottom + 6, button: r }, tile)
+        return menu?.id === n.entry.id && menu.kind === b.dataset.act && menu.tile === tile ? closeMenu() : openMenu(n.entry.id, b.dataset.act!, { x: r.left, y: r.bottom + 6, button: r }, tile)
       }
-      const ba = ev.target.closest('.bbtns button')
+      const ba = (ev.target as HTMLElement).closest('.bbtns button')
       if (ba) {
         ev.stopPropagation()
         const r = ba.getBoundingClientRect()
@@ -585,7 +623,7 @@ export function deskPage() {
         if (act === 'more') return menu?.id === n.entry.id && menu.kind === 'board' ? closeMenu() : openMenu(n.entry.id, 'board', { x: r.left, y: r.bottom + 6, button: r })
         if (act === 'add') return lib?.id === n.entry.id ? closeLib() : openLib(n, r)
       }
-      const dot = ev.target.closest('.sdots button')
+      const dot = (ev.target as HTMLElement).closest('.sdots button')
       if (dot && G.isStack(n.entry)) turnTo(n, Number(dot.dataset.p))
     })
     el.addEventListener(
@@ -602,13 +640,13 @@ export function deskPage() {
     )
   }
   // The tile an element is in (its index on its board), or -1.
-  const tileOf = el => {
-    const tile = el?.closest?.('.tile')
+  const tileOf = (el: EventTarget | null) => {
+    const tile = (el as Element | null)?.closest?.('.tile')
     return tile ? Number(tile.dataset.i) : -1
   }
 
   // The widget a stack shows (its top), or the one alone.
-  function shownWidget(e) {
+  function shownWidget(e: G.Entry) {
     const m = G.isStack(e) ? e.items[topOf(e)] : G.memberOf(e)
     return Widgets.sourcesOf(m, all)[0] || null
   }
@@ -620,8 +658,27 @@ export function deskPage() {
   // cell. A tile of a board dragged out of it is one alone; dragged in it,
   // it moves there. A stack turns by the wheel (a touchpad's scroll too) or
   // a press on its dots; one comes out of it by the menu.
-  function press(ev, n) {
-    if (ev.button !== 0 || ev.target.closest('.tools, .sdots, .bbtns, .wacts, input')) return
+  // A press on one (on a board, its tile or -1), the drag it becomes once
+  // it moves (mode), where in it it was taken (dx, dy); one it may stack
+  // onto under it (over), held there long enough (armed: its id); the
+  // board it is over (into).
+  interface Drag {
+    n: DeskNode
+    tile: number
+    tileEl: HTMLElement | null
+    mode: string
+    id: number
+    x0: number
+    y0: number
+    dx: number
+    dy: number
+    armed: string | null
+    over: DeskNode | null
+    overTimer: Timer
+    into: Into | null
+  }
+  function press(ev: PointerEvent, n: DeskNode) {
+    if (ev.button !== 0 || (ev.target as HTMLElement).closest('.tools, .sdots, .bbtns, .wacts, input')) return
     closeMenu()
     closeLib()
     endAsk(false)
@@ -634,7 +691,8 @@ export function deskPage() {
     clearSelection()
     const tile = isBoard(n) ? tileOf(ev.target) : -1
     const tileEl = tile >= 0 ? n.el.querySelector(`.tile[data-i="${tile}"]`) : null
-    const tr = tile >= 0 ? G.tileRect(n.entry.items[tile].at, n.entry.items[tile].size) : { x: 0, y: 0 }
+    // A tile: of a board (tileOf above).
+    const tr = tile >= 0 ? G.tileRect((n.entry as G.Board).items[tile].at, (n.entry as G.Board).items[tile].size) : { x: 0, y: 0 }
     drag = { n, tile, tileEl, mode: 'press', id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, dx: ev.clientX - (n.x + tr.x), dy: ev.clientY - (n.y + tr.y), armed: null, over: null, overTimer: 0, into: null }
     try {
       n.el.setPointerCapture(ev.pointerId)
@@ -644,7 +702,7 @@ export function deskPage() {
     loadIcons()
   }
 
-  function move(ev) {
+  function move(ev: PointerEvent) {
     const d = drag
     if (!d || ev.pointerId !== d.id) return
     const n = d.n
@@ -658,8 +716,8 @@ export function deskPage() {
     const x = ev.clientX - d.dx
     const y = ev.clientY - d.dy
     if (d.tile >= 0) {
-      const tr = G.tileRect(n.entry.items[d.tile].at, n.entry.items[d.tile].size)
-      d.tileEl.style.transform = `translate(${Math.round(x - n.x - tr.x)}px, ${Math.round(y - n.y - tr.y)}px)`
+      const tr = G.tileRect((n.entry as G.Board).items[d.tile].at, (n.entry as G.Board).items[d.tile].size)
+      d.tileEl!.style.transform = `translate(${Math.round(x - n.x - tr.x)}px, ${Math.round(y - n.y - tr.y)}px)`
     } else place(n, x, y)
     // A board takes what is not a board; over none, one alone may stack.
     if (d.tile >= 0 || !isBoard(n)) seekBoard(ev, x, y)
@@ -668,8 +726,8 @@ export function deskPage() {
   }
 
   // Over one it may stack onto, held half a second: that one ringed, armed.
-  function seek(ev, moving?) {
-    const d = drag
+  function seek(ev: PointerEvent | null, moving?: G.Entry) {
+    const d = drag!
     const over = ev ? [...nodes.values()].find(o => o !== d.n && !isBoard(o) && ev.clientX >= o.x && ev.clientX <= o.x + o.rect.w && ev.clientY >= o.y && ev.clientY <= o.y + o.rect.h) : null
     const ok = over && G.canStack(moving, over.entry) ? over : null
     if (ok === d.over) return
@@ -687,7 +745,7 @@ export function deskPage() {
   }
 
   // The board under the pointer (its title bar too), but the one dragged.
-  function boardUnder(cx, cy, except) {
+  function boardUnder(cx: number, cy: number, except: DeskNode | null) {
     for (const o of nodes.values()) {
       if (!isBoard(o) || o === except) continue
       const { w, h } = G.boardBox(o.entry)
@@ -698,17 +756,17 @@ export function deskPage() {
   // The board a drag is over (drag.into): the cell [col, row] it would take
   // there and at what size (spotIn), null when full; or that it is a stack.
   interface Into {
-    b: any
+    b: BoardNode
     stack?: boolean
-    spot?: [number, number] | null
+    spot?: number[] | null
     size?: string
   }
   // Over a board: where it would land (a dashed place there), none (full:
   // it shakes as it is let go of), or a stack, which may not go in.
-  function seekBoard(ev, x, y) {
-    const d = drag
+  function seekBoard(ev: PointerEvent, x: number, y: number) {
+    const d = drag!
     const b = boardUnder(ev.clientX, ev.clientY, d.tile >= 0 ? null : d.n)
-    const into: Into = !b ? null : d.tile < 0 && G.isStack(d.n.entry) ? { b, stack: true } : { b, ...spotIn(b, x, y) }
+    const into: Into | null = !b ? null : d.tile < 0 && G.isStack(d.n.entry) ? { b, stack: true } : { b, ...spotIn(b, x, y) }
     const was = d.into
     d.into = into
     if (was && (!into || was.b !== into.b || JSON.stringify(was.spot) !== JSON.stringify(into.spot))) was.b.el.querySelector('.bghost')?.remove()
@@ -717,24 +775,24 @@ export function deskPage() {
     if (!ghost) {
       ghost = document.createElement('div')
       ghost.className = 'bghost'
-      into.b.el.querySelector('.db').append(ghost)
+      into.b.el.querySelector('.db')!.append(ghost)
     }
-    const r = G.tileRect(into.spot, into.size)
+    const r = G.tileRect(into.spot, into.size!)
     Object.assign(ghost.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` })
   }
   // The cell one dragged with its top left at (x, y) takes in a board.
-  function spotIn(b, x, y) {
-    const d = drag
-    const size = d.tile >= 0 ? d.n.entry.items[d.tile].size : d.n.entry.size
+  function spotIn(b: BoardNode, x: number, y: number) {
+    const d = drag!
+    const size = d.tile >= 0 ? (d.n.entry as G.Board).items[d.tile].size : d.n.entry.size!
     const skip = d.tile >= 0 && b === d.n ? d.tile : -1
     const spot = b.entry.folded ? G.boardFirst(b.entry, size) : G.boardSpot(b.entry, G.tileAt(x - b.x, y - b.y, size), size, skip)
     return { spot, size }
   }
-  function dropInto(d) {
+  function dropInto(d: Drag) {
     d?.into?.b.el.querySelector('.bghost')?.remove()
   }
 
-  function release(ev) {
+  function release(ev: PointerEvent) {
     const d = drag
     if (!d || ev.pointerId !== d.id) return
     drag = null
@@ -765,7 +823,7 @@ export function deskPage() {
         shake(d.into.b)
         return back()
       }
-      return keepLayout(G.intoBoard(layout, d.into.b.entry.id, G.memberOf(e), e.size, d.into.spot, newId))
+      return keepLayout(G.intoBoard(layout, d.into.b.entry.id, G.memberOf(e), e.size!, d.into.spot, newId))
     }
     const box = G.boxOf(e)
     const off = ev.clientX < 0 || ev.clientY < 0 || ev.clientX > innerWidth || ev.clientY > innerHeight
@@ -773,16 +831,16 @@ export function deskPage() {
     const cell = G.dropAt(grid(), x, y, box, others(e.id), icons)
     n.rect = G.rectAt(grid(), cell, box)
     place(n, n.rect.x, n.rect.y)
-    keepLayout(layout.map(o => (o.id === e.id ? G.placed(o, here.key, cell) : o)))
+    keepLayout(layout.map(o => (o.id === e.id ? G.placed(o, here!.key, cell) : o)))
   }
   // A tile let go of: in its board (moved there), in another board, or off
   // the board, one alone there (on another display too).
-  function releaseTile(ev, d, x, y) {
-    const b = d.n.entry
+  function releaseTile(ev: PointerEvent, d: Drag, x: number, y: number) {
+    const b = d.n.entry as G.Board
     const tile = b.items[d.tile]
     const back = () => {
-      d.tileEl.style.transform = ''
-      d.tileEl.classList.remove('lifted')
+      d.tileEl!.style.transform = ''
+      d.tileEl!.classList.remove('lifted')
     }
     if (d.into) {
       if (!d.into.spot) {
@@ -798,7 +856,7 @@ export function deskPage() {
     const off = ev.clientX < 0 || ev.clientY < 0 || ev.clientX > innerWidth || ev.clientY > innerHeight
     if (off) return elsewhere(ev, x - ev.clientX, y - ev.clientY, tile.size, cell => keepLayout(G.outOfBoard(layout, b.id, d.tile, newId, cell.key, cell.at)), back)
     const cell = G.dropAt(grid(), x, y, tile.size, others(''), icons)
-    keepLayout(G.outOfBoard(layout, b.id, d.tile, newId, here.key, cell))
+    keepLayout(G.outOfBoard(layout, b.id, d.tile, newId, here!.key, cell))
   }
   function cancel() {
     const d = drag
@@ -816,17 +874,17 @@ export function deskPage() {
     place(d.n, d.n.rect.x, d.n.rect.y)
   }
   // The others' rects here (not this one; '' all of them).
-  const others = id => [...nodes.values()].filter(o => o.entry.id !== id).map(o => o.rect)
+  const others = (id: string) => [...nodes.values()].filter(o => o.entry.id !== id).map(o => o.rect)
 
   // Let go of on another display: its cell there (desk.rs desk_where says
   // which display, its work area and the point in its window's px); that
   // display's page clears it of icons and others as it comes (settle).
-  async function elsewhere(ev, ox, oy, size, then, back) {
-    let there = null
+  async function elsewhere(ev: PointerEvent, ox: number, oy: number, size: ReturnType<typeof G.boxOf>, then: (cell: { key: string; at: number[] }) => void, back: () => void) {
+    let there: { key: string; work: number[]; x: number; y: number } | null = null
     try {
       there = await invoke('desk_where', { x: ev.clientX, y: ev.clientY })
     } catch {}
-    if (!there || there.key === here.key) return back()
+    if (!there || there.key === here!.key) return back()
     const g = G.gridOf(there.work)
     then({ key: there.key, at: G.snap(g, there.x + ox, there.y + oy, size) })
   }
@@ -837,7 +895,7 @@ export function deskPage() {
   // read a while ago (Explorer may have laid them anew meanwhile).
   const ICONS_FRESH_MS = 5000
   let iconsAt = 0
-  let iconsLoading = null
+  let iconsLoading: Promise<void> | null = null
   // Not read (null: Explorer starting again, busy), or none (a desktop
   // read before Explorer had laid its icons): as they were, asked again
   // every 3 s, five times at most; known only then, what was placed
@@ -848,7 +906,7 @@ export function deskPage() {
   let iconsTries = 0
   let iconsTimer: Timer = 0
   async function loadIcons() {
-    let list = null
+    let list: number[][] | null = null
     try {
       list = await invoke('desk_icons')
     } catch {}
@@ -872,14 +930,15 @@ export function deskPage() {
 
   // A board refusing one (full): its frame shakes, 0.3 s (§7's note); with
   // motion reduced, a ring for as long.
-  function shake(b) {
+  function shake(b: DeskNode | null | undefined) {
     const db = b?.el.querySelector('.db')
     if (!db) return
     db.classList.remove('shake')
     void db.offsetWidth
     db.classList.add('shake')
-    clearTimeout(b.shakeTimer)
-    b.shakeTimer = setTimeout(() => db.classList.remove('shake'), 320)
+    // b's, so b is there.
+    clearTimeout(b!.shakeTimer)
+    b!.shakeTimer = setTimeout(() => db.classList.remove('shake'), 320)
   }
   // A word on a board for two seconds (a stack may not go in).
   const toastEl = document.createElement('div')
@@ -887,8 +946,9 @@ export function deskPage() {
   toastEl.hidden = true
   document.body.append(toastEl)
   let toastTimer: Timer = 0
-  function toast(b, text) {
-    const { w } = G.boardBox(b.entry)
+  // On a board.
+  function toast(b: DeskNode, text: string) {
+    const { w } = G.boardBox(b.entry as G.Board)
     toastEl.textContent = text
     toastEl.hidden = false
     toastEl.style.left = `${Math.round(b.x + w / 2)}px`
@@ -898,7 +958,7 @@ export function deskPage() {
   }
 
   // Folded to its title bar, or open again.
-  function fold(n) {
+  function fold(n: DeskNode) {
     const b = n.entry
     const { folded, ...rest } = b
     keepLayout(layout.map(o => (o.id === b.id ? (folded ? rest : { ...b, folded: true }) : o)))
@@ -909,7 +969,7 @@ export function deskPage() {
   // window takes the keyboard for it alone (desk.rs desk_type). save: its
   // menu's 存为组合…, the combo's name typed there the same way (its own
   // name to start with), Enter keeping the combo, Esc or a press elsewhere not.
-  function startRename(n, save = false) {
+  function startRename(n: DeskNode, save = false) {
     if (renaming || !isBoard(n)) return
     const name = n.el.querySelector('.bname')
     if (!name) return
@@ -939,7 +999,7 @@ export function deskPage() {
       input.select()
     })
   }
-  function endRename(ok) {
+  function endRename(ok: boolean) {
     const r = renaming
     if (!r) return
     renaming = null
@@ -962,7 +1022,7 @@ export function deskPage() {
   // name replaced, else added (twenty at most, the oldest going); said on
   // the board. Read and written as the settings are (settings_get,
   // settings_set: settings.rs is_board_sets checks them as isBoardSets does).
-  async function keepSet(b, name) {
+  async function keepSet(b: G.Board, name: string) {
     let got = null
     try {
       got = await invoke('settings_get')
@@ -976,12 +1036,13 @@ export function deskPage() {
   }
 
   // --- A stack turned (§7, §9): the one on top up and away, the next rising --------------------
-  function turn(n, by) {
-    const s = n.entry
+  // A stack's: what turns it looks first (the tests' turn names one).
+  function turn(n: DeskNode, by: number) {
+    const s = n.entry as G.Stack
     turnTo(n, G.flip(topOf(s), s.items.length, by), by)
   }
-  function turnTo(n, next, by = 0) {
-    const s = n.entry
+  function turnTo(n: DeskNode, next: number, by = 0) {
+    const s = n.entry as G.Stack
     const count = s.items.length
     const was = topOf(s)
     if (next === was || !G.isStack(s)) return
@@ -990,12 +1051,12 @@ export function deskPage() {
     tops.set(s.id, next)
     n.key = contentKey(s)
     const layers = [...n.el.querySelectorAll('.layer')]
-    const setTo = (layer, cls) => {
+    const setTo = (layer: HTMLElement, cls: string) => {
       for (const k of ['top', 'b1', 'b2', 'rest', 'gone']) layer.classList.toggle(k, k === cls)
     }
     // The buttons go with the one on top.
     const tools = n.el.querySelector('.tools')
-    if (tools) layers[next].querySelector('.wd').append(tools)
+    if (tools) layers[next].querySelector('.wd')!.append(tools)
     const still = reduced()
     if (by > 0 && !still) {
       layers.forEach((l, i) => i !== was && setTo(l, layerOf(i, next, count)))
@@ -1021,7 +1082,7 @@ export function deskPage() {
 
   // A letter come into one of a stack's (its unread grew): it comes to the
   // top, once (§7).
-  function news(before) {
+  function news(before: Widgets.Widget[]) {
     for (const n of nodes.values()) {
       if (!G.isStack(n.entry)) continue
       const at = G.newsTop(n.entry, before, all)
@@ -1036,7 +1097,7 @@ export function deskPage() {
   document.body.append(menuEl)
 
   // Why a size is not there, by kind (the spec's §4, as island.ts has it).
-  function noSizeOf(w, size, stack = false) {
+  function noSizeOf(w: Widgets.Widget | null | undefined, size: string, stack = false) {
     if (stack) return t('desk.stackSize')
     const kind = w ? WCards.kindOf(w) : ''
     if (size === 'l' && kind === 'pomodoro') return t('menu.why.pomodoro')
@@ -1045,10 +1106,10 @@ export function deskPage() {
   }
 
   // The nearest of the same size it may stack with, here.
-  function neighbour(e) {
+  function neighbour(e: G.Entry) {
     const n = nodes.get(e.id)
     if (!n) return null
-    let best = null
+    let best: { o: DeskNode; d: number } | null = null
     for (const o of nodes.values()) {
       if (o === n || !G.canStack(e, o.entry)) continue
       const d = Math.hypot(o.x - n.x, o.y - n.y)
@@ -1056,25 +1117,25 @@ export function deskPage() {
     }
     return best?.o.entry || null
   }
-  const nameOfMember = (e, m) => {
+  const nameOfMember = (e: G.Entry, m: G.Member) => {
     const w = Widgets.sourcesOf(m, all)[0]
     return w ? WCards.titleOf(w, ctx()) : emptyName(e, m, ctx())
   }
-  const nameOfEntry = e => nameOfMember(e, G.isStack(e) ? e.items[topOf(e)] : G.memberOf(e))
+  const nameOfEntry = (e: G.Entry) => nameOfMember(e, G.isStack(e) ? e.items[topOf(e)] : G.memberOf(e))
   // The boards here (three at most in a menu).
   const boardsHere = () => shown().filter(G.isBoard)
 
-  const opt = (act, v, label, on, why = '') => `<button type="button" class="wmo${on ? ' on' : ''}${why ? ' off' : ''}" data-act="${act}" data-v="${v}"${why ? ` aria-disabled="true" data-why="${esc(why)}"` : ''}>${esc(label)}</button>`
+  const opt = (act: string, v: string, label: string, on: boolean, why = '') => `<button type="button" class="wmo${on ? ' on' : ''}${why ? ' off' : ''}" data-act="${act}" data-v="${v}"${why ? ` aria-disabled="true" data-why="${esc(why)}"` : ''}>${esc(label)}</button>`
   // An item; sub: a small grey line under it (what it does to the widgets).
-  const item = (act, label, why = '', v = '', sub = '') => `<button type="button" class="wmi${why ? ' off' : ''}" data-act="${act}" data-v="${esc(v)}"${why ? ` aria-disabled="true" data-why="${esc(why)}"` : ''}>${esc(label)}${sub ? `<span class="wmsub">${esc(sub)}</span>` : ''}</button>`
-  const line = (label, html) => `<div class="wmr"><span class="wml">${esc(label)}</span><span class="wms">${html}</span></div>`
-  const head = (w, glyph, title) => `<div class="wmh" style="--c:${w ? WCards.colorOf(w, ctx()) : 'currentColor'}">${glyph}<b>${esc(title)}</b></div>`
+  const item = (act: string, label: string, why = '', v = '', sub = '') => `<button type="button" class="wmi${why ? ' off' : ''}" data-act="${act}" data-v="${esc(v)}"${why ? ` aria-disabled="true" data-why="${esc(why)}"` : ''}>${esc(label)}${sub ? `<span class="wmsub">${esc(sub)}</span>` : ''}</button>`
+  const line = (label: string, html: string) => `<div class="wmr"><span class="wml">${esc(label)}</span><span class="wms">${html}</span></div>`
+  const head = (w: Widgets.Widget | null | undefined, glyph: string, title: string) => `<div class="wmh" style="--c:${w ? WCards.colorOf(w, ctx()) : 'currentColor'}">${glyph}<b>${esc(title)}</b></div>`
   const whereLine = () => {
-    const notBar = here.home === 'taskbar' ? '' : t('menu.notTaskbar')
+    const notBar = here!.home === 'taskbar' ? '' : t('menu.notTaskbar')
     return line(t('menu.where'), opt('where', 'bar', t('menu.bar'), false, notBar) + opt('where', 'isle', t('menu.isle'), false) + opt('where', 'desk', t('menu.desk'), true))
   }
 
-  function menuHTML(e, kind, tile = -1) {
+  function menuHTML(e: G.Entry, kind: string, tile = -1) {
     if (kind === 'sel') return selMenuHTML()
     if (G.isBoard(e)) return tile >= 0 ? tileMenuHTML(e, kind, tile) : boardMenuHTML(e)
     const w = shownWidget(e)
@@ -1101,7 +1162,7 @@ export function deskPage() {
       // stands; a stack may not go in (this time round).
       if (stack) parts.push(item('board', t('menu.board'), t('desk.noStackInBoard')))
       else {
-        for (const b of boardsHere().slice(0, 3)) parts.push(item('board', t('desk.toBoard', { name: boardLabel(b) }), G.boardFirst(b, e.size) ? '' : t('desk.boardFull'), b.id))
+        for (const b of boardsHere().slice(0, 3)) parts.push(item('board', t('desk.toBoard', { name: boardLabel(b) }), G.boardFirst(b, e.size!) ? '' : t('desk.boardFull'), b.id))
         parts.push(item('board', t('desk.newBoard'), '', 'new'))
       }
       if (w) parts.push(item('settings', t('menu.settings')))
@@ -1123,14 +1184,14 @@ export function deskPage() {
 
   // A tile's: its size (one with no room for it in the board greyed, why),
   // where, out of the board, its settings, off.
-  function tileMenuHTML(b, kind, i) {
+  function tileMenuHTML(b: G.Board, kind: string, i: number) {
     const x = b.items[i]
     const m = G.memberOf(x)
     const w = Widgets.sourcesOf(m, all)[0]
     const parts = [head(w, w ? WCards.glyphHTML(w, 'wmg') : WCards.memberGlyph(m), nameOfMember(b, m))]
     if (kind === 'size' || kind === 'full') {
       const sizes = G.sizesOfEntry({ type: m.type, of: m.of }, all)
-      const why = z => (!sizes.includes(z) ? noSizeOf(w, z) : z !== x.size && !G.boardSpot(b, x.at, z, i) ? t('desk.noRoom') : '')
+      const why = (z: string) => (!sizes.includes(z) ? noSizeOf(w, z) : z !== x.size && !G.boardSpot(b, x.at, z, i) ? t('desk.noRoom') : '')
       parts.push(line(t('menu.size'), ['s', 'm', 'l'].map(z => opt('size', z, t(`menu.${z}`), x.size === z, why(z))).join('')))
     }
     if (kind === 'more' || kind === 'full') {
@@ -1148,7 +1209,7 @@ export function deskPage() {
   // folded or open, kept as a combo (for the picker's 组合), apart (each
   // alone on the desktop), gone (its widgets back in the capsule; asked
   // first, askRemove).
-  function boardMenuHTML(b) {
+  function boardMenuHTML(b: G.Board) {
     return [
       `<div class="wmh"><b>${esc(boardLabel(b))}${b.items.length ? ` · ${esc(t('desk.boardCount', { n: b.items.length }))}` : ''}</b></div>`,
       item('rename', t('desk.rename')),
@@ -1161,7 +1222,13 @@ export function deskPage() {
     ].join('')
   }
 
-  function openMenu(id, kind, at, tile = -1) {
+  // Where a menu opens: at the pointer, or by its button.
+  interface PopAt {
+    x: number
+    y: number
+    button?: DOMRect
+  }
+  function openMenu(id: string, kind: string, at: PopAt, tile = -1) {
     const e = find(id)
     if (!e || !here) return
     closeLib()
@@ -1178,7 +1245,7 @@ export function deskPage() {
   }
   // By the button (under it, its right edge at the button's) or at the
   // pointer; kept inside the display.
-  function popAt(pop, at) {
+  function popAt(pop: HTMLElement, at: PopAt) {
     const w = pop.offsetWidth
     const h = pop.offsetHeight
     let x = at.button ? at.button.right - w : at.x
@@ -1205,7 +1272,7 @@ export function deskPage() {
       const off = (ev.target as HTMLElement).closest('[data-why]')
       if (!why) return
       why.hidden = !off
-      if (off) why.textContent = off.dataset.why
+      if (off) why.textContent = off.dataset.why!
       shapes()
     })
     pop.addEventListener('contextmenu', ev => ev.preventDefault())
@@ -1235,23 +1302,24 @@ export function deskPage() {
     const e = find(menu.id)
     const { tile, kind } = menu
     closeMenu()
-    if (kind === 'sel') return actSel(b.dataset.act)
+    // Each made with its act and v (opt, item).
+    if (kind === 'sel') return actSel(b.dataset.act!)
     if (!e) return
-    if (G.isBoard(e)) return tile >= 0 ? actTile(e, tile, b.dataset.act, b.dataset.v) : actBoard(e, b.dataset.act)
-    act(e, b.dataset.act, b.dataset.v)
+    if (G.isBoard(e)) return tile >= 0 ? actTile(e, tile, b.dataset.act!, b.dataset.v!) : actBoard(e, b.dataset.act!)
+    act(e, b.dataset.act!, b.dataset.v!)
   })
 
   // Each of its widgets or plugins, as the island's placeWidget takes them.
-  const itemsOf = e => G.membersOf(e).map(G.itemOf)
+  const itemsOf = (e: G.Entry) => G.membersOf(e).map(G.itemOf)
 
-  function act(e, what, v) {
+  function act(e: G.Entry, what: string, v: string) {
     switch (what) {
       case 'size': {
         // The new size where it stands, or the nearest free spot from there.
         const cell = spots.get(e.id) || [0, 0]
         const blocks = others(e.id)
         const at = G.isFree(grid(), cell, v, blocks) ? cell : G.nearestFree(grid(), cell, v, [...blocks, ...icons]) || G.nearestFree(grid(), cell, v, blocks) || cell
-        return keepLayout(layout.map(o => (o.id === e.id ? G.placed({ ...o, size: v }, here.key, at, visiting(o)) : o)))
+        return keepLayout(layout.map(o => (o.id === e.id ? G.placed({ ...o, size: v }, here!.key, at, visiting(o)) : o)))
       }
       case 'where':
         if (v === 'desk') return
@@ -1262,22 +1330,23 @@ export function deskPage() {
         return keepLayout(G.stackOnto(layout, e.id, v, newId))
       case 'ungroup': {
         const cell = spots.get(e.id)
-        const apart = G.ungroup(layout, e.id, newId).map(o => (cell && !layout.some(x => x.id === o.id) ? G.placed(o, here.key, cell) : o))
+        const apart = G.ungroup(layout, e.id, newId).map(o => (cell && !layout.some(x => x.id === o.id) ? G.placed(o, here!.key, cell) : o))
         tops.delete(e.id)
         return keepLayout(apart)
       }
       case 'takeOut': {
         const cell = spots.get(e.id) || [0, 0]
-        const free = G.nearestFree(grid(), cell, e.size, [...others(''), ...icons]) || cell
+        const free = G.nearestFree(grid(), cell, e.size!, [...others(''), ...icons]) || cell
         tops.set(e.id, 0)
-        return keepLayout(G.takeOut(layout, e.id, Number(v) || 0, newId, here.key, free))
+        return keepLayout(G.takeOut(layout, e.id, Number(v) || 0, newId, here!.key, free))
       }
       case 'board': {
         if (v === 'new') return keepLayout(G.newBoard(layout, e.id, newId))
-        const b = find(v)
-        const spot = b && G.boardFirst(b, e.size)
+        // A board's id (menuHTML).
+        const b = find(v) as G.Board | undefined
+        const spot = b && G.boardFirst(b, e.size!)
         if (!spot) return shake(nodes.get(v))
-        return keepLayout(G.intoBoard(layout, b.id, G.memberOf(e), e.size, spot, newId))
+        return keepLayout(G.intoBoard(layout, b!.id, G.memberOf(e), e.size!, spot, newId))
       }
       case 'settings': {
         const w = shownWidget(e)
@@ -1290,7 +1359,7 @@ export function deskPage() {
 
   // A tile's: another size where it stands (or the nearest room in its
   // board), elsewhere, out of the board beside it, its settings, off.
-  function actTile(b, i, what, v) {
+  function actTile(b: G.Board, i: number, what: string, v: string) {
     const x = b.items[i]
     if (!x) return
     const m = G.memberOf(x)
@@ -1305,7 +1374,7 @@ export function deskPage() {
       case 'outBoard': {
         const from = spots.get(b.id) || [0, 0]
         const cell = G.nearestFree(grid(), from, x.size, [...others(''), ...icons]) || G.nearestFree(grid(), from, x.size, others('')) || from
-        return keepLayout(G.outOfBoard(layout, b.id, i, newId, here.key, cell))
+        return keepLayout(G.outOfBoard(layout, b.id, i, newId, here!.key, cell))
       }
       case 'settings': {
         const w = Widgets.sourcesOf(m, all)[0]
@@ -1316,7 +1385,7 @@ export function deskPage() {
     }
   }
 
-  function actBoard(b, what) {
+  function actBoard(b: G.Board, what: string) {
     const n = nodes.get(b.id)
     switch (what) {
       case 'rename':
@@ -1364,7 +1433,7 @@ export function deskPage() {
     pickedSent = selected.size > 0
     invoke('desk_picked', { on: pickedSent }).catch(() => {})
   }
-  function toggleSelected(id) {
+  function toggleSelected(id: string) {
     if (!selected.delete(id)) selected.add(id)
     paintSelected()
   }
@@ -1374,15 +1443,16 @@ export function deskPage() {
     paintSelected()
   }
 
-  function startMarquee(ev) {
+  function startMarquee(ev: PointerEvent) {
     marquee = { x0: ev.clientX, y0: ev.clientY, id: ev.pointerId, base: new Set(selected) }
     try {
       desk.setPointerCapture(ev.pointerId)
     } catch {}
     hold(true)
   }
-  function moveMarquee(ev) {
-    const m = marquee
+  // While a rectangle is dragged (the listeners look first).
+  function moveMarquee(ev: PointerEvent) {
+    const m = marquee!
     const box = { x: Math.min(m.x0, ev.clientX), y: Math.min(m.y0, ev.clientY), w: Math.abs(ev.clientX - m.x0), h: Math.abs(ev.clientY - m.y0) }
     if (box.w < 4 && box.h < 4 && selEl.hidden) return
     Object.assign(selEl.style, { left: `${box.x}px`, top: `${box.y}px`, width: `${box.w}px`, height: `${box.h}px` })
@@ -1429,7 +1499,7 @@ export function deskPage() {
 
   // Their menu's: one board of them (where the top-left-most stood, its
   // name typed at once, 工作台 N to start with), or all off the desktop.
-  function actSel(what) {
+  function actSel(what: string) {
     const chosen = layout.filter(e => selected.has(e.id) && G.isSelectable(e))
     if (!chosen.length) return
     if (what === 'removeAll') {
@@ -1437,11 +1507,12 @@ export function deskPage() {
       return ask('place', { items: chosen.flatMap(itemsOf), where: 'isle' })
     }
     if (what !== 'combine') return
-    const r = G.boardOf(layout, chosen.map(e => e.id), { at: spots, grid: grid(), key: here.key, icons, newId, name: freshBoardName() })
+    const r = G.boardOf(layout, chosen.map(e => e.id), { at: spots, grid: grid(), key: here!.key, icons, newId, name: freshBoardName() })
+    // Made, else why (never '').
     if (r.why) return
     clearSelection()
-    renameNext = r.board.id
-    keepLayout(r.layout)
+    renameNext = r.board!.id
+    keepLayout(r.layout!)
   }
   // 工作台 N, N one more than the boards there are, past any of those names.
   function freshBoardName() {
@@ -1466,18 +1537,18 @@ export function deskPage() {
   askEl.setAttribute('role', 'alertdialog')
   document.body.append(askEl)
 
-  function askRemove(n) {
+  function askRemove(n: DeskNode) {
     const b = n.entry
     if (!isBoard(n)) return
     endRename(true)
     asking = { id: b.id }
-    const k = b.items.length
+    const k = b.items!.length
     const sub = k ? (k === 1 ? t('desk.removeOne') : t('desk.removeSome', { n: k })) : t('desk.removeEmpty')
     askEl.innerHTML = `<div class="bask-card"><div class="bask-text"><b class="bask-q"></b><span class="bask-sub"></span></div><div class="bask-btns"><button type="button" data-ask="no"></button><button type="button" class="bask-yes" data-ask="yes"></button></div></div>`
-    askEl.querySelector('.bask-q').textContent = t('desk.removeAsk', { name: boardLabel(b) })
-    askEl.querySelector('.bask-sub').textContent = sub
-    askEl.querySelector('[data-ask="no"]').textContent = t('desk.cancel')
-    askEl.querySelector('[data-ask="yes"]').textContent = t('desk.removeIt')
+    askEl.querySelector('.bask-q')!.textContent = t('desk.removeAsk', { name: boardLabel(b) })
+    askEl.querySelector('.bask-sub')!.textContent = sub
+    askEl.querySelector('[data-ask="no"]')!.textContent = t('desk.cancel')
+    askEl.querySelector('[data-ask="yes"]')!.textContent = t('desk.removeIt')
     askEl.setAttribute('aria-label', t('desk.removeAsk', { name: boardLabel(b) }))
     askEl.classList.toggle('folded', !!b.folded)
     askEl.hidden = false
@@ -1489,12 +1560,12 @@ export function deskPage() {
   function placeAsk() {
     const n = asking && nodes.get(asking.id)
     if (!n) return
-    const { w, h } = G.boardBox(n.entry)
+    const { w, h } = G.boardBox(n.entry as G.Board)
     Object.assign(askEl.style, { left: `${n.x}px`, top: `${n.y}px`, width: `${w}px`, height: `${h}px` })
     shapes()
   }
   // Kept (ok: removed, its widgets back in the capsule).
-  function endAsk(ok) {
+  function endAsk(ok: boolean) {
     const a = asking
     if (!a) return
     asking = null
@@ -1520,15 +1591,16 @@ export function deskPage() {
   libEl.className = 'wmenu wlib'
   libEl.hidden = true
   document.body.append(libEl)
-  let lib = null
+  let lib: { id: string; items: ReturnType<typeof libItems> } | null = null
 
   // The widgets there are, a plugin's once (its first): not those already
   // in this board; each saying where it is (in the capsule, on the taskbar,
   // on the desktop, in a board).
-  function libItems(b) {
-    const inBoard = new Set(b.items.map(G.keyOf))
-    const bar = here.bar && typeof here.bar === 'object' ? Widgets.shownOn(Widgets.monitorAsPart({ left: [], center: [], right: [], ...here.bar }), all) : new Set()
-    const monitorPart = here.home === 'taskbar' && (!here.bar || Object.values(here.bar).some(run => Array.isArray(run) && run.includes('monitor')))
+  // A board's (its Add).
+  function libItems(b: G.Entry) {
+    const inBoard = new Set(b.items!.map(G.keyOf))
+    const bar = here!.bar && typeof here!.bar === 'object' ? Widgets.shownOn(Widgets.monitorAsPart({ left: [], center: [], right: [], ...here!.bar }), all) : new Set()
+    const monitorPart = here!.home === 'taskbar' && (!here!.bar || Object.values(here!.bar).some(run => Array.isArray(run) && run.includes('monitor')))
     const seen = new Set()
     const out = []
     for (const w of all) {
@@ -1542,7 +1614,7 @@ export function deskPage() {
     }
     return out.slice(0, 40)
   }
-  function libHTML(b) {
+  function libHTML(b: G.Entry) {
     const items = libItems(b)
     const rows = items.map((x, i) => {
       const c = WCards.colorOf(x.w, ctx())
@@ -1550,7 +1622,7 @@ export function deskPage() {
     })
     return `<div class="wmh"><b>${esc(t('desk.library'))}</b></div>${rows.length ? rows.join('') : `<div class="wlnone">${esc(t('desk.libNone'))}</div>`}`
   }
-  function openLib(n, button) {
+  function openLib(n: DeskNode, button: DOMRect) {
     closeMenu()
     lib = { id: n.entry.id, items: libItems(n.entry) }
     libEl.innerHTML = libHTML(n.entry)
@@ -1569,7 +1641,7 @@ export function deskPage() {
   libEl.addEventListener('click', ev => {
     const row = (ev.target as HTMLElement).closest('[data-k]')
     if (!row || !lib) return
-    const b = find(lib.id)
+    const b = find(lib.id) as G.Board | undefined
     const x = lib.items[Number(row.dataset.k)]
     closeLib()
     if (!b || !x) return
@@ -1585,12 +1657,13 @@ export function deskPage() {
 
   // What her island's page does for the desktop (desk.rs desk_ask): a
   // widget's settings opened, a widget put elsewhere, off the taskbar.
-  const ask = (what, args) => invoke('desk_ask', { what, args }).catch(() => {})
+  const ask = (what: string, args: Record<string, unknown>) => invoke('desk_ask', { what, args }).catch(() => {})
 
   // --- From desk.rs -------------------------------------------------------------------------------
-  const on = (name, fn) => listen(name, e => fn(e.payload), { target })
+  // Their payloads: desk.rs's JSON as it is.
+  const on = (name: string, fn: (payload: any) => unknown) => listen(name, e => fn(e.payload), { target })
   Promise.all([
-    on('desk:state', async s => {
+    on('desk:state', async (s: DeskHere) => {
       // The icons first, before anything is drawn (the VM, 2026-10-16: the
       // widgets' words came while they were asked, and one come from the
       // other display was drawn over the icons, no longer new here).
@@ -1618,17 +1691,17 @@ export function deskPage() {
     // this desktop is covered, nobody is about, or the island's watchdog
     // has them away a while.
     on('desk:views', p => views?.set({ on: p?.on !== false })),
-    on('desk:paper', p => setPaper(p)),
+    on('desk:paper', (p: Paper | null) => setPaper(p)),
     // The window took the mouse (where the pointer is: the widget under it
     // shown hovered at once, before any move, a board's tile too), or lets
     // it through again.
-    on('desk:pointer', at => {
+    on('desk:pointer', (at: { x: number; y: number } | null) => {
       if (drag) return
       const el = at ? document.elementFromPoint(at.x, at.y) : null
       const under = el?.closest('.dw')
       for (const n of nodes.values()) {
         n.el.classList.toggle('hover', n.el === under)
-        hoverTile(n, n.el === under ? el.closest('.tile') : null)
+        hoverTile(n, n.el === under ? el!.closest('.tile') : null)
       }
     }),
     // A press elsewhere (on the desktop, another window): the menu goes,
@@ -1662,27 +1735,27 @@ export function deskPage() {
     // The plugins' views here (views.ts), for the tests' eyes.
     views,
     draw,
-    turn: (id, by) => nodes.get(id) && turn(nodes.get(id), by),
+    turn: (id: string, by: number) => nodes.get(id) && turn(nodes.get(id)!, by),
     openMenu,
-    openLib: id => {
+    openLib: (id: string) => {
       const n = nodes.get(id)
       const b = n?.el.querySelector('[data-bact=add]')
       if (n && b) openLib(n, b.getBoundingClientRect())
     },
-    rename: id => nodes.get(id) && startRename(nodes.get(id)),
-    askRemove: id => nodes.get(id) && askRemove(nodes.get(id)),
+    rename: (id: string) => nodes.get(id) && startRename(nodes.get(id)!),
+    askRemove: (id: string) => nodes.get(id) && askRemove(nodes.get(id)!),
     asking: () => asking?.id || null,
     // Picked as Ctrl and presses pick them (the scenes' shots), and which are.
-    select: ids => {
+    select: (ids: string[] | null | undefined) => {
       selected.clear()
       for (const id of ids || []) if (G.isSelectable(find(id))) selected.add(id)
       paintSelected()
     },
     selected: () => [...selected],
     // Its name typed: as 改名 does, or (save) as 存为组合… does.
-    saveSet: id => nodes.get(id) && startRename(nodes.get(id), true),
-    shake: id => shake(nodes.get(id)),
-    toast: (id, text) => nodes.get(id) && toast(nodes.get(id), text),
+    saveSet: (id: string) => nodes.get(id) && startRename(nodes.get(id)!, true),
+    shake: (id: string) => shake(nodes.get(id)),
+    toast: (id: string, text: string) => nodes.get(id) && toast(nodes.get(id)!, text),
     paperAgain: () => lastPaper && setPaper(lastPaper),
     // desk-drop.ts: a widget from her home let go of over this display (the
     // picker of 2026-10-17): what is here, and how it is kept.

@@ -9,6 +9,8 @@
 // up). What it hands back is the island's again.
 import * as Flow from './flow.ts'
 import type { IslandCore } from './island.ts'
+import type { Show } from './island-vars.ts'
+import type { Ring } from './flow.ts'
 
 export function ringPart(core: IslandCore) {
   const {
@@ -55,10 +57,10 @@ export function ringPart(core: IslandCore) {
   // Something happened: kind (waiting, done, review, error, hello, plugin,
   // notice, process), and what the island would have opened with ({ clip,
   // text, ms, widget }; a reaction's name, react).
-  function cue(kind, show) {
+  function cue(kind: string, show: Show) {
     const how = Flow.cueFor(kind, { setting: Flow.endCue(st.config), view: st.view, blocked: flowBlocked(), herOut: herTalks() })
     // Inside a turn: her clip, and nothing kept, no ring, no dot.
-    if (how === 'clip') return playReaction(show.react)
+    if (how === 'clip') return playReaction(show.react!)
     // The newest wins: what is kept for the next look is this one's (an
     // ending's words are its session's: the open island has them), or none
     // when it shows now; a prompt leaves it for after.
@@ -77,7 +79,7 @@ export function ringPart(core: IslandCore) {
   // A reaction inside a turn (a tool failed, an item of its list done): her
   // portrait plays its clip as many times as she does out on the desktop
   // (Sprite.REACTIONS), then her mood's again; the island stays as it is.
-  function playReaction(react) {
+  function playReaction(react: string) {
     const r = REACTIONS[react]
     const clip = r && CLIPS[r.clip]
     if (!clip) return
@@ -94,33 +96,35 @@ export function ringPart(core: IslandCore) {
   }
 
   // The colours for a kind, on Windows' mode now: a plugin's from its own.
-  const flowStops = kind => Flow.gradient(Flow.palette(kind, flowLight(), st.news?.colour, hintAccent()))
+  const flowStops = (kind: string) => Flow.gradient(Flow.palette(kind, flowLight(), st.news?.colour, hintAccent()))
 
-  function ring(kind) {
+  function ring(kind: string) {
     // Held lit after its turns for as long as the hold says (until seen: until
     // the island opens), zhoupengjie/Wakuwaku#65.
     const step = Flow.play(st.flowState, kind, performance.now(), { still: stillMotionNow(), hold: Flow.holdMs(st.config.hold) })
     st.flowState = step.state
     if (step.act === 'start') {
-      // A dot from before goes, and comes again in the new colour as it fades.
-      st.news.shown = false
+      // A dot from before goes, and comes again in the new colour as it
+      // fades. (cue has just set st.news; a start has its ring.)
+      st.news!.shown = false
       for (const b of st.blends) b.anim.cancel()
       st.blends = []
       for (const s of spins) (s.firstChild as HTMLElement).style.background = flowStops(kind)
-      flow.classList.toggle('glow', Flow.glows(flowLight(), step.ring.still))
+      flow.classList.toggle('glow', Flow.glows(flowLight(), step.ring!.still))
       flow.classList.add('on')
       placeFlow()
-      animateRing(step.ring)
+      animateRing(step.ring!)
     } else if (step.act === 'blend') {
       blendTo(kind)
       // Taken on as it faded (its dot come already, its session at work
       // again a moment before): the dot goes again, and comes as it fades
       // this time.
-      if (step.retimed && st.news?.shown && step.ring.hold > 0 && step.ring.dotAt > performance.now()) {
+      // A blend has its ring.
+      if (step.retimed && st.news?.shown && step.ring!.hold > 0 && step.ring!.dotAt > performance.now()) {
         st.news.shown = false
         drawNews()
       }
-      if (step.retimed) animateRing(step.ring)
+      if (step.retimed) animateRing(step.ring!)
     } else if (step.act === 'hop' || step.act === 'swap') {
       showNews(step.act)
     }
@@ -134,7 +138,7 @@ export function ringPart(core: IslandCore) {
   // zhoupengjie/Wakuwaku#65): animated only until it is held still
   // (holdRing), down again at the hold's end (fadeRing); until seen, no end
   // of its own (the island opening ends it: stopRing).
-  function animateRing(r) {
+  function animateRing(r: Ring) {
     for (const a of st.flowAnims) a.cancel()
     for (const t of st.flowTimers) clearTimeout(t)
     st.flowAnims = []
@@ -142,14 +146,15 @@ export function ringPart(core: IslandCore) {
     stopStepping()
     unholdRing()
     const f = Flow.frames(r, performance.now())
-    const later = (fn, ms) => Number.isFinite(ms) && st.flowTimers.push(setTimeout(fn, Math.max(0, ms)))
+    const later = (fn: () => void, ms: number) => Number.isFinite(ms) && st.flowTimers.push(setTimeout(fn, Math.max(0, ms)))
     if (f.still == null || f.still > 0) {
       st.flowAnims.push(flow.animate(f.light.keyframes, { delay: f.light.delay, duration: f.light.duration, fill: 'both' }))
       if (f.steps.length) stepRing(f.steps)
     }
     if (f.still != null) {
-      if (f.still > 0) later(() => holdRing(f.rest), f.still)
-      else holdRing(f.rest)
+      // Held still at some point: rest is where (Flow.frames).
+      if (f.still > 0) later(() => holdRing(f.rest!), f.still)
+      else holdRing(f.rest!)
     }
     if (f.out) later(() => fadeRing(r), f.out.delay)
     later(() => showNews('in'), f.dotIn)
@@ -164,7 +169,7 @@ export function ringPart(core: IslandCore) {
     clearTimeout(stepping)
     stepping = 0
   }
-  function stepRing(steps) {
+  function stepRing(steps: { delay: number; angle: number }[]) {
     const made = performance.now()
     const glow = flow.classList.contains('glow')
     const turning = spins.filter(s => glow || !s.closest('.flow-glow'))
@@ -184,7 +189,7 @@ export function ringPart(core: IslandCore) {
   // not even a light held at full (an animation filling forwards still
   // costs its frames): the ring left lit, its gradient where it stopped,
   // the glow under it the same, no will-change (held).
-  function holdRing(rest) {
+  function holdRing(rest: number) {
     for (const a of st.flowAnims) a.cancel()
     st.flowAnims = []
     stopStepping()
@@ -202,7 +207,7 @@ export function ringPart(core: IslandCore) {
 
   // The hold over: its light down from lit (as Flow.frames has it now),
   // the gradient resting where it was held.
-  function fadeRing(r) {
+  function fadeRing(r: Ring) {
     const o = Flow.frames(r, performance.now()).out
     if (!o) return
     for (const a of st.flowAnims) a.cancel()
@@ -214,7 +219,7 @@ export function ringPart(core: IslandCore) {
   // Into another kind's colours over BLEND_MS: the upper of each square's
   // two layers takes them and comes up, then the lower has them and the
   // upper goes again. One coming mid-way: the last finished at once.
-  function blendTo(kind) {
+  function blendTo(kind: string) {
     const stops = flowStops(kind)
     for (const b of st.blends) settle(b)
     st.blends = spins.map(s => {
@@ -227,7 +232,7 @@ export function ringPart(core: IslandCore) {
   }
 
   // A blend done (or cut short by the next): the lower layer has its colours.
-  function settle(b) {
+  function settle(b: { under: HTMLElement; stops: string; anim: Animation }) {
     b.under.style.background = b.stops
     b.anim.cancel()
   }
@@ -299,15 +304,16 @@ export function ringPart(core: IslandCore) {
 
   // The dot's colour: a mood's as the island's words have it, a hello's and
   // a notice's Windows' accent, a plugin's its own (or the accent).
+  // (Drawn only while the dot shows: st.news is there.)
   function newsColour() {
-    if (Flow.isEnding(st.news.kind)) return hue()[st.news.kind]
-    if (st.news.kind === 'plugin') return ink(st.news.colour) || hintAccent()
+    if (Flow.isEnding(st.news!.kind)) return hue()[st.news!.kind]
+    if (st.news!.kind === 'plugin') return ink(st.news!.colour) || hintAccent()
     return hintAccent()
   }
 
   // It comes (in: grown from nothing, a little past full size and back),
   // hops in a new colour, or only takes it (swap, and with reduced motion).
-  function showNews(how) {
+  function showNews(how: string) {
     if (!st.news) return
     const was = st.news.shown
     st.news.shown = true

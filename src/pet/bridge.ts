@@ -8,10 +8,17 @@
 // where it is (pet:pointer), and this plays the mouseenter / mouseleave the
 // page would have heard.
 import * as Hovers from './hovers.ts'
+import type { Config } from '../shared/config.ts'
 
 // Made only where Tauri is (her windows; the preview's stand-in): the tests
-// import scripts that use it with none, and get null.
-export const pet = typeof window !== 'undefined' && window.__TAURI__ ? bridge() : null
+// import scripts that use it with none, and get null. Typed as made (null!
+// is never): every page that calls it has Tauri, and a script the tests
+// import calls it only from what the tests do not run.
+export const pet = typeof window !== 'undefined' && window.__TAURI__ ? bridge() : null!
+export type Pet = ReturnType<typeof bridge>
+
+// A file dragged from another program over the window (onFileDrag).
+type FileDrag = (type: string, at: { x: number; y: number } | null, paths: string[]) => void
 
 function bridge() {
   const { invoke } = window.__TAURI__.core
@@ -26,8 +33,9 @@ function bridge() {
   // event was handled twice.
   const LABEL = window.__TAURI_INTERNALS__?.metadata?.currentWebview?.label || window.__TAURI__.webviewWindow?.getCurrentWebviewWindow?.()?.label || new URLSearchParams(location.search).get('role') || 'pet'
   const target: TauriTarget = { kind: 'WebviewWindow', label: LABEL }
-  const pending = []
-  const on = channel => fn => {
+  const pending: Promise<() => void>[] = []
+  // What the Rust side says is loose JSON: each listener takes it as it comes.
+  const on = (channel: string) => (fn: (payload: any) => void) => {
     pending.push(listen(channel, e => fn(e.payload), { target }))
   }
   const noop = () => {}
@@ -35,7 +43,7 @@ function bridge() {
   // One at a time, in order: each call is its own request, and a drop must
   // not overtake the release before it.
   let queue = Promise.resolve()
-  const send = (cmd, args?) => {
+  const send = (cmd: string, args?: Record<string, unknown>) => {
     queue = queue.then(() => invoke(cmd, args)).catch(err => console.error(cmd, err))
   }
 
@@ -60,19 +68,19 @@ function bridge() {
     onCarried: on('pet:carried'),
     onAsks: on('pet:asks'),
     onShift: on('pet:shift'),
-    answer: (id, choice) => send('pet_answer', { id, choice }),
-    dismiss: id => send('pet_dismiss', { id }),
-    keyboard: needs => send('pet_keyboard', { needs: needs === true }),
+    answer: (id: number, choice: unknown) => send('pet_answer', { id, choice }),
+    dismiss: (id: number) => send('pet_dismiss', { id }),
+    keyboard: (needs: boolean) => send('pet_keyboard', { needs: needs === true }),
     // A shortcut being recorded: her global ones let go meanwhile (shortcuts.rs).
-    shortcutsPause: on => send('pet_shortcuts_pause', { on: on === true }),
+    shortcutsPause: (on: boolean) => send('pet_shortcuts_pause', { on: on === true }),
     // Room sizes are measured in page CSS px. WebView2's DPR can differ from
     // the monitor scale reported to Rust (Windows text scaling), so include
     // it when the native window converts that room to physical pixels.
-    panel: measured => send('pet_panel', { measured: measured ? { ...measured, dpr: devicePixelRatio || 1 } : null }),
+    panel: (measured: { width: number; height: number } | null) => send('pet_panel', { measured: measured ? { ...measured, dpr: devicePixelRatio || 1 } : null }),
     // her: false for what is over her head out on the desktop (her words,
     // her list, a prompt), not her: no drag starts from a press there, and
     // it is not her seen (pet.rs hover).
-    hover: (isOver, her = true) => {
+    hover: (isOver: boolean, her = true) => {
       // The real pointer has the page now, or has left it: start over.
       inside = []
       send('pet_hover', { isOver: isOver === true, her: her !== false })
@@ -81,28 +89,28 @@ function bridge() {
     dragEnd: () => send('pet_drag_end'),
     // Her menu; on the volume, the network or the clock of her taskbar
     // (part), the one Windows' own taskbar has there.
-    menu: (part?) => send('pet_menu', { part: part || null }),
+    menu: (part?: string | null) => send('pet_menu', { part: part || null }),
     doubleClick: () => send('pet_double_click'),
     // Out of the queue: it answers when the walk is over.
-    walk: (dx, ms) => invoke('pet_walk', { dx, ms }).catch(() => false),
+    walk: (dx: number, ms: number) => invoke('pet_walk', { dx, ms }).catch(() => false),
     walkStop: () => send('pet_walk_stop'),
     // The island's page: she broke free of the drop (her middle this far from
     // the cursor), the button was let go, the button is held on her.
-    releaseHer: offset => send('island_release', { offset: offset || {} }),
+    releaseHer: (offset?: { dx: number; dy: number }) => send('island_release', { offset: offset || {} }),
     dropHer: () => send('island_drop'),
-    holding: isHolding => send('island_holding', { isHolding: isHolding === true }),
+    holding: (isHolding: boolean) => send('island_holding', { isHolding: isHolding === true }),
     // The taskbar's layout being edited, or not, and where its edit bar and
     // what picker.ts has open are (the picker, its popover, her capsule's
     // panel, the toasts; [[x, y, w, h]], page px, editing or not): the
     // window keeps the mouse there whatever enter and leave say (island.rs
     // set_editing, #53).
-    editing: (on, rects) => send('island_editing', { on: on === true, rects: Array.isArray(rects) ? rects : [], pageSf: devicePixelRatio || 1 }),
+    editing: (on: boolean, rects: number[][]) => send('island_editing', { on: on === true, rects: Array.isArray(rects) ? rects : [], pageSf: devicePixelRatio || 1 }),
     // Her seat on the taskbar, where the page has laid her island out (logical px from its left).
-    seat: x => send('island_seat', { x: Number(x) || 0 }),
+    seat: (x: number) => send('island_seat', { x: Number(x) || 0 }),
     // A blur of what is behind her island, under it (backplate.rs): where
     // the island is ({ x, y, width, height, radius, vw, vh, dark }), faded
     // in over fade ms; none, faded out.
-    plate: (rect, fade) => send('island_plate', { rect: rect || null, fade: Math.max(0, Math.round(Number(fade) || 0)) }),
+    plate: (rect: object | null, fade: unknown) => send('island_plate', { rect: rect || null, fade: Math.max(0, Math.round(Number(fade) || 0)) }),
     onReach: on('island:reach'),
     onAbsorb: on('island:absorb'),
     onLanded: on('island:landed'),
@@ -121,7 +129,7 @@ function bridge() {
     // way or not, and its closed size (island-plate.ts setStow).
     onUnder: on('island:under'),
     onCalled: on('island:called'),
-    stow: (stowed, width, height) => send('island_stow', { stowed: stowed === true, width: Number(width) || 0, height: Number(height) || 0 }),
+    stow: (stowed: boolean, width: number, height: number) => send('island_stow', { stowed: stowed === true, width: Number(width) || 0, height: Number(height) || 0 }),
     // Something opened up from her taskbar's strip: its window over any
     // other that has come over it (island.rs raise, zhoupengjie/Wakuwaku#55).
     raise: () => send('island_raise'),
@@ -129,29 +137,29 @@ function bridge() {
     // opened by itself), or nothing now, shrunk back: inside Windows'
     // taskbar its window is out of the taskbar while something is
     // (island.rs set_opened, embed.rs).
-    opened: on => send('island_opened', { on: on === true }),
+    opened: (on: boolean) => send('island_opened', { on: on === true }),
     // The settings in the island (settings.ts): open them here or from
     // anywhere else (the tray, her double-click), what they show, what they change.
     onSettings: on('island:settings'),
     onSettingsChanged: on('settings:changed'),
     // The island's window lost the keyboard (a click elsewhere).
     onBlur: on('island:blur'),
-    openSettings: (tab?) => send('settings_open', { tab: tab || null }),
+    openSettings: (tab?: string | null) => send('settings_open', { tab: tab || null }),
     settingsClosed: () => send('settings_closed'),
     // To a session's window; true when there was one to go to.
-    jump: id => invoke('session_jump', { id: String(id || '') }).catch(() => false),
+    jump: (id: unknown) => invoke('session_jump', { id: String(id || '') }).catch(() => false),
     // A button on a widget's card (what is playing: previous, play or
     // pause, next), to the plugin it belongs to (plugins.rs act).
-    widgets: { act: (id, action) => invoke('widget_act', { id: String(id || ''), action: String(action || '') }).catch(() => false) },
+    widgets: { act: (id: unknown, action: unknown) => invoke('widget_act', { id: String(id || ''), action: String(action || '') }).catch(() => false) },
     // The taskbar (taskbar/): what its own buttons open (start, search,
     // tasks, widgets, desktop, quick, notifications), a press on a tray icon
     // (leftDown, leftUp, rightDown, rightUp, double, move, in, out; in order,
     // so a press never overtakes the one before), where the page drew the
     // tray's icons; the icons as they change.
     taskbar: {
-      open: what => invoke('taskbar_open', { what: String(what) }).catch(() => false),
+      open: (what: string) => invoke('taskbar_open', { what: String(what) }).catch(() => false),
       // The volume that many steps up (down below 0), by Windows' volume keys.
-      volume: steps => invoke('taskbar_volume', { steps: Math.round(Number(steps) || 0) }).catch(() => false),
+      volume: (steps: number) => invoke('taskbar_volume', { steps: Math.round(Number(steps) || 0) }).catch(() => false),
       // The clock's tip as Windows' own has it: the date in full, and
       // Windows' additional clocks (clock.rs).
       clockTip: () => invoke('taskbar_clock_tip').catch(() => ''),
@@ -160,21 +168,21 @@ function bridge() {
       // The input methods to pick from ([{ id, lang, langName, name, icon, own,
       // current }], inputs.rs), and one of them switched to for the window in front.
       inputs: () => invoke('taskbar_inputs').catch(() => []),
-      input: id => invoke('taskbar_input', { id: String(id) }).catch(() => false),
+      input: (id: unknown) => invoke('taskbar_input', { id: String(id) }).catch(() => false),
       // Windows' own battery font (an ArrayBuffer; empty where Windows has none).
       batteryFont: () => invoke('taskbar_battery_font').catch(() => null),
       // Windows' own Task View pictures, { light, dark } (SVGs, for a light
       // strip and a dark one); null where Windows has none (Windows 10).
       taskViewIcons: () => invoke('taskbar_task_view_icons').catch(() => null),
-      tray: (key, press) => send('taskbar_tray', { key: Number(key), press: String(press) }),
-      trayRects: rects => send('taskbar_tray_rects', { rects }),
+      tray: (key: unknown, press: string) => send('taskbar_tray', { key: Number(key), press: String(press) }),
+      trayRects: (rects: unknown[]) => send('taskbar_tray_rects', { rects }),
       // A press on a window's button: press (to the front, or minimized),
       // front (to the front alone: the next of a program's windows), drag (to
       // the front, a file held over its button),
       // close, end (its process ended, as Windows' End task does).
-      window: (id, what) => invoke('taskbar_window', { id: Number(id), what: String(what) }).catch(() => false),
+      window: (id: unknown, what: string) => invoke('taskbar_window', { id: Number(id), what: String(what) }).catch(() => false),
       // A program's windows all to the front, or all minimized when one is in front.
-      windows: ids => invoke('taskbar_windows', { ids: (ids || []).map(Number) }).catch(() => false),
+      windows: (ids: unknown[] | null) => invoke('taskbar_windows', { ids: (ids || []).map(Number) }).catch(() => false),
       // Shift and Ctrl held now, as Windows has them ({ shift, ctrl }; null
       // if it could not say): read at a press on a program's button.
       held: () => invoke('taskbar_held').catch(() => null),
@@ -182,25 +190,25 @@ function bridge() {
       // is held (winkeys.rs pause), the keys' hook hears nothing meanwhile.
       keysPause: () => send('taskbar_keys_pause'),
       // A window's own menu, or one for all of a program's windows, at the pointer.
-      windowMenu: ids => invoke('taskbar_window_menu', { ids: (ids || []).map(Number) }).catch(() => false),
+      windowMenu: (ids: unknown[] | null) => invoke('taskbar_window_menu', { ids: (ids || []).map(Number) }).catch(() => false),
       // Presses anywhere told back (onPress) while something is open that closes on one.
-      watch: on => send('taskbar_watch_presses', { on: on === true }),
+      watch: (on: boolean) => send('taskbar_watch_presses', { on: on === true }),
       // A tray icon kept out on the taskbar, or folded away (its name,
       // systray.rs; null: where it was), and the tray's order (names) after it.
-      trayPin: (name, pinned, order) =>
+      trayPin: (name: unknown, pinned: boolean | null, order: unknown[] | null) =>
         send('taskbar_tray_pin', { name: String(name), pinned: typeof pinned === 'boolean' ? pinned : null, order: Array.isArray(order) ? order.map(String) : null }),
       // A program's button: launch (it, or another window of it), admin (run
       // as administrator), pin, unpin.
-      app: (path, what, id) => invoke('taskbar_app', { path: String(path), what: String(what), id: id ? String(id) : null }).catch(() => false),
+      app: (path: unknown, what: string, id?: unknown) => invoke('taskbar_app', { path: String(path), what: String(what), id: id ? String(id) : null }).catch(() => false),
       // Programs (or shortcuts to them) dropped on the taskbar: pinned (taskbar/).
-      pinFiles: paths => invoke('taskbar_pin_files', { paths: paths.map(String) }).catch(() => 0),
+      pinFiles: (paths: unknown[]) => invoke('taskbar_pin_files', { paths: paths.map(String) }).catch(() => 0),
       // Room for windows' live pictures in the page: [[window, x, y, w, h]], or none.
-      thumbs: items => send('taskbar_thumbs', { items }),
+      thumbs: (items: unknown[]) => send('taskbar_thumbs', { items }),
       // The handover with Windows' own taskbar (handoff.ts): its picture is
       // over it (covered), hers is bare for Windows' to show under it (bare),
       // the dust has settled (done). Out of the queue: the program may be
       // waiting on it inside an earlier call (pet_ready waits for covered).
-      handoff: what => invoke('taskbar_handoff', { what: String(what) }).catch(() => {}),
+      handoff: (what: string) => invoke('taskbar_handoff', { what: String(what) }).catch(() => {}),
     },
     // The handover's steps ({ step: in, picture } with Windows' strip as a
     // picture, { step: go } once Windows' is hidden under it, { step: out }).
@@ -228,7 +236,7 @@ function bridge() {
     // type enter, over, leave or drop, at where it is in the page's px (none
     // once it has left). Tauri's drop handler has the window's drags, so the
     // page hears no dragenter of its own.
-    onFileDrag: fn => fileDrags.push(fn),
+    onFileDrag: (fn: FileDrag) => fileDrags.push(fn),
     // Win+T, Win+B (winkeys.rs): the keyboard, given her window already, on
     // her programs' buttons or her tray ({ part: apps | tray, back }).
     onFocusBar: on('taskbar:focus'),
@@ -250,8 +258,8 @@ function bridge() {
     // size }, in this page's px; null: off the desktop again), and let go
     // there ({ x, y, item, size, ticket }). What that page said back: {
     // ticket, ok, where, why } (ticket null: about the preview).
-    deskPreview: at => send('desk_drag_preview', { at: at || null }),
-    deskDrop: at => send('desk_drop', { at }),
+    deskPreview: (at: object | null) => send('desk_drag_preview', { at: at || null }),
+    deskDrop: (at: object) => send('desk_drop', { at }),
     onDeskAnswer: on('island:desk-answer'),
     // A desktop widget's page asks the island's (desk.rs desk_ask): a
     // widget's settings ({ what: 'settings', args: { widget } }), widgets
@@ -259,7 +267,7 @@ function bridge() {
     onDeskAsk: on('desk:ask'),
     // The desktop's widgets (desk.rs): entries put there or changed, ids gone.
     desk: {
-      keep: (entries, gone) => invoke('desk_keep', { entries: entries || [], gone: gone || [] }),
+      keep: (entries: unknown[] | null, gone: unknown[] | null) => invoke('desk_keep', { entries: entries || [], gone: gone || [] }),
     },
     // Windows' Start menu opened or closed ({ open }), for the Start button.
     onStart: on('taskbar:start'),
@@ -274,23 +282,23 @@ function bridge() {
       // A running plugin's asking (widget, remove, fetch, storage, notify,
       // hardware, said), in its name: addons.ts knows it by its frame; and
       // its watchdog's (stop, views).
-      call: (what, args) => invoke('addon_call', { id: String(args?.id || ''), what: String(what), args: args || {} }),
+      call: (what: string, args?: Record<string, unknown>) => invoke('addon_call', { id: String(args?.id || ''), what: String(what), args: args || {} }),
       // A card's view (views.ts): what a widget's view shows ({ page, data,
       // rev }), a message of it for its main.js.
-      view: (what, widget, message?) => invoke('addon_view', { what: String(what), widget: String(widget), message: message ?? null }),
+      view: (what: string, widget: unknown, message?: unknown) => invoke('addon_view', { what: String(what), widget: String(widget), message: message ?? null }),
       // From the settings: a package looked at, installed, a plugin taken
       // away, a pack taken away (its kind, pet or wallpaper, and id), a
       // .zip picked in Windows' dialog ({ path }, null: closed), one
       // stopped turned on again.
-      inspect: path => invoke('addon_manage', { what: 'inspect', arg: String(path) }),
+      inspect: (path: unknown) => invoke('addon_manage', { what: 'inspect', arg: String(path) }),
       // sha: the SHA-256 inspect gave, so the install refuses a file changed since.
-      install: (path, sha) => invoke('addon_manage', { what: 'install', arg: String(path), sha: sha ? String(sha) : null }),
-      uninstall: id => invoke('addon_manage', { what: 'uninstall', arg: String(id) }),
-      uninstallPack: (kind, id) => invoke('addon_manage', { what: 'uninstallPack', arg: `${kind}:${id}` }),
+      install: (path: unknown, sha?: unknown) => invoke('addon_manage', { what: 'install', arg: String(path), sha: sha ? String(sha) : null }),
+      uninstall: (id: unknown) => invoke('addon_manage', { what: 'uninstall', arg: String(id) }),
+      uninstallPack: (kind: string, id: string) => invoke('addon_manage', { what: 'uninstallPack', arg: `${kind}:${id}` }),
       pickZip: () => invoke('addon_manage', { what: 'pick', arg: null }).then(r => r?.path ?? null, () => null),
-      revive: id => invoke('addon_manage', { what: 'revive', arg: String(id) }),
+      revive: (id: unknown) => invoke('addon_manage', { what: 'revive', arg: String(id) }),
       // Allow a plugin the permissions its manifest now asks for (finding 1).
-      approve: id => invoke('addon_manage', { what: 'approve', arg: String(id) }),
+      approve: (id: unknown) => invoke('addon_manage', { what: 'approve', arg: String(id) }),
     },
     // The plugin market (market.rs): its index ({ items, at, from, error },
     // read again when asked or an hour old), one got from it (answered once
@@ -299,41 +307,41 @@ function bridge() {
     // total, stage }).
     onMarket: on('market:progress'),
     market: {
-      index: force => invoke('market', { what: 'index', arg: force ? 'force' : null }),
-      install: id => invoke('market', { what: 'install', arg: String(id) }),
+      index: (force?: boolean) => invoke('market', { what: 'index', arg: force ? 'force' : null }),
+      install: (id: unknown) => invoke('market', { what: 'install', arg: String(id) }),
       updateAll: () => invoke('market', { what: 'updateAll', arg: null }),
-      cancel: id => invoke('market', { what: 'cancel', arg: String(id) }),
+      cancel: (id: unknown) => invoke('market', { what: 'cancel', arg: String(id) }),
     },
     settings: {
       get: () => invoke('settings_get'),
-      set: patch => invoke('settings_set', { patch }),
-      showPet: on => invoke('settings_show_pet', { on: on === true }),
-      login: on => invoke('settings_login', { on: on === true }),
+      set: (patch: Partial<Config>) => invoke('settings_set', { patch }),
+      showPet: (on: boolean) => invoke('settings_show_pet', { on: on === true }),
+      login: (on: boolean) => invoke('settings_login', { on: on === true }),
       // Windows' own mode ({ light }) or accent colour ({ accent: "#rrggbb" }).
       winLook: ({ light, accent }: { light?: boolean; accent?: string } = {}) => invoke('settings_win_look', { light: typeof light === 'boolean' ? light : null, accent: typeof accent === 'string' ? accent : null }),
       // The desktop's picture: picked (picture, folder), a wallpaper pack's folder by its id (pack), laid (position), its turns (every, shuffle), the next now.
-      wallpaper: (what, value) => invoke('settings_wallpaper', { what: String(what), value: value == null ? null : String(value) }),
+      wallpaper: (what: string, value?: unknown) => invoke('settings_wallpaper', { what: String(what), value: value == null ? null : String(value) }),
       // One agent's (agents.ts id) files: 'install', 'remove'; Claude Code's
       // 'install-http'; DeepSeek Harness's 'install:npmmirror'.
-      agent: (id, action) => invoke('settings_agent', { agent: id, action }),
+      agent: (id: string, action: string) => invoke('settings_agent', { agent: id, action }),
       // DeepSeek Harness's way: 'plugin' or 'bridge', switched (the other
       // taken away); registry 'npmmirror' for the bridge's packages from there.
-      dshVia: (via, registry) => invoke('settings_agent', { agent: 'dsh', action: `via:${via}${registry ? `:${registry}` : ''}` }),
+      dshVia: (via: string, registry?: string | null) => invoke('settings_agent', { agent: 'dsh', action: `via:${via}${registry ? `:${registry}` : ''}` }),
       // The CPU temperature/power helper (#18 part B): 'install',
       // 'installPawnIO' (download PawnIO first), 'remove'. Each shows one UAC.
-      cpuSensors: action => invoke('settings_cpu_sensors', { action }),
-      fetch: reference => invoke('settings_fetch', { reference: String(reference || '') }),
-      gallery: (page, sort, query) => invoke('settings_gallery', { page, sort, query }),
-      openSite: (place, account?) => invoke('settings_open_site', { place, account: account || null }),
+      cpuSensors: (action: string) => invoke('settings_cpu_sensors', { action }),
+      fetch: (reference: unknown) => invoke('settings_fetch', { reference: String(reference || '') }),
+      gallery: (page: number, sort: string, query: string) => invoke('settings_gallery', { page, sort, query }),
+      openSite: (place: string, account?: string) => invoke('settings_open_site', { place, account: account || null }),
       // Her updates: 'check', 'page' (the release's), 'update' (updates.rs).
-      update: what => invoke('settings_update', { what }),
+      update: (what: string) => invoke('settings_update', { what }),
       // The Network proxy tried the way given ({ mode, kind, address }): GitHub reached or not (proxy.rs test).
-      netTest: proxy => invoke('settings_net_test', { proxy: proxy || null }),
+      netTest: (proxy?: object | null) => invoke('settings_net_test', { proxy: proxy || null }),
       // LibreHardwareMonitor for the monitor: 'get', 'start', 'startup', 'noStartup',
       // 'usePort', 'folder', 'look', 'dismiss' (lhm_setup.rs).
-      lhm: what => invoke('settings_lhm', { what: String(what) }),
+      lhm: (what: string) => invoke('settings_lhm', { what: String(what) }),
       // Her crash reports: 'yes', 'no' (her asking answered), 'send', 'open' (the last one's issue; crash.rs).
-      crash: what => invoke('settings_crash', { what }),
+      crash: (what: string) => invoke('settings_crash', { what }),
     },
     // Mail accounts (mail.rs): the server for an address, an account kept
     // once it signs in, one removed, one on or off, a server tried without
@@ -345,30 +353,30 @@ function bridge() {
     // Re-test go the way the account being set up does (proxy: its own, or
     // null for the Mail page's; mail/proxy.rs).
     mail: {
-      discover: (address, proxy) => invoke('mail_discover', { address: String(address || ''), proxy: proxy || null }),
-      probe: (host, port, security, kind, proxy) =>
+      discover: (address: unknown, proxy?: object | null) => invoke('mail_discover', { address: String(address || ''), proxy: proxy || null }),
+      probe: (host: unknown, port: unknown, security: unknown, kind: string, proxy?: object | null) =>
         invoke('mail_probe', { host: String(host || ''), port: String(port ?? ''), security: String(security || 'auto'), kind: kind === 'smtp' ? 'smtp' : 'imap', proxy: proxy || null }),
-      send: letter => invoke('mail_send', { letter }),
-      save: (account, password) => invoke('mail_save', { account, password: String(password || '') }),
-      remove: id => invoke('mail_remove', { id: String(id) }),
-      switch: (id, on) => invoke('mail_switch', { id: String(id), on: on === true }),
-      letters: (id, count, filter) => invoke('mail_letters', { id: String(id), count: Number(count) || 50, filter: String(filter || 'all') }),
-      flag: (id, uid, on, folder) => invoke('mail_flag', { id: String(id), uid: Number(uid), on: on === true, folder: String(folder || 'inbox') }),
-      say: (key, text) => invoke('mail_say', { key: String(key), text: String(text || '') }),
-      letter: (id, uid, folder) => invoke('mail_letter', { id: String(id), uid: Number(uid), folder: String(folder || 'inbox') }),
+      send: (letter: object) => invoke('mail_send', { letter }),
+      save: (account: object, password: unknown) => invoke('mail_save', { account, password: String(password || '') }),
+      remove: (id: unknown) => invoke('mail_remove', { id: String(id) }),
+      switch: (id: unknown, on: boolean) => invoke('mail_switch', { id: String(id), on: on === true }),
+      letters: (id: unknown, count: unknown, filter: unknown) => invoke('mail_letters', { id: String(id), count: Number(count) || 50, filter: String(filter || 'all') }),
+      flag: (id: unknown, uid: unknown, on: boolean, folder?: unknown) => invoke('mail_flag', { id: String(id), uid: Number(uid), on: on === true, folder: String(folder || 'inbox') }),
+      say: (key: unknown, text: unknown) => invoke('mail_say', { key: String(key), text: String(text || '') }),
+      letter: (id: unknown, uid: unknown, folder?: unknown) => invoke('mail_letter', { id: String(id), uid: Number(uid), folder: String(folder || 'inbox') }),
       // An account's sync (or every one's, '*') to look at the server now.
-      kick: id => invoke('mail_kick', { id: String(id) }),
+      kick: (id: unknown) => invoke('mail_kick', { id: String(id) }),
       // The letter being written, as kept in the data folder (null: none).
       draft: () => invoke('mail_draft'),
-      keepDraft: draft => invoke('mail_keep_draft', { draft: draft || null }),
-      hand: (id, uid, agent, how, folder) => invoke('mail_hand', { id: String(id), uid: Number(uid), agent: String(agent), how: String(how), folder: String(folder || 'inbox') }),
+      keepDraft: (draft: object | null) => invoke('mail_keep_draft', { draft: draft || null }),
+      hand: (id: unknown, uid: unknown, agent: unknown, how: unknown, folder?: unknown) => invoke('mail_hand', { id: String(id), uid: Number(uid), agent: String(agent), how: String(how), folder: String(folder || 'inbox') }),
     },
   }
 
   // --- Mouse moves while clicks pass through ------------------------------------
 
   // The elements under the pointer, outermost first, as last played.
-  let inside = []
+  let inside: Element[] = []
   // What the page has had a mouseenter for and no mouseleave since, real or
   // played, in the order entered (heard in the capture phase: neither
   // bubbles). Left by the next word from the Rust side that the pointer is
@@ -378,13 +386,13 @@ function bridge() {
   document.addEventListener('mouseenter', e => e.target instanceof Element && e.target !== document.documentElement && entered.add(e.target), true)
   document.addEventListener('mouseleave', e => entered.delete(e.target as Element), true)
 
-  function chainAt(x, y) {
-    const chain = []
+  function chainAt(x: number, y: number) {
+    const chain: Element[] = []
     for (let el = document.elementFromPoint(x, y); el && el !== document.documentElement; el = el.parentElement) chain.unshift(el)
     return chain
   }
 
-  function play(type, el, x, y) {
+  function play(type: string, el: Element, x: number, y: number) {
     el.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: false, view: window }))
   }
 
@@ -420,8 +428,8 @@ function bridge() {
   // that the window lets the drag through once it is off her things, as it
   // does the pointer: caught, the clear window over the strip took the drop
   // meant for the window under it. Then told the page (onFileDrag).
-  const fileDrags = []
-  let dragged = []
+  const fileDrags: FileDrag[] = []
+  let dragged: Element[] = []
   for (const type of ['enter', 'over', 'leave', 'drop']) {
     pending.push(
       listen(

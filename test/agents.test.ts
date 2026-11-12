@@ -46,7 +46,7 @@ test('each agent in the table is whole, and its words are there in both language
   const sites = read('src-tauri/src/settings.rs')
   const keys = new Set<string>()
   // Each written or removed through the bridge's one call, by its id.
-  assert.match(bridge, /\n\s+agent: \(id, action\) => invoke\('settings_agent', \{ agent: id, action \}\)/)
+  assert.match(bridge, /\n\s+agent: \(id: string, action: string\) => invoke\('settings_agent', \{ agent: id, action \}\)/)
   assert.equal(Agents.TABLE.length, 8)
   for (const a of Agents.TABLE) {
     assert.match(a.id, /^[a-z]+$/)

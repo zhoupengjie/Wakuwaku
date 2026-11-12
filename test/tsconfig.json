@@ -1,9 +1,16 @@
 // The pages' tests: what they test is src/ (tsconfig.json there), and they
-// run in Node (node --test, its own type stripping), with its types.
+// run in Node (node --test, its own type stripping), with its types. Not
+// strict, as before the pages were: a parameter with no type is any and
+// null is in every type (the pages themselves are checked strict by
+// tsconfig.json; here they are checked again only as the tests use them).
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    "strict": false,
+    "noImplicitThis": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true
   },
   "include": ["*.ts", "../src"]
 }

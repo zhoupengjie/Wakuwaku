@@ -33,7 +33,7 @@
   // (window[0]) has its own fresh constructors with no contentWindow to
   // reach through. Its residual risk is in docs/PLUGINS.md.
   const RTC = ['RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCDataChannel', 'RTCSessionDescription', 'RTCIceCandidate', 'RTCRtpSender', 'RTCRtpReceiver', 'RTCRtpTransceiver', 'RTCCertificate']
-  function blankRtc(win) {
+  function blankRtc(win: object | null) {
     if (!win) return
     for (const name of RTC) {
       try {
@@ -61,7 +61,7 @@
         const orig = proto && proto[name]
         if (typeof orig !== 'function') continue
         try {
-          Object.defineProperty(proto, name, { configurable: true, writable: true, value: function (...args) {
+          Object.defineProperty(proto, name, { configurable: true, writable: true, value: function (this: unknown, ...args: unknown[]) {
             const out = orig.apply(this, args)
             sweepFrames()
             return out
@@ -73,8 +73,8 @@
       const desc = proto && Object.getOwnPropertyDescriptor(proto, prop)
       if (!desc || !desc.set) continue
       try {
-        Object.defineProperty(proto, prop, { configurable: true, enumerable: desc.enumerable, get: desc.get, set: function (v) {
-          desc.set.call(this, v)
+        Object.defineProperty(proto, prop, { configurable: true, enumerable: desc.enumerable, get: desc.get, set: function (this: unknown, v: unknown) {
+          desc.set!.call(this, v)
           sweepFrames()
         } })
       } catch {}
@@ -83,24 +83,25 @@
 
   // A view's page is any of its folder's but her first page for main.js.
   const VIEW = !/\/__waku\/main\.html$/.test(location.pathname)
-  const tell = (t, args) => parent.postMessage({ waku: 1, t, ...args }, '*')
+  const tell = (t: string, args: Record<string, unknown>) => parent.postMessage({ waku: 1, t, ...args }, '*')
   // A value as JSON has it (what a message carries, checked over there).
-  const plain = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)))
+  const plain = (v: unknown) => (v === undefined ? null : JSON.parse(JSON.stringify(v)))
 
   // --- What goes wrong, told ---------------------------------------------------------------
   let base = ''
   try {
     base = new URL(VIEW ? './' : '../', location.href).href
   } catch {}
-  const short = file => String(file || '').replace(base, '')
-  function report(err, file?, line?) {
+  const short = (file: unknown) => String(file || '').replace(base, '')
+  // err: whatever was thrown.
+  function report(err: any, file?: unknown, line?: unknown) {
     const message = err && typeof err === 'object' ? `${err.name || 'Error'}: ${err.message}` : String(err)
     const where = file ? ` (${short(file)}${line ? `:${line}` : ''})` : ''
     tell('error', { line: `${message}${where}`.slice(0, 300) })
   }
   window.addEventListener('error', e => report(e.error || e.message, e.filename, e.lineno))
   window.addEventListener('unhandledrejection', e => report(e.reason))
-  const call = (fn, ...args) => {
+  const call = (fn: (...args: any[]) => any, ...args: unknown[]) => {
     try {
       const r = fn(...args)
       if (r && typeof r.then === 'function') r.then(undefined, report)
@@ -109,7 +110,7 @@
     }
   }
 
-  function words(args) {
+  function words(args: unknown[]) {
     return args
       .map(a => {
         if (typeof a === 'string') return a
@@ -133,8 +134,8 @@
     // with the words of why not).
     const pending = new Map()
     let next = 1
-    const ask = (t, args = {}) =>
-      new Promise((resolve, reject) => {
+    const ask = (t: string, args: Record<string, unknown> = {}) =>
+      new Promise<any>((resolve, reject) => {
         const n = next++
         pending.set(n, { resolve, reject })
         tell(t, { n, ...args })
@@ -156,16 +157,22 @@
     } catch {}
 
     // --- Its state, as the page tells it ------------------------------------------------------
-    let state = null
-    const listeners = new Map(EVENTS.map(e => [e, new Set()]))
-    const fire = (what, ...values) => {
-      for (const fn of listeners.get(what)) call(fn, ...values)
+    let state: { id: string; version: string; lang: string; theme: string; quiet: boolean; settings: unknown } | null = null
+    const listeners = new Map(EVENTS.map(e => [e, new Set<(...values: any[]) => unknown>()]))
+    const fire = (what: string, ...values: unknown[]) => {
+      for (const fn of listeners.get(what)!) call(fn, ...values)
     }
 
     // waku.every's timers: each at its interval, three times as long while
     // nobody is about; started over from now as that changes.
-    const timers = new Set()
-    function arm(t) {
+    interface Tick {
+      secs: number
+      fn: () => unknown
+      handle: Timer
+      stopped: boolean
+    }
+    const timers = new Set<Tick>()
+    function arm(t: Tick) {
       clearTimeout(t.handle)
       t.handle = setTimeout(
         () => {
@@ -176,9 +183,9 @@
         t.secs * 1000 * (state?.quiet ? 3 : 1),
       )
     }
-    function every(seconds, fn) {
+    function every(seconds: unknown, fn: () => unknown) {
       if (typeof fn !== 'function') throw new TypeError('waku.every(seconds, fn)')
-      const t = { secs: Math.max(1, Number(seconds) || 1), fn, handle: 0, stopped: false }
+      const t: Tick = { secs: Math.max(1, Number(seconds) || 1), fn, handle: 0, stopped: false }
       timers.add(t)
       arm(t)
       return () => {
@@ -190,7 +197,7 @@
 
     // An answer of waku.fetch, as a fetch's is read: its status, whether ok,
     // its headers (a few), and its text, read as text or JSON.
-    function answerOf(r) {
+    function answerOf(r: { text?: unknown; status?: unknown; ok?: unknown; headers?: Record<string, string> } | null) {
       const text = String(r?.text ?? '')
       return Object.freeze({
         status: Number(r?.status) || 0,
@@ -200,8 +207,9 @@
         json: () => Promise.resolve().then(() => JSON.parse(text)),
       })
     }
-    function headersOf(h) {
-      const out = {}
+    // h: a plugin's headers, as fetch() takes them (an object, pairs, Headers).
+    function headersOf(h: any) {
+      const out: Record<string, string> = {}
       if (!h || typeof h !== 'object') return out
       const pairs = Array.isArray(h) ? h : typeof h.entries === 'function' && !(h.constructor === Object) ? [...h.entries()] : Object.entries(h)
       for (const [k, v] of pairs) out[String(k)] = String(v)
@@ -210,26 +218,26 @@
 
     const waku = Object.freeze({
       get id() {
-        return state.id
+        return state!.id
       },
       get version() {
-        return state.version
+        return state!.version
       },
       get lang() {
-        return state.lang
+        return state!.lang
       },
       get theme() {
-        return state.theme
+        return state!.theme
       },
       get quiet() {
-        return state.quiet
+        return state!.quiet
       },
       get settings() {
-        return state.settings
+        return state!.settings
       },
       widget: Object.freeze({
         // set(data), or set(sub, data) for a second widget.
-        set(sub, data) {
+        set(sub: unknown, data?: unknown) {
           if (typeof sub !== 'string') [sub, data] = ['', sub]
           return ask('widget', { sub, data: plain(data) })
         },
@@ -238,31 +246,31 @@
         },
       }),
       every,
-      fetch(url, opts: { method?: unknown; headers?: unknown; body?: unknown } = {}) {
+      fetch(url: unknown, opts: { method?: unknown; headers?: unknown; body?: unknown } = {}) {
         const body = opts.body == null ? null : String(opts.body)
         return ask('fetch', { url: String(url), method: String(opts.method || 'GET'), headers: headersOf(opts.headers), body }).then(answerOf)
       },
       storage: Object.freeze({
-        get: key => ask('storage', { op: 'get', key: String(key) }),
-        set: (key, value) => ask('storage', { op: 'set', key: String(key), value: plain(value) }),
-        remove: key => ask('storage', { op: 'remove', key: String(key) }),
+        get: (key: unknown) => ask('storage', { op: 'get', key: String(key) }),
+        set: (key: unknown, value: unknown) => ask('storage', { op: 'set', key: String(key), value: plain(value) }),
+        remove: (key: unknown) => ask('storage', { op: 'remove', key: String(key) }),
         all: () => ask('storage', { op: 'all' }),
       }),
       agents: Object.freeze({ list: () => ask('agents') }),
       hardware: Object.freeze({ read: () => ask('hardware') }),
-      notify: text => ask('notify', { text: String(text ?? '') }),
+      notify: (text: unknown) => ask('notify', { text: String(text ?? '') }),
       // view: fn(message, { sub }), a message of its view.html (waku.send)
       // from the card of its widget `sub` ('' its own).
-      on(what, fn) {
+      on(what: string, fn: (...values: any[]) => unknown) {
         if (!listeners.has(what) || typeof fn !== 'function') throw new TypeError(`waku.on(${EVENTS.join(' | ')}, fn)`)
-        listeners.get(what).add(fn)
+        listeners.get(what)!.add(fn)
         if (what === 'agents' || what === 'hardware') tell('listen', { what })
-        return () => listeners.get(what).delete(fn)
+        return () => listeners.get(what)!.delete(fn)
       },
-      log: (...args) => tell('log', { line: words(args).slice(0, 500) }),
+      log: (...args: unknown[]) => tell('log', { line: words(args).slice(0, 500) }),
     })
 
-    const frozen = v => Object.freeze(plain(v) ?? {})
+    const frozen = (v: unknown) => Object.freeze(plain(v) ?? {})
 
     window.addEventListener('message', e => {
       if (e.source !== parent) return
@@ -335,7 +343,8 @@
     // clear, nothing round its edge, nothing to scroll (the card is its
     // frame). The view's own styles come after these, and may say otherwise.
     const VARS = { fg: '--waku-fg', muted: '--waku-muted', color: '--waku-color', font: '--waku-font', fontDisplay: '--waku-font-display' }
-    function style(s) {
+    // s: the card's colours and fonts, as the page holding it gave them.
+    function style(s: any) {
       if (!s || typeof s !== 'object') return
       for (const [k, name] of Object.entries(VARS)) if (typeof s[k] === 'string' && s[k].length <= 300) document.documentElement.style.setProperty(name, s[k])
     }
@@ -346,9 +355,9 @@
       ;(document.head || document.documentElement).appendChild(sheet)
     } catch {}
 
-    const listeners = new Map(EVENTS.map(e => [e, new Set()]))
-    const fire = (what, value) => {
-      for (const fn of listeners.get(what)) call(fn, value)
+    const listeners = new Map(EVENTS.map(e => [e, new Set<(value: any) => unknown>()]))
+    const fire = (what: string, value: unknown) => {
+      for (const fn of listeners.get(what)!) call(fn, value)
     }
 
     const waku = Object.freeze({
@@ -370,13 +379,13 @@
         return state.lang
       },
       // Any JSON to its main.js (waku.on('view')).
-      send: message => tell('send', { message: plain(message) }),
-      on(what, fn) {
+      send: (message: unknown) => tell('send', { message: plain(message) }),
+      on(what: string, fn: (value: any) => unknown) {
         if (!listeners.has(what) || typeof fn !== 'function') throw new TypeError(`waku.on(${EVENTS.join(' | ')}, fn)`)
-        listeners.get(what).add(fn)
-        return () => listeners.get(what).delete(fn)
+        listeners.get(what)!.add(fn)
+        return () => listeners.get(what)!.delete(fn)
       },
-      log: (...args) => tell('log', { line: words(args).slice(0, 500) }),
+      log: (...args: unknown[]) => tell('log', { line: words(args).slice(0, 500) }),
     })
     Object.defineProperty(window, 'waku', { value: waku, enumerable: true })
 

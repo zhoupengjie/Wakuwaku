@@ -11,7 +11,12 @@
 import * as Aim from './aim.ts'
 import * as Presses from './presses.ts'
 import { pet } from './bridge.ts'
-import type { IslandCore } from './island.ts'
+import type { IslandCore, Room } from './island.ts'
+import type { TaskApp } from './island-vars.ts'
+
+// Where a pop goes along the bar (besideOrOver): from its left, or a side
+// bar's top.
+type PopAt = { left?: number; top?: number }
 
 export function winlistPart(core: IslandCore) {
   const {
@@ -28,30 +33,32 @@ export function winlistPart(core: IslandCore) {
     if (!app || !button) return closePop()
     const windows = app.windows || []
     const rows = []
-    if (st.popFor.kind === 'list') {
+    // Open (its program found): st.popFor is there from here on.
+    if (st.popFor!.kind === 'list') {
       // A card for each: its icon, title and ✕, and room under them for
       // its live picture (taskbar/mod.rs thumbs).
       for (const w of windows) {
         const card = el('div', w.front ? 'wcard front' : 'wcard')
-        card.dataset.win = w.id
+        // Its handle, a number, made a string as data-* are.
+        card.dataset.win = w.id as unknown as string
         const top = el('div', 'wtop')
         if (w.png || app.png) {
           const img = el('img')
-          img.src = w.png || app.png
+          img.src = w.png || app.png!
           top.append(img)
         }
         // A window with no title (tasks.rs is_task): its program's name.
         top.append(el('span', 'wt', w.title || app.name))
         const x = el('span', 'wx', '✕')
-        x.dataset.close = w.id
+        x.dataset.close = w.id as unknown as string
         top.append(x)
         const room = el('div', 'wthumb')
-        room.dataset.thumb = w.id
+        room.dataset.thumb = w.id as unknown as string
         card.append(top, room)
         rows.push(card)
       }
     } else {
-      const item = (text, act) => {
+      const item = (text: string, act: string) => {
         const row = el('div', 'witem', text)
         row.dataset.act = act
         return row
@@ -68,17 +75,17 @@ export function winlistPart(core: IslandCore) {
     if (!rows.length) return closePop()
     // Another program's windows taking the place of the last's (the pointer
     // gone along the buttons): where the list was and how big, to slide from.
-    const isList = st.popFor.kind === 'list'
+    const isList = st.popFor!.kind === 'list'
     const from = isList && !pop.hidden && pop.classList.contains('list') && st.popShown && st.popShown !== app.app ? { [isSide() ? 'top' : 'left']: isSide() ? pop.offsetTop : pop.offsetLeft, width: pop.offsetWidth, height: pop.offsetHeight } : null
     const opening = pop.hidden
     // Drawn again only when what it shows changed: a card replaced under a
     // press is never clicked (the windows' list comes again often).
-    const drawn = JSON.stringify([st.popFor.app, st.popFor.kind, app.name, app.pinned, windows.map(w => [w.id, w.title, w.front, (w.png || '').length]), st.lang, st.look.endTask])
+    const drawn = JSON.stringify([st.popFor!.app, st.popFor!.kind, app.name, app.pinned, windows.map(w => [w.id, w.title, w.front, (w.png || '').length]), st.lang, st.look.endTask])
     if (drawn !== st.popDrawn || pop.hidden) {
       st.popDrawn = drawn
       pop.replaceChildren(...rows, popReach)
     }
-    pop.classList.toggle('menu', st.popFor.kind === 'menu')
+    pop.classList.toggle('menu', st.popFor!.kind === 'menu')
     pop.classList.toggle('list', isList)
     pop.hidden = false
     st.popShown = app.app
@@ -111,7 +118,7 @@ export function winlistPart(core: IslandCore) {
     pet.taskbar.thumbs([])
   }
 
-  function settlePop(ms) {
+  function settlePop(ms: number) {
     st.popMoveTimer = setTimeout(() => {
       st.popMoving = false
       // A slide not quite done by now would hold the list at its old size.
@@ -126,20 +133,21 @@ export function winlistPart(core: IslandCore) {
   // Where a pop goes in the bar (its px): centred over a node along the bar,
   // or beside it on a side bar (its place there by style.css), kept this
   // far from the bar's ends.
-  function besideOrOver(node, popNode, keep) {
+  function besideOrOver(node: HTMLElement, popNode: HTMLElement, keep: number): PopAt {
     const r = node.getBoundingClientRect()
     const base = barRest.getBoundingClientRect()
     if (isSide()) return { top: Math.round(Math.max(keep, Math.min(r.top - base.top + r.height / 2 - popNode.offsetHeight / 2, barRest.offsetHeight - popNode.offsetHeight - keep))) }
     return { left: Math.round(Math.max(keep, Math.min(r.left - base.left + r.width / 2 - popNode.offsetWidth / 2, barRest.offsetWidth - popNode.offsetWidth - keep))) }
   }
 
-  function slidePop(from, to) {
+  function slidePop(from: PopAt & Room, to: PopAt & Room) {
     holdThumbs()
     // Along the bar: across a bottom or top one, up and down a side one.
     const key = 'top' in to ? 'top' : 'left'
-    pop.style.setProperty('--come', `${to[key] > from[key] ? 16 : -16}px`)
+    // Both along the same side (drawPop).
+    pop.style.setProperty('--come', `${to[key]! > from[key]! ? 16 : -16}px`)
     pop.classList.add('sliding')
-    const box = b => ({ [key]: `${b[key]}px`, width: `${b.width}px`, height: `${b.height}px` })
+    const box = (b: PopAt & Room) => ({ [key]: `${b[key]}px`, width: `${b.width}px`, height: `${b.height}px` })
     Object.assign(pop.style, box(to))
     pop.getAnimations().forEach(a => a.id === 'slide' && a.cancel())
     const slide = pop.animate([box(from), box(to)], { duration: POP_SLIDE_MS, easing: 'cubic-bezier(0.3, 1.2, 0.5, 1)' })
@@ -183,7 +191,7 @@ export function winlistPart(core: IslandCore) {
   // one with several windows, the next of them; a right press, its menu,
   // with Shift its window's own menu (one for all its windows when it has
   // several).
-  function pressApp(app, what) {
+  function pressApp(app: TaskApp, what: string | null) {
     const windows = app.windows || []
     if (!what) return
     if (what === 'menu') return openPop(app.app, 'menu')
@@ -196,15 +204,16 @@ export function winlistPart(core: IslandCore) {
     if (what === 'next') {
       const last = cycled?.app === app.app && Date.now() - cycled.at < Presses.CYCLED_MS ? cycled.id : null
       const next = Presses.nextWindow(windows, last)
-      cycled = { app: app.app, id: next.id, at: Date.now() }
-      return pet.taskbar.window(next.id, 'front')
+      // Ctrl's next is for one with several windows (Presses.pressOf).
+      cycled = { app: app.app, id: next!.id, at: Date.now() }
+      return pet.taskbar.window(next!.id, 'front')
     }
     if (!windows.length) return pet.taskbar.app(app.path, 'launch', app.id)
     if (windows.length > 1) {
       const listed = st.popFor?.kind === 'list' && st.popFor.app === app.app && !pop.hidden
-      if (listed && st.popFor.pressed) return closePop()
+      if (listed && st.popFor!.pressed) return closePop()
       if (!listed) openPop(app.app, 'list')
-      st.popFor.pressed = true
+      st.popFor!.pressed = true
       return
     }
     closePop()
@@ -212,7 +221,7 @@ export function winlistPart(core: IslandCore) {
   }
   // The window Ctrl and a press last brought, for the next to go on from
   // it while its mark in front has not come yet ({ app, id, at }).
-  let cycled = null
+  let cycled: { app: string; id: number; at: number } | null = null
   // A window's own menu open (Shift and a right press): no list of windows
   // on the pointer resting on the button, which came up over the menu.
   let menuUp = false
@@ -220,12 +229,12 @@ export function winlistPart(core: IslandCore) {
   // by the time the button comes up: her window never takes the keyboard,
   // and what the page's own events say of them may be behind. Theirs only
   // when it could not say.
-  let heldAtPress = null
+  let heldAtPress: Promise<any> | null = null
   windowsBox.addEventListener('pointerdown', e => {
-    if (e.target.closest('[data-app]')) heldAtPress = pet.taskbar.held()
+    if ((e.target as HTMLElement).closest('[data-app]')) heldAtPress = pet.taskbar.held()
   })
-  function pressAt(e) {
-    const key = e.target.closest('[data-app]')?.dataset.app
+  function pressAt(e: MouseEvent) {
+    const key = (e.target as HTMLElement).closest('[data-app]')?.dataset.app
     const press = { type: e.type, button: e.button }
     const own = { shift: e.shiftKey, ctrl: e.ctrlKey }
     const held = heldAtPress
@@ -236,7 +245,7 @@ export function winlistPart(core: IslandCore) {
     })
   }
   windowsBox.addEventListener('click', e => {
-    if (!appOf(e.target.closest('[data-app]')?.dataset.app)) return
+    if (!appOf((e.target as HTMLElement).closest('[data-app]')?.dataset.app)) return
     e.stopPropagation()
     // The end of a drag, not a press.
     if (winDragged) {
@@ -246,7 +255,7 @@ export function winlistPart(core: IslandCore) {
     pressAt(e)
   })
   windowsBox.addEventListener('auxclick', e => {
-    if (e.button !== 1 || !appOf(e.target.closest('[data-app]')?.dataset.app)) return
+    if (e.button !== 1 || !appOf((e.target as HTMLElement).closest('[data-app]')?.dataset.app)) return
     e.stopPropagation()
     pressAt(e)
   })
@@ -254,7 +263,7 @@ export function winlistPart(core: IslandCore) {
   // a side bar's column of buttons.
   windowsBox.addEventListener('mousedown', e => e.button === 1 && e.preventDefault())
   windowsBox.addEventListener('contextmenu', e => {
-    if (!appOf(e.target.closest('[data-app]')?.dataset.app)) return
+    if (!appOf((e.target as HTMLElement).closest('[data-app]')?.dataset.app)) return
     e.preventDefault()
     e.stopPropagation()
     pressAt(e)
@@ -262,10 +271,10 @@ export function winlistPart(core: IslandCore) {
   // A program's button dragged along the taskbar: put where it is let go
   // among the others, before the one under the pointer (after it past its
   // middle), the order kept (taskbarOrder). { app, x, y, ghost } while held.
-  let winPress = null
+  let winPress: { app: string; x: number; y: number; ghost: HTMLImageElement | null } | null = null
   let winDragged = false
   windowsBox.addEventListener('pointerdown', e => {
-    const key = e.target.closest('[data-app]')?.dataset.app
+    const key = (e.target as HTMLElement).closest('[data-app]')?.dataset.app
     if (e.button !== 0 || !key) return
     winPress = { app: key, x: e.clientX, y: e.clientY, ghost: null }
   })
@@ -279,7 +288,7 @@ export function winlistPart(core: IslandCore) {
       try {
         windowsBox.setPointerCapture(e.pointerId)
       } catch {}
-      const from = windowsBox.querySelector(`[data-app="${CSS.escape(winPress.app)}"] img`)
+      const from = windowsBox.querySelector<HTMLImageElement>(`[data-app="${CSS.escape(winPress.app)}"] img`)
       winPress.ghost = el('img', 'tghost')
       if (from) winPress.ghost.src = from.src
       body.append(winPress.ghost)
@@ -324,7 +333,7 @@ export function winlistPart(core: IslandCore) {
   // Where a dragged button would land at (x, y): beside the button whose
   // span holds x (past the last, after it); null when let go off the
   // taskbar, or on itself.
-  function winDropAt(x, y, key) {
+  function winDropAt(x: number, y: number, key: string) {
     const strip = windowsBox.getBoundingClientRect()
     const [a, c] = [along(x, y), across(x, y)]
     if (c < crossLo(strip) - 24 || c > crossHi(strip) + 24) return null
@@ -336,17 +345,17 @@ export function winlistPart(core: IslandCore) {
     if (!others.length) return null
     for (const b of others) {
       const r = b.getBoundingClientRect()
-      if (a < hi(r)) return { target: b.dataset.app, after: a > lo(r) + len(r) / 2, slot: b }
+      if (a < hi(r)) return { target: b.dataset.app!, after: a > lo(r) + len(r) / 2, slot: b }
     }
     const last = others[others.length - 1]
-    return { target: last.dataset.app, after: true, slot: last }
+    return { target: last.dataset.app!, after: true, slot: last }
   }
 
-  let winMarked = null
-  function markWinDrop(drop) {
+  let winMarked: HTMLElement | null = null
+  function markWinDrop(drop: { after: boolean; slot: HTMLElement } | null) {
     if (winMarked) winMarked.classList.remove('drop-before', 'drop-after')
     winMarked = drop?.slot || null
-    if (winMarked) winMarked.classList.add(drop.after ? 'drop-after' : 'drop-before')
+    if (winMarked) winMarked.classList.add(drop!.after ? 'drop-after' : 'drop-before')
   }
 
   // The pointer resting on a running program's button: its windows. With
@@ -369,7 +378,7 @@ export function winlistPart(core: IslandCore) {
   windowsBox.addEventListener('mouseover', e => {
     const at = performance.now()
     aim.move(e.clientX, e.clientY, at)
-    aim.over(e.target.closest('[data-app]')?.dataset.app ?? null, at)
+    aim.over((e.target as HTMLElement).closest('[data-app]')?.dataset.app ?? null, at)
     aimPop()
   })
   // Gone from the button and the list a moment: it closes. Between them it
@@ -392,8 +401,8 @@ export function winlistPart(core: IslandCore) {
   // (bridge.ts onFileDrag, which also plays it as the pointer's: the list
   // goes once the drag has left it and the buttons a moment, as for the
   // pointer). What it is held over: 'win:<id>', 'app:<key>', or null.
-  let fileHeld = null
-  let fileTimer
+  let fileHeld: string | null = null
+  let fileTimer: Timer | undefined
   pet.onFileDrag((type, at, paths) => {
     // Let go of over the strip: programs and shortcuts to them pinned, as
     // Windows' own taskbar pins one dropped on it (taskbar/mod.rs taskbar_pin_files).
@@ -412,13 +421,14 @@ export function winlistPart(core: IslandCore) {
     if (!held) return
     fileTimer = setTimeout(() => {
       if (card) return pet.taskbar.window(card.dataset.win, 'drag')
-      const app = appOf(button.dataset.app)
+      // Held over a card or a button: not a card, a button.
+      const app = appOf(button!.dataset.app)
       const windows = app?.windows || []
       if (windows.length === 1) {
         closePop()
         pet.taskbar.window(windows[0].id, 'drag')
-      } else if (windows.length > 1 && !(st.popFor?.kind === 'list' && st.popFor.app === app.app && !pop.hidden)) {
-        openPop(app.app, 'list')
+      } else if (windows.length > 1 && !(st.popFor?.kind === 'list' && st.popFor.app === app!.app && !pop.hidden)) {
+        openPop(app!.app, 'list')
       }
     }, Presses.DRAG_HOLD_MS)
   })
@@ -431,15 +441,15 @@ export function winlistPart(core: IslandCore) {
     e.stopPropagation()
     const app = st.popFor && appOf(st.popFor.app)
     if (!app) return
-    const close = e.target.closest('[data-close]')
+    const close = (e.target as HTMLElement).closest('[data-close]')
     if (close) return pet.taskbar.window(close.dataset.close, 'close')
-    const row = e.target.closest('[data-win]')
+    const row = (e.target as HTMLElement).closest('[data-win]')
     // A window picked: to the front, never minimized (taskbar/ 'front').
     if (row) {
       closePop()
       return pet.taskbar.window(row.dataset.win, 'front')
     }
-    const act = e.target.closest('[data-act]')?.dataset.act
+    const act = (e.target as HTMLElement).closest('[data-act]')?.dataset.act
     if (!act) return
     closePop()
     if (act === 'close' || act === 'end') for (const w of app.windows || []) pet.taskbar.window(w.id, act)

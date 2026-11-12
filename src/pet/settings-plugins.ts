@@ -11,6 +11,38 @@ import * as AddonUI from './addonui.ts'
 import * as Widgets from './widgets.ts'
 import type { SettingsCore } from './settings.ts'
 
+// The monitor's hardware and its sensors as hw.rs and lhm.rs list them: the
+// Rust side's JSON, these fields read by name. A sensor on is shown; one
+// for the settings alone (info) has no switch; toggle: one of the
+// monitor's own switches it stands for.
+interface Hardware {
+  id: string
+  name?: string
+  class?: string
+  about?: any
+  health?: { used: number; spare: number; hours: number }
+}
+interface Sensor {
+  id: string
+  name: string
+  [field: string]: any
+}
+interface View {
+  status?: string
+  version?: string
+  hardware?: Hardware[]
+  sensors?: Sensor[]
+}
+// Sensors under their hardware: its id, name and what it is, and,
+// folded out, its own lines (more).
+interface Group {
+  id: string
+  name: string
+  about?: string
+  list: Sensor[]
+  more?: string
+}
+
 export function pluginsPart(core: SettingsCore) {
   const {
     st, pieces, go, AddonUI, COLOR, SPINS, T, Widgets, drafts, esc, market, openHardware, placeHTML, placeOf,
@@ -39,7 +71,7 @@ export function pluginsPart(core: SettingsCore) {
   }
 
   // The setting in "monitor" with a source's picks (hw.rs Source::picks).
-  const picksKey = source => (source === 'lhm' ? 'sensors' : 'builtinSensors')
+  const picksKey = (source: string) => (source === 'lhm' ? 'sensors' : 'builtinSensors')
 
   // Sensors under their hardware ({ id, name, about, list, more }), folded
   // (the ones on still shown): each hardware's name, what it is and how
@@ -47,11 +79,11 @@ export function pluginsPart(core: SettingsCore) {
   // switch is: lhms:<id> or hws:<id>, picked; mon:<part>, one of the
   // monitor's own). One for the settings alone (info) has none; `more`,
   // a hardware's own lines (a drive's health), shows folded out.
-  function sensorGroups(groups, keyOf) {
+  function sensorGroups(groups: Group[], keyOf: (s: Sensor) => string) {
     return groups
       .map(g => {
         const open = openHardware.has(g.id)
-        const shown = s => s.on && !s.info
+        const shown = (s: Sensor) => s.on && !s.info
         const picked = g.list.filter(shown).length
         const about = g.about ? ` <span class="d">${esc(g.about)}</span>` : ''
         const title = `<div class="fr lhw" data-lhw="${esc(g.id)}"><span class="fl">${open ? '▾' : '▸'} ${esc(g.name)}${about}</span><span class="d">${picked ? esc(T('mon.lhmTicked', { n: picked })) : ''}</span></div>`
@@ -67,9 +99,9 @@ export function pluginsPart(core: SettingsCore) {
   // monitor's own switches, the rest picked; an NVMe drive's health in its
   // own line, for the settings alone.
   function builtinFields() {
-    const v = st.snap.hw
+    const v: View | undefined = st.snap.hw
     if (!v || !Array.isArray(v.hardware)) return `<div class="note lhm-note">${esc(T('hw.unread'))}</div>`
-    const hardwareName = h => h.name || T(`hw.${h.class}`)
+    const hardwareName = (h: Hardware) => h.name || T(`hw.${h.class}`)
     const groups = v.hardware.map(h => {
       const health = h.health ? `<div class="fr lsen info"><span class="fl">${esc(T('hw.health'))}</span><span class="d">${esc(T('hw.healthReading', { used: h.health.used, spare: h.health.spare, hours: h.health.hours }))}</span></div>` : ''
       const about = h.about && typeof h.about === 'object' ? render(st.lang, h.about) : h.about || ''
@@ -119,9 +151,10 @@ export function pluginsPart(core: SettingsCore) {
   // snap.lhm): whether it was found, and if not, how to; its sensors to
   // pick, under their hardware (folded, the ones picked still shown); its
   // port, and a user and password for its authentication.
-  function sensorFields(m) {
+  // m: the monitor's settings.
+  function sensorFields(m: Record<string, any>) {
     const head = `<div class="note lhm-note">${esc(T('mon.lhmNote'))}</div>`
-    const v = st.snap.lhm || {}
+    const v: View = st.snap.lhm || {}
     const port = m.lhmPort || 8085
     const status =
       v.status === 'found'
@@ -139,14 +172,14 @@ export function pluginsPart(core: SettingsCore) {
     // found, the steps; or, answering, where it is and its start at logon.
     const note = lhmSetup(port, `<div class="note lhm-note${v.status === 'found' ? '' : ' bad'}">${esc(status)}${get}</div>`)
     // Its sensors by hardware, in LHM's order.
-    const groups = []
+    const groups: Group[] = []
     for (const s of v.status === 'found' ? v.sensors || [] : []) {
       const last = groups[groups.length - 1]
       if (last && last.id === s.hardwareId) last.list.push(s)
       else groups.push({ id: s.hardwareId, name: s.hardware || s.hardwareId, list: [s] })
     }
     const sensors = sensorGroups(groups, s => 'lhms:' + s.id)
-    const field = (key, label, attrs, value) => `<label class="fr"><span class="fl">${esc(label)}</span><input class="in" data-mon="${key}" value="${esc(`mon:${key}` in drafts ? drafts[`mon:${key}`] : value)}" spellcheck="false" ${attrs}></label>`
+    const field = (key: string, label: string, attrs: string, value: unknown) => `<label class="fr"><span class="fl">${esc(label)}</span><input class="in" data-mon="${key}" value="${esc(`mon:${key}` in drafts ? drafts[`mon:${key}`] : value)}" spellcheck="false" ${attrs}></label>`
     // The password is never shown again: kept, it says so, and can be forgotten.
     const kept = m.lhmPass === true
     const forget = kept ? `<div class="fr"><span class="fl"></span><span class="d grow">${esc(T('mon.lhmPassKept'))}</span><button class="pbtn sm" data-lhm-forget>${esc(T('mon.lhmForget'))}</button></div>` : ''
@@ -167,11 +200,11 @@ export function pluginsPart(core: SettingsCore) {
   // removal; someone's own is theirs, its start at logon LHM's menu's. What
   // went wrong last above it. Nothing off Windows, nor till it was first
   // looked for (looking).
-  function lhmSetup(port, note) {
+  function lhmSetup(port: number, note: string) {
     const u = st.snap.lhmSetup
     if (!u || !u.step || u.step === 'off' || u.step === 'looking') return note
-    const line = (text, bad?) => `<div class="note lhm-note${bad ? ' bad' : ''}">${text}</div>`
-    const button = (what, label, accent?) => `<div class="fr"><span class="fl"></span><span class="grow"></span><button class="pbtn sm${accent ? ' al' : ''}" data-lhm="${what}">${esc(label)}</button></div>`
+    const line = (text: string, bad?: boolean) => `<div class="note lhm-note${bad ? ' bad' : ''}">${text}</div>`
+    const button = (what: string, label: string, accent?: boolean) => `<div class="fr"><span class="fl"></span><span class="grow"></span><button class="pbtn sm${accent ? ' al' : ''}" data-lhm="${what}">${esc(label)}</button></div>`
     const i = u.install
     const where = i ? i.dir || i.shown : ''
     const code = u.error?.code || ''
@@ -182,7 +215,7 @@ export function pluginsPart(core: SettingsCore) {
     let body
     if (u.step === 'busy') {
       const j = u.job || {}
-      const mb = n => (n / 1048576).toFixed(1)
+      const mb = (n: number) => (n / 1048576).toFixed(1)
       const name = j.stage || 'look'
       const stage = name === 'download' ? T('lhm.stageDownload', { asset: j.asset || '', version: j.version || '', pct: j.total ? Math.min(100, Math.floor((100 * j.got) / j.total)) : 0, got: mb(j.got || 0), total: mb(j.total || 0) }) : T(`lhm.stage${name[0].toUpperCase()}${name.slice(1)}`, { dir: u.dir || '' })
       body = line(esc(stage) + (name === 'wait' || name === 'install' ? pawnio : ''))
@@ -234,7 +267,7 @@ export function pluginsPart(core: SettingsCore) {
     if (own) return own
     go({ type: 'sub-off' })
     const s = st.snap.settings
-    const left = ms => (ms >= 60000 ? T('settings.minutes', { n: Math.round(ms / 60000) }) : T('settings.seconds', { n: Math.max(1, Math.round(ms / 1000)) }))
+    const left = (ms: number) => (ms >= 60000 ? T('settings.minutes', { n: Math.round(ms / 60000) }) : T('settings.seconds', { n: Math.max(1, Math.round(ms / 1000)) }))
     const rows = widgetRows()
       .map(r => {
         if (r.addon) return addonRow(r.addon, r.mine)

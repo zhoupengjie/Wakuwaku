@@ -12,6 +12,14 @@ import { CELL_W, CELL_H, CLIPS, MOOD_CLIP, REACTIONS, lookCell } from './sprite.
 import { t } from '../shared/i18n.ts'
 import { pet } from './bridge.ts'
 import type { Config } from '../shared/config.ts'
+import type { Session } from './status.ts'
+
+// A row of her sheet, and a mood (what main says she is: each has its clip
+// and its colours here).
+type Clip = keyof typeof CLIPS
+type Mood = keyof typeof MOOD_CLIP
+// The room over her head, as main is told it (pet.panel), or none.
+type Room = { width: number; height: number } | null
 
 // Her own window's page (index.html, role=pet; in the island's, role=island,
 // she is not drawn here): made by main.ts. What it hands back: what the
@@ -31,17 +39,17 @@ export function herPage() {
   const LOOK_NEAR = 40
   const LOOK_FAR = 900
 
-  const sprite = document.getElementById('pet')
+  const sprite = document.getElementById('pet')!
   // The whole sheet behind her cell-sized box (style.css #pet-film); made
   // here should the page lack it (a harness with an older index.html).
   const film = document.getElementById('pet-film') || sprite.appendChild(Object.assign(document.createElement('div'), { id: 'pet-film' }))
   // Her words over her head out on the desktop (and, with no pet at all, how
   // to get one); the list she opens under the pointer, made here as the film is.
-  const bubble = document.getElementById('bubble')
-  const herList = document.getElementById('her-list') || sprite.parentElement.insertBefore(Object.assign(document.createElement('div'), { id: 'her-list', hidden: true }), sprite)
-  const panelBox = document.getElementById('panel')
+  const bubble = document.getElementById('bubble')!
+  const herList = document.getElementById('her-list') || sprite.parentElement!.insertBefore(Object.assign(document.createElement('div'), { id: 'her-list', hidden: true }), sprite)
+  const panelBox = document.getElementById('panel')!
   // Under her feet while she is carried out of her home: a double-click sends her back.
-  const hint = document.getElementById('her-hint') || sprite.parentElement.appendChild(Object.assign(document.createElement('div'), { id: 'her-hint', hidden: true }))
+  const hint = document.getElementById('her-hint') || sprite.parentElement!.appendChild(Object.assign(document.createElement('div'), { id: 'her-hint', hidden: true }))
 
   let lang = 'en'
   // The session shown as main tells it (pet:update), with every session in
@@ -51,15 +59,16 @@ export function herPage() {
     mood: string
     detail: any
     project: string
-    since: number
-    took: number
+    since: number | null
+    took: number | null
     others: number
     sessions: number
-    list: any[]
+    list: Session[]
   }
   let now: Now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
+  // (Main sends every key with a default, scale among them: data.rs load.)
   let config: Config = { scale: 0.55, details: true, walk: true, look: true, sound: false, dnd: false }
-  let spriteUrl = null
+  let spriteUrl: string | null = null
   // 2: the 11-row sheet; 1: the older 9-row one, without the look-around rows.
   let spriteVersion = 2
 
@@ -74,22 +83,22 @@ export function herPage() {
   // Nobody at the keyboard or mouse for a while (pet:quiet): she stands still.
   let quiet = false
 
-  let reaction = null // { clip, times, say, start }
-  let dragged = null // { dir, at }
-  let walking = null // { dir }
-  let looking = null // { row, frame, until }
+  let reaction: { clip: string; times: number; say?: string; start: number } | null = null
+  let dragged: { dir: number; at: number } | null = null
+  let walking: { dir: number } | null = null
+  let looking: { row: number; frame: number; until: number } | null = null
   let loop = { clip: '', start: 0 }
 
   // --- Drawing ------------------------------------------------------------------
 
   let drawn = ''
-  let frameTimer
+  let frameTimer: Timer | undefined
 
-  function drawCell(row, frame) {
+  function drawCell(row: number, frame: number) {
     const key = `${row}:${frame}:${config.scale}`
     if (key === drawn) return
     drawn = key
-    const s = config.scale
+    const s = config.scale!
     // The sheet moved behind the cell: a transform on its own layer, no repaint.
     film.style.transform = `translate3d(${-frame * CELL_W * s}px, ${-row * CELL_H * s}px, 0)`
   }
@@ -101,9 +110,9 @@ export function herPage() {
 
   // Loop a clip, keeping its clock while it stays the same clip. Returns the
   // time until its next frame.
-  function drawLoop(name, at) {
+  function drawLoop(name: string, at: number) {
     if (loop.clip !== name) loop = { clip: name, start: at }
-    const clip = CLIPS[name]
+    const clip = CLIPS[name as Clip]
     const t = at - loop.start
 
     if (name === 'idle') {
@@ -132,7 +141,7 @@ export function herPage() {
     // mood's first frame (a reaction still plays; a drag still carries her).
     if (quiet && !reaction && !dragged && !walking) {
       loop = { clip: '', start: 0 }
-      drawCell(CLIPS[MOOD_CLIP[now.mood]].row, 0)
+      drawCell(CLIPS[MOOD_CLIP[now.mood as Mood] as Clip].row, 0)
       return 60 * 60 * 1000
     }
 
@@ -142,7 +151,7 @@ export function herPage() {
     }
 
     if (reaction) {
-      const clip = CLIPS[reaction.clip]
+      const clip = CLIPS[reaction.clip as Clip]
       const step = Math.floor((at - reaction.start) / clip.ms)
       if (step < clip.frames * reaction.times) {
         loop = { clip: '', start: 0 }
@@ -161,7 +170,7 @@ export function herPage() {
       return looking.until - at
     }
 
-    return drawLoop(MOOD_CLIP[now.mood], at)
+    return drawLoop(MOOD_CLIP[now.mood as Mood], at)
   }
 
   // Draw now and plan the next frame; called again on anything that changes her.
@@ -217,7 +226,7 @@ export function herPage() {
   const isAsking = () => document.body.classList.contains('asking')
   const detailed = () => config.details !== false
 
-  function span(cls, text?) {
+  function span(cls: string, text?: string) {
     const node = document.createElement('span')
     node.className = cls
     if (text) node.textContent = text
@@ -229,14 +238,14 @@ export function herPage() {
   function line({ mood, name, what, clock, others }: { mood: string; name?: string; what?: string; clock?: string; others?: number }) {
     const row = span('row')
     const dot = span('dot')
-    dot.style.background = ON_DARK[mood] || ON_DARK.idle
+    dot.style.background = ON_DARK[mood as Mood] || ON_DARK.idle
     row.append(dot)
     if (name) row.append(span('who', name))
     if (what) row.append(span('what', what))
     if (others) row.append(span('more', `+${others}`))
     if (clock) {
       const c = span('clock', clock)
-      c.style.color = ON_DARK[mood] || ON_DARK.idle
+      c.style.color = ON_DARK[mood as Mood] || ON_DARK.idle
       row.append(c)
     }
     return row
@@ -245,16 +254,16 @@ export function herPage() {
   // Out of her head with the island's spring as it comes, back into it as it
   // goes, and once in place nothing moves (the design's motion: quick, light,
   // played once). Her capsule hides by a class, the rest by their hidden.
-  const isUp = node => (node === bubble ? !node.classList.contains('hidden') : !node.hidden) && !node.classList.contains('out')
-  const goTimers = new Map()
+  const isUp = (node: HTMLElement) => (node === bubble ? !node.classList.contains('hidden') : !node.hidden) && !node.classList.contains('out')
+  const goTimers = new Map<HTMLElement, Timer>()
 
-  function replayIn(node) {
+  function replayIn(node: HTMLElement) {
     node.classList.remove('in')
     void node.offsetWidth
     node.classList.add('in')
   }
 
-  function popIn(node) {
+  function popIn(node: HTMLElement) {
     const was = isUp(node)
     clearTimeout(goTimers.get(node))
     node.classList.remove('out')
@@ -263,7 +272,7 @@ export function herPage() {
     if (!was) replayIn(node)
   }
 
-  function popOut(node, then) {
+  function popOut(node: HTMLElement, then?: () => void) {
     clearTimeout(goTimers.get(node))
     if (!isUp(node)) return then?.()
     node.classList.remove('in')
@@ -281,7 +290,7 @@ export function herPage() {
   }
 
   let saidKey = ''
-  let tickTimer
+  let tickTimer: Timer | undefined
 
   // Her capsule as the session shown is now; drawn again only when what it
   // says changes, its clock kept up each second in place (tick). Something
@@ -314,7 +323,7 @@ export function herPage() {
   function tick() {
     clearTimeout(tickTimer)
     if (!isOut() || quiet || document.hidden) return
-    const busy = s => s.mood === 'working' || s.mood === 'waiting'
+    const busy = (s: Session) => s.mood === 'working' || s.mood === 'waiting'
     if (!(saidKey && busy(now)) && !(listOpen && (now.list || []).some(busy))) return
     tickTimer = setTimeout(() => {
       const c = bubble.querySelector('.clock')
@@ -334,8 +343,8 @@ export function herPage() {
   // --- Her list, under the pointer ----------------------------------------------------
 
   let listOpen = false
-  let listTimer
-  let leaveTimer
+  let listTimer: Timer | undefined
+  let leaveTimer: Timer | undefined
   let listKey = ''
 
   // Drawn again only when its lines change; their clocks kept up in place.
@@ -366,7 +375,7 @@ export function herPage() {
     const more = all.length - sessions.length
     const head = span('head', all.length ? t(lang, all.length === 1 ? 'her.session' : 'her.sessions', { n: all.length }) : t(lang, 'her.noSessions'))
     const foot = span('foot')
-    const button = (text, act) => {
+    const button = (text: string, act: () => void) => {
       const b = span('btn', text)
       b.addEventListener('click', () => {
         closeList()
@@ -424,11 +433,12 @@ export function herPage() {
   // What is over her head (a prompt, her list, her words) measured for main:
   // her window grows up and out for more than it has above her, she staying
   // put (pet.rs set_panel); less is given back a moment later.
-  let roomSent
+  let roomSent: Room | undefined
   // Less room on its way (its timer, and how much), not put off again by the
-  // clock's tick asking the same.
-  let roomTimer = null
-  let roomLess
+  // clock's tick asking the same. (Null till set: clearTimeout takes that,
+  // though the DOM's type says not, so it is cleared as a Timer.)
+  let roomTimer: Timer | null = null
+  let roomLess: Room | undefined
 
   // A prompt comes out of her head; once it is answered, her capsule again.
   let wasAsking = false
@@ -445,22 +455,22 @@ export function herPage() {
       if (asking && listOpen) return closeList()
       const shown = [panelBox, herList, bubble].find(n => n && !n.hidden && !n.classList.contains('hidden') && n.offsetHeight > 0)
       const want = shown ? { width: Math.ceil(shown.offsetWidth) + 16, height: Math.ceil(shown.offsetHeight) + 12 } : null
-      const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+      const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
       const send = () => {
-        clearTimeout(roomTimer)
+        clearTimeout(roomTimer as Timer)
         roomTimer = null
         roomSent = want
         pet.panel(want)
       }
       if (same(want, roomSent)) {
-        clearTimeout(roomTimer)
+        clearTimeout(roomTimer as Timer)
         roomTimer = null
         return
       }
       const isLess = !want || (roomSent && want.width <= roomSent.width && want.height <= roomSent.height)
       if (!isLess || atOnce) return send()
       if (roomTimer && same(want, roomLess)) return
-      clearTimeout(roomTimer)
+      clearTimeout(roomTimer as Timer)
       roomLess = want
       roomTimer = setTimeout(send, ROOM_KEEP_MS)
     })
@@ -471,8 +481,8 @@ export function herPage() {
   // The bubble never pushes her out of her window: one line for the status
   // and one for the others, cut short with an ellipsis; something she says
   // (a task's name can be long) two lines at most. All of it in the tooltip.
-  function fillBubble(lines, isSaying = false) {
-    const line = (cls, text) => {
+  function fillBubble(lines: { main: string; more?: string }, isSaying = false) {
+    const line = (cls: string, text: string) => {
       const node = document.createElement('span')
       node.className = cls
       node.textContent = text
@@ -487,7 +497,7 @@ export function herPage() {
   function render() {
     const root = document.documentElement.style
     root.setProperty('--scale', config.scale as any)
-    root.setProperty('--accent', COLOR[now.mood])
+    root.setProperty('--accent', COLOR[now.mood as Mood])
     root.setProperty('--sprite', spriteUrl ? `url("${spriteUrl}")` : 'none')
     root.setProperty('--sheet-h', `${spriteVersion === 2 ? 2288 : 1872}px`)
     drawn = ''
@@ -513,8 +523,8 @@ export function herPage() {
 
   // --- Idle life: walk a little, glance around ---------------------------------------
 
-  let idleTimer
-  let glanceTimer
+  let idleTimer: Timer | undefined
+  let glanceTimer: Timer | undefined
 
   function scheduleIdle() {
     clearTimeout(idleTimer)
@@ -532,7 +542,7 @@ export function herPage() {
 
     if (config.walk && Math.random() < 0.4) {
       const dir = Math.random() < 0.5 ? -1 : 1
-      const distance = Math.round((60 + Math.random() * 140) * (config.scale / 0.55))
+      const distance = Math.round((60 + Math.random() * 140) * (config.scale! / 0.55))
       walking = { dir }
       kick()
       await pet.walk(dir * distance, distance * 18)
@@ -546,7 +556,7 @@ export function herPage() {
   }
 
   // Look at a few random directions in turn, then back to idle.
-  function glance(times) {
+  function glance(times: number) {
     if (times <= 0 || now.mood !== 'idle' || spriteVersion !== 2) return
     const index = Math.floor(Math.random() * 16)
     const { row, frame: cell } = lookCell(Math.sin((index * Math.PI) / 8), -Math.cos((index * Math.PI) / 8))
@@ -567,22 +577,23 @@ export function herPage() {
 
   // --- Sound: two soft notes, made here (no audio files) ---------------------------------
 
-  let audio
+  let audio: AudioContext | undefined
 
-  function chime(mood) {
+  function chime(mood: string) {
     if (!config.sound || config.dnd) return
     try {
       audio = audio || new AudioContext()
       const notes = mood === 'error' ? [440, 330] : mood === 'waiting' ? [660, 880] : [523, 784]
+      // (The audio there: made just now if it was not.)
       notes.forEach((hz, i) => {
-        const osc = audio.createOscillator()
-        const gain = audio.createGain()
-        const at = audio.currentTime + i * 0.16
+        const osc = audio!.createOscillator()
+        const gain = audio!.createGain()
+        const at = audio!.currentTime + i * 0.16
         osc.frequency.value = hz
         gain.gain.setValueAtTime(0.0001, at)
         gain.gain.exponentialRampToValueAtTime(0.12, at + 0.02)
         gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.3)
-        osc.connect(gain).connect(audio.destination)
+        osc.connect(gain).connect(audio!.destination)
         osc.start(at)
         osc.stop(at + 0.32)
       })
@@ -617,8 +628,8 @@ export function herPage() {
     tick()
   })
 
-  function react({ react: name, say: text, times }) {
-    const r = REACTIONS[name]
+  function react({ react: name, say: text, times }: { react: string; say?: string; times?: number }) {
+    const r = REACTIONS[name as keyof typeof REACTIONS]
     if (!r) return
     stopIdle()
     reaction = { ...r, ...(times ? { times } : {}), say: text, start: performance.now() }

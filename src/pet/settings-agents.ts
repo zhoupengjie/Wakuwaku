@@ -28,14 +28,14 @@ export function agentsPart(core: SettingsCore) {
 
   // Why each could not be written: { error, kind, folder } (locked, invalid, path, other).
   const failed: Record<string, Failure> = {}
-  const sessionOpen = new Set()
+  const sessionOpen = new Set<string>()
   let connectingAll = false
   const known = () => ({ busy: st.connecting, failed })
 
   // One written or removed (bridge.ts settings.agent): what
   // came back shown; not written, why (the card names the file), its row
   // open to say so, and Claude Code's plugin the other way.
-  async function agentDo(id, action) {
+  async function agentDo(id: string, action: string) {
     const a = Agents.byId(id)
     if (!a || st.connecting) return
     if (action === 'install') {
@@ -66,7 +66,7 @@ export function agentsPart(core: SettingsCore) {
   // registry: 'npmmirror', picked after the registry pnpm names could not
   // be reached.
   let dshSwitching = ''
-  async function dshSwitch(via, registry?) {
+  async function dshSwitch(via: string, registry?: string) {
     if (st.connecting) return
     const r: any = Agents.read(st.snap, 'dsh') || {}
     if (!registry && !Agents.isIn(st.snap, 'dsh')) return (r.via || 'plugin') === via ? undefined : patch({ dshVia: via })
@@ -96,12 +96,16 @@ export function agentsPart(core: SettingsCore) {
     draw()
   }
 
-  const capTip = (cap, key) => T('ag.capTip', { cap: T(`ag.cap.${cap}`), what: T(key) })
-  const capIcon = (cap, level, key) => `<span class="cap ${level}" title="${esc(capTip(cap, key))}">${Agents.CAP_GLYPH[cap]}</span>`
+  const capTip = (cap: string, key: string) => T('ag.capTip', { cap: T(`ag.cap.${cap}`), what: T(key) })
+  const capIcon = (cap: string, level: string, key: string) => `<span class="cap ${level}" title="${esc(capTip(cap, key))}">${Agents.CAP_GLYPH[cap as keyof typeof Agents.CAP_GLYPH]}</span>`
+
+  // (The ids drawn here are the table's, found on this computer or not
+  // (agents.ts here, elsewhere), and the snapshot is there: byId and read
+  // find each.)
 
   // How one stands, in its row's second line.
-  function agentLine(id, state) {
-    const r = Agents.read(st.snap, id)
+  function agentLine(id: string, state: string) {
+    const r = Agents.read(st.snap, id)!
     if (state === 'on') {
       const n = Agents.sessionsOf(st.snap, id)
       return n ? T(n === 1 ? 'ag.st.on1' : 'ag.st.onN', { n }) : T('ag.st.on')
@@ -117,9 +121,9 @@ export function agentsPart(core: SettingsCore) {
     return T('ag.st.none')
   }
 
-  function agentRow(id) {
-    const a = Agents.byId(id)
-    const r = Agents.read(st.snap, id)
+  function agentRow(id: string) {
+    const a = Agents.byId(id)!
+    const r = Agents.read(st.snap, id)!
     const state = Agents.stateOf(st.snap, id, known())
     const action = Agents.actionOf(st.snap, id, known())
     const open = st.agentOpen === id
@@ -129,8 +133,8 @@ export function agentsPart(core: SettingsCore) {
     // actionOf); else a faint › saying the row opens.
     let end = `<span class="fi chev${open ? ' open' : ''}">\uE76C</span>`
     if (state === 'busy') end = `<button class="pbtn sm" disabled><span class="spin"></span>${esc(T('wc.busy'))}</button>`
-    else if (action?.act === 'open') end = `<button class="pbtn sm" data-ag-open="${id}" data-ag-keep>${esc(T(action.label))}</button>`
-    else if (action) end = `<button class="pbtn sm" data-agent="${id}:${action.act}" ${st.connecting ? 'disabled' : ''}>${esc(T(action.label))}</button>`
+    else if (action?.act === 'open') end = `<button class="pbtn sm" data-ag-open="${id}" data-ag-keep>${esc(T(action.label!))}</button>`
+    else if (action) end = `<button class="pbtn sm" data-agent="${id}:${action.act}" ${st.connecting ? 'disabled' : ''}>${esc(T(action.label!))}</button>`
     const caps = `<span class="caps">${Agents.capsOf(st.snap, id).map(([cap, level, key]) => capIcon(cap, level, key)).join('')}</span>`
     return `<div class="r ag-row${open ? ' open' : ''}" data-ag-open="${id}"><span class="dot" style="background:${COLOR[Agents.MOOD[state]]}"></span><div class="grow"><div class="ag-name ellip">${esc(a.name)}${small}</div><div class="d ellip" title="${esc(line)}">${esc(line)}</div></div>${caps}<span class="ag-end">${end}</span></div>${open ? agentDetails(id, state) : ''}`
   }
@@ -138,8 +142,8 @@ export function agentsPart(core: SettingsCore) {
   // What the person must do now, in amber at the top of the details (as
   // its dot): Codex's trust, its background hooks, an old Codex, ZCode's
   // hooks turned off, Claude Code's two ways at once, a file unreadable.
-  function agentSteps(id, state) {
-    const r = Agents.read(st.snap, id)
+  function agentSteps(id: string, state: string) {
+    const r = Agents.read(st.snap, id)!
     const warn = []
     if (id === 'codex' && state === 'step') warn.push(T('ag.trust.codex'))
     if (id === 'codex' && r.status === 'upgradable') warn.push(T('s.codexUpgradeNote'))
@@ -160,8 +164,8 @@ export function agentsPart(core: SettingsCore) {
   // for its first turn (a new omp session, DSH started or restarted); for
   // DSH, whether and when it loaded her plugin; or why a version of it
   // cannot be connected (Reasonix 0.x).
-  function agentNotes(id, state) {
-    const r = Agents.read(st.snap, id)
+  function agentNotes(id: string, state: string) {
+    const r = Agents.read(st.snap, id)!
     const next =
       state === 'set' && id === 'omp'
         ? T('s.ompNew')
@@ -175,7 +179,7 @@ export function agentsPart(core: SettingsCore) {
 
   // DSH and her plugin (connection/dsh.rs dsh_view): loaded, when and in which
   // profile; an older one loaded; DSH to be restarted; DSH to start.
-  function dshNote(state) {
+  function dshNote(state: string) {
     const r: any = Agents.read(st.snap, 'dsh') || {}
     const load = r.load || {}
     // The hook bridge: an event of it since DSH started, the first still to
@@ -195,13 +199,13 @@ export function agentsPart(core: SettingsCore) {
   }
 
   // A field of the details: its name, what it is.
-  const field = (key, value) => `<div class="kv"><span class="k">${esc(T(key))}</span><span class="v">${value}</span></div>`
-  const pathOf = text => `<span class="mono path">${esc(text)}</span>`
+  const field = (key: string, value: string) => `<div class="kv"><span class="k">${esc(T(key))}</span><span class="v">${value}</span></div>`
+  const pathOf = (text: unknown) => `<span class="mono path">${esc(text)}</span>`
 
   // Where one is written: the file (omp's in each profile too; DSH's patch
   // file, and her plugin beside it), its backup.
-  function agentFiles(id) {
-    const r = Agents.read(st.snap, id)
+  function agentFiles(id: string) {
+    const r = Agents.read(st.snap, id)!
     return [
       field('ag.file', `${pathOf(r.shown)}${r.more ? esc(T('s.ompMore', { n: r.more })) : ''}`),
       r.list ? field(r.listKey || 'ag.list', pathOf(r.list)) : '',
@@ -217,9 +221,10 @@ export function agentsPart(core: SettingsCore) {
     const plugged = ['plugin', 'both'].includes(st.snap.agents?.claude?.connection)
     const plugin = `<div class="ag-way"><div class="ag-way-h"><b>${esc(T('home.plugin'))}</b><span class="grow"></span><span class="d">${esc(T(plugged ? 'home.pluginOn' : 'ag.claude.pluginOff'))}</span></div>
       <div class="d">${esc(T(plugged ? 'ag.claude.pluginRemove' : 'home.pluginWhy'))}</div>
-      ${plugged ? '' : `${commands.map(c => `<div class="wc-cmd mono">${esc(c)}</div>`).join('')}<div class="ag-btns"><button class="pbtn sm" data-copy="${esc(commands.join('\n'))}" data-label="${esc(T('wc.copyBoth'))}">${esc(T('wc.copyBoth'))}</button><span class="d">${esc(T('home.pluginStart'))}</span></div>`}</div>`
+      ${plugged ? '' : `${commands.map((c: string) => `<div class="wc-cmd mono">${esc(c)}</div>`).join('')}<div class="ag-btns"><button class="pbtn sm" data-copy="${esc(commands.join('\n'))}" data-label="${esc(T('wc.copyBoth'))}">${esc(T('wc.copyBoth'))}</button><span class="d">${esc(T('home.pluginStart'))}</span></div>`}</div>`
     const status = st.snap.agents?.claude?.hooks
-    const word = { ok: 'settings.hooksOk', missing: 'settings.hooksMissing', stale: 'settings.hooksStale', partial: 'settings.hooksPartial', httpOnly: 'settings.hooksHttpOnly', unreadable: 's.hooksUnreadable' }[status] || 'settings.hooksMissing'
+    // (Read as one of these: any other has no word, so missing's.)
+    const word = { ok: 'settings.hooksOk', missing: 'settings.hooksMissing', stale: 'settings.hooksStale', partial: 'settings.hooksPartial', httpOnly: 'settings.hooksHttpOnly', unreadable: 's.hooksUnreadable' }[status as 'ok'] || 'settings.hooksMissing'
     const busy = st.connecting === 'claude'
     // Not written while the plugin is on: every event would come twice.
     const buttons =
@@ -248,13 +253,13 @@ export function agentsPart(core: SettingsCore) {
   }
 
   // How one connects, in one word for all (the plugin or the hooks for Claude Code, as connected).
-  function viaOf(id) {
-    if (id !== 'claude') return T(`ag.via.${Agents.byId(id).via}`)
+  function viaOf(id: string) {
+    if (id !== 'claude') return T(`ag.via.${Agents.byId(id)!.via}`)
     const c = st.snap.agents?.claude?.connection
     return c === 'plugin' ? T('ag.via.plugin') : c === 'hooks' ? T('ag.via.hooks') : c === 'both' ? `${T('ag.via.plugin')} + ${T('ag.via.hooks')}` : T('ag.via.claudeNone')
   }
 
-  function agentDetails(id, state) {
+  function agentDetails(id: string, state: string) {
     const caps = Agents.capsOf(st.snap, id)
       .map(([cap, level, key]) => `<div class="ag-cap ${level}">${capIcon(cap, level, key)}<span class="ag-cap-n">${esc(T(`ag.cap.${cap}`))}</span><span class="d">${esc(T(key))}</span></div>`)
       .join('')
@@ -290,8 +295,8 @@ export function agentsPart(core: SettingsCore) {
     const legend = Agents.CAPS.map(cap => `<span class="ag-key"><span class="cap yes">${Agents.CAP_GLYPH[cap]}</span>${esc(T(`ag.cap.${cap}`))}</span>`).join('')
     const others = away.length
       ? `${sec(T('ag.others'))}<div class="grp">
-          <div class="r go" data-ag-others><span class="fi chev${st.othersOpen || !here.length ? ' open' : ''}">\uE76C</span><div class="grow ellip">${esc(nameList(st.lang, away.map(id => Agents.byId(id).name), 'and'))}</div><span class="d">${esc(T('ag.othersNote'))}</span></div>
-          ${st.othersOpen || !here.length ? away.map(id => `<div class="r"><div class="grow"><div>${esc(Agents.byId(id).name)}${Agents.byId(id).aka ? `<span class="ver">${esc(Agents.byId(id).aka)}</span>` : ''}</div><div class="d">${esc(T(`ag.how.${id}`))}</div></div><span class="link" data-site="${Agents.byId(id).site}">${esc(T('ag.get'))} ›</span></div>`).join('') : ''}
+          <div class="r go" data-ag-others><span class="fi chev${st.othersOpen || !here.length ? ' open' : ''}">\uE76C</span><div class="grow ellip">${esc(nameList(st.lang, away.map(id => Agents.byId(id)!.name), 'and'))}</div><span class="d">${esc(T('ag.othersNote'))}</span></div>
+          ${st.othersOpen || !here.length ? away.map(id => `<div class="r"><div class="grow"><div>${esc(Agents.byId(id)!.name)}${Agents.byId(id)!.aka ? `<span class="ver">${esc(Agents.byId(id)!.aka)}</span>` : ''}</div><div class="d">${esc(T(`ag.how.${id}`))}</div></div><span class="link" data-site="${Agents.byId(id)!.site}">${esc(T('ag.get'))} ›</span></div>`).join('') : ''}
         </div>`
       : ''
     return `<div class="sec row-sec"><span class="ellip">${esc(T('ag.found', { n: here.length }))}</span><span class="grow"></span>${all}</div>
@@ -317,7 +322,7 @@ export function agentsPart(core: SettingsCore) {
     if (!u.may) return `${sec(T('s.update'))}<div class="grp">${row(esc(version), esc(T('s.updateSource')), '')}</div>`
     const latest = u.latest
     const newer = !!latest?.newer
-    const mb = n => (n / 1048576).toFixed(1)
+    const mb = (n: number) => (n / 1048576).toFixed(1)
     let state = ''
     if (u.stage === 'download') state = T('s.updateDownloading', { from: u.from || '', pct: u.total ? Math.min(100, Math.floor((100 * u.got) / u.total)) : 0, got: mb(u.got || 0), total: mb(u.total || 0) })
     else if (u.stage) state = T(`s.updateStage.${u.stage}`)
@@ -353,7 +358,7 @@ export function agentsPart(core: SettingsCore) {
   function pageCrash() {
     const c = st.snap.crash || {}
     if (!c.can) return ''
-    const when = ms => new Date(ms).toLocaleString(st.lang === 'zh' ? 'zh-CN' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const when = (ms: number) => new Date(ms).toLocaleString(st.lang === 'zh' ? 'zh-CN' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     const ask =
       c.mode === 'ask' && c.newest
         ? `<div class="grp">

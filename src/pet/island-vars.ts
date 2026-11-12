@@ -8,6 +8,7 @@
 import type * as Flow from './flow.ts'
 import { initial, type IslandState } from './island-state.ts'
 import type { Config } from '../shared/config.ts'
+import type { Widget } from './widgets.ts'
 
 // The compact island at its narrowest: just her, when there is nothing to say.
 export const MIN_W = 112
@@ -48,12 +49,88 @@ export interface Look {
   taskView?: boolean
 }
 
+// A Mac's screen top as notch.rs says it (island:top): the band's height
+// and the notch's width (0 without one).
+export interface ScreenTop {
+  height: number
+  notch: number
+}
+
+// A program's button as taskbar/ sends it (taskbar:windows, buttons.rs):
+// its key, its path and app id, its name, whether it is kept on the
+// taskbar, its icon, and its windows.
+export interface TaskApp {
+  app: string
+  path?: string
+  id?: string | null
+  name?: string
+  pinned?: boolean
+  png?: string
+  windows?: TaskWindow[]
+}
+// One of its windows: its handle, title and picture; in front, minimized,
+// maximized on the strip's display (max), flashing for attention.
+export interface TaskWindow {
+  id: number
+  title?: string
+  png?: string
+  front?: boolean
+  min?: boolean
+  max?: boolean
+  flash?: boolean
+}
+
+// A tray icon as taskbar/ sends it (taskbar:tray, tray.rs): its key, its
+// picture (sent once: kept by the page, island-look.ts), tip, program and
+// name, kept out on the taskbar by Windows, reached by a press.
+export interface TrayIcon {
+  key: number
+  png: string
+  tip?: string
+  exe?: string
+  name: string
+  windowsOut?: boolean
+  reach?: boolean
+}
+
+// A widget or a plugin she runs, as one is put somewhere (island-wmenu.ts
+// placeWidget, the desktop's asks): by its id or its plugin's, its icon
+// as it was put there.
+export interface WidgetItem {
+  id?: string
+  plugin?: string
+  icon?: string
+}
+
+// A widget's menu (island-wmenu.ts): on the strip or in the open island,
+// for an entry there (a group's member by its index; -1, the group) or a
+// widget.
+export interface MenuFor {
+  where: 'bar' | 'isle'
+  entry?: string
+  member?: number
+  widget?: string | null
+}
+
+// What something that opens the island by itself would show in it
+// (island-ring.ts cue): her clip, words in place of the mood's (null:
+// none), for how long, a widget's card; for a reaction inside a turn, its
+// name (react).
+export interface Show {
+  clip: string
+  text: string | null
+  ms: number
+  widget?: Widget | null
+  react?: string
+}
+
 // A layout of the strip (widgets.ts layoutOf): its three runs, each its
 // parts by name and the widgets put there.
 export interface TbLayout {
   left: any[]
   center: any[]
   right: any[]
+  [run: string]: any[]
 }
 
 export interface IslandVars extends IslandState {
@@ -83,7 +160,7 @@ export interface IslandVars extends IslandState {
   // notch's width (0 without one); null elsewhere. With a notch the compact
   // island wraps round it: her in the ear at its left, the clock in the ear at
   // its right, the words (which the notch would hide) left out.
-  screenTop: { height: number; notch: number } | null
+  screenTop: ScreenTop | null
   // At the top of the screen, the side island.rs placed her window at
   // (pet:update islandAt: left, center, right; zhoupengjie/Wakuwaku#59): the
   // island laid out at that side of it (isl-at-left, isl-at-right), and all
@@ -172,15 +249,16 @@ export interface IslandVars extends IslandState {
   // The dot's event: its kind and (a plugin's) colour, and whether it shows
   // yet (it comes as the ring fades).
   news: { kind: string; colour?: string; shown: boolean } | null
-  // What the island would have shown by itself: { clip, text, ms, widget,
-  // until }, shown as it next opens (takePending), until then.
-  pending: any
-  // Its state (flow.ts), its animations running, its colours' blends, its
-  // dot's and its end's timers.
+  // What the island would have shown by itself (a Show), shown as it
+  // next opens (takePending), until then.
+  pending: (Show & { until: number }) | null
+  // Its state (flow.ts), its animations running, its colours' blends (the
+  // lower layer of a spin, the colours it takes, the upper one coming up),
+  // its dot's and its end's timers.
   flowState: ReturnType<typeof Flow.idle>
-  flowAnims: any[]
-  blends: any[]
-  flowTimers: any[]
+  flowAnims: Animation[]
+  blends: { under: HTMLElement; stops: string; anim: Animation }[]
+  flowTimers: Timer[]
 
   // --- The widgets -----------------------------------------------------------------
   // The widgets that are on, the one shown, and the turn to the next; all
@@ -232,20 +310,21 @@ export interface IslandVars extends IslandState {
   slotMiddle: number | null
   // The tray's icons as last sent ({ key, png, tip, exe }), as drawn, and
   // their places as last told; its overflow open.
-  trayIcons: any[]
+  trayIcons: TrayIcon[]
   trayDrawn: string
   trayRectsSent: string
   trayOpen: boolean
   // The windows' buttons as last sent (taskbar/), and as drawn.
-  taskWindows: any[]
+  taskWindows: TaskApp[]
   windowsDrawn: string
   // The programs' buttons drawn once already: a new one after that grows its line in.
   buttonsDrawn: boolean
   // The pointer gliding along the buttons (island-glide.ts).
-  glideOn: any
-  // { app, kind: 'list' | 'menu' } while open, what it showed last, and its
-  // wait to open; shown and moving along with the pointer (island-winlist.ts).
-  popFor: any
+  glideOn: HTMLElement | null
+  // { app, kind: 'list' | 'menu' } while open (pressed: by a press on its
+  // button), what it showed last, and its wait to open; shown and moving
+  // along with the pointer (island-winlist.ts).
+  popFor: { app: string; kind: 'list' | 'menu'; pressed?: boolean } | null
   popDrawn: string
   popTimer: Timer | undefined
   popShown: any
@@ -261,7 +340,7 @@ export interface IslandVars extends IslandState {
   imeOpen: boolean
   // A widget's menu open (the spec's §10), and the open island's height for
   // it (0: none open).
-  menuFor: any
+  menuFor: MenuFor | null
   menuRoom: number
   // What the window was last told to catch the mouse over (sendSolid).
   solidSent: string

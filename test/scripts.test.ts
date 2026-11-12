@@ -91,19 +91,16 @@ test('each page loads its entry alone, and only the entries put faces on window'
   assert.deepEqual(found.sort(), ['desk-main.ts', 'entry.ts', 'main.ts'])
 })
 
-// The files that pass tsc with strict on (tsconfig.strict.json, checked by
-// npm run typecheck): the list only grows. These were on it by 2026-11-12
-// (the new state and entry files, then the small pure modules); a file
-// taken off would fail here (one added need not be named here).
-test('the strict list keeps every file it had, and each is there', () => {
-  const text = fs.readFileSync(path.join(import.meta.dirname, '..', 'tsconfig.strict.json'), 'utf8')
-  const config = JSON.parse(text.split(/\r?\n/).filter(line => !/^\s*\/\//.test(line)).join('\n'))
-  const kept = [
-    ...['src/window.d.ts', 'src/pet/entry.ts', 'src/pet/main.ts', 'src/pet/desk-main.ts', 'src/pet/bar-main.ts', 'src/pet/barpop-main.ts'],
-    ...['island-state', 'island-vars', 'settings-state', 'settings-vars'].map(f => `src/pet/${f}.ts`),
-    ...['addonui', 'agents', 'aim', 'anchor', 'capsule', 'deskgrid', 'flow', 'hovers', 'mica', 'placing', 'presses', 'sprite', 'status', 'views', 'wcards', 'wdesk', 'widgets'].map(f => `src/pet/${f}.ts`),
-  ]
-  for (const f of kept) assert.ok(config.include.includes(f), `${f} stays on the strict list`)
-  for (const f of config.include) assert.ok(fs.existsSync(path.join(import.meta.dirname, '..', f)), `${f} is there`)
-  assert.equal(config.compilerOptions.strict, true)
+// The pages are checked with strict on (npm run typecheck, tsconfig.json):
+// since 2026-11-12 every file in src/ passes it (tsconfig.strict.json listed
+// them as they did, one by one, until it held them all), and one added
+// since must too. The tests' own check (test/tsconfig.json) stays as it was.
+test('the pages are checked strict, the tests as before', () => {
+  const read = (file: string) => JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', file), 'utf8').split(/\r?\n/).filter(line => !/^\s*\/\//.test(line)).join('\n'))
+  const pages = read('tsconfig.json')
+  assert.equal(pages.compilerOptions.strict, true)
+  assert.deepEqual(pages.include, ['src'])
+  const tests = read('test/tsconfig.json')
+  assert.equal(tests.extends, '../tsconfig.json')
+  assert.equal(tests.compilerOptions.strict, false)
 })

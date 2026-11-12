@@ -9,6 +9,24 @@
 // up). What it hands back is the island's again.
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
+import type { Battery } from './island-right.ts'
+
+// What taskbar:keys says (keys.rs): the layout's language and whether it
+// types in its own script, the input method in front (Microsoft's own or
+// another maker's: its name, language, icon, and its mode's), Caps Lock,
+// the network, what uses the microphone, camera or location, the volume
+// and the battery.
+interface Keys {
+  lang?: number
+  native?: boolean | null
+  ime?: { own?: boolean; name?: string; lang?: string; icon?: string; mode?: { icon?: string; tip?: string; off?: boolean } } | null
+  caps?: boolean
+  net?: string
+  bars?: number
+  use?: Record<string, string[]>
+  volume?: unknown
+  battery?: Battery | null
+}
 
 export function imePart(core: IslandCore) {
   const {
@@ -20,19 +38,19 @@ export function imePart(core: IslandCore) {
   const { besideOrOver } = pieces.winlist
 
   // The script's mark by the layout's language: its own and plain letters.
-  const SCRIPTS = { 0x04: ['中', '英'], 0x11: ['あ', 'A'], 0x12: ['한', 'A'] }
-  const LANGS = { 0x09: 'EN', 0x07: 'DE', 0x0c: 'FR', 0x0a: 'ES', 0x10: 'IT', 0x16: 'PT', 0x19: 'RU', 0x13: 'NL', 0x1f: 'TR' }
-  function langMark(langId, native) {
+  const SCRIPTS: Record<number, string[]> = { 0x04: ['中', '英'], 0x11: ['あ', 'A'], 0x12: ['한', 'A'] }
+  const LANGS: Record<number, string> = { 0x09: 'EN', 0x07: 'DE', 0x0c: 'FR', 0x0a: 'ES', 0x10: 'IT', 0x16: 'PT', 0x19: 'RU', 0x13: 'NL', 0x1f: 'TR' }
+  function langMark(langId: number | undefined, native?: boolean | null) {
     const primary = (langId || 0) & 0x3ff
     const script = SCRIPTS[primary]
     return { script, text: script ? script[native === false ? 1 : 0] : LANGS[primary] || primary.toString(16).toUpperCase() }
   }
   // The mode's word in the tip where Windows gives none of its own.
-  const MODE_WORDS = { 中: '中文', 英: '英文' }
+  const MODE_WORDS: Record<string, string> = { 中: '中文', 英: '英文' }
   // The input methods' icons (taskbar/ taskbar:imeIcons), by key: each
   // sent once, named by the keys after it.
-  const imeIcons = {}
-  let keysNow = null
+  const imeIcons: Record<string, string> = {}
+  let keysNow: Keys | null = null
   let imeDrawn = ''
   // As Windows' own taskbar shows the input method in front (which one it
   // is, inputs.rs): Microsoft's own, and a plain layout, by the script's
@@ -40,7 +58,7 @@ export function imePart(core: IslandCore) {
   // (Sogou's, WeChat's) by the picture it gives of its mode, as Windows
   // shows it, or else its own icon beside 中 or 英, so two of one language
   // can be told apart. Its name, its mode and its language in the tip.
-  function showIme(keys) {
+  function showIme(keys: Keys | null) {
     const { script, text } = langMark(keys?.lang, keys?.native)
     const ime = keys?.ime || null
     const theirs = !!ime && !ime.own

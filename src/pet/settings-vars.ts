@@ -18,8 +18,13 @@ import type { Widget } from './widgets.ts'
 // declare them).
 export type Settings = Config & { mailAgent?: string; mailPanes?: string; mailPictures?: string[] }
 
-// Someone else's plugin (addons.rs view) and a pack (packs.rs view): the
-// Rust side's JSON, these fields read by name, the rest as it comes.
+// A plugin she runs (plugins.rs view), someone else's (addons.rs view)
+// and a pack (packs.rs view): the Rust side's JSON, these fields read by
+// name, the rest as it comes.
+export interface Plugin {
+  id: string
+  [field: string]: any
+}
 export interface Addon {
   id: string
   name: string
@@ -54,7 +59,7 @@ export interface Snapshot {
   sessions?: any[]
   packs?: Pack[]
   widgets?: Widget[]
-  plugins?: any[]
+  plugins?: Plugin[]
   addons?: Addon[]
   addonsBroken?: any[]
   marketUpdates?: any[]

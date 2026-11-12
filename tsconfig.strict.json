@@ -61,6 +61,7 @@
     "src/pet/settings-addons.ts",
     "src/pet/settings-look.ts",
     "src/pet/settings-market.ts",
+    "src/pet/settings-plugins.ts",
     "src/pet/sprite.ts",
     "src/pet/status.ts",
     "src/pet/views.ts",

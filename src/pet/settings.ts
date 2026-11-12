@@ -39,7 +39,8 @@ import { welcomePart } from './settings-welcome.ts'
 import { settingsVars } from './settings-vars.ts'
 import * as State from './settings-state.ts'
 import { TABS, PART_OF } from './settings-state.ts'
-import type { Settings, SettingsVars } from './settings-vars.ts'
+import type { Addon, Plugin, Settings, SettingsVars } from './settings-vars.ts'
+import type { Widget } from './widgets.ts'
 import type { SettingsEvent } from './settings-state.ts'
 import type { IslandFace } from './island.ts'
 import type { PickerFace } from './picker.ts'
@@ -53,16 +54,13 @@ export interface Place {
 }
 
 // A row of the Plugins page (widgetRows): its key, its place in the order,
-// and what it is, from the snapshot (settings.rs: loose JSON): a widget, a
-// plugin she runs or someone else's, with its widgets up now (mine).
-export interface WidgetRow {
-  key: string
-  i: number
-  widget?: any
-  plugin?: any
-  addon?: any
-  mine?: any
-}
+// and what it is: a widget, or a plugin she runs or someone else's, with
+// its widgets up now (mine).
+export type WidgetRow = { key: string; i: number } & (
+  | { widget: Widget; plugin?: undefined; addon?: undefined; mine?: undefined }
+  | { plugin: Plugin; mine: Widget[]; widget?: undefined; addon?: undefined }
+  | { addon: Addon; mine: Widget[]; widget?: undefined; plugin?: undefined }
+)
 
 // The Mail page's inbox (settingsPage inbox): its conversations
 // (threads.rs) and what went wrong (mail.rs) are the Rust side's JSON.
@@ -173,10 +171,9 @@ export interface SettingsCore {
   part: (id: string, html: string) => string
   patch: (change: Settings) => void
   placeHTML: (place: Place, key?: string) => string
-  placeOf: (item: { plugin?: string; id?: string }, on: boolean) => Place
-  // A plugin she runs (plugins.rs view: the snapshot's JSON).
-  pluginFields: (p: any) => string
-  pluginNote: (p: any, mine: unknown[], placed: boolean) => { text: string; bad?: boolean }
+  placeOf: (item: { plugin?: string; id?: string }, on: boolean | undefined) => Place
+  pluginFields: (p: Plugin) => string
+  pluginNote: (p: Plugin, mine: Widget[], placed: boolean) => { text: string; bad?: boolean }
   redrawMail: (focus?: string | null) => void
   relayout: () => number
   render: typeof render

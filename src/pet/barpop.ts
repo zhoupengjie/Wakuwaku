@@ -9,6 +9,18 @@
 // pressed) or once something in it is pressed.
 import * as Presses from './presses.ts'
 import { t } from '../shared/i18n.ts'
+import type { TaskApp, TaskLook } from './bar.ts'
+
+// What it is told to show (bars.rs send_pop): a program's windows (list)
+// or its menu, as that strip shows it.
+interface Shown {
+  kind: string
+  app: TaskApp
+  edge: string
+  look?: TaskLook
+  lang: string
+  endTask?: boolean
+}
 
 // The list over a program's button on another display (barpop.html):
 // made by barpop-main.ts.
@@ -17,7 +29,7 @@ export function barpopPage() {
   const { listen } = window.__TAURI__.event
   const target: TauriTarget = { kind: 'WebviewWindow', label: 'barpop' }
 
-  const pop = document.getElementById('pop')
+  const pop = document.getElementById('pop')!
   // Its room for the pointer out to the strip (barpop.css .reach, #56).
   const reach = document.createElement('span')
   reach.className = 'reach'
@@ -26,30 +38,31 @@ export function barpopPage() {
   const SHADE = 14
   const GAP = { bottom: 6, top: 6, left: 8, right: 8 }
   // What it shows ({ kind, app, edge, look, lang }), as drawn last.
-  let shown = null
+  let shown: Shown | null = null
   let drawn = ''
   // The pointer on the strip's buttons (bars.rs bar_pop_over), on the list.
   let overBar = true
   let overPop = false
-  let closeTimer
-  let thumbTimer
+  let closeTimer: Timer | undefined
+  let thumbTimer: Timer | undefined
   let thumbsSent = ''
 
-  const el = (tag, cls?, text?) => {
+  const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string | null) => {
     const n = document.createElement(tag)
     if (cls) n.className = cls
     if (text != null) n.textContent = text
     return n
   }
 
-  function rows(s) {
+  function rows(s: Shown) {
     const app = s.app
     const windows = app.windows || []
     if (s.kind === 'list') {
       // A card for each: its icon, title and ✕, and room under them for its live picture.
       return windows.map(w => {
         const card = el('div', w.front ? 'wcard front' : 'wcard')
-        card.dataset.win = w.id
+        // Its id, a number: the page keeps it as a string.
+        card.dataset.win = w.id as unknown as string
         const top = el('div', 'wtop')
         if (w.png || app.png) {
           const img = el('img')
@@ -59,15 +72,15 @@ export function barpopPage() {
         }
         top.append(el('span', 'wt', w.title))
         const x = el('span', 'wx', '✕')
-        x.dataset.close = w.id
+        x.dataset.close = w.id as unknown as string
         top.append(x)
         const room = el('div', 'wthumb')
-        room.dataset.thumb = w.id
+        room.dataset.thumb = w.id as unknown as string
         card.append(top, room)
         return card
       })
     }
-    const item = (text, act) => {
+    const item = (text: string, act: string) => {
       const row = el('div', 'witem', text)
       row.dataset.act = act
       return row
@@ -80,7 +93,7 @@ export function barpopPage() {
     return out
   }
 
-  function draw(s) {
+  function draw(s: Shown) {
     const opening = pop.hidden || shown?.kind !== s.kind || shown?.app?.app !== s.app?.app
     shown = s
     const light = s.look?.mode === 'light'
@@ -96,7 +109,7 @@ export function barpopPage() {
     pop.replaceChildren(...rows(s), reach)
     pop.className = s.kind
     pop.hidden = false
-    const pad = { top: SHADE, right: SHADE, bottom: SHADE, left: SHADE, [edge]: GAP[edge] }
+    const pad = { top: SHADE, right: SHADE, bottom: SHADE, left: SHADE, [edge]: GAP[edge as keyof typeof GAP] }
     Object.assign(pop.style, { left: `${pad.left}px`, top: `${pad.top}px` })
     if (opening) {
       overBar = true
@@ -182,8 +195,8 @@ export function barpopPage() {
   // it (Tauri's drop handler has it, tauri://drag-*, in physical px): the
   // list goes once the drag has left it and the buttons a moment, as for
   // the pointer.
-  let fileHeld = null
-  let fileTimer
+  let fileHeld: string | null = null
+  let fileTimer: Timer | undefined
   for (const type of ['enter', 'over', 'leave', 'drop']) {
     listen(
       `tauri://drag-${type}`,

@@ -27,6 +27,7 @@
     "src/pet/aim.ts",
     "src/pet/anchor.ts",
     "src/pet/bar.ts",
+    "src/pet/barpop.ts",
     "src/pet/bridge.ts",
     "src/pet/capsule.ts",
     "src/pet/deskgrid.ts",

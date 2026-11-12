@@ -1,5 +1,5 @@
 // The default speakers' volume and whether they are muted, for the
-// taskbar's volume icon (taskbar/win/keys.rs keys_loop, island.js showVolume): drawn
+// taskbar's volume icon (taskbar/win/keys.rs keys_loop, island-right.js showVolume): drawn
 // as Windows' own taskbar draws it, its waves up to the volume. Asked of
 // Windows' Core Audio (IMMDeviceEnumerator, then the default endpoint's
 // IAudioEndpointVolume).

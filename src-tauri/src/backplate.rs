@@ -14,14 +14,14 @@
 // window never active, as this one never is, and neither honours a window
 // region; the accent blurs either way. Rounded by DWM's own corners
 // (DWMWA_WINDOW_CORNER_PREFERENCE, ROUND: 8 px), set in from the island's
-// edge (by the page, island.js plateInset) far enough that they stay inside
+// edge (by the page, island-plate.js plateInset) far enough that they stay inside
 // the island's rounder ones; the page paints the band left over (its rim).
 // Layered, so it lets the pointer through and fades (its alpha). Where the
 // accent is not there or is refused (SetWindowCompositionAttribute missing,
 // or answering 0, when tried at first and whenever set), there is none:
 // available says so, and the page deepens its ground instead.
 //
-// The page says where and when (island.js placePlate): for a look that is
+// The page says where and when (island-plate.js placePlate): for a look that is
 // see-through and blurred, under the island as it is, moved with it as it
 // changes size; nothing otherwise, nor while she is quiet. Made on first
 // use, on a thread of its own that waits for messages, so nothing runs

@@ -138,7 +138,7 @@
 每一步在测试虚拟机里试 125%、150%、175%。
 
 1. **位置**：`taskbarEdge` 加 `split`；主窗口按顶边摆（`island.rs`、`appbar.rs` 的顶边照旧），页面 `body` 上多一个类。
-2. **48 px 顶栏**：顶边的任务栏去掉 `start`、`apps` 两个部件（`island.js` 的 `TB_PARTS`、`PART_NODES`、预设按位置给不同的一份；`Widgets.layoutOf` 不再把它们补回来）。
+2. **48 px 顶栏**：顶边的任务栏去掉 `start`、`apps` 两个部件（`island-layout.js` 的 `TB_PARTS`、`PART_NODES`、预设按位置给不同的一份；`Widgets.layoutOf` 不再把它们补回来）。
 3. **dock 窗口**：照 `bars.rs` 开一个窗口，页面用 `bar.html`、`bar.js` 加 dock 的样子；按钮是主屏的（`bars::for_main`）。`bar.js` 补上现在只有主屏才有的：拖动排序、会话小点、拖文件停留。
 4. **自动隐藏**：Windows 的任务栏按侧边那样设自动隐藏（`shell.rs` 的 `keep_room`）；dock 不登记 AppBar；让开和叫出来照灵动岛（`island.rs` 的 `look_under`、`tasks::reaches_into`、`call_look`），加上拖文件、Win+T、开始菜单、闪烁求关注。
 5. **32 px 顶栏**：`TASKBAR_H` 不再是一个常量（JS、CSS、`island.rs` 的窗口大小和条带厚度），按 §2 的表画部件；流光按 26 高的胶囊。

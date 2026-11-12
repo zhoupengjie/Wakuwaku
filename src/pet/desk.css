@@ -3,7 +3,7 @@
    wallpaper under it blurred (desk.js paperFor), the glass colour over it, a hairline, a
    highlight along its top, a soft shadow and a faint glow of its own colour in one corner.
    Dark as Windows' mode is dark; .lw light. Its colours on :host too: the market's page draws a
-   plugin's cards with these, in a shadow of their own in the settings (settings.js fillCards). */
+   plugin's cards with these, in a shadow of their own in the settings (settings-market.js fillCards). */
 :root,
 :host {
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;

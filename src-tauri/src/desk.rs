@@ -32,7 +32,7 @@
 //
 // The layout is the settings' deskLayout (settings.rs is_desk_layout); a page
 // keeps what it changed (desk_keep, merged with the rest), and her island's
-// page puts widgets on and off the desktop (island.js placeWidget).
+// page puts widgets on and off the desktop (island-wmenu.js placeWidget).
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 

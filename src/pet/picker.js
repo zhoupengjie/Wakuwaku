@@ -712,7 +712,7 @@
     const L = r => Isle.len(r)
     const strip = Isle.barRest.getBoundingClientRect()
     const edge = Isle.barRest.querySelector('.tdesk')
-    // The middle run stays where it is centred (island.js alignApps keeps
+    // The middle run stays where it is centred (island-layout.js alignApps keeps
     // it there, never moving it back): what lies before it is used too.
     const mid = getComputedStyle(Isle.zones.center)
     // A side bar's: its programs scroll when crowded (two buttons' room kept), its middle run moves up.

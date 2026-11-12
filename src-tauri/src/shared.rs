@@ -388,7 +388,7 @@ impl Shared {
         now["settingsOpen"] = json!(settings_open);
         now["quiet"] = json!(self.is_quiet());
         // An app full screen on her display: no flow light's ring then, the
-        // dot alone (island.js cue; pet:full-screen as it changes).
+        // dot alone (island-ring.js cue; pet:full-screen as it changes).
         now["fullScreen"] = json!(self.is_fullscreen());
         // Her window up on the desktop: she says it herself there, a prompt
         // over her head, and her home does not open for it (panel.js holderOf).

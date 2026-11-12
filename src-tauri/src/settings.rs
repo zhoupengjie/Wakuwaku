@@ -111,7 +111,7 @@ fn agent_row(sh: &Shared, agent: Agent) -> AgentRow {
     }
 }
 
-// The displays for the Look page (settings.js screenRow, #104): each one's
+// The displays for the Look page (settings-welcome.js screenRow, #104): each one's
 // key (what homeDisplay holds), its number as Windows numbers them
 // (\\.\DISPLAY2: 2; its place in the list where the name has none), its
 // size in physical px, whether it is Windows' main display, and whether her
@@ -251,7 +251,7 @@ fn is_island_look(v: &Value) -> bool {
 }
 
 // The taskbar's layout: { left, center, right }, each a list of its parts
-// (island.js TB_PARTS), none twice and nothing else; one left out goes where
+// (island-layout.js TB_PARTS), none twice and nothing else; one left out goes where
 // the default has it.
 // "front": the program in front, by its name (the top bar's first, split).
 const TASKBAR_PARTS: [&str; 9] = ["her", "start", "apps", "monitor", "tray", "keys", "quick", "clock", "front"];
@@ -629,7 +629,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         // desk.rs key_for), kept while that display is unplugged so she goes
         // back to it; "" for Windows' main display.
         "homeDisplay" => v.as_str().is_some_and(|k| k.len() <= 64 && !k.chars().any(char::is_control)),
-        // The taskbar's parts in three runs (island.js tbLayout), each once.
+        // The taskbar's parts in three runs (island-layout.js tbLayout), each once.
         "taskbarLayout" => v.is_null() || is_taskbar_layout(v),
         // The desktop's widgets (desk.rs, deskgrid.js).
         "deskLayout" => is_desk_layout(v),
@@ -642,7 +642,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "hold" => is_hold(v),
         // When she has something to tell that needs no answer (a turn's end,
         // a hello, a plugin's nudge): the island open by itself, a ring round
-        // it (the flow light), or only the dot (island.js cue).
+        // it (the flow light), or only the dot (island-ring.js cue).
         "endCue" => matches!(v.as_str(), Some("open" | "ring" | "none")),
         // Minutes a session at rest stays in sight, or 0: always (state.rs is_shown).
         "idleHideMin" => matches!(v.as_u64(), Some(0 | 15 | 30 | 60 | 120)),
@@ -672,7 +672,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "connectHintOff" => is_bool,
         // Her island's look on the taskbar, by Windows' mode (island.js
         // drawIslandLook): none, or a mode's none, is Windows' own grey.
-        // And at the top of the screen (island.js lookNow), kept apart:
+        // And at the top of the screen (island-look.js lookNow), kept apart:
         // none is black, as it always was.
         "islandLook" | "islandTopLook" => v.is_null() || v.as_object().is_some_and(|m| m.iter().all(|(mode, look)| matches!(mode.as_str(), "dark" | "light") && is_island_look(look))),
         "mailAgent" => matches!(v.as_str(), Some("claude" | "codex" | "agy")),

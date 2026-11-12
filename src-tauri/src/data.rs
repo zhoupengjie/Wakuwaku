@@ -133,7 +133,7 @@ fn defaults() -> Map<String, Value> {
         // (embed.rs), unless turned off: laid over it then.
         "islandEmbed": true,
         // At the top of the screen, slid up out of the way while a window
-        // lies under it (island.js setStow, zhoupengjie/Wakuwaku#49).
+        // lies under it (island-plate.js setStow, zhoupengjie/Wakuwaku#49).
         "islandHideUnder": true,
         // The taskbar's strip: mica (the desktop's picture through it, mica.js),
         // black (solid: black, or light in Windows' light mode) or clear (the
@@ -149,7 +149,7 @@ fn defaults() -> Map<String, Value> {
         "taskbarDisplays": "main",
         "taskbarClearWhen": "mica",
         // Its programs' buttons: icons alone or with their titles; in the
-        // middle of the screen or after her end (island.js alignApps).
+        // middle of the screen or after her end (island-layout.js alignApps).
         "taskbarButtons": "icons",
         "taskbarAlign": "center",
         // The screen's edge it is along: bottom (Windows' own place), top,

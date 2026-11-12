@@ -297,7 +297,7 @@
   // fade as they end: lit, still, until the hold is over, counted from the
   // event (as main holds the ending itself, state.rs settle_at), then down
   // over 0.56 s, the dot coming as it does. Held still, nothing of it runs
-  // (island.js holdRing): the gradient left where it stopped, the glow
+  // (island-ring.js holdRing): the gradient left where it stopped, the glow
   // under it the same. With reduced motion it is lit still the whole hold,
   // not 1.4 s. A ring's times then:
   //   stillAt  its turning over (the light up, with reduced motion): from

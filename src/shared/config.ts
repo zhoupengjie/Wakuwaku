@@ -90,4 +90,11 @@ export interface Config {
   // Each widget's size where its person set it, by id (island.ts; addons.rs
   // drops a plugin's when it goes).
   widgetSize?: Record<string, string>
+  // The Mail page's: who a letter goes to first ("claude", "codex" or
+  // "agy"), the page as two panes or one ("two" or "one"), and the senders
+  // whose letters show their pictures from elsewhere, in lower case
+  // (settings-mail.ts, settings-letter.ts; settings.rs checks each).
+  mailAgent?: string
+  mailPanes?: string
+  mailPictures?: string[]
 }

@@ -13,10 +13,9 @@ import type { Config } from '../shared/config.ts'
 import type { Widget } from './widgets.ts'
 
 // Her settings as the snapshot has them and a patch changes them
-// (settings.rs settings_set): the config's keys, and the Mail page's that
-// mail.rs reads besides (settings.rs is_ok takes them; config.rs does not
-// declare them).
-export type Settings = Config & { mailAgent?: string; mailPanes?: string; mailPictures?: string[] }
+// (settings.rs settings_set): the config's keys, the Mail page's among
+// the pages' own (config.ts).
+export type Settings = Config
 
 // A plugin she runs (plugins.rs view), someone else's (addons.rs view)
 // and a pack (packs.rs view): the Rust side's JSON, these fields read by

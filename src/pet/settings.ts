@@ -1925,7 +1925,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       st.dropSure = false
       keepDraft()
     }
-    if ((e.target as HTMLElement).dataset.ilook) ilookInput(e.target, false)
+    if ((e.target as HTMLElement).dataset.ilook) ilookInput(e.target as HTMLInputElement, false)
     if ((e.target as HTMLElement).id === 's-ref') {
       st.typedRef = (e.target as HTMLInputElement).value
       // Not mid-word in an input method: once the word is chosen.
@@ -1952,7 +1952,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // number that is none goes back to what it was.
   layer.addEventListener('change', e => {
     if ((e.target as HTMLElement).matches('[data-w-file]')) return addFiles(e.target)
-    if ((e.target as HTMLElement).dataset.ilook) return ilookInput(e.target, true)
+    if ((e.target as HTMLElement).dataset.ilook) return ilookInput(e.target as HTMLInputElement, true)
     if ((e.target as HTMLElement).dataset.proxyAt !== undefined) return proxyAddress((e.target as HTMLElement).dataset.proxyAt, (e.target as HTMLInputElement).value)
     if ((e.target as HTMLElement).dataset.mon) return monitorField((e.target as HTMLElement).dataset.mon)
     if ((e.target as HTMLElement).dataset.hold) return holdTyped(e.target)

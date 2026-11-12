@@ -10,6 +10,19 @@
 import * as AddonUI from './addonui.ts'
 import { pet } from './bridge.ts'
 import type { SettingsCore } from './settings.ts'
+import type { WinMode as Mode } from './settings-vars.ts'
+
+// Her island's look in one of Windows' modes: its ground, how opaque (%)
+// and blurred (px), its edge (line, ring, none), bare on the strip (a
+// capsule of the strip's own look).
+interface Look {
+  bg: string
+  op: number
+  blur: number
+  edge: string
+  bare: boolean
+}
+type Preset = [id: string, look: Look]
 
 export function lookPart(core: SettingsCore) {
   const {
@@ -23,7 +36,7 @@ export function lookPart(core: SettingsCore) {
   // of it. Folded out under the taskbar's options, or the island's at the
   // top of the screen (its own look, ITOP_*). Open, the settings are the
   // island itself, so a small one here shows the look (hovered, it opens).
-  const ILOOK_DEFAULT = {
+  const ILOOK_DEFAULT: Record<Mode, Look> = {
     // Bare in the dark mode, a new user's since 2026-10-13 (the person's own
     // look; island-look.ts drawIslandLook takes it as the default too).
     dark: { bg: '#2c2c2c', op: 100, blur: 0, edge: 'line', bare: true },
@@ -32,7 +45,7 @@ export function lookPart(core: SettingsCore) {
   // Each preset its own look: the dark grey was the default's, the bare look
   // once that became the default, and a press on the bare one lit the grey
   // (zhoupengjie/Wakuwaku#17).
-  const ILOOK_PRESETS = {
+  const ILOOK_PRESETS: Record<Mode, Preset[]> = {
     dark: [
       ['black', { bg: '#000000', op: 100, blur: 0, edge: 'line', bare: false }],
       ['gray', { bg: '#2c2c2c', op: 100, blur: 0, edge: 'line', bare: false }],
@@ -54,11 +67,11 @@ export function lookPart(core: SettingsCore) {
   // was (the iPhone's, its faint line, white words), so nobody's changes;
   // no bare capsule (no strip to be part of up there), and no 「云母毛玻璃」
   // where Windows' acrylic cannot go under it (nothing else would blur).
-  const ITOP_DEFAULT = {
+  const ITOP_DEFAULT: Record<Mode, Look> = {
     dark: { bg: '#000000', op: 100, blur: 0, edge: 'line', bare: false },
     light: { bg: '#000000', op: 100, blur: 0, edge: 'line', bare: false },
   }
-  const ITOP_PRESETS = {
+  const ITOP_PRESETS: Record<Mode, Preset[]> = {
     dark: [
       ['black', { bg: '#000000', op: 100, blur: 0, edge: 'line', bare: false }],
       ['gray', { bg: '#2c2c2c', op: 100, blur: 0, edge: 'line', bare: false }],
@@ -74,27 +87,27 @@ export function lookPart(core: SettingsCore) {
     ],
   }
   // The moods' colours on a light ground, as island.ts has them (COLOR_LIGHT).
-  const COLOR_DEEP = { idle: '#6e6e73', working: '#0067c0', waiting: '#b25e00', done: '#0f7b3f', review: '#7346c9', error: '#c42b3c' }
+  const COLOR_DEEP: Record<string, string> = { idle: '#6e6e73', working: '#0067c0', waiting: '#b25e00', done: '#0f7b3f', review: '#7346c9', error: '#c42b3c' }
   // Grounds to pick for each mode: as dark (or light) as its words need.
-  const ILOOK_SWATCHES = {
+  const ILOOK_SWATCHES: Record<Mode, string[]> = {
     dark: ['#000000', '#1c1c1c', '#202020', '#2c2c2c', '#3a3a3a', '#1f2733', '#2a2433', '#1f2d27', '#33271f'],
     light: ['#ffffff', '#fbfbfb', '#f3f3f3', '#e8e8e8', '#dddddd', '#eef3fb', '#f5effa', '#eef7f1', '#fbf3ec'],
   }
-  const winMode = () => (st.snap.winLook?.light ? 'light' : 'dark')
+  const winMode = (): Mode => (st.snap.winLook?.light ? 'light' : 'dark')
   const ilookFor = () => st.ilookMode || winMode()
   // Her home's: the taskbar's, or the top of the screen's.
   const isTop = () => !onTaskbar(st.snap.settings)
   const ilookKey = () => (isTop() ? 'islandTopLook' : 'islandLook')
-  const ilookDefault = mode => (isTop() ? ITOP_DEFAULT : ILOOK_DEFAULT)[mode]
-  const ilookPresets = mode => (isTop() ? ITOP_PRESETS[mode].filter(([id]) => id !== 'mica' || st.snap.plate === true) : ILOOK_PRESETS[mode])
-  const ilookOf = mode => ({ ...ilookDefault(mode), ...(st.snap.settings[ilookKey()]?.[mode] || {}) })
-  const sameLook = (a, b) => a.bg.toLowerCase() === b.bg.toLowerCase() && a.op === b.op && a.blur === b.blur && a.edge === b.edge && !!a.bare === !!b.bare
-  const ilookPreset = mode => (ilookPresets(mode).find(([, p]) => sameLook(p, ilookOf(mode))) || ['custom'])[0]
-  const ilookName = (mode, id) => T(id === 'custom' ? 's.ilookCustom' : isTop() && id === 'black' ? 's.ilookP.top.black' : `s.ilookP.${mode}.${id}`)
+  const ilookDefault = (mode: Mode) => (isTop() ? ITOP_DEFAULT : ILOOK_DEFAULT)[mode]
+  const ilookPresets = (mode: Mode) => (isTop() ? ITOP_PRESETS[mode].filter(([id]) => id !== 'mica' || st.snap.plate === true) : ILOOK_PRESETS[mode])
+  const ilookOf = (mode: Mode): Look => ({ ...ilookDefault(mode), ...(st.snap.settings[ilookKey()]?.[mode] || {}) })
+  const sameLook = (a: Look, b: Look) => a.bg.toLowerCase() === b.bg.toLowerCase() && a.op === b.op && a.blur === b.blur && a.edge === b.edge && !!a.bare === !!b.bare
+  const ilookPreset = (mode: Mode) => (ilookPresets(mode).find(([, p]) => sameLook(p, ilookOf(mode))) || ['custom'])[0]
+  const ilookName = (mode: Mode, id: string) => T(id === 'custom' ? 's.ilookCustom' : isTop() && id === 'black' ? 's.ilookP.top.black' : `s.ilookP.${mode}.${id}`)
 
   // A mode's look kept (its default kept as none); while a slider moves,
   // only shown here, kept once it is let go.
-  function ilookSave(mode, look, keep = true) {
+  function ilookSave(mode: Mode, look: Look, keep = true) {
     const key = ilookKey()
     const all = { ...(st.snap.settings[key] || {}) }
     all[mode] = sameLook(look, ilookDefault(mode)) ? null : look
@@ -105,16 +118,16 @@ export function lookPart(core: SettingsCore) {
 
   // A colour's relative luminance (WCAG), as island.ts judges a ground:
   // above 0.35, the words on it go dark.
-  function luminance(hex) {
+  function luminance(hex: string) {
     const [r, g, b] = [1, 3, 5].map(i => {
       const v = parseInt(hex.slice(i, i + 2), 16) / 255
       return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
     })
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
   }
-  const inkDarkOn = hex => luminance(hex) > 0.35
+  const inkDarkOn = (hex: string) => luminance(hex) > 0.35
 
-  function toHsl(hex) {
+  function toHsl(hex: string) {
     const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
     const max = Math.max(r, g, b)
     const min = Math.min(r, g, b)
@@ -125,7 +138,7 @@ export function lookPart(core: SettingsCore) {
     return [h, s, l]
   }
 
-  function fromHsl(h, s, l) {
+  function fromHsl(h: number, s: number, l: number) {
     const c = (1 - Math.abs(2 * l - 1)) * s
     const x = c * (1 - Math.abs((h % 2) - 1))
     const [r, g, b] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][Math.floor(h) % 6]
@@ -137,7 +150,7 @@ export function lookPart(core: SettingsCore) {
   // (island.ts), so only a mid one reads poorly either way (between 0.18
   // and 0.36, under 4.5 to 1 with white words, and dark ones not yet):
   // moved out to the nearer side, its hue kept.
-  function ilookSteer(hex) {
+  function ilookSteer(hex: string) {
     hex = hex.toLowerCase()
     const y = luminance(hex)
     if (y <= 0.18 || y >= 0.36) return hex
@@ -163,7 +176,7 @@ export function lookPart(core: SettingsCore) {
   // Windows' acrylic goes under it, island-plate.ts placePlate). At the top of
   // the screen, a pill at the top of a desktop, opening down; blurred only
   // by that acrylic, open or not.
-  function ilookPreview(mode, look, big = false) {
+  function ilookPreview(mode: Mode, look: Look, big = false) {
     const [r, g, b] = [1, 3, 5].map(i => parseInt(look.bg.slice(i, i + 2), 16))
     // Its words, and the moods' colours, as light or dark as its ground is.
     const inkDark = inkDarkOn(look.bg)
@@ -196,7 +209,7 @@ export function lookPart(core: SettingsCore) {
       .map(c => `<button class="swc${c === look.bg.toLowerCase() ? ' on' : ''}" data-ilook-bg="${c}" style="background:${c}" title="${c}"></button>`)
       .join('')
     const picker = `<span class="ilook-sw">${swatches}<input type="color" class="swc-in" data-ilook="bg" value="${esc(look.bg)}" title="${esc(T('s.ilookPick'))}"></span>`
-    const range = (key, min, max, unit) => `<span class="ilook-rng"><input type="range" class="rng" data-ilook="${key}" min="${min}" max="${max}" step="1" value="${look[key]}"><span class="rv">${look[key]}${unit}</span></span>`
+    const range = (key: 'op' | 'blur', min: number, max: number, unit: string) => `<span class="ilook-rng"><input type="range" class="rng" data-ilook="${key}" min="${min}" max="${max}" step="1" value="${look[key]}"><span class="rv">${look[key]}${unit}</span></span>`
     // At the top no bare capsule, and a blur only where Windows' acrylic
     // can go under the island.
     const blurRow = top && st.snap.plate !== true ? '' : row(esc(T('s.ilookBlur')), esc(T(top ? 's.ilookBlurTopNote' : 's.ilookBlurNote')), range('blur', 0, 60, 'px'))
@@ -216,11 +229,12 @@ export function lookPart(core: SettingsCore) {
 
   // A slider moved (shown here) or let go (kept); a colour picked, moved
   // out of the greys no words read on.
-  function ilookInput(target, keep) {
+  // (A box of the look's: its data-ilook says which part.)
+  function ilookInput(target: HTMLInputElement, keep: boolean) {
     const mode = ilookFor()
-    const key = target.dataset.ilook
+    const key = target.dataset.ilook!
     const value = key === 'bg' ? ilookSteer(target.value) : Number(target.value)
-    if (key === 'bg' && value !== target.value.toLowerCase()) target.value = value
+    if (key === 'bg' && value !== target.value.toLowerCase()) target.value = value as string
     ilookSave(mode, { ...ilookOf(mode), [key]: value }, keep)
   }
 
@@ -270,7 +284,7 @@ export function lookPart(core: SettingsCore) {
     // (the embedding off), the middle of it too (s.islandPosBar.*).
     const bar = !notch && s.islandEdge === 'taskbar'
     const embed = bar && s.islandEmbed !== false
-    const pos = !notch && ['left', 'right'].includes(s.islandPos) ? s.islandPos : embed ? 'right' : 'center'
+    const pos = !notch && ['left', 'right'].includes(s.islandPos as string) ? s.islandPos : embed ? 'right' : 'center'
     const places = (embed ? ['left', 'right'] : ['left', 'center', 'right']).map(p => [p, T(`s.islandPos${bar ? 'Bar' : ''}.${p}`), notch && p !== 'center'])
     return row(esc(T('s.islandPos')), esc(T(notch ? 's.islandPosNotch' : 's.islandPosNote')), seg('islandPos', places, pos))
   }
@@ -312,7 +326,7 @@ export function lookPart(core: SettingsCore) {
         <div class="mode${s.display === 'taskbar' ? ' on' : ''}" data-mode="taskbar"><div class="pv"><s></s></div><div class="l"><span class="rd"></span>${esc(T('s.displayTaskbar'))}</div></div>
         <div class="mode${s.display === 'split' ? ' on' : ''}" data-mode="split"><div class="pv"><u></u><b></b></div><div class="l"><span class="rd"></span>${esc(T('s.displaySplit'))}</div></div>
       </div>
-      ${onTaskbar(s) ? `<div class="grp"><div class="note">${esc(T(s.display === 'split' ? 's.splitNote' : 's.taskbarNote'))}</div></div><div class="grp">${s.display === 'split' ? splitRows() : row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${pieces.welcome.screenRow()}${pieces.welcome.displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${s.display === 'split' || ['left', 'right'].includes(s.taskbarEdge) ? row(esc(T('s.taskbarButtons')), esc(T(s.display === 'split' ? 's.taskbarButtonsDock' : 's.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
+      ${onTaskbar(s) ? `<div class="grp"><div class="note">${esc(T(s.display === 'split' ? 's.splitNote' : 's.taskbarNote'))}</div></div><div class="grp">${s.display === 'split' ? splitRows() : row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${pieces.welcome.screenRow()}${pieces.welcome.displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen as string) ? s.taskbarClearWhen : 'mica')) : ''}${s.display === 'split' || ['left', 'right'].includes(s.taskbarEdge as string) ? row(esc(T('s.taskbarButtons')), esc(T(s.display === 'split' ? 's.taskbarButtonsDock' : 's.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
       ${part('place', '')}<div class="grp">${onTaskbar(s) ? '' : pieces.welcome.screenRow()}${islandPosRow()}${onTaskbar(s) ? '' : islandEdgeRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${onTaskbar(s) || pet.mac || s.islandEdge === 'taskbar' ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${onTaskbar(s) ? '' : ilookRow()}</div>
       ${pageWindows()}
       ${sec(T('s.her'))}<div class="grp">
@@ -357,7 +371,7 @@ export function lookPart(core: SettingsCore) {
   let paperBusy = false
 
   // Asked of Windows for the desktop's picture; the snapshot as it is after.
-  function paperDo(what, value) {
+  function paperDo(what: string, value?: unknown) {
     if (paperBusy) return
     paperBusy = true
     st.pickingPaper = what === 'picture' || what === 'folder'
@@ -378,7 +392,7 @@ export function lookPart(core: SettingsCore) {
   // picked in Windows' file dialog; how it is laid; the turns.
   const PAPER_POSITIONS = ['fill', 'fit', 'stretch', 'tile', 'center', 'span']
   const PAPER_EVERY = [60000, 600000, 1800000, 3600000, 21600000, 86400000]
-  const lastPart = path => String(path || '').split(/[\\/]/).filter(Boolean).pop() || ''
+  const lastPart = (path: unknown) => String(path || '').split(/[\\/]/).filter(Boolean).pop() || ''
   function pagePaper() {
     const paper = st.snap.winPaper
     if (!paper) return ''
@@ -390,7 +404,7 @@ export function lookPart(core: SettingsCore) {
         ? T('s.paperNowFolder', { name: lastPart(paper.folder) || T('s.paperUnknown') })
         : T('s.paperNowPicture', { name: lastPart(paper.file) || T('s.paperUnknown') })
     const every = PAPER_EVERY.map(ms => [ms, ms >= 86400000 ? T('s.paperDay') : ms >= 3600000 ? T('s.paperHours', { n: ms / 3600000 }) : T('settings.minutes', { n: ms / 60000 })])
-    const button = (what, label) => `<button class="pbtn sm" data-paper="${what}" ${paperBusy ? 'disabled' : ''}>${esc(T(label))}</button>`
+    const button = (what: string, label: string) => `<button class="pbtn sm" data-paper="${what}" ${paperBusy ? 'disabled' : ''}>${esc(T(label))}</button>`
     // Back to the picture before the last change made here, while there is one.
     const pick = `<span class="btns">${button('picture', 's.paperPicture')}${button('folder', 's.paperFolder')}${paper.canUndo ? button('undo', 's.paperUndo') : ''}</span>`
     // Under it the wallpaper packs (spec §1; packs.rs): each its picture,

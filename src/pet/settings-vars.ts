@@ -147,6 +147,9 @@ export interface Draft {
 // Its boxes typed in (data-w).
 export type DraftBox = 'to' | 'cc' | 'bcc' | 'subject' | 'text'
 
+// Windows' two modes (light, dark).
+export type WinMode = 'dark' | 'light'
+
 export interface SettingsVars extends SettingsState {
   // --- Open --------------------------------------------------------------------------
   // What main last sent (settings.rs snapshot: the settings, the sessions,
@@ -182,7 +185,7 @@ export interface SettingsVars extends SettingsState {
   // Her island's look folded out (island-look.ts drawIslandLook), and the
   // mode being set ('' follows Windows' own).
   ilookOpen: boolean
-  ilookMode: string
+  ilookMode: WinMode | ''
   // Windows' dialog open for the desktop's picture: its own mark, held until
   // the dialog answers (picking, a letter's files', is let go a second after
   // the island has the focus again, which a press on it mid-dialog gives).

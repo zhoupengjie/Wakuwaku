@@ -14,11 +14,17 @@ pub(super) static TICKS: AtomicU32 = AtomicU32::new(0);
 // every half minute.
 pub(super) static HELD_AT: AtomicU32 = AtomicU32::new(0);
 pub(super) static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
-// The windows over a display (fills_display), each with that display, as
-// last seen moving (on_event).
-pub(super) static OVER: Lock<Vec<(isize, isize)>> = Lock::new("taskbar::win::thread::OVER", Vec::new());
+thread_local! {
+    // Whether this is the taskbar's thread (run): what is its alone is
+    // touched only here (a debug build asserts it: work.rs with_work).
+    pub(super) static ON_HOST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    // The windows over a display (fills_display), each with that display,
+    // as last seen moving (on_event, here): gone with the thread.
+    static OVER: std::cell::RefCell<Vec<(isize, isize)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
 
 pub(super) fn run(strip: (i32, i32, i32, i32), ready: std::sync::mpsc::Sender<isize>) {
+    ON_HOST.set(true);
     // SAFETY: our own class and window, on this thread, which runs its loop.
     unsafe {
         let instance = GetModuleHandleW(std::ptr::null());
@@ -167,14 +173,16 @@ pub(super) extern "system" fn on_event(_hook: isize, event: u32, hwnd: Hwnd, obj
         let h = hwnd as isize;
         // SAFETY: a plain query; a gone window gives the nearest display.
         let now = fills_display(h).then(|| unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) } as isize);
-        let mut over = OVER.lock().unwrap();
-        let was = over.iter().find(|(w, _)| *w == h).map(|(_, m)| *m);
-        if now == was {
+        let same = OVER.with_borrow_mut(|over| {
+            let was = over.iter().find(|(w, _)| *w == h).map(|(_, m)| *m);
+            if now != was {
+                over.retain(|(w, _)| *w != h);
+                over.extend(now.map(|m| (h, m)));
+            }
+            now == was
+        });
+        if same {
             return;
-        }
-        over.retain(|(w, _)| *w != h);
-        if let Some(m) = now {
-            over.push((h, m));
         }
     }
     if event == EVENT_SYSTEM_FOREGROUND {
@@ -319,7 +327,7 @@ pub(super) extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lpara
         WM_RESEND_TRAY => resend_tray(),
         WM_THUMBS => thumbs_asked(),
         WM_THUMBS_GROUND => thumbs_ground_here(wparam != 0),
-        WM_PAPER => send_look(),
+        WM_STRIP_MOVED => strip_moved_here(),
         WM_SETTINGCHANGE if wparam == SPI_SETWORKAREA as usize => {
             work_after_still(hwnd);
             settle(hwnd);

@@ -2,40 +2,103 @@
 // taskbar's class, the work area set along it and set again when Windows or
 // a program moves it (the self-heal), the desktop's icons out from under it,
 // the strip taken again, and windows kept from under a strip at the top.
+//
+// The strip's edge and where it lies are the island's to say (set_edge,
+// strip_moved: island/strip.rs sync_bar_now), published whole (PLACE)
+// for the taskbar's threads to read. What the work area was made for and
+// the self-heal's counts are the taskbar's thread's alone (Work, a
+// thread_local, gone with it): the strip moved is told to it
+// (WM_STRIP_MOVED), and it sets the work area there as it does at its
+// tick and at Explorer's word. The island's thread set it itself, as
+// the taskbar's might at the same moment, and waited on that thread to
+// move the tray's window, which is that thread's.
+use std::cell::RefCell;
+
 use super::*;
 use crate::lock::Lock;
 
-pub(super) static WORK_BOTTOM: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
-// The screen's edge the strip is along (island/, taskbarEdge), and the
-// one the work area was last made whole for (strip_moved), with whether
-// Windows' own kept its room along the foot then (split, the dock in it).
-pub(super) static EDGE: Lock<Edge> = Lock::new("taskbar::win::work::EDGE", Edge::Bottom);
-pub(super) static WORK_EDGE: Lock<Option<(Edge, bool)>> = Lock::new("taskbar::win::work::WORK_EDGE", None);
-// The strip as granted (physical); since when (tick) the work area has
-// reached into it, and when it was last taken again for that.
-pub(super) static STRIP: Lock<Option<(i32, i32, i32, i32)>> = Lock::new("taskbar::win::work::STRIP", None);
-// The work area's side on the strip's edge as she last set it (tick,
-// strip_moved): left there as the strip moves, it follows the strip
-// (appbar.rs work_fix). Whether the strip as told lies off its display's
-// edge (the display changed), said once.
-pub(super) static WORK_SIDE: Lock<Option<(Edge, i32)>> = Lock::new("taskbar::win::work::WORK_SIDE", None);
-pub(super) static STRIP_OFF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-pub(super) static LOST_SINCE: AtomicU32 = AtomicU32::new(0);
-pub(super) static LAST_TAKEN: AtomicU32 = AtomicU32::new(0);
+// The screen's edge the strip is along (island/, taskbarEdge) and the
+// strip as granted (physical), as the island last said.
+#[derive(Clone, Copy)]
+pub(super) struct Place {
+    pub(super) edge: Edge,
+    pub(super) strip: Option<(i32, i32, i32, i32)>,
+}
+
+pub(super) static PLACE: Lock<Place> = Lock::ranked("taskbar::win::work::PLACE", crate::lock::LEAF, Place { edge: Edge::Bottom, strip: None });
+
+pub(super) fn edge_now() -> Edge {
+    PLACE.lock().unwrap().edge
+}
+
+pub(super) fn strip_now() -> Option<(i32, i32, i32, i32)> {
+    PLACE.lock().unwrap().strip
+}
+
+// The taskbar's thread's own.
+#[derive(Default)]
+struct Work {
+    // The work area's bottom as last seen (said when it changes).
+    bottom: i32,
+    // The edge the work area was last made whole for (strip_moved_here),
+    // with whether Windows' own kept its room along the foot then (split,
+    // the dock in it).
+    made_for: Option<(Edge, bool)>,
+    // The work area's side on the strip's edge as she last set it (tick,
+    // strip_moved_here): left there as the strip moves, it follows the
+    // strip (appbar.rs work_fix).
+    side: Option<(Edge, i32)>,
+    // Whether the strip as told lies off its display's edge (the display
+    // changed), said once.
+    strip_off: bool,
+    // Since when (tick) the work area has reached into the strip, and
+    // when it was last taken again for that.
+    lost_since: u32,
+    last_taken: u32,
+    // Windows moved from under a strip at the top (keep_under_bar), and
+    // Windows' flyouts known by their window.
+    under_bar: Vec<(isize, u32, Instant)>,
+    flyouts: Vec<isize>,
+    // The work area taken at Explorer's word, lately (eager_allowed).
+    eager: Vec<Instant>,
+}
+
+thread_local! {
+    static WORK: RefCell<Work> = RefCell::new(Work::default());
+}
+
+// Each use short, calling nothing out: a call that waits on another
+// thread lets this one answer the messages sent it meanwhile, and one of
+// those may come back here.
+fn with_work<R>(f: impl FnOnce(&mut Work) -> R) -> R {
+    debug_assert!(ON_HOST.get(), "the work area's state is the taskbar's thread's");
+    WORK.with_borrow_mut(f)
+}
 
 // Where the strip is now (physical): ours of the taskbar's class goes
-// there too, for those who ask the taskbar's window where it is.
+// there too, for those who ask the taskbar's window where it is. Told
+// to the taskbar's thread, not waited for.
 pub fn strip_moved(strip: (i32, i32, i32, i32)) {
-    *STRIP.lock().unwrap() = Some(strip);
+    PLACE.lock().unwrap().strip = Some(strip);
+    let ours = OURS.load(Ordering::SeqCst);
+    if ours != 0 {
+        // SAFETY: the thread's own window; a posted message, no pointers.
+        unsafe { PostMessageW(ours as Hwnd, WM_STRIP_MOVED, 0, 0) };
+    }
+}
+
+// On the taskbar's thread (WM_STRIP_MOVED), the strip as last told.
+pub(super) fn strip_moved_here() {
+    let Place { edge, strip } = *PLACE.lock().unwrap();
+    let Some(strip) = strip else { return };
     // Along another edge than the bottom (taken there, or moved there):
     // the work area made the display less the strip, at once. The self-heal only ever moves the
     // strip's own side, and the room the last edge took was kept: from
     // the left to the right the work area kept its 60 px on the left too,
     // then the top's as well (2026-10-12). Along the bottom Windows' own
     // takes its room back and sets it whole itself.
-    let edge = *EDGE.lock().unwrap();
     let room = shell::kept_room();
-    let was = std::mem::replace(&mut *WORK_EDGE.lock().unwrap(), Some((edge, room)));
+    let was = with_work(|w| std::mem::replace(&mut w.made_for, Some((edge, room))));
     if is_up() && was != Some((edge, room)) && edge != Edge::Bottom {
         let ((x, y, w, h), _) = monitor_of(strip);
         let mut r = Rect { left: x, top: y, right: x + w, bottom: y + h };
@@ -53,7 +116,7 @@ pub fn strip_moved(strip: (i32, i32, i32, i32)) {
         }
         log(&format!("the strip now along the {edge:?}: work area made ({}, {}, {}, {})", r.left, r.top, r.right, r.bottom));
         set_work_area(r);
-        *WORK_SIDE.lock().unwrap() = Some((edge, edge.inner(strip)));
+        with_work(|w| w.side = Some((edge, edge.inner(strip))));
         icons_out(strip, edge);
     } else if is_up() && was.is_some_and(|w| w.0 != Edge::Bottom) && edge == Edge::Bottom {
         // Back along the bottom: the work area the display less the room
@@ -77,10 +140,11 @@ pub fn strip_moved(strip: (i32, i32, i32, i32)) {
             });
         }
     }
+    // The tray's window is this thread's too; the desktop's picture under
+    // the strip looked at again (the look's thread).
     if is_up() {
         systray::place(strip);
-        // SAFETY: our own window; a posted message, no pointers.
-        unsafe { PostMessageW(OURS.load(Ordering::SeqCst) as Hwnd, WM_PAPER, 0, 0) };
+        send_look();
     }
 }
 
@@ -189,17 +253,15 @@ pub(super) fn set_work_area(mut r: Rect) {
 // Every move of every window comes here (moved): its frame looked at
 // first, its program only for one over the strip, or Windows' flyout at
 // the foot as it opens (shown, to the front; known by its window after).
-pub(super) static UNDER_BAR: Lock<Vec<(isize, u32, Instant)>> = Lock::new("taskbar::win::work::UNDER_BAR", Vec::new());
-pub(super) static FLYOUTS: Lock<Vec<isize>> = Lock::new("taskbar::win::work::FLYOUTS", Vec::new());
-
 pub(super) fn keep_under_bar(hwnd: isize, moved: bool) {
     const SWP_NOSIZE: u32 = 0x1;
     const SWP_NOZORDER: u32 = 0x4;
     const SWP_ASYNCWINDOWPOS: u32 = 0x4000;
-    if *EDGE.lock().unwrap() != Edge::Top || !is_up() {
+    let Place { edge, strip } = *PLACE.lock().unwrap();
+    if edge != Edge::Top || !is_up() {
         return;
     }
-    let Some(strip) = *STRIP.lock().unwrap() else { return };
+    let Some(strip) = strip else { return };
     let Some((l, t, r, b)) = tasks::frame(hwnd) else { return };
     let ((mx, my, mw, mh), sf) = monitor_of(strip);
     if r <= mx || l >= mx + mw || b <= my || t >= my + mh {
@@ -207,7 +269,7 @@ pub(super) fn keep_under_bar(hwnd: isize, moved: bool) {
     }
     let bar = strip.1 + strip.3;
     let over = t < bar && b > strip.1;
-    let foot = b > my + mh * 2 / 3 && b - t < mh * 3 / 4 && (!moved || FLYOUTS.lock().unwrap().contains(&hwnd));
+    let foot = b > my + mh * 2 / 3 && b - t < mh * 3 / 4 && (!moved || with_work(|w| w.flyouts.contains(&hwnd)));
     if !over && !foot {
         return;
     }
@@ -217,12 +279,13 @@ pub(super) fn keep_under_bar(hwnd: isize, moved: bool) {
     }
     let flyout = tasks::is_shell_flyout(hwnd);
     if flyout {
-        let mut known = FLYOUTS.lock().unwrap();
-        if !known.contains(&hwnd) {
-            known.push(hwnd);
-            let n = known.len();
-            known.drain(..n.saturating_sub(16));
-        }
+        with_work(|w| {
+            if !w.flyouts.contains(&hwnd) {
+                w.flyouts.push(hwnd);
+                let n = w.flyouts.len();
+                w.flyouts.drain(..n.saturating_sub(16));
+            }
+        });
     }
     // Windows' flyout standing on the foot; a tray program's popup over
     // the strip: one of a popup's size, not Explorer's (its icons are in
@@ -234,17 +297,19 @@ pub(super) fn keep_under_bar(hwnd: isize, moved: bool) {
     if !wants || crate::pet::any_down() == Some(true) {
         return;
     }
-    {
-        let mut moved = UNDER_BAR.lock().unwrap();
-        moved.retain(|(_, _, at)| at.elapsed() < Duration::from_secs(5));
-        let n = moved.iter().filter(|(h, _, _)| *h == hwnd).map(|(_, n, _)| *n).max().unwrap_or(0);
-        if n >= 20 {
-            return;
+    let times = with_work(|w| {
+        w.under_bar.retain(|(_, _, at)| at.elapsed() < Duration::from_secs(5));
+        let n = w.under_bar.iter().filter(|(h, _, _)| *h == hwnd).map(|(_, n, _)| *n).max().unwrap_or(0);
+        if n < 20 {
+            w.under_bar.push((hwnd, n + 1, Instant::now()));
         }
-        moved.push((hwnd, n + 1, Instant::now()));
-        if n == 0 {
-            log(&format!("{} of {} at ({l}, {t}, {r}, {b}): moved under the strip along the top", if flyout { "Windows' flyout" } else { "a tray program's popup" }, p.program));
-        }
+        n
+    });
+    if times >= 20 {
+        return;
+    }
+    if times == 0 {
+        log(&format!("{} of {} at ({l}, {t}, {r}, {b}): moved under the strip along the top", if flyout { "Windows' flyout" } else { "a tray program's popup" }, p.program));
     }
     let gap = (8.0 * sf).round() as i32;
     let x = if flyout { p.rect.0 + (mx + mw - gap - r) } else { p.rect.0 };
@@ -277,16 +342,15 @@ pub(super) fn work_after_still(hwnd: Hwnd) {
 
 pub(super) const EAGER_TIMES: usize = 6;
 pub(super) const EAGER_WITHIN: Duration = Duration::from_secs(10);
-pub(super) static EAGER: Lock<Vec<Instant>> = Lock::new("taskbar::win::work::EAGER", Vec::new());
-
-pub(super) fn eager_allowed() -> bool {
-    let mut times = EAGER.lock().unwrap();
-    times.retain(|at| at.elapsed() < EAGER_WITHIN);
-    if times.len() >= EAGER_TIMES {
-        return false;
+impl Work {
+    fn eager_allowed(&mut self) -> bool {
+        self.eager.retain(|at| at.elapsed() < EAGER_WITHIN);
+        if self.eager.len() >= EAGER_TIMES {
+            return false;
+        }
+        self.eager.push(Instant::now());
+        true
     }
-    times.push(Instant::now());
-    true
 }
 
 // The work area reaching into the strip: Windows has not counted it.
@@ -298,46 +362,47 @@ pub(super) fn eager_allowed() -> bool {
 pub(super) fn keep_work(eager: bool) {
     let work = work_area();
     let bottom = work.bottom;
-    if bottom != WORK_BOTTOM.swap(bottom, Ordering::SeqCst) {
+    if bottom != with_work(|w| std::mem::replace(&mut w.bottom, bottom)) {
         log(&format!("work area's bottom now {bottom}"));
     }
-    let edge = *EDGE.lock().unwrap();
     // The strip and its display; none while the strip as told lies off
     // its display's edge (appbar.rs lies_along): told before the display
     // changed, it would set the work area by where the edge was. Nothing
     // is set until it is told anew.
-    let told = *STRIP.lock().unwrap();
+    let Place { edge, strip: told } = *PLACE.lock().unwrap();
     let laid = told.map(|s| (s, monitor_of(s).0)).filter(|&(s, mon)| {
         let along = edge.lies_along(s, mon);
-        if !along && !STRIP_OFF.swap(true, Ordering::SeqCst) {
+        if !with_work(|w| std::mem::replace(&mut w.strip_off, !along)) && !along {
             log(&format!("the strip as told {s:?} lies off the {edge:?} of its display {mon:?} (the display changed): the work area left be until it is told anew"));
-        } else if along {
-            STRIP_OFF.store(false, Ordering::SeqCst);
         }
         along
     });
     let strip = laid.map(|(s, _)| s);
     let xywh = (work.left, work.top, work.right - work.left, work.bottom - work.top);
-    let ours = WORK_SIDE.lock().unwrap().filter(|w| w.0 == edge).map(|w| w.1);
+    let ours = with_work(|w| w.side.filter(|s| s.0 == edge).map(|s| s.1));
     let fix = strip.and_then(|s| edge.work_fix(xywh, s, ours));
     // A side an earlier strip of hers held in, kept by Explorer: given back (appbar.rs stale_sides).
     let stale = laid.filter(|_| edge != Edge::Bottom).map(|(s, m)| edge.stale_sides(xywh, s, m)).unwrap_or_default();
     let lost = fix.is_some() || !stale.is_empty();
     let ticks = TICKS.load(Ordering::SeqCst);
-    let due = if !lost {
-        LOST_SINCE.store(0, Ordering::SeqCst);
-        false
-    } else if eager && eager_allowed() {
-        true
-    } else if LOST_SINCE.load(Ordering::SeqCst) == 0 {
-        LOST_SINCE.store(ticks.max(1), Ordering::SeqCst);
-        false
-    } else {
-        ticks >= LOST_SINCE.load(Ordering::SeqCst) + 1 && ticks >= LAST_TAKEN.load(Ordering::SeqCst) + 4
-    };
+    let due = with_work(|w| {
+        if !lost {
+            w.lost_since = 0;
+            false
+        } else if eager && w.eager_allowed() {
+            true
+        } else if w.lost_since == 0 {
+            w.lost_since = ticks.max(1);
+            false
+        } else {
+            ticks > w.lost_since && ticks >= w.last_taken + 4
+        }
+    });
     if due {
-        LAST_TAKEN.store(ticks, Ordering::SeqCst);
-        LOST_SINCE.store(0, Ordering::SeqCst);
+        with_work(|w| {
+            w.last_taken = ticks;
+            w.lost_since = 0;
+        });
         let when = if eager { " at Explorer's word, it still" } else { "" };
         if let Some(side) = fix {
             let reaches = strip.is_some_and(|s| edge.reaches(xywh, s));
@@ -352,7 +417,7 @@ pub(super) fn keep_work(eager: bool) {
             };
             log(&format!("work area ({}, {}, {}, {}) {how} the strip ({strip:?}, {edge:?}){why}: its side set to {side}{when}{counted}", work.left, work.top, work.right, work.bottom));
             set_work_side(edge, side);
-            *WORK_SIDE.lock().unwrap() = Some((edge, side));
+            with_work(|w| w.side = Some((edge, side)));
             if let Some(strip) = strip {
                 icons_out(strip, edge);
             }

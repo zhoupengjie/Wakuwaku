@@ -219,7 +219,7 @@ pub(super) fn look_at_desktop(sent: &mut Sent) {
     }
     // Her taskbar on the other displays: each one's wallpaper too, for its Mica.
     crate::bars::read_papers(&sh);
-    let Some(strip) = *STRIP.lock().unwrap() else { return };
+    let Some(strip) = strip_now() else { return };
     let (mon, sf) = monitor_of(strip);
     let Some(paper) = wallpaper::read(mon) else { return };
     // SAFETY: plain reads.

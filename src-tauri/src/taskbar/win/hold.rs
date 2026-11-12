@@ -28,14 +28,14 @@ pub fn set_edge(edge: Edge, room: bool) {
     // Back to the bottom from another edge: the desktop's icons where
     // they are, before Windows' taskbar takes its room back and the
     // desktop moves them (icons.rs hold).
-    if edge == Edge::Bottom && *EDGE.lock().unwrap() != Edge::Bottom && is_up() {
+    if edge == Edge::Bottom && edge_now() != Edge::Bottom && is_up() {
         if let Some(sh) = sh() {
             for line in crate::icons::hold_within(&sh.dir, Duration::from_secs(2)) {
                 sh.log(&line);
             }
         }
     }
-    let was = std::mem::replace(&mut *EDGE.lock().unwrap(), edge);
+    let was = std::mem::replace(&mut PLACE.lock().unwrap().edge, edge);
     let kept = shell::kept_room();
     shell::keep_room(room);
     if (was != edge || kept != room) && is_up() {
@@ -521,14 +521,13 @@ pub fn give_back(sh: &Shared) {
             }
         });
     }
-    *WORK_EDGE.lock().unwrap() = None;
-    *WORK_SIDE.lock().unwrap() = None;
+    // What the work area was made for went with the taskbar's thread.
     *SENT.lock().unwrap() = Value::Null;
     *SENT_WINDOWS.lock().unwrap() = Value::Null;
     // The look's thread forgets what it sent (its own to forget).
     forget_look();
     START_OPEN.store(false, Ordering::SeqCst);
-    *STRIP.lock().unwrap() = None;
+    PLACE.lock().unwrap().strip = None;
 }
 
 // Windows' taskbar shown again as fast as she puts it away: another

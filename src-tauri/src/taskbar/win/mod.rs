@@ -231,10 +231,11 @@ const WM_TRAY_CHANGED: u32 = 0x8002;
 const WM_STOP: u32 = 0x8003;
 // A new page wants the tray's icons whole (tray.rs resend): its pictures are this thread's.
 const WM_RESEND_TRAY: u32 = 0x8007;
-// The strip moved: the desktop's picture under it looked at again (so
-// too when a setting or Windows' colours change). The picture changed
-// by her own settings: looked at until it is in place (settle).
-const WM_PAPER: u32 = 0x8004;
+// The strip moved (work.rs strip_moved): the work area made for it here,
+// the tray's window moved, the desktop's picture under it looked at
+// again. The picture changed by her own settings: looked at until it is
+// in place (settle).
+const WM_STRIP_MOVED: u32 = 0x8004;
 const WM_PAPER_SET: u32 = 0x8005;
 // Debug only (/debug/hang): this thread held still for wparam seconds.
 const WM_HOLD_STILL: u32 = 0x8012;
@@ -312,7 +313,7 @@ use look::{PAPER, LOOK};
 use thread::{OURS, TICKS};
 use thumbs::THUMB_HOST;
 use tray::{ASK_AT, LAST_ASK, SENT};
-use work::{EDGE, WORK_EDGE, STRIP, WORK_SIDE};
+use work::PLACE;
 // Her Shared, for the threads here: only ever cloned out (sh()), so taken
 // inside any lock and nothing inside it.
 static SH: Lock<Option<Arc<Shared>>> = Lock::ranked("taskbar::win::SH", crate::lock::LEAF, None);

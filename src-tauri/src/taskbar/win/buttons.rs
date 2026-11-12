@@ -274,7 +274,7 @@ pub(super) fn icon_of(hwnd: isize, redrawn: &[isize]) -> isize {
 
 // On the strip's display (a window maximized elsewhere leaves it clear).
 pub(super) fn on_strip(hwnd: isize) -> bool {
-    let Some(s) = *STRIP.lock().unwrap() else { return false };
+    let Some(s) = strip_now() else { return false };
     // SAFETY: plain queries.
     unsafe { MonitorFromWindow(hwnd as Hwnd, MONITOR_DEFAULTTONEAREST) == MonitorFromPoint(Point { x: s.0 + s.2 / 2, y: s.1 + s.3 / 2 }, MONITOR_DEFAULTTONEAREST) }
 }

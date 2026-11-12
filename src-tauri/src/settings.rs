@@ -10,6 +10,7 @@ use tauri::{AppHandle, WebviewWindow};
 
 use crate::shared::{set_display, set_out};
 use crate::{connection, data, fetch, fullscreen, i18n, island, logon, mail, now_ms, pet, plugins, shared, Shared};
+use crate::config;
 
 const REPO: &str = "https://github.com/zhoupengjie/wakuwaku";
 // How to write a plugin (the Plugins page's 开发文档, under a .zip it cannot take).
@@ -92,7 +93,7 @@ fn agent_row(sh: &Shared, agent: Agent) -> AgentRow {
         Agent::Omp => Own::Omp { more: connection::omp_files().len().saturating_sub(1) },
         Agent::Reasonix => Own::Reasonix { line: connection::reasonix_line().map(|major| format!("{major}.x")) },
         Agent::Dsh => {
-            let Value::Object(mut view) = connection::dsh_view(sh.port, &sh.setting("dshVia"), seen_at(sh, agent)) else { unreachable!("dsh_view is an object") };
+            let Value::Object(mut view) = connection::dsh_view(sh.port, &sh.setting(config::DSH_VIA), seen_at(sh, agent)) else { unreachable!("dsh_view is an object") };
             hooks = view.remove("hooks").and_then(|h| h.as_str().map(String::from));
             view.insert("listShown".into(), json!(connection::shown_path(&connection::dsh_plugin_file())));
             view.insert("hooksShown".into(), json!(connection::shown_path(&connection::dsh_hooks_file())));
@@ -154,7 +155,7 @@ pub fn snapshot(sh: &Shared) -> Value {
     // The monitor's source in effect: the one chosen, else LHM while it answers.
     let lhm = crate::lhm::view();
     let lhm_status = lhm["status"].as_str().unwrap_or("").to_string();
-    let monitor_source = crate::hw::Source::of(&sh.setting("monitor"), &sh.setting("monitorSource"), lhm_status == "found");
+    let monitor_source = crate::hw::Source::of(&sh.setting(config::MONITOR), &sh.setting(config::MONITOR_SOURCE), lhm_status == "found");
     let lhm_shown = monitor_source == crate::hw::Source::Lhm && sh.settings_open();
     json!({
         "settings": Value::Object(sh.settings.lock().unwrap().clone()),
@@ -564,7 +565,7 @@ fn is_island_edge(v: &Value) -> bool {
     matches!(v.as_str(), Some("top" | "taskbar"))
 }
 
-const SHORTCUT_KEYS: [&str; 3] = ["shortcutApprove", "shortcutDeny", "shortcutIsland"];
+const SHORTCUT_KEYS: [config::Setting; 3] = [config::SHORTCUT_APPROVE, config::SHORTCUT_DENY, config::SHORTCUT_ISLAND];
 
 fn is_shortcut_spec(sh: &Shared, key: &str, s: &str) -> bool {
     if s.is_empty() {
@@ -576,7 +577,7 @@ fn is_shortcut_spec(sh: &Shared, key: &str, s: &str) -> bool {
     let all: Vec<String> = SHORTCUT_KEYS
         .iter()
         .map(|&k| {
-            if k == key {
+            if k.name() == key {
                 s.to_string()
             } else {
                 sh.setting(k).as_str().unwrap_or("").to_string()
@@ -752,7 +753,7 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
     }
     // The web another way: taken at the next request.
     if net_way {
-        crate::proxy::set_web(&sh.setting("netProxy"));
+        crate::proxy::set_web(&sh.setting(config::NET_PROXY));
     }
     // Her home on another display (#104): everything of hers there now.
     if home_display {
@@ -965,7 +966,7 @@ pub async fn settings_agent(app: AppHandle, agent: String, action: String) -> Va
 
 // The way DSH is followed, as chosen or as the rows have it (connection/dsh.rs dsh_way).
 fn dsh_way(sh: &Shared) -> &'static str {
-    connection::dsh_rows_status(sh.port, &sh.setting("dshVia")).0
+    connection::dsh_rows_status(sh.port, &sh.setting(config::DSH_VIA)).0
 }
 
 // The CPU temperature/power helper (sensors.rs, #18 part B). She is not
@@ -1010,7 +1011,7 @@ pub async fn settings_fetch(app: AppHandle, reference: String) -> Value {
     let lang = sh.lang();
     match got {
         Ok(Ok(pet)) => {
-            let current = sh.setting("pet");
+            let current = sh.setting(config::PET);
             let found = data::pets(&sh.dir);
             let has_current = found.iter().any(|p| Some(p.id.as_str()) == current.as_str());
             if !has_current || found.len() == 1 {

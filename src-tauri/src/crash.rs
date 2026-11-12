@@ -57,6 +57,7 @@ use std::time::Duration;
 use serde_json::{json, Map, Value};
 
 use crate::Shared;
+use crate::config;
 pub use redact::Redactor;
 
 // The relays: in front of GitHub's issues (Cloudflare, the Worker
@@ -819,7 +820,7 @@ pub fn send_now(sh: &Arc<Shared>) {
 fn tell(sh: &Arc<Shared>) {
     let Some(newest) = pending(&sh.dir).pop() else { return };
     let id = newest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-    if sh.setting("crashTold").as_str() == Some(id.as_str()) || !sh.is_visible() || sh.pet.lock().unwrap().wants_you() {
+    if sh.setting(config::CRASH_TOLD).as_str() == Some(id.as_str()) || !sh.is_visible() || sh.pet.lock().unwrap().wants_you() {
         return;
     }
     let lang = sh.lang();

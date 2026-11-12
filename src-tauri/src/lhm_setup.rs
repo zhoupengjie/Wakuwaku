@@ -568,7 +568,7 @@ pub fn tools(sh: &Shared) -> PathBuf {
 }
 
 fn port(sh: &Shared) -> u16 {
-    crate::lhm::Conf::from(&sh.setting("monitor")).port
+    crate::lhm::Conf::from(&sh.setting(crate::config::MONITOR)).port
 }
 
 // What the settings show of it: the step offered (looking, till it was
@@ -616,7 +616,7 @@ pub fn view(sh: &Shared, status: &str, shown: bool) -> Value {
         "startup": seen.starts_at_logon(),
         "taskOther": seen.task.as_ref().filter(|_| !seen.starts_at_logon()).map(|t| t.to_string_lossy().into_owned()),
         "pawnio": seen.pawnio,
-        "startupWanted": sh.setting("monitor")["lhmStartup"] != false,
+        "startupWanted": sh.setting(crate::config::MONITOR)["lhmStartup"] != false,
         "job": job.map(|j| json!({ "stage": j.stage, "got": j.got, "total": j.total, "version": j.version, "asset": j.asset })),
         "error": error,
     })
@@ -691,7 +691,7 @@ pub fn act(sh: &Arc<Shared>, what: &str) {
         "usePort" => {
             let other = with(|s| s.seen.install.as_ref().and_then(|i| i.web.port));
             if let Some(port) = other {
-                let mut monitor = sh.setting("monitor");
+                let mut monitor = sh.setting(crate::config::MONITOR);
                 if !monitor.is_object() {
                     monitor = json!({});
                 }
@@ -885,7 +885,7 @@ fn get(sh: &Arc<Shared>) -> Result<(), Value> {
     }
     sh.log(&format!("lhm: {} downloaded, its SHA-256 as GitHub gives it ({got})", asset.name));
     let user = crate::logon::user_sid().ok_or_else(|| error("task", "no SID"))?;
-    let startup = sh.setting("monitor")["lhmStartup"] != false;
+    let startup = sh.setting(crate::config::MONITOR)["lhmStartup"] != false;
     let asked = ask_admin(sh, &AdminAsk::Install { zip: part.clone(), sha256: got, port: port(sh), user, startup }, "install");
     let _ = std::fs::remove_file(&part);
     asked?;

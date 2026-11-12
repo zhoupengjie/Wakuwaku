@@ -20,6 +20,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use crate::frameless;
 use crate::lock::Lock;
 use crate::{asks, backplate, bars, connection, crash, data, desk, focus, fullscreen, i18n, island, logon, mail, notify, pet, plugins, power, screen, settings, shortcuts, state, taskbar, tray, wallpaper, widgets};
+use crate::config;
 
 // The island's own animation of taking her in, before she counts as in.
 const ABSORB_MS: u64 = 380;
@@ -125,20 +126,23 @@ impl Shared {
         sh
     }
 
-    pub fn setting(&self, key: &str) -> Value {
-        self.settings.lock().unwrap().get(key).cloned().unwrap_or(Value::Null)
+    // A setting as it is (config.rs: each key declared once, a constant
+    // there, never a string here): Null while unset.
+    pub fn setting(&self, key: impl config::Key) -> Value {
+        self.settings.lock().unwrap().get(key.name()).cloned().unwrap_or(Value::Null)
     }
 
-    pub fn flag(&self, key: &str) -> bool {
-        self.setting(key).as_bool().unwrap_or(false)
+    // A switch: on only when it is true.
+    pub fn flag(&self, key: config::Flag) -> bool {
+        config::is_on(&self.setting(key))
     }
 
     pub fn lang(&self) -> &'static str {
-        i18n::lang(self.setting("lang").as_str().unwrap_or("auto"))
+        i18n::lang(self.setting(config::LANG).as_str().unwrap_or("auto"))
     }
 
     pub fn hold(&self) -> state::Hold {
-        match self.setting("hold").as_u64() {
+        match self.setting(config::HOLD).as_u64() {
             Some(secs) => state::Hold::Secs(secs),
             None => state::Hold::Seen,
         }
@@ -150,7 +154,7 @@ impl Shared {
     pub fn idle_hide_ms(&self) -> u64 {
         static TEST: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
         let test = *TEST.get_or_init(|| std::env::var("WAKUWAKU_IDLE_HIDE_MS").ok().and_then(|s| s.parse().ok()));
-        test.unwrap_or_else(|| self.setting("idleHideMin").as_u64().unwrap_or(state::IDLE_HIDE_MIN) * 60 * 1000)
+        test.unwrap_or_else(|| self.setting(config::IDLE_HIDE_MIN).as_u64().unwrap_or(state::IDLE_HIDE_MIN) * 60 * 1000)
     }
 
     pub fn screens(&self) -> screen::Screens {
@@ -192,13 +196,13 @@ impl Shared {
     // apply_visibility); it had them even while her capsule on another
     // display showed (the test session, 2026-10-13).
     pub fn asks_seen(&self) -> bool {
-        self.is_visible() || (!self.hidden.load(Ordering::SeqCst) && !self.flag("dnd") && self.is_fullscreen() && bars::any_shown())
+        self.is_visible() || (!self.hidden.load(Ordering::SeqCst) && !self.flag(config::DND) && self.is_fullscreen() && bars::any_shown())
     }
 
     pub fn is_visible(&self) -> bool {
         !self.hidden.load(Ordering::SeqCst)
-            && !self.flag("dnd")
-            && !(self.flag("hideInFullscreen") && self.by_fullscreen.load(Ordering::SeqCst))
+            && !self.flag(config::DND)
+            && !(self.flag(config::HIDE_IN_FULLSCREEN) && self.by_fullscreen.load(Ordering::SeqCst))
     }
 
     // Nobody at the keyboard or mouse for a while: she holds still, the
@@ -293,7 +297,7 @@ impl Shared {
     // Her home as her windows have it: the island, or the taskbar, which the
     // top bar and the dock are too (display split: island.rs is_split).
     pub fn home(&self) -> &'static str {
-        match self.setting("display").as_str() {
+        match self.setting(config::DISPLAY).as_str() {
             Some("taskbar" | "split") => "taskbar",
             _ => "island",
         }
@@ -546,7 +550,7 @@ impl Shared {
         if let Some(react) = out.react {
             self.to_pages("pet:react", react);
         }
-        if !self.flag("dnd") {
+        if !self.flag(config::DND) {
             for (mood, project) in out.alerts {
                 self.alert(&mood, &project);
             }
@@ -556,25 +560,25 @@ impl Shared {
 
     // --- Widgets ----------------------------------------------------------------------
 
-    fn list_setting(&self, key: &str) -> Vec<String> {
+    fn list_setting(&self, key: config::Setting) -> Vec<String> {
         self.setting(key).as_array().into_iter().flatten().filter_map(|v| v.as_str().map(str::to_string)).collect()
     }
 
     pub fn is_widget_on(&self, id: &str) -> bool {
-        !self.list_setting("widgetsOff").iter().any(|o| o == id)
+        !self.list_setting(config::WIDGETS_OFF).iter().any(|o| o == id)
     }
 
     // In the closed island: on, and not put on the desktop, nor on the
     // taskbar while that is her home (a widget in one place, settings.rs
     // is_placed_out).
     pub fn is_in_island(&self, id: &str) -> bool {
-        self.is_widget_on(id) && !settings::is_placed_out(&self.setting("deskLayout"), &self.setting("taskbarLayout"), self.home() == "taskbar", id)
+        self.is_widget_on(id) && !settings::is_placed_out(&self.setting(config::DESK_LAYOUT), &self.setting(config::TASKBAR_LAYOUT), self.home() == "taskbar", id)
     }
 
     // On in the island, put on the taskbar (taskbarLayout) while she is the
     // taskbar, or on the desktop (deskLayout): a built-in one is worked out then.
     pub fn is_widget_wanted(&self, id: &str) -> bool {
-        self.is_widget_on(id) || (self.home() == "taskbar" && settings::is_on_taskbar(&self.setting("taskbarLayout"), id)) || (cfg!(windows) && settings::is_on_desk(&self.setting("deskLayout"), id))
+        self.is_widget_on(id) || (self.home() == "taskbar" && settings::is_on_taskbar(&self.setting(config::TASKBAR_LAYOUT), id)) || (cfg!(windows) && settings::is_on_desk(&self.setting(config::DESK_LAYOUT), id))
     }
 
     // The widgets with something to say, each saying whether it is on.
@@ -584,7 +588,7 @@ impl Shared {
 
     // Every widget, in the person's order, on or off.
     pub fn widgets_view(&self) -> Value {
-        let (off, order) = (self.list_setting("widgetsOff"), self.list_setting("widgetOrder"));
+        let (off, order) = (self.list_setting(config::WIDGETS_OFF), self.list_setting(config::WIDGET_ORDER));
         self.widgets.lock().unwrap().view(now_ms(), &off, &order, &|id: &str| plugins::owner_of(id))
     }
 
@@ -624,7 +628,7 @@ impl Shared {
     // `open` names ({ tab, … }: a letter on the Mail page) instead of the
     // settings as they were.
     pub fn nudge_widget_to(&self, id: &str, words: &str, open: Value) {
-        if !self.is_visible() || self.setting("widgetNudge") == false || !self.is_widget_on(id) || self.pet.lock().unwrap().wants_you() {
+        if !self.is_visible() || self.setting(config::WIDGET_NUDGE) == false || !self.is_widget_on(id) || self.pet.lock().unwrap().wants_you() {
             return;
         }
         let Some((label, value, private)) = self.widgets.lock().unwrap().label_of(id) else { return };
@@ -653,7 +657,7 @@ impl Shared {
             "error" => "error",
             _ => "done",
         };
-        if self.setting("notify").get(group).and_then(Value::as_bool) != Some(true) {
+        if self.setting(config::NOTIFY).get(group).and_then(Value::as_bool) != Some(true) {
             return;
         }
         let lang = self.lang();
@@ -679,11 +683,12 @@ impl Shared {
 
     pub fn change(self: &Arc<Self>, patch: Value) {
         let Value::Object(patch) = patch else { return };
-        let touches_visibility = ["dnd", "display", "out", "hideInFullscreen", "taskbarEdge", "taskbarDisplays", "splitBar", "splitDock"].iter().any(|k| patch.contains_key(*k));
-        let touches_top = ["settingsPin", "settingsTop"].iter().any(|k| patch.contains_key(*k));
-        let touches_monitor = ["monitor", "monitorSource", "widgetsOff"].iter().any(|k| patch.contains_key(*k));
-        let touches_stow = patch.contains_key("islandHideUnder");
-        let touches_shortcuts = ["shortcutsEnabled", "shortcutApprove", "shortcutDeny", "shortcutIsland", "dnd"].iter().any(|k| patch.contains_key(*k));
+        let touches = |keys: &[&str]| keys.iter().any(|k| patch.contains_key(*k));
+        let touches_visibility = touches(&[config::DND.name(), config::DISPLAY.name(), config::OUT.name(), config::HIDE_IN_FULLSCREEN.name(), config::TASKBAR_EDGE.name(), config::TASKBAR_DISPLAYS.name(), config::SPLIT_BAR.name(), config::SPLIT_DOCK.name()]);
+        let touches_top = touches(&[config::SETTINGS_PIN.name(), config::SETTINGS_TOP.name()]);
+        let touches_monitor = touches(&[config::MONITOR.name(), config::MONITOR_SOURCE.name(), config::WIDGETS_OFF.name()]);
+        let touches_stow = touches(&[config::ISLAND_HIDE_UNDER.name()]);
+        let touches_shortcuts = touches(&[config::SHORTCUTS_ENABLED.name(), config::SHORTCUT_APPROVE.name(), config::SHORTCUT_DENY.name(), config::SHORTCUT_ISLAND.name(), config::DND.name()]);
         {
             let mut settings = self.settings.lock().unwrap();
             settings.extend(patch);
@@ -882,10 +887,10 @@ impl Shared {
 
 // A new home: the island, the taskbar, or the top bar and the dock (she goes into it).
 pub fn set_display(sh: &Arc<Shared>, display: &str) {
-    if sh.setting("display").as_str() == Some(display) && !sh.flag("out") {
+    if sh.setting(config::DISPLAY).as_str() == Some(display) && !sh.flag(config::OUT) {
         return;
     }
-    if sh.flag("out") {
+    if sh.flag(config::OUT) {
         pet::hide_now(sh);
     }
     sh.change(json!({ "display": display, "out": false }));
@@ -893,7 +898,7 @@ pub fn set_display(sh: &Arc<Shared>, display: &str) {
 
 // Out on the desktop where she was last left, or back home, from the menu.
 pub fn set_out(sh: &Arc<Shared>, out: bool) {
-    if sh.flag("out") == out {
+    if sh.flag(config::OUT) == out {
         return;
     }
     if out {
@@ -919,7 +924,7 @@ pub fn absorb(sh: &Arc<Shared>, point: (i32, i32)) {
 // Started again while running, or "back to the corner": find her.
 pub fn come_home(sh: &Arc<Shared>) {
     sh.hidden.store(false, Ordering::SeqCst);
-    if sh.flag("out") {
+    if sh.flag(config::OUT) {
         pet::come_home(sh);
     }
     sh.apply_visibility();

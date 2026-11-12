@@ -26,6 +26,7 @@ use crate::pointer::{ClickThrough, Mode};
 use crate::screen::Area;
 use crate::appbar::Edge;
 use crate::{appbar, taskbar, Shared};
+use crate::config;
 
 // The window without extra room, by home (island.js BASE): the island as
 // wide as pulling her out needs, so it only ever grows down. A window whose
@@ -393,7 +394,7 @@ pub fn edge(sh: &Shared) -> Edge {
     if is_split(sh) {
         return Edge::Top;
     }
-    Edge::of(sh.setting("taskbarEdge").as_str().unwrap_or("bottom"))
+    Edge::of(sh.setting(config::TASKBAR_EDGE).as_str().unwrap_or("bottom"))
 }
 
 // The top bar and the dock (display split, a home beside the island and the
@@ -401,20 +402,20 @@ pub fn edge(sh: &Shared) -> Edge {
 // top bar (the strip, here) and a dock at the foot with Start and the
 // programs (bars.rs); a taskbar as her windows have it (Shared::home).
 pub fn is_split(sh: &Shared) -> bool {
-    sh.setting("display").as_str() == Some("split")
+    sh.setting(config::DISPLAY).as_str() == Some("split")
 }
 
 // The strip's thickness (logical): Windows' own, or split, the top bar's
 // (splitBar: 32 unless set to 48).
 pub fn strip_h(sh: &Shared) -> f64 {
-    if is_split(sh) && sh.setting("splitBar").as_u64() != Some(48) { SLIM_H } else { TASKBAR_H }
+    if is_split(sh) && sh.setting(config::SPLIT_BAR).as_u64() != Some(48) { SLIM_H } else { TASKBAR_H }
 }
 
 // Split, the dock kept in the room Windows' own keeps along the foot
 // (splitDock room), maximized windows stopping at it; else (hide, the
 // default) it keeps none and steps out of the way of a window touching it.
 pub fn dock_keeps_room(sh: &Shared) -> bool {
-    is_split(sh) && sh.setting("splitDock").as_str() == Some("room")
+    is_split(sh) && sh.setting(config::SPLIT_DOCK).as_str() == Some("room")
 }
 
 // The edge of the strips on the other displays (bars.rs): hers, or split,
@@ -427,7 +428,7 @@ pub fn bars_edge(sh: &Shared) -> Edge {
 // as screen.rs keeps it: zhoupengjie/Wakuwaku#104), while it is attached;
 // none chosen (the default), or it unplugged, none.
 fn chosen(sh: &Shared, screens: &crate::screen::Screens) -> Option<Area> {
-    let key = sh.setting("homeDisplay");
+    let key = sh.setting(config::HOME_DISPLAY);
     screens.by_key(key.as_str().filter(|k| !k.is_empty())?)
 }
 
@@ -465,11 +466,11 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
     let home = sh.home();
     let edge = edge(sh);
     let area = area(sh)?;
-    let wanted = Side::of(sh.setting("islandPos").as_str().unwrap_or("center"));
+    let wanted = Side::of(sh.setting(config::ISLAND_POS).as_str().unwrap_or("center"));
     // In Windows' own taskbar instead of at the top of the screen (islandEdge
     // taskbar, #105): along its edge, the bottom or the top, while Explorer's
     // taskbar is shown there; along the foot of the work area with none.
-    let in_bar = home != "taskbar" && sh.setting("islandEdge").as_str() == Some("taskbar");
+    let in_bar = home != "taskbar" && sh.setting(config::ISLAND_EDGE).as_str() == Some("taskbar");
     let bar = in_bar.then(|| crate::shell::shown_bar(area.mon)).flatten().filter(|(_, _, e)| matches!(e, Edge::Top | Edge::Bottom));
     let low = in_bar && !matches!(bar, Some((_, _, Edge::Top)));
     let thick = strip_h(sh);
@@ -578,14 +579,14 @@ fn at_bottom(sh: &Shared) -> bool {
 // embed.rs then looks for Explorer's taskbar along the bottom or the top
 // of her display every second.
 pub fn embedding_wanted(sh: &Shared) -> bool {
-    sh.home() != "taskbar" && sh.setting("islandEdge").as_str() == Some("taskbar") && sh.setting("islandEmbed").as_bool() != Some(false)
+    sh.home() != "taskbar" && sh.setting(config::ISLAND_EDGE).as_str() == Some("taskbar") && sh.setting(config::ISLAND_EMBED).as_bool() != Some(false)
 }
 
 // Her island laid over Windows' taskbar (islandEdge taskbar, the embedding
 // off): embed.rs makes the taskbar's window its owner, so Windows keeps it
 // over the taskbar as Explorer raises the taskbar (uncover only finds it under one).
 pub fn over_wanted(sh: &Shared) -> bool {
-    sh.home() != "taskbar" && sh.setting("islandEdge").as_str() == Some("taskbar") && sh.setting("islandEmbed").as_bool() == Some(false)
+    sh.home() != "taskbar" && sh.setting(config::ISLAND_EDGE).as_str() == Some("taskbar") && sh.setting(config::ISLAND_EMBED).as_bool() == Some(false)
 }
 
 // The display her home is on, for the capsule to go into its taskbar.
@@ -595,7 +596,7 @@ pub fn home_area(sh: &Shared) -> Option<Area> {
 
 // Where the island is set to sit (islandPos), for the stretch of the taskbar the capsule goes in.
 pub fn side_wanted(sh: &Shared) -> Side {
-    Side::of(sh.setting("islandPos").as_str().unwrap_or("center"))
+    Side::of(sh.setting(config::ISLAND_POS).as_str().unwrap_or("center"))
 }
 
 // The closed capsule as the page has it (logical width and height) and the
@@ -683,7 +684,7 @@ pub fn embedding(sh: &Shared) -> (bool, Option<i32>, i32) {
 // next started (webview.rs browser_args).
 pub fn home_display_changed(sh: &Shared) {
     place(sh);
-    sh.log(&format!("island: her home on {:?} (homeDisplay {})", display(sh), sh.setting("homeDisplay")));
+    sh.log(&format!("island: her home on {:?} (homeDisplay {})", display(sh), sh.setting(config::HOME_DISPLAY)));
     sh.redraw();
     crate::fullscreen::ask();
 }
@@ -1188,7 +1189,7 @@ static OVER_MAX: AtomicBool = AtomicBool::new(false);
 static TOP_LIGHT: AtomicU8 = AtomicU8::new(2);
 
 pub fn look_over_max(sh: &Arc<Shared>) {
-    let looks = sh.setting("islandTopLook");
+    let looks = sh.setting(config::ISLAND_TOP_LOOK);
     if sh.home() == "taskbar" || sh.is_quiet() || !looks.as_object().is_some_and(|m| m.values().any(Value::is_object)) {
         return;
     }
@@ -1264,7 +1265,7 @@ pub fn look_under(sh: &Arc<Shared>) {
     // the foot of the screen (#105): over Windows' taskbar, or on the work
     // area's foot, no window's top lies under the closed island.
     // The settings read before the island's lock: never two of Shared's at once.
-    let asked = sh.home() == "island" && sh.flag("islandHideUnder");
+    let asked = sh.home() == "island" && sh.flag(config::ISLAND_HIDE_UNDER);
     let (rect, wanted) = {
         let isl = sh.island.lock().unwrap();
         let wanted = asked && !isl.bottom && isl.strip.is_none();
@@ -1714,7 +1715,7 @@ pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
         sh.log(&format!("island: {}", if on { "called down by the pointer" } else { "the pointer gone from it" }));
         let _ = sh.app.emit_to("island", "island:called", json!({ "on": on }));
     }
-    if came && sh.home() == "island" && sh.flag("islandHideUnder") {
+    if came && sh.home() == "island" && sh.flag(config::ISLAND_HIDE_UNDER) {
         crate::fullscreen::ask();
     }
     // Come near her island along the foot of the screen: over Windows'
@@ -2038,7 +2039,7 @@ pub fn settings_closed(sh: &Arc<Shared>) {
     // Set up once Claude Code or Codex is connected, not as the settings
     // close (a click outside closed them, and a new user, nothing
     // connected, was never asked again: the test session, 2026-10-12).
-    if !sh.flag("onboarded") && crate::connection::seems_connected() {
+    if !sh.flag(config::ONBOARDED) && crate::connection::seems_connected() {
         sh.change(json!({ "onboarded": true }));
     } else {
         sh.redraw();
@@ -2176,7 +2177,7 @@ static WATCHING_TOP: AtomicBool = AtomicBool::new(false);
 
 pub fn keep_on_top(sh: &Arc<Shared>) {
     let open = sh.settings_open();
-    let (locked, top) = (sh.flag("settingsPin"), sh.flag("settingsTop"));
+    let (locked, top) = (sh.flag(config::SETTINGS_PIN), sh.flag(config::SETTINGS_TOP));
     let topmost = !(open && locked && !top);
     if TOPMOST.swap(topmost, Ordering::SeqCst) != topmost {
         if let Some(win) = window(sh) {
@@ -2193,7 +2194,7 @@ pub fn keep_on_top(sh: &Arc<Shared>) {
     }
     let sh = sh.clone();
     std::thread::spawn(move || loop {
-        let watched = || sh.settings_open() && sh.flag("settingsPin") && sh.flag("settingsTop");
+        let watched = || sh.settings_open() && sh.flag(config::SETTINGS_PIN) && sh.flag(config::SETTINGS_TOP);
         while watched() {
             let hwnd = hwnd(&sh);
             let own = sh.own_windows();

@@ -44,6 +44,7 @@ use tiny_http::{Header, Request, Response, Server, StatusCode};
 use agent_core::event::{Agent, AgentEvent, Kind};
 
 use crate::{events, events_agy, events_dsh, island, jump, now_ms, pet, Responder, Shared};
+use crate::config;
 
 // Hook events carry whole files (an Edit's PostToolUse has the file before
 // the edit), so this is generous.
@@ -330,7 +331,7 @@ fn take(sh: &Shared, hook: Hook) {
                 Some(out) => reply(req, 200, if out.is_object() { out } else { json!({}) }),
                 None => drop(req),
             });
-            let mut wait = sh.setting("promptWaitSec").as_u64().unwrap_or(290) * 1000;
+            let mut wait = sh.setting(config::PROMPT_WAIT_SEC).as_u64().unwrap_or(290) * 1000;
             if agent == Some("codex") || agent == Some("agy") {
                 wait = wait.min(CODEX_ASK_MS);
             }

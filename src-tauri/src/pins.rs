@@ -12,6 +12,7 @@
 // the shell itself. One it cannot read is left out, and said in the log.
 
 use serde_json::Value;
+use crate::config;
 
 // The item ID lists in Explorer's Favorites, each copied out (aligned, as
 // the shell reads them) and checked whole: its items' sizes within it, and
@@ -84,7 +85,7 @@ pub fn merge(windows: Vec<Value>, mine: &[Value]) -> Vec<Value> {
 // kept before after them; what was taken and what was left out, in the log.
 pub fn take_from_windows(sh: &std::sync::Arc<crate::Shared>) {
     let (windows, notes) = read();
-    let mine = sh.setting("taskbarPinned").as_array().cloned().unwrap_or_default();
+    let mine = sh.setting(config::TASKBAR_PINNED).as_array().cloned().unwrap_or_default();
     let all = merge(windows.clone(), &mine);
     let from_windows: Vec<String> = windows.iter().map(key_of).collect();
     // Their names marked as the person's: a crash report leaves them out (crash.rs).

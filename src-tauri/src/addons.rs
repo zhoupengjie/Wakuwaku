@@ -47,6 +47,7 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 use crate::{now_ms, shared, zip, Shared};
+use crate::config;
 
 // Her scheme for their files, and where her pages find it (WebView2 serves
 // a scheme of the app's own at <scheme>.localhost).
@@ -1181,7 +1182,7 @@ fn migrate_grants(sh: &Shared) {
 // it never loops (clean is idempotent). At start and after an install
 // (a refresh may have changed what a plugin's manifest asks for).
 pub(crate) fn prune_plugins(sh: &Shared) {
-    let stored = sh.setting("plugins");
+    let stored = sh.setting(config::PLUGINS);
     let cleaned = crate::plugins::clean(&stored);
     if cleaned != stored {
         shared(&sh.app).change(json!({ "plugins": cleaned }));
@@ -1283,7 +1284,7 @@ pub fn views_paused() -> bool {
 // settings }: on (placed), its required settings filled, a plugin of an API
 // she has, not stopped.
 fn wanted(sh: &Shared) -> Value {
-    let conf = sh.setting("plugins");
+    let conf = sh.setting(config::PLUGINS);
     let stopped: HashSet<String> = run().stopped.keys().cloned().collect();
     read(|r| {
         Value::Array(
@@ -1367,7 +1368,7 @@ fn view_owner(widget: &str) -> Option<(String, String)> {
 // stopped, unsupported (a newer API)), what went wrong last, why it was
 // stopped, and its settings as the page draws them.
 pub fn view(sh: &Shared) -> Value {
-    let conf = sh.setting("plugins");
+    let conf = sh.setting(config::PLUGINS);
     let lang = sh.lang();
     let (said, stopped) = {
         let r = run();

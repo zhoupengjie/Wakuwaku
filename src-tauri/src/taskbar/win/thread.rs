@@ -110,7 +110,6 @@ pub(super) fn run(strip: (i32, i32, i32, i32), ready: std::sync::mpsc::Sender<is
         KillTimer(hwnd, TICK);
         KillTimer(hwnd, SETTLE);
         KillTimer(hwnd, WORK_STILL);
-        LOOKS_LEFT.store(0, Ordering::SeqCst);
         log(&format!("tray handed back; it was handed {}", systray::seen()));
         systray::stop();
         thumbs(Vec::new());

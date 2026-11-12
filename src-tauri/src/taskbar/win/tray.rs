@@ -46,12 +46,12 @@ pub fn resend(sh: &Shared) {
         let _ = sh.app.emit_to("island", "taskbar:keys", &*keys);
     }
     let paper = PAPER.lock().unwrap().clone();
-    if !paper.is_null() {
-        let _ = sh.app.emit_to("island", "taskbar:wallpaper", paper);
+    if let Some(paper) = paper {
+        let _ = sh.app.emit_to("island", "taskbar:wallpaper", &*paper);
     }
     let look = LOOK.lock().unwrap().clone();
-    if !look.is_null() {
-        let _ = sh.app.emit_to("island", "taskbar:look", look);
+    if let Some(look) = look {
+        let _ = sh.app.emit_to("island", "taskbar:look", &*look);
     }
 }
 

@@ -304,7 +304,7 @@ const SETTLE_TICKS: u32 = 3;
 use buttons::{TASKS_STOP, SENT_WINDOWS};
 use flyouts::START_OPEN;
 use keys::SENT_KEYS;
-use look::{PAPER, LOOK, LOOKS_LEFT};
+use look::{PAPER, LOOK};
 use thread::{OURS, TICKS};
 use thumbs::THUMB_HOST;
 use tray::{ASK_AT, LAST_ASK, SENT};

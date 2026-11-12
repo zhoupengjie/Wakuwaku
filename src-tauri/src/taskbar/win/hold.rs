@@ -525,8 +525,8 @@ pub fn give_back(sh: &Shared) {
     *WORK_SIDE.lock().unwrap() = None;
     *SENT.lock().unwrap() = Value::Null;
     *SENT_WINDOWS.lock().unwrap() = Value::Null;
-    *PAPER.lock().unwrap() = Value::Null;
-    *LOOK.lock().unwrap() = Value::Null;
+    // The look's thread forgets what it sent (its own to forget).
+    forget_look();
     START_OPEN.store(false, Ordering::SeqCst);
     *STRIP.lock().unwrap() = None;
 }

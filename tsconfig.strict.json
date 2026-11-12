@@ -10,6 +10,8 @@
   },
   "include": [
     "src/window.d.ts",
+    "src/shared/config.ts",
+    "src/shared/i18n.ts",
     "src/pet/entry.ts",
     "src/pet/main.ts",
     "src/pet/desk-main.ts",

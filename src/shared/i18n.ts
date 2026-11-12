@@ -3560,33 +3560,38 @@ const STRINGS = {
 }
 
 const LANGS = Object.keys(STRINGS)
+// A language's words by key (the tables are the same keys; English has them all).
+type Table = Record<string, string>
+// A text the pet shows (render): a plain string, or a key to translate and
+// its vars, which may be texts of the same kind.
+type Text = string | { key: string; vars?: Record<string, unknown> } | null | undefined
 
 // 'zh' for any Chinese locale (zh, zh-CN, zh_CN.UTF-8, ...), else 'en'.
-function detectLang(locale) {
+function detectLang(locale: unknown) {
   return /^zh(?:$|[-_.@])/i.test(String(locale || '')) ? 'zh' : 'en'
 }
 
 // The words for key in lang, {name} filled from vars; English, then the
 // key itself, when a translation is missing.
-function t(lang, key, vars?) {
-  const table = STRINGS[lang] || STRINGS.en
-  const text = table[key] ?? STRINGS.en[key] ?? key
-  return text.replace(/\{(\w+)\}/g, (all, name) => (vars && vars[name] !== undefined ? String(vars[name]) : all))
+function t(lang: string, key: string, vars?: Record<string, unknown>) {
+  const table: Table = (STRINGS as Record<string, Table>)[lang] || STRINGS.en
+  const text = table[key] ?? (STRINGS.en as Table)[key] ?? key
+  return text.replace(/\{(\w+)\}/g, (all: string, name: string) => (vars && vars[name] !== undefined ? String(vars[name]) : all))
 }
 
 // A text the pet shows: a plain string, or { key, vars } to translate,
 // whose vars may be texts of the same kind.
-function render(lang, text) {
+function render(lang: string, text: Text): string {
   if (!text) return ''
   if (typeof text === 'string') return text
-  const vars = {}
-  for (const [name, value] of Object.entries(text.vars || {})) vars[name] = value && typeof value === 'object' ? render(lang, value) : value
+  const vars: Record<string, unknown> = {}
+  for (const [name, value] of Object.entries(text.vars || {})) vars[name] = value && typeof value === 'object' ? render(lang, value as Text) : value
   return t(lang, text.key, vars)
 }
 
 // Names in a row as one says them: 「A、B 或 C」, "A, B or C"; with
 // kind 'and', 「A、B 和 C」, "A, B and C".
-function list(lang, names, kind = 'or') {
+function list(lang: string, names: string[], kind = 'or') {
   if (names.length < 2) return names.join('')
   const zh = lang === 'zh'
   const last = zh ? (kind === 'and' ? ' 和 ' : ' 或 ') : kind === 'and' ? ' and ' : ' or '

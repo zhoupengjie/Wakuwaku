@@ -321,6 +321,17 @@ export function marketPart(core: SettingsCore) {
     core.relayout()
   }
 
+  // 取消 on what is asked over the panel, by its button or Esc: whichever it
+  // is (an uninstall, the market's, new permissions, a .zip's steps) goes,
+  // unless it is at work (uninstalling, installing).
+  function cancelAsked() {
+    if (st.gone?.busy || st.flow.step === 'installing') return
+    st.gone = null
+    st.mkAsk = null
+    st.approveFor = null
+    flowStep({ type: 'cancel' })
+  }
+
   // A word for a few seconds, at the panel's foot.
   let toastTimer
   function toast(text) {
@@ -330,5 +341,5 @@ export function marketPart(core: SettingsCore) {
     toastTimer = setTimeout(() => (toastEl.hidden = true), 3600)
   }
 
-  return { approveGo, drawSheet, fillCards, flowStep, installFromFile, installGo, loadMarket, marketInstall, marketItem, marketItemPage, marketPage, toast, uninstallGo, updateAll }
+  return { approveGo, cancelAsked, drawSheet, fillCards, flowStep, installFromFile, installGo, loadMarket, marketInstall, marketItem, marketItemPage, marketPage, toast, uninstallGo, updateAll }
 }

@@ -49,7 +49,7 @@ struct TrayData {
 }
 
 // What Shell_NotifyIconGetRect hands the tray (asked twice: message 1
-// for the left and top, 2 for the right and bottom): 40 bytes, the window
+// for the left and top, 2 for the width and height): 40 bytes, the window
 // in 32 bits (seen 2026-10-10: 23 34 75 34 | 02 00 00 00 | 20 00 00 00 |
 // 00 00 00 00 | window | id | guid).
 #[repr(C)]
@@ -788,6 +788,18 @@ mod tests {
         assert_eq!(std::mem::size_of::<TrayData>(), 964);
         assert_eq!(std::mem::size_of::<TrayData>(), super::super::PATH_AT);
         assert_eq!(std::mem::size_of::<RectQuestion>(), 40);
+    }
+
+    #[test]
+    fn where_an_icon_is_answered_as_shell32_reads_it() {
+        // An icon at 2380,1395 to 2412,1427: message 1 its left and top,
+        // message 2 its width and height (shell32 adds them to the first).
+        let rect = (2380, 1395, 2412, 1427);
+        assert_eq!(rect_half(rect, 1), (2380, 1395));
+        assert_eq!(rect_half(rect, 2), (32, 32));
+        // On a screen left of the main one: the left below 0, the size as ever.
+        assert_eq!(rect_half((-1880, 1040, -1856, 1064), 1), (-1880, 1040));
+        assert_eq!(rect_half((-1880, 1040, -1856, 1064), 2), (24, 24));
     }
 
     fn nid(hwnd: u32, id: u32, flags: u32, tip: &str) -> IconData {

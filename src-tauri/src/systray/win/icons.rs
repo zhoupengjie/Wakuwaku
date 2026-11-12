@@ -195,8 +195,21 @@ pub(super) fn answer_rect(cds: &CopyData) -> Option<isize> {
         }
         return None;
     };
-    let (l, t, r, b) = RECTS.with_borrow(|rects| rects.iter().find(|(k, _)| *k == key).map(|(_, rect)| *rect))?;
-    let (x, y) = if q.message == 2 { (r, b) } else { (l, t) };
+    let rect = RECTS.with_borrow(|rects| rects.iter().find(|(k, _)| *k == key).map(|(_, rect)| *rect))?;
+    let (x, y) = rect_half(rect, q.message);
     Some(((x as u16 as u32) | ((y as u16 as u32) << 16)) as i32 as isize)
+}
+
+// The half of an icon's rect each question asks for: message 1 its left
+// and top, message 2 its width and height, which shell32 adds to the first
+// answer for the right and bottom. Answered with the right and bottom, a
+// program asking (WeChat, QQ: where to put their window by their icon) was
+// told a rect that ended as far again past the icon, off the screen.
+pub(super) fn rect_half((l, t, r, b): (i32, i32, i32, i32), message: u32) -> (i32, i32) {
+    if message == 2 {
+        (r - l, b - t)
+    } else {
+        (l, t)
+    }
 }
 

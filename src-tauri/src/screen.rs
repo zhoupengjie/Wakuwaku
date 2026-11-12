@@ -18,7 +18,7 @@ pub struct Screens {
     pub areas: Vec<Area>,
     pub primary: Option<Area>,
     // Each display's device name as Windows gives it (\\.\DISPLAY1; none on
-    // some systems) and its key (desk.rs key_for: its monitor's device, the
+    // some systems) and its key (desk/ key_for: its monitor's device, the
     // same through replugging and renumbering), which the setting
     // homeDisplay names her display by (zhoupengjie/Wakuwaku#104).
     pub names: Vec<((i32, i32, i32, i32), Option<String>, String)>,

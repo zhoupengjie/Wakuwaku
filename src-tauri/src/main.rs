@@ -496,7 +496,7 @@ fn main() {
             shortcuts::start(&sh);
             // The mail accounts that are on, watched from the start.
             mail::sync(&sh);
-            // The desktop's widgets (desk.rs).
+            // The desktop's widgets (desk/).
             desk::sync(&sh);
             // Her updates looked for (a downloaded exe only).
             updates::start(&sh);

@@ -1273,7 +1273,7 @@ fn run() -> crate::lock::Guard<'static, Run> {
 }
 
 // Whether a plugin with a view runs (the desktop's pages are told when their
-// views may show only then: desk.rs views), and whether the island's
+// views may show only then: desk/ views), and whether the island's
 // watchdog has the views taken away for a while (pause_views).
 static VIEWS: AtomicBool = AtomicBool::new(false);
 static VIEWS_PAUSED: AtomicBool = AtomicBool::new(false);
@@ -1351,7 +1351,7 @@ fn is_running(id: &str) -> bool {
 }
 
 // Whether one of those running has a view; one just come, the desktop's
-// pages told whether theirs may show (desk.rs views).
+// pages told whether theirs may show (desk/ views).
 fn note_views(sh: &Shared, running: &HashSet<String>) {
     let views = read(|r| running.iter().any(|id| r.manifest(id).is_some_and(|m| m.view.is_some())));
     if views && !VIEWS.swap(true, Ordering::Relaxed) {
@@ -2469,7 +2469,7 @@ fn stop(sh: &Shared, id: &str, why: &str, since: Option<u64>, times: Option<u64>
 
 // Every view taken away a while (the island's watchdog starting the
 // plugins' frames anew: the one process they share must end, a view's frame
-// too), or back; the desktop's pages told (desk.rs views).
+// too), or back; the desktop's pages told (desk/ views).
 fn pause_views(sh: &Shared, paused: bool) {
     if VIEWS_PAUSED.swap(paused, Ordering::Relaxed) != paused {
         sh.log(&format!("addons: views {}", if paused { "taken away a while" } else { "back" }));

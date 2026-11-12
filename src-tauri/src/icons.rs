@@ -385,7 +385,7 @@ mod imp {
         // (the test VM, its left display at 175 %: 130 x 147 against 93 x
         // 125, from 23 px left of where the view says the item is). Empty
         // when the list cannot be read (another kind of desktop, Explorer
-        // busy): the places and the spacing then (desk.rs icons).
+        // busy): the places and the spacing then (desk/ icons).
         pub fn bounds(&self) -> Vec<Rect> {
             const LVM_GETITEMCOUNT: u32 = 0x1004;
             const LVM_GETITEMRECT: u32 = 0x100E;

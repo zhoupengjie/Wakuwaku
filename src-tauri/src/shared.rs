@@ -460,7 +460,7 @@ impl Shared {
         self.to_pages("pet:update", self.payload());
         tray::refresh(self);
         self.push_settings();
-        // The desktop's widgets (desk.rs), their words.
+        // The desktop's widgets (desk/), their words.
         desk::push_widgets(self);
     }
 
@@ -711,7 +711,7 @@ impl Shared {
         }
         // Her taskbar on the other displays: its material, its buttons' alignment, her language (bars.rs).
         bars::refresh(self);
-        // The desktop's widgets: made or gone as the layout says, told the rest (desk.rs).
+        // The desktop's widgets: made or gone as the layout says, told the rest (desk/).
         desk::sync(self);
         if touches_top {
             island::keep_on_top(self);

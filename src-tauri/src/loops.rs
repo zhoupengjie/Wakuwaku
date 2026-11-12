@@ -21,7 +21,7 @@ pub(crate) fn wake_monitor() {
 }
 
 // The pointer's loop woken from its wait (setup): Ctrl pressed or let go
-// (desk.rs, its keyboard hook), so the desktop takes or lets go of the
+// (desk/, its keyboard hook), so the desktop takes or lets go of the
 // mouse at once. Called from that hook: no more than an unpark.
 static POINTER_LOOP: std::sync::OnceLock<std::thread::Thread> = std::sync::OnceLock::new();
 
@@ -33,7 +33,7 @@ pub(crate) fn wake_pointer() {
 
 // The mouse: click-through, her eyes, drags; for both windows.
 // Quiet (nobody touching it), looked at once a second. Woken
-// before its time by wake_pointer (desk.rs: Ctrl pressed or let go).
+// before its time by wake_pointer (desk/: Ctrl pressed or let go).
 pub fn pointer(sh: &Arc<Shared>) {
     let pointer = sh.clone();
     spawn_named("pointer", move || loop {
@@ -48,7 +48,7 @@ pub fn pointer(sh: &Arc<Shared>) {
             (c, c)
         };
         // Quiet or not first: woken by a key after a quiet while (Ctrl,
-        // desk.rs), the looks are someone's at once, not a turn later.
+        // desk/), the looks are someone's at once, not a turn later.
         let quiet = pointer.check_quiet();
         let wait = match at {
             (Some(her), Some(home)) => pet::poll(&pointer, her).min(island::poll(&pointer, home)).min(desk::poll(&pointer, home)).min(bars::poll(&pointer, home)),
@@ -143,7 +143,7 @@ pub fn monitor(sh: &Arc<Shared>) {
                 // the taskbar), no display shows it (a window maximized or
                 // full screen over it) and the open island is not being
                 // looked at (its overview lists it): not read, kept as
-                // it was, looked at again at its pace (desk.rs seen).
+                // it was, looked at again at its pace (desk/ seen).
                 let unseen = on && !monitored.is_in_island("monitor") && !(monitored.home() == "taskbar" && settings::is_on_taskbar(&monitored.config().taskbar_layout, "monitor")) && !desk::seen(&monitored, "monitor") && !island::is_over(&monitored);
                 let words = if unseen {
                     None
@@ -229,7 +229,7 @@ pub fn ticker(sh: &Arc<Shared>) {
                     ticker.push_asks();
                 }
             }
-            // The desktop's widgets' counts, each minute (desk.rs minute).
+            // The desktop's widgets' counts, each minute (desk/ minute).
             if n % 120 == 0 {
                 desk::minute(&ticker);
             }

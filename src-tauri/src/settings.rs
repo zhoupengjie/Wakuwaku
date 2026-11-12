@@ -342,7 +342,7 @@ pub fn is_on_taskbar(layout: &Value, widget: &str) -> bool {
 // to 8 as the taskbar's groups have them, or { id, type: "board", name,
 // items, folded, d, at } a board (its name 16 characters at most, its tiles
 // is_board_tiles); size s, m or l; d the display it
-// is on (desk.rs key_of: a-z 0-9), at where it stood on each display it has
+// is on (desk/ key_of: a-z 0-9), at where it stood on each display it has
 // been on, 8 at most, { key: [column, row] }. Each id once, each widget or
 // plugin once.
 fn is_desk_entry(v: &Value) -> bool {
@@ -627,12 +627,12 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "splitKeys" => matches!(v.as_str(), Some("top" | "dock")),
         "taskbarDisplays" => matches!(v.as_str(), Some("main" | "all")),
         // The display her home is on (#104): a display's key (screen.rs,
-        // desk.rs key_for), kept while that display is unplugged so she goes
+        // desk/ key_for), kept while that display is unplugged so she goes
         // back to it; "" for Windows' main display.
         "homeDisplay" => v.as_str().is_some_and(|k| k.len() <= 64 && !k.chars().any(char::is_control)),
         // The taskbar's parts in three runs (island-layout.ts tbLayout), each once.
         "taskbarLayout" => v.is_null() || is_taskbar_layout(v),
-        // The desktop's widgets (desk.rs, deskgrid.ts).
+        // The desktop's widgets (desk/, deskgrid.ts).
         "deskLayout" => is_desk_layout(v),
         // Boards kept as combos, to be put up again from the picker's 组合.
         "boardSets" => is_board_sets(v),

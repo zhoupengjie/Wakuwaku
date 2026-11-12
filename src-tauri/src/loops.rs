@@ -8,7 +8,6 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use crate::{bars, desk, fullscreen, hw, island, lhm, mail, now_ms, pet, plugins, power, screen, settings, spawn_named, tokens, widgets, Shared};
-use crate::config;
 use crate::lock::Lock;
 
 // The monitor's thread woken from its wait (setup): its settings changed
@@ -122,7 +121,7 @@ pub fn monitor(sh: &Arc<Shared>) {
         let mut watching_listed = false;
         let mut was = (false, Value::Null, false, false);
         loop {
-            let setting = json!([monitored.setting(config::MONITOR), monitored.setting(config::MONITOR_SOURCE)]);
+            let setting = json!([monitored.config().monitor.clone(), monitored.config().monitor_source.clone()]);
             let mut watching = widgets::Watching::from(&setting[0], &setting[1]);
             // On in the island, or put on the taskbar (its widget there).
             let (on, quiet) = (monitored.is_widget_wanted("monitor"), monitored.is_quiet());
@@ -145,7 +144,7 @@ pub fn monitor(sh: &Arc<Shared>) {
                 // full screen over it) and the open island is not being
                 // looked at (its overview lists it): not read, kept as
                 // it was, looked at again at its pace (desk.rs seen).
-                let unseen = on && !monitored.is_in_island("monitor") && !(monitored.home() == "taskbar" && settings::is_on_taskbar(&monitored.setting(config::TASKBAR_LAYOUT), "monitor")) && !desk::seen(&monitored, "monitor") && !island::is_over(&monitored);
+                let unseen = on && !monitored.is_in_island("monitor") && !(monitored.home() == "taskbar" && settings::is_on_taskbar(&monitored.config().taskbar_layout, "monitor")) && !desk::seen(&monitored, "monitor") && !island::is_over(&monitored);
                 let words = if unseen {
                     None
                 } else if on {

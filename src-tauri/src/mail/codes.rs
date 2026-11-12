@@ -26,7 +26,6 @@ use super::store::{Folder, Store};
 use super::Account;
 use crate::{now_ms, Shared};
 use tauri::Emitter;
-use crate::config;
 use crate::lock::Lock;
 
 // --- Finding one ------------------------------------------------------------------------
@@ -644,7 +643,7 @@ const AT_ONCE: usize = 3;
 // (`looked`, kept across connections), for a code or a link.
 pub fn look(sh: &Arc<Shared>, conn: &mut Session, st: &Lock<Store>, account: &Account, since: Option<u32>, looked: &mut HashSet<u32>) {
     let Some(since) = since else { return };
-    if sh.setting(config::MAIL_CODES) == false {
+    if !sh.config().mail_codes {
         return;
     }
     let now_s = now_ms() as i64 / 1000;

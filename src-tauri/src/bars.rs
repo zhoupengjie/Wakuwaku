@@ -164,7 +164,7 @@ static BARE_AT: Lock<Vec<(Mon, Instant)>> = Lock::new("bars::BARE_AT", Vec::new(
 
 // Her taskbar wanted on every display: her home the taskbar, and set so.
 pub fn wanted(sh: &Shared) -> bool {
-    sh.home() == "taskbar" && sh.setting(config::TASKBAR_DISPLAYS).as_str() == Some("all")
+    sh.home() == "taskbar" && sh.config().taskbar_displays.as_deref() == Some("all")
 }
 
 fn window(sh: &Shared, label: &str) -> Option<WebviewWindow> {
@@ -1295,11 +1295,11 @@ pub fn refresh(sh: &Shared) {
     let spread = spread();
     let edge = island::bars_edge(sh);
     let asks = waiting(&sh.asks.lock().unwrap().views());
-    let pet = sh.setting(config::PET);
+    let pet = sh.config().pet.clone();
     let sprite = crate::data::pets(&sh.dir).into_iter().find(|p| Some(p.id.as_str()) == pet.as_str());
     // The dock's: the buttons of her strip, in its order (as Win+digit counts
     // them, winkeys.rs ordered); whether a window of them flashes.
-    let order: Vec<String> = sh.setting(config::TASKBAR_ORDER).as_array().map(|o| o.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()).unwrap_or_default();
+    let order: Vec<String> = sh.config().taskbar_order.clone();
     let docked = Value::Array(crate::winkeys::ordered(&for_main(sh, &all), &order));
     let flashing = docked.as_array().into_iter().flatten().flat_map(|a| a["windows"].as_array().into_iter().flatten()).any(|w| w["flash"] == true);
     for b in BARS.lock().unwrap().iter_mut().filter(|b| b.dock) {
@@ -1310,7 +1310,7 @@ pub fn refresh(sh: &Shared) {
     // Windows has it (transparency effects on: backplate.rs available); else
     // its page draws the desktop's picture.
     let light = look["mode"].as_str() == Some("light");
-    let acrylic = (sh.setting(config::TASKBAR_MATERIAL).as_str() != Some("black") && crate::backplate::available()).then_some(!light);
+    let acrylic = (sh.config().taskbar_material.as_deref() != Some("black") && crate::backplate::available()).then_some(!light);
     let docks: Vec<(String, bool)> = BARS
         .lock()
         .unwrap()
@@ -1341,15 +1341,15 @@ pub fn refresh(sh: &Shared) {
             // Its Recycle Bin, as last looked at (look_at_bin).
             "bin": if dock { bins.get(&label).cloned().unwrap_or(Value::Null) } else { Value::Null },
             // Split: quick settings and the clock in the dock, or in the top bar (splitKeys).
-            "keys": dock && sh.setting(config::SPLIT_KEYS).as_str() == Some("dock"),
+            "keys": dock && sh.config().split_keys.as_deref() == Some("dock"),
             "keysNow": if dock { taskbar::keys_now() } else { Value::Null },
             "edge": edge.word(),
-            "align": sh.setting(config::TASKBAR_ALIGN),
-            "material": sh.setting(config::TASKBAR_MATERIAL),
-            "clearWhen": sh.setting(config::TASKBAR_CLEAR_WHEN),
+            "align": sh.config().taskbar_align.clone(),
+            "material": sh.config().raw(config::TASKBAR_MATERIAL).clone(),
+            "clearWhen": sh.config().taskbar_clear_when.clone(),
             "filled": fills(&all, mon),
             "look": look,
-            "islandLook": sh.setting(config::ISLAND_LOOK),
+            "islandLook": sh.config().island_look.clone(),
             "lang": sh.lang(),
             "sf": sf,
             "windows": if dock { docked.clone() } else { buttons_for(&all, mon, false, spread) },

@@ -3,7 +3,6 @@
 // (taskbar:windows), each with the sessions that run in it (jump.rs); a
 // program started, a window brought up, minimized or closed, its menu.
 use super::*;
-use crate::config;
 use crate::lock::Lock;
 
 pub(super) fn wake_tasks() {
@@ -243,7 +242,8 @@ pub(super) fn send_windows(sh: &Shared) {
     // Kept on the taskbar: its path, and the app id of one Windows only
     // starts by it (a store app: Settings, Calculator).
     let pinned: Vec<(String, Option<String>)> = sh
-        .setting(config::TASKBAR_PINNED)
+        .config()
+        .taskbar_pinned
         .as_array()
         .map(|all| all.iter().filter_map(|p| Some((p["path"].as_str()?.to_string(), p["id"].as_str().filter(|s| !s.is_empty()).map(str::to_string)))).collect())
         .unwrap_or_default();
@@ -389,7 +389,8 @@ pub fn app(sh: &Shared, what: &str, path: &str, id: Option<&str>) -> bool {
             // as Windows' taskbar starts it (what the shortcut adds, a
             // browser's profile), while it is there.
             let lnk = sh
-                .setting(config::TASKBAR_PINNED)
+                .config()
+                .taskbar_pinned
                 .as_array()
                 .and_then(|all| all.iter().find(|p| p["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(path)) && !path.is_empty()).and_then(|p| p["lnk"].as_str().map(str::to_string)))
                 .filter(|l| std::path::Path::new(l).exists());
@@ -423,7 +424,7 @@ pub fn app(sh: &Shared, what: &str, path: &str, id: Option<&str>) -> bool {
             true
         }
         "pin" | "unpin" => {
-            let mut kept: Vec<Value> = sh.setting(config::TASKBAR_PINNED).as_array().cloned().unwrap_or_default();
+            let mut kept: Vec<Value> = sh.config().taskbar_pinned.as_array().cloned().unwrap_or_default();
             kept.retain(|p| match (id, p["id"].as_str()) {
                 (Some(id), Some(theirs)) => !theirs.eq_ignore_ascii_case(id),
                 (None, None) => !p["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(path)),

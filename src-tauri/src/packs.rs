@@ -41,7 +41,6 @@ use tauri::Manager;
 
 use crate::addons::{self, refused, FromMarket, Kind, Manifest, Package, Perms, Refused, Words};
 use crate::{now_ms, shared, zip, Shared};
-use crate::config;
 use crate::lock::Lock;
 
 // Her mark in a pack's folder.
@@ -244,7 +243,7 @@ fn in_use(paper: &Value, folder: &Path) -> bool {
 // update shows), whether it is in use (her pet; the slideshow's folder).
 pub fn view(sh: &Shared, packs: &[Pack], paper: &Value) -> Value {
     let lang = sh.lang();
-    let pet = sh.setting(config::PET);
+    let pet = sh.config().pet.clone();
     Value::Array(
         packs
             .iter()
@@ -475,7 +474,7 @@ fn uninstall_held(sh: &Shared, kind: Kind, id: &str) -> Result<(), String> {
     if pack.is_none() && !plain_pet {
         return Err(format!("{id}: no {} pack of that name here", kind.name()));
     }
-    if kind == Kind::Pet && sh.setting(config::PET) == id {
+    if kind == Kind::Pet && sh.config().pet == id {
         let next = match fallback_pet(&crate::data::pets(&sh.dir), id) {
             Some(next) => next,
             // The default one written anew in its place: never the default one itself.

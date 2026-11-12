@@ -53,7 +53,7 @@ src/                      页面的源码：TypeScript、HTML、CSS（见「页�
     aim.ts                从程序按钮往上去它的窗口列表：列表开着时在别的按钮上待多久才换成它的（按 Windows 自己的任务栏实测）、往列表去的路上划过的按钮不算（安全三角形）（主屏和副屏的任务栏共用）
     flow.ts               流光提醒：哪种事件怎么提醒（展开、流光、只留小点），光环的转法和明暗（时间和角度），连着来时怎么接，每种事件的颜色；不碰页面，测试直接调
     style.css, settings.css
-  shared/config.ts        页面拿到的设置（Config）：config.rs 声明的每个键（test/config.test.ts 对照），加上只有页面用的几个；只有类型
+  shared/config.ts        页面拿到的设置（Config）：config.rs 声明的每个键（那一段由 config.rs 的测试写出，`CONFIG_TS_BLESS=1 cargo test config`；test/config.test.ts 也对照），加上只有页面用的几个；只有类型
   shared/i18n.ts          中英文，唯一写词的地方：页面直接用；程序自己说的那些（托盘菜单、通知、对话框）由 src-tauri/build.rs 在编译时读出来给 i18n.rs，只取程序代码里点名的 key
 src-tauri/
   src/
@@ -93,7 +93,7 @@ src-tauri/
     crash.rs, crash/      崩溃报告：panic 钩子、未处理异常过滤器、守护进程看退出码、WebView2 进程挂掉；常开的尾日志、脱敏（redact.rs）、问一次、发到中转
     proxy.rs              网络代理（通用页，netProxy）：她联网（更新、崩溃报告、LHM 下载、插件、市场、宠物图库）怎么走（web_ways）、自己跟跳转的 GET（get，更新和市场共用）、「测试」；Windows 的系统代理、手填的代理地址（邮件也用）
     wallpaper.rs          每块显示器的桌面壁纸：文件、摆法、底色（IDesktopWallpaper），给任务栏的云母用
-    config.rs             她的设置（数据目录的 config.json）在 Rust 这边的每个键：名字、种类（Flag 开关、Setting 原样读）、默认值，各声明一次；读设置只能用这里的常量（`sh.setting(config::DISPLAY)`、`sh.flag(config::DND)`），拼错了编译不过
+    config.rs             她的设置（数据目录的 config.json）在 Rust 这边的每个键：常量、字段名、种类、默认值，各声明一次（keys! 宏）；由它生成设置的快照 Config：文件的整个对象（map），加上每个键按种类读出的字段。读设置是 `sh.config().dnd`、`sh.config().display.as_deref()`，拼错了编译不过；也由它写出 src/shared/config.ts 里声明的那些键
     settings.rs           设置看到的快照、校验后的设置补丁、设置的各个命令
     pointer.rs            两个窗口共用的点击穿透
     screen.rs             各个显示器的工作区、设备名（\\.\DISPLAY1）和标识（设置 homeDisplay 用它记她在哪块屏）
@@ -942,7 +942,8 @@ zhoupengjie/Wakuwaku#44：exe 改名后 Run 还指着旧文件，开机什么也
 - **收起**：Esc、点 ✕、点面板头部，或窗口失去焦点（点岛外面：`WindowEvent::Focused(false)` → `island:blur`）。鼠标移开不收起。收起时页面发 `settings_closed`，Rust 让窗口变回不可获得焦点；如果前台还是岛（Esc、✕ 的情况），把焦点还给记下的窗口。
 - **只有宠物时**：打开设置会临时升起一颗岛（`Island.temp`，`payload.islandTemp` 让页面把自己当成"岛开着"），收起后等岛缩回（620ms）再藏起来。设置里切成灵动岛模式，岛就留下来。
 - **数据**：页面打开时取一次快照（`settings_get`），之后 Rust 在状态、确认请求、设置变化时推 `settings:changed`（每秒最多 4 次）。改动先在页面上显示，再发 `settings_set` 补丁，Rust 按白名单校验（`settings.rs` 的 `is_ok`），大小、显示方式、出门通过窗口去改，她的位置不跳。
-- **键在 Rust 这边**（`config.rs`）：Rust 读的每个设置都在 `config.rs` 里声明一次：常量名、种类、默认值（新配置从这些默认值开始，`data.rs` 的 `defaults`）。`Flag` 是开关，只有 `true` 算开（`Shared::flag`）；`Setting` 原样读，没有就是 `Null`，各个调用处自己决定怎么理解。只有页面用、Rust 不读的键只登记默认值，不生成常量。加一个 Rust 要读的设置：在 `config.rs` 里加一行，读的地方用它的常量；`settings.rs` 的 `is_ok` 照旧要放行它。`config.json` 的格式没变：页面写进来、`config.rs` 没声明的键照样原样读进、写回（`data.rs` 的测试 `a_key_not_declared_is_kept`），新旧版本互相兼容。
+- **键在 Rust 这边**（`config.rs`）：Rust 读的每个设置都在 `config.rs` 里声明一次：常量名、字段名、种类、默认值（新配置从这些默认值开始，`data.rs` 的 `defaults`），比如 `DND dnd: Flag = "dnd" => false`。种类决定字段的类型：`Flag` 只有 `true` 算开、`On` 只有 `false` 算关（都是 `bool`），`Text`、`Num`、`UInt`、`Int`、`YesNo` 是 `Option<String/f64/u64/i64/bool>`（不是这个类型就是 `None`，调用处自己给缺省值，和以前 `as_str().unwrap_or(..)` 一样），`List` 是字符串列表，`Raw` 是原样的 JSON（没有就是 `Null`）。只有页面用、Rust 不读的键只登记默认值，不生成常量和字段。加一个 Rust 要读的设置：在 `config.rs` 里加一行，读的地方用 `sh.config().字段`；`CONFIG_TS_BLESS=1 cargo test config` 把它写进 `src/shared/config.ts`；`settings.rs` 的 `is_ok` 照旧要放行它。
+- **快照**（2026-11-12 起）：`Shared::settings` 是 `Lock<Arc<Config>>`。`sh.config()` 只在锁里拿走一个 Arc 就放锁，之后怎么读都不再碰锁；一处要读几个键时先 `let config = sh.config();`，读到的是同一时刻的。改设置（`Shared::change`、`keep_settings`）在锁里复制一份对象、改、写文件、换上新的快照，旧快照留给还拿着它的人。`config.json` 的格式没变：快照里存着文件的整个对象，页面写进来、`config.rs` 没声明的键，和类型不对的值（比如手改过的文件），都照样原样读进、写回、发给页面（`data.rs` 的测试 `a_key_not_declared_is_kept`，`config.rs` 的测试 `the_snapshot_keeps_the_object_whole`），新旧版本互相兼容。
 - **高度**：面板宽 520px，正文高度不超过屏幕（`screen.availHeight` 减去头、页签、脚），超出的在正文里滚动；页签切换时岛的高度用弹簧过渡。
 
 ## 精灵图
@@ -1007,7 +1008,7 @@ CPU 主要花在 GPU 进程和渲染进程上，两边几乎一样（页面是�
 - **监听要先注册好**：`listen()` 本身也是一次 IPC，是异步的。bridge 等所有监听注册完再发 `pet_ready`，Rust 收到后才开始推状态。
 - **新窗口要写进 capability**：`capabilities/default.json` 的 `windows` 里没有 `island` 时，岛的页面调 `listen()` 会被拒绝，页面永远等不到 `pet_ready`。
 - **调用要排队**：每次 `invoke` 都是独立请求，async 命令的执行顺序没有保证。拉她出来时页面依次发 holding、release、drop，顺序乱了就会出错，所以 bridge 把调用排成队一个个发（`walk` 除外，它要等走完才回复）。
-- **锁和窗口 getter**：Tauri 的 getter（`outer_position`、`cursor_position` 等）要等主线程回复，菜单回调又在主线程上拿锁。所以拿着锁时绝不调 getter，同一时间也不拿两把锁；页面的命令一律写成 async，不在主线程上跑。两条都由 `lock.rs` 查（2026-11-12 起包括各模块的静态锁，见「目录」的 lock.rs）：同一线程拿第二把，测试里就 panic，调试版写进日志；getter、建窗口、建菜单都从 `main_wait.rs` 过，调之前手里有锁也一样报。确实要嵌套的写成锁等级（`Lock::ranked`），只从低往高拿。注意临时值活到哪里：`match`、`if let`（含 else）、`for` 的条件里拿的锁一直拿到整个块结束（`if let Some(t) = X.lock().unwrap().take() { 等线程 }` 就是拿着 X 等），函数和方法的参数里拿的锁活到这条语句结束（`a.lock().unwrap().f(sh.flag(..))` 就是两把），`if` 的条件、`&&`、`||` 的每一边自己结束；要用的先读到局部变量里，再拿下一把。别的线程的窗口也一样：对它 `SetWindowPos`、`ShowWindow`、`SetParent` 会等那个线程处理完，拿着锁时不要做，别的程序的窗口用 `SWP_ASYNCWINDOWPOS`（appbar.rs `refit_maximized`）。
+- **锁和窗口 getter**：Tauri 的 getter（`outer_position`、`cursor_position` 等）要等主线程回复，菜单回调又在主线程上拿锁。所以拿着锁时绝不调 getter，同一时间也不拿两把锁；页面的命令一律写成 async，不在主线程上跑。两条都由 `lock.rs` 查（2026-11-12 起包括各模块的静态锁，见「目录」的 lock.rs）：同一线程拿第二把，测试里就 panic，调试版写进日志；getter、建窗口、建菜单都从 `main_wait.rs` 过，调之前手里有锁也一样报。确实要嵌套的写成锁等级（`Lock::ranked`），只从低往高拿。注意临时值活到哪里：`match`、`if let`（含 else）、`for` 的条件里拿的锁一直拿到整个块结束（`if let Some(t) = X.lock().unwrap().take() { 等线程 }` 就是拿着 X 等），函数和方法的参数里拿的锁活到这条语句结束（`a.lock().unwrap().f(sh.config().dnd)` 就是两把），`if` 的条件、`&&`、`||` 的每一边自己结束；要用的先读到局部变量里，再拿下一把。别的线程的窗口也一样：对它 `SetWindowPos`、`ShowWindow`、`SetParent` 会等那个线程处理完，拿着锁时不要做，别的程序的窗口用 `SWP_ASYNCWINDOWPOS`（appbar.rs `refit_maximized`）。
 - **在主线程上建窗口会卡死**：菜单回调在主线程上，第一次建岛的窗口要放到另一个线程去建。
 - **路径里不能有 `..`**：asset 协议的允许范围按路径匹配，带 `..` 的路径匹配不上（`data.rs` 的 `in_tree`）。
 - **16 位 PNG**：Tauri 的 PNG 解码只要 8 位 RGBA，托盘和窗口图标都用 8 位（`make-icons.js` 加了 `-depth 8`）。

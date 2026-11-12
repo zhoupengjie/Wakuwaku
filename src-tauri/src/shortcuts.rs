@@ -190,13 +190,13 @@ mod win {
                     return None;
                 }
                 // Yield hotkeys when shortcuts disabled, DND on, or an app is fullscreen
-                if !sh.flag(crate::config::SHORTCUTS_ENABLED) || sh.flag(crate::config::DND) || sh.is_fullscreen() {
+                if !sh.config().shortcuts_enabled || sh.config().dnd || sh.is_fullscreen() {
                     return Some(Vec::new());
                 }
 
-                let approve = sh.setting(crate::config::SHORTCUT_APPROVE).as_str().unwrap_or("Alt+Y").to_string();
-                let deny = sh.setting(crate::config::SHORTCUT_DENY).as_str().unwrap_or("Alt+N").to_string();
-                let island = sh.setting(crate::config::SHORTCUT_ISLAND).as_str().unwrap_or("Alt+W").to_string();
+                let approve = sh.config().shortcut_approve.as_deref().unwrap_or("Alt+Y").to_string();
+                let deny = sh.config().shortcut_deny.as_deref().unwrap_or("Alt+N").to_string();
+                let island = sh.config().shortcut_island.as_deref().unwrap_or("Alt+W").to_string();
 
                 let mut failed = Vec::new();
 

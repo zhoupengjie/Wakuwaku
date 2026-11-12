@@ -680,7 +680,7 @@ mod imp {
     // The program in that place on her strip, as its button shows it now.
     fn app(sh: &Arc<Shared>, key: &str, slot: usize, how: How) {
         let all = crate::bars::for_main(sh, &crate::taskbar::windows_now());
-        let order: Vec<String> = sh.setting(crate::config::TASKBAR_ORDER).as_array().map(|o| o.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()).unwrap_or_default();
+        let order: Vec<String> = sh.config().taskbar_order.clone();
         let apps = ordered(&all, &order);
         let Some(app) = apps.get(slot) else {
             log(&format!("{key}: no program in that place ({} on her strip)", apps.len()));

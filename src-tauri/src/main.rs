@@ -456,7 +456,7 @@ fn main() {
             let sh = Shared::new(app.handle().clone(), dir, port, settings, hub, today);
             app.manage(sh.clone());
             // Her requests to the web the way the General page says (proxy.rs).
-            proxy::set_web(&sh.setting(config::NET_PROXY));
+            proxy::set_web(&sh.config().net_proxy);
             sh.log(&format!("up on port {}, data in {}", sh.port, sh.dir.display()));
             // The third-party plugins here, before anything checks a setting naming one.
             addons::start(&sh);
@@ -473,7 +473,7 @@ fn main() {
             pet::create(&sh)?;
             // Windows' own taskbar's pinned programs, once: hers seeded from
             // them, those she kept before after them (pins.rs).
-            if !sh.flag(config::TASKBAR_PINS_IMPORTED) {
+            if !sh.config().taskbar_pins_imported {
                 let first = sh.clone();
                 std::thread::spawn(move || pins::take_from_windows(&first));
             }
@@ -557,7 +557,7 @@ fn main() {
             if sh.keeps_login() {
                 let dsh = sh.clone();
                 spawn_named("dsh at start", move || {
-                    for line in connection::dsh_at_start(dsh.port, &dsh.setting(config::DSH_VIA)) {
+                    for line in connection::dsh_at_start(dsh.port, &dsh.config().dsh_via) {
                         dsh.log(&line);
                     }
                 });
@@ -567,7 +567,7 @@ fn main() {
             // connected was too much for one who keeps her as a pet only,
             // with no way to stop it (the user, 2026-10-13); nor once "not
             // now" was said (connectHintOff, the welcome's or the island's).
-            if !connection::look_connected(port) && !sh.flag(config::ONBOARDED) && !sh.flag(config::WELCOME_OPENED) && !sh.flag(config::CONNECT_HINT_OFF) {
+            if !connection::look_connected(port) && !sh.config().onboarded && !sh.config().welcome_opened && !sh.config().connect_hint_off {
                 sh.change(json!({ "welcomeOpened": true }));
                 island::open_settings(&sh, Some("connect"));
             }

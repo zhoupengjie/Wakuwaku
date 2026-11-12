@@ -57,7 +57,6 @@ use std::time::Duration;
 use serde_json::{json, Map, Value};
 
 use crate::Shared;
-use crate::config;
 use crate::lock::Lock;
 pub use redact::Redactor;
 
@@ -803,7 +802,7 @@ fn tick(sh: &Arc<Shared>) {
         return;
     }
     // Bound first: sending asks for the settings again.
-    let mode = mode_of(&sh.settings.lock().unwrap());
+    let mode = mode_of(sh.config().map());
     let due = crate::now_ms() >= STATUS.lock().unwrap().next_at;
     match mode {
         "auto" if due => send_now(sh),
@@ -840,7 +839,7 @@ pub fn send_now(sh: &Arc<Shared>) {
 fn tell(sh: &Arc<Shared>) {
     let Some(newest) = pending(&sh.dir).pop() else { return };
     let id = newest.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-    if sh.setting(config::CRASH_TOLD).as_str() == Some(id.as_str()) || !sh.is_visible() || sh.pet.lock().unwrap().wants_you() {
+    if sh.config().crash_told.as_deref() == Some(id.as_str()) || !sh.is_visible() || sh.pet.lock().unwrap().wants_you() {
         return;
     }
     let lang = sh.lang();
@@ -900,7 +899,7 @@ pub fn view(sh: &Shared) -> Value {
         Some(json!({ "at": v["sentAt"], "url": v["answer"]["url"], "number": v["answer"]["number"], "count": v["answer"]["count"] }))
     });
     // The settings read before STATUS is taken: one lock at a time.
-    let mode = mode_of(&sh.settings.lock().unwrap());
+    let mode = mode_of(sh.config().map());
     let s = STATUS.lock().unwrap();
     json!({
         "mode": mode,
@@ -985,7 +984,7 @@ pub fn webview_failed(sh: &Arc<Shared>, label: &str, kind: i32, reason: i32, cod
             let report = report_of(&sh.dir, &found, &names);
             let saved = save(&sh.dir, &found, &report);
             sh.log(&format!("crash: webview report {}", saved.map(|p| p.display().to_string()).unwrap_or_default()));
-            let mode = mode_of(&sh.settings.lock().unwrap());
+            let mode = mode_of(sh.config().map());
             if can_send() && mode == "auto" {
                 send_now(&sh);
             } else {

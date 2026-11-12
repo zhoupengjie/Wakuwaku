@@ -1,12 +1,13 @@
 // Her settings as the pages hold them: config.json, as the snapshot gives it
 // (settings.rs) and a patch sets it. The keys the Rust side reads are
-// declared in src-tauri/src/config.rs, each with its kind and default; each
-// is here too (test/config.test.ts says so), its type from that kind and
-// default (a switch, a Flag there, is boolean). Then the keys the pages
+// declared in src-tauri/src/config.rs, each with its kind and default, and
+// their lines here are written from there (its test the_pages_config_is_
+// written_from_here; test/config.test.ts looks too): the type its kind
+// reads (a switch is boolean), else by its default. Then the keys the pages
 // alone keep. Every key may be missing (a config from before it): optional.
 // Types alone: nothing of this is in the built page.
 export interface Config {
-  // --- Declared in config.rs ---
+  // --- Declared in config.rs (written from it: cargo test config, CONFIG_TS_BLESS=1) ---
   lang?: string
   pet?: string
   scale?: number
@@ -56,7 +57,8 @@ export interface Config {
   shortcutIsland?: string
   lookDefaults?: number
   connectHintOff?: boolean
-  crashTold?: any
+  crashTold?: string
+  crashReports?: string
   deskLayout?: any
   dshVia?: any
   islandLook?: any
@@ -66,7 +68,7 @@ export interface Config {
   mailProxy?: any
   monitorSource?: any
   netProxy?: any
-  pluginAutoUpdate?: any
+  pluginAutoUpdate?: boolean
   settingsPin?: boolean
   settingsTop?: boolean
   taskbarLayout?: any
@@ -74,7 +76,7 @@ export interface Config {
   taskbarPinned?: any
   taskbarPinsImported?: boolean
   trayPinned?: any
-  updateTold?: any
+  updateTold?: string
   welcomeOpened?: boolean
   x?: number
   y?: number

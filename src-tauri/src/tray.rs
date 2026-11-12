@@ -10,7 +10,6 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{Emitter, Wry};
 
 use crate::{data, i18n, now_ms, pet, Shared};
-use crate::config;
 use crate::lock::Lock;
 
 const TRAY_ID: &str = "main";
@@ -47,8 +46,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     let app = &sh.app;
     let lang = sh.lang();
     let t = |key: &str| i18n::t(lang, key);
-    let settings = sh.settings.lock().unwrap().clone();
-    let flag = |key: &str| settings.get(key).and_then(|v| v.as_bool()).unwrap_or(false);
+    let config = sh.config();
     let home = sh.home();
     let is_tray = over == Over::Tray;
     let menu = Menu::new(app)?;
@@ -69,13 +67,13 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     // room (splitDock room, else it gets out of the way: hide), checked so.
     if (over == Over::Home && home == "taskbar") || over == Over::Dock {
         menu.append(&MenuItem::with_id(app, "addWidgets", t("menu.addWidgets"), true, None::<&str>)?)?;
-        menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, flag("dnd"), None::<&str>)?)?;
+        menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, config.dnd, None::<&str>)?)?;
         menu.append(&MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?)?;
         // Split, what it edits is the top bar's.
         let edit = if crate::island::is_split(sh) { "menu.editTopBar" } else { "menu.editTaskbar" };
         menu.append(&MenuItem::with_id(app, "editTaskbar", t(edit), true, None::<&str>)?)?;
         if over == Over::Dock {
-            let room = settings.get("splitDock").and_then(|v| v.as_str()) == Some("room");
+            let room = config.split_dock.as_deref() == Some("room");
             menu.append(&CheckMenuItem::with_id(app, "dockRoom", t("s.splitDock.room"), true, room, None::<&str>)?)?;
         }
         menu.append(&PredefinedMenuItem::separator(app)?)?;
@@ -94,18 +92,18 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     if found.is_empty() {
         pets.append(&MenuItem::with_id(app, "none", t("menu.noPets"), false, None::<&str>)?)?;
     }
-    let current = settings.get("pet").and_then(|v| v.as_str()).unwrap_or("");
+    let current = config.pet.as_str().unwrap_or("");
     for p in &found {
         pets.append(&CheckMenuItem::with_id(app, format!("pet:{}", p.id), &p.name, true, p.id == current, None::<&str>)?)?;
     }
     let sizes = Submenu::new(app, t("menu.size"), true)?;
-    let scale = settings.get("scale").and_then(|v| v.as_f64()).unwrap_or(0.55);
+    let scale = config.scale.unwrap_or(0.55);
     for (name, value) in data::SCALES {
         let label = t(&format!("menu.{name}"));
         sizes.append(&CheckMenuItem::with_id(app, format!("size:{name}"), label, true, (scale - value).abs() < 1e-9, None::<&str>)?)?;
     }
     // Let her out onto the desktop, or call her back home.
-    let out_label = if flag("out") { t("menu.callBack") } else { t("menu.letOut") };
+    let out_label = if config.out { t("menu.callBack") } else { t("menu.letOut") };
 
     // On her, and the tray's: what is about her alone (the user's call,
     // 2026-10-28). Calling her home first; her walk, her eyes and her home
@@ -114,7 +112,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     if over != Over::Home {
         if is_tray {
             let label = if sh.is_visible() { t("menu.hide") } else { t("menu.show") };
-            menu.append(&MenuItem::with_id(app, "toggle", label, !flag("dnd"), None::<&str>)?)?;
+            menu.append(&MenuItem::with_id(app, "toggle", label, !config.dnd, None::<&str>)?)?;
         }
         menu.append(&MenuItem::with_id(app, "out", out_label, true, None::<&str>)?)?;
         if is_tray {
@@ -124,7 +122,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
         menu.append(&pets)?;
         menu.append(&sizes)?;
         menu.append(&PredefinedMenuItem::separator(app)?)?;
-        menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, flag("dnd"), None::<&str>)?)?;
+        menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, config.dnd, None::<&str>)?)?;
         menu.append(&MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?)?;
         menu.append(&PredefinedMenuItem::separator(app)?)?;
         menu.append(&MenuItem::with_id(app, "restart", t("menu.restart"), true, None::<&str>)?)?;
@@ -138,21 +136,21 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&pets)?;
     menu.append(&sizes)?;
-    for key in ["walk", "look"] {
-        menu.append(&CheckMenuItem::with_id(app, key, t(&format!("menu.{key}")), true, flag(key), None::<&str>)?)?;
+    for (key, on) in [("walk", config.walk), ("look", config.look)] {
+        menu.append(&CheckMenuItem::with_id(app, key, t(&format!("menu.{key}")), true, on, None::<&str>)?)?;
     }
     // Her home: the island, the taskbar, or the top bar and the dock.
     let homes = Submenu::new(app, t("menu.home"), true)?;
-    let display = sh.setting(config::DISPLAY);
+    let display = config.display.clone();
     for id in ["island", "taskbar", "split"] {
-        let on = if id == "island" { home == "island" } else { display.as_str() == Some(id) };
+        let on = if id == "island" { home == "island" } else { display.as_deref() == Some(id) };
         homes.append(&CheckMenuItem::with_id(app, format!("display:{id}"), t(&format!("menu.{id}")), true, on, None::<&str>)?)?;
     }
     menu.append(&homes)?;
     menu.append(&MenuItem::with_id(app, "out", out_label, true, None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, "corner", t("menu.backToCorner"), true, None::<&str>)?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, flag("dnd"), None::<&str>)?)?;
+    menu.append(&CheckMenuItem::with_id(app, "dnd", t("menu.dnd"), true, config.dnd, None::<&str>)?)?;
     menu.append(&MenuItem::with_id(app, "settings", t("menu.settings"), true, None::<&str>)?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     menu.append(&MenuItem::with_id(app, "restart", t("menu.restart"), true, None::<&str>)?)?;
@@ -196,19 +194,20 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
     match id {
         "toggle" => sh.set_hidden(sh.is_visible()),
         "walk" | "look" | "dnd" => {
-            let key = match id {
-                "walk" => config::WALK,
-                "look" => config::LOOK,
-                _ => config::DND,
+            let config = sh.config();
+            let on = match id {
+                "walk" => config.walk,
+                "look" => config.look,
+                _ => config.dnd,
             };
-            sh.change(json!({ id: !sh.flag(key) }))
+            sh.change(json!({ id: !on }))
         }
         // The dock's 占着位置: keeping its room, or getting out of the way.
         "dockRoom" => {
-            let room = sh.setting(config::SPLIT_DOCK).as_str() == Some("room");
+            let room = sh.config().split_dock.as_deref() == Some("room");
             sh.change(json!({ "splitDock": if room { "hide" } else { "room" } }));
         }
-        "out" => crate::shared::set_out(sh, !sh.flag(config::OUT)),
+        "out" => crate::shared::set_out(sh, !sh.config().out),
         "corner" => crate::shared::come_home(sh),
         "settings" => crate::island::open_settings(sh, None),
         // The taskbar's parts dragged about, on the strip itself (island.ts).
@@ -281,9 +280,9 @@ pub fn create(sh: &Shared) -> tauri::Result<()> {
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
                 let sh = crate::shared(tray.app_handle());
-                if sh.flag(config::DND) {
+                if sh.config().dnd {
                     crate::island::open_settings(&sh, None);
-                } else if cfg!(target_os = "macos") && sh.home() == "island" && !sh.flag(config::OUT) {
+                } else if cfg!(target_os = "macos") && sh.home() == "island" && !sh.config().out {
                     // On a Mac the notch is another app's to hover (Atoll and
                     // the like): her island stays in it, and this drops it
                     // open, or puts it back (island.ts peek).
@@ -324,8 +323,8 @@ fn refresh_here(sh: &Shared) {
     let lang = sh.lang();
     // Whose: the session's name, unless the specifics are kept off screen.
     let name: String = now["name"].as_str().unwrap_or("").chars().take(40).collect();
-    let project = if name.is_empty() || sh.setting(config::DETAILS) == false { now["project"].as_str().unwrap_or("") } else { &name };
-    let status = if sh.flag(config::DND) {
+    let project = if name.is_empty() || !sh.config().details { now["project"].as_str().unwrap_or("") } else { &name };
+    let status = if sh.config().dnd {
         i18n::t(lang, "menu.dnd")
     } else if project.is_empty() {
         i18n::t(lang, &format!("mood.{mood}"))

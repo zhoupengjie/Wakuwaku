@@ -37,7 +37,6 @@ use super::proxy;
 use super::store::{self, Entry, Folder, Offline, Store};
 use super::{password_of, show, Account, Watch, CONNECT, IDLE_FOR, POLL};
 use crate::{now_ms, Shared};
-use crate::config;
 use crate::lock::Lock;
 
 // The header fields a letter is kept by.
@@ -169,7 +168,7 @@ fn rest_or_new_way(account: &Account, watch: &Watch, wait: Duration) {
 
 // How much is kept whole ahead (the setting mailOffline), and now (ms).
 fn offline(sh: &Shared) -> Offline {
-    Offline::of(&sh.setting(config::MAIL_OFFLINE))
+    Offline::of(&sh.config().mail_offline)
 }
 
 fn now() -> i64 {

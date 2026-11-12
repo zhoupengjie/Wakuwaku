@@ -47,7 +47,6 @@ use tauri::{AppHandle, Emitter};
 use crate::addons::{self, Kind, Perms, Words};
 use crate::proxy::Miss;
 use crate::{now_ms, shared, Shared};
-use crate::config;
 use crate::lock::Lock;
 
 const GITHUB: &str = "https://github.com/zhoupengjie/wakuwaku-plugins/releases/download/market/";
@@ -458,7 +457,7 @@ pub fn updates_of(installed: &[addons::FromMarket], items: &[Item]) -> Vec<Updat
 }
 
 fn auto_update(sh: &Shared) -> bool {
-    sh.setting(config::PLUGIN_AUTO_UPDATE) != false
+    sh.config().plugin_auto_update
 }
 
 // What of the market's is here: its plugins (addons.rs) and its packs (packs.rs).

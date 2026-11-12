@@ -150,7 +150,14 @@ fn main() {
         let data = file.parent().map(PathBuf::from).unwrap_or_default();
         let after = data.clone();
         let mut hang = crash::Hang::default();
-        shell::guard(pid, file, || hang.look(&data, pid), || drop(icons::hold(&data)), move |code, started| crash::after_exit(&after, pid, code, started));
+        // Her main thread or her taskbar's not answering ten seconds while
+        // her taskbar holds the strip: Windows' own shown again meanwhile.
+        let mut back = shell::HangBack::default();
+        let watch = || {
+            let hung = hang.look(&data, pid);
+            back.look(file, pid, hung, |line| crash::guard_said(&data, line));
+        };
+        shell::guard(pid, file, watch, || drop(icons::hold(&data)), move |code, started| crash::after_exit(&after, pid, code, started));
         // Her desktop's icons as they were, should she have left them moved (icons.rs).
         icons::given_back(&data);
         return;

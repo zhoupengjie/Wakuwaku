@@ -24,6 +24,7 @@ mod appbar;
 #[allow(dead_code)]
 mod detach;
 #[path = "../src/shell.rs"]
+#[allow(dead_code)]
 mod shell;
 // What shell.rs asks of the pet's data.rs: the exe its guard is started
 // from (the pet's may have been renamed as it ran; this one is not).

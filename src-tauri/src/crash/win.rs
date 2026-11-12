@@ -282,10 +282,25 @@ fn is_ime(class: &str) -> bool {
     class == "IME" || class == "MSCTFIME UI"
 }
 
+// Which of a thread's windows says best whose it is: one that names her
+// main thread or her taskbar's (crash.rs holds_the_strip: the main
+// thread's tao target is always there, the dock's pictures' window too in
+// the top bar and dock, and was the one taken, 2026-11-12), then any but an
+// IME's.
+pub(super) fn rank(class: &str) -> u8 {
+    if super::holds_the_strip(class) {
+        2
+    } else if is_ime(class) {
+        0
+    } else {
+        1
+    }
+}
+
 // The threads of process `pid` with a window Windows takes for not
 // answering (IsHungAppWindow: five seconds and more without a look at its
 // messages, as for its ghost window and the "not responding" box), each with
-// the class of one of its windows (not an IME's, if it has another).
+// the class of the one of its windows that says best whose it is (rank).
 pub fn hung(pid: u32) -> Vec<(u32, String)> {
     struct Seen {
         pid: u32,
@@ -301,7 +316,7 @@ pub fn hung(pid: u32) -> Vec<(u32, String)> {
         if pid == seen.pid && unsafe { IsHungAppWindow(hwnd) } != 0 {
             let class = class_of(hwnd);
             match seen.found.iter_mut().find(|(t, _)| *t == thread) {
-                Some((_, was)) if is_ime(was) && !is_ime(&class) => *was = class,
+                Some((_, was)) if rank(&class) > rank(was) => *was = class,
                 Some(_) => {}
                 None => seen.found.push((thread, class)),
             }

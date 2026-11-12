@@ -233,6 +233,8 @@ const WM_STOP: u32 = 0x8003;
 // by her own settings: looked at until it is in place (settle).
 const WM_PAPER: u32 = 0x8004;
 const WM_PAPER_SET: u32 = 0x8005;
+// Debug only (/debug/hang): this thread held still for wparam seconds.
+const WM_HOLD_STILL: u32 = 0x8012;
 // The timers on the window: the half second's tick, the looks after
 // Windows' word (settle), and the work area looked at once Explorer
 // has been still a moment (WORK_STILL_MS: keep_work).
@@ -427,6 +429,13 @@ fn work_area() -> Rect {
     r
 }
 
+// Windows' taskbar shown again by her guard while a thread of hers did not
+// answer (shell.rs HangBack): left up till the guard takes its mark away
+// as she answers again.
+fn shown_for_hang() -> bool {
+    sh().is_some_and(|sh| shell::shown_for_hang(&sh.dir.join("taskbar.json")))
+}
+
 fn work_bottom() -> i32 {
     work_area().bottom
 }
@@ -452,7 +461,7 @@ pub use hold::*;
 pub use keys::*;
 pub use look::*;
 pub use presses::*;
-use thread::*;
+pub use thread::*;
 pub use thumbs::*;
 pub use tray::*;
 pub use work::*;

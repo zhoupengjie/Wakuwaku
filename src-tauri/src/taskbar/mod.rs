@@ -103,6 +103,9 @@ mod imp {
     }
     pub fn watch_presses(_on: bool) {}
     pub fn note(_line: &str) {}
+    pub fn hold_still(_secs: u64) -> bool {
+        false
+    }
     pub fn end_task_on() -> bool {
         false
     }
@@ -124,7 +127,7 @@ mod imp {
     }
 }
 
-pub use imp::{claim, close_flyout, dock_badges, dock_thumbs, dock_thumbs_over, drop_dock_host, make_dock_host, thumbs_on_top, end_task_on, explorer_room, give_back, handing_back, is_up, keys_now, recycle_bin, set_edge, start_open, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
+pub use imp::{claim, close_flyout, hold_still, dock_badges, dock_thumbs, dock_thumbs_over, drop_dock_host, make_dock_host, thumbs_on_top, end_task_on, explorer_room, give_back, handing_back, is_up, keys_now, recycle_bin, set_edge, start_open, look_for_other, look_now, look_value, note, paper_set, resend, strip_moved, strip_picture, take, waiting, wake, windows_now, work_area_bottom, work_area_rect};
 
 // A number Windows keeps for a setting of its own (end_task_on, seconds_on):
 // on once set, but for 0.

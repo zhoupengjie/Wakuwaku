@@ -642,6 +642,17 @@ fn clear_waiting(data: &Path) {
 // answering (IsHungAppWindow): before the guard can see it.
 const HUNG_AFTER_S: u64 = 5;
 
+// A line of the guard's in her log (recent.log; debug.log is hers to write).
+pub fn guard_said(data: &Path, line: &str) {
+    tail(data, &log_line(&format!("guard: {line}")));
+}
+
+// Whether a window's class is one of her main thread's or her taskbar's:
+// the two whose hang leaves the screen without a taskbar (shell.rs HangBack).
+fn holds_the_strip(class: &str) -> bool {
+    matches!(class, "Tauri Window" | "Tao Thread Event Target" | "tray_icon_app" | "WakuwakuTaskbarHost" | "Shell_TrayWnd" | "WakuwakuThumbs")
+}
+
 // Which thread of hers a window's class says it is.
 fn thread_said(class: &str) -> String {
     match class {
@@ -657,19 +668,21 @@ fn thread_said(class: &str) -> String {
 // answering (win::hung), its stack read from outside then (win::stack_of)
 // and kept with what it is as crashes/hang-<pid>.txt, and said in her log;
 // once it answers again, the record gone and that said too. Should she end
-// while it is kept, her report is of it (found_for).
+// while it is kept, her report is of it (found_for). Tells whether her main
+// thread or her taskbar's is one not answering now (shell.rs HangBack).
 #[derive(Default)]
 pub struct Hang {
     since: Option<u64>,
 }
 
 impl Hang {
-    pub fn look(&mut self, data: &Path, pid: u32) {
+    pub fn look(&mut self, data: &Path, pid: u32) -> bool {
         #[cfg(windows)]
         {
             let file = folder(data).join(format!("hang-{pid}.txt"));
-            let log = |line: &str| tail(data, &log_line(&format!("guard: {line}")));
-            match (self.since, win::hung(pid).first()) {
+            let log = |line: &str| guard_said(data, line);
+            let hung = win::hung(pid);
+            match (self.since, hung.first()) {
                 (None, Some((thread, class))) => {
                     let now = crate::now_ms();
                     let frames = win::stack_of(pid, *thread);
@@ -690,9 +703,13 @@ impl Hang {
                 }
                 _ => {}
             }
+            hung.iter().any(|(_, class)| holds_the_strip(class))
         }
         #[cfg(not(windows))]
-        let _ = (data, pid);
+        {
+            let _ = (data, pid);
+            false
+        }
     }
 }
 
@@ -1096,6 +1113,30 @@ mod tests {
         assert_eq!(thread_said("WakuwakuTaskbarHost"), "her taskbar's thread");
         assert_eq!(thread_said(""), "a thread of hers");
         assert_eq!(thread_said("Odd/Class‹x›"), "a thread of hers (OddClassx)");
+    }
+
+    // The threads whose hang leaves the screen with no taskbar: her main
+    // thread's windows and her taskbar's (shell.rs HangBack), no other.
+    #[test]
+    fn the_strips_threads() {
+        for class in ["Tauri Window", "Tao Thread Event Target", "tray_icon_app", "WakuwakuTaskbarHost", "Shell_TrayWnd", "WakuwakuThumbs"] {
+            assert!(super::holds_the_strip(class), "{class}");
+        }
+        for class in ["", "IME", "MSCTFIME UI", "Chrome_WidgetWin_0"] {
+            assert!(!super::holds_the_strip(class), "{class}");
+        }
+    }
+
+    // A hung thread named by its best window: the main thread's tao target
+    // over the dock's pictures' window seen first, any over an IME's.
+    #[cfg(windows)]
+    #[test]
+    fn a_hung_thread_named_by_its_best_window() {
+        use super::win::rank;
+        assert!(rank("Tao Thread Event Target") > rank("WakuwakuDockThumbs"));
+        assert!(rank("WakuwakuTaskbarHost") > rank("WakuwakuDockThumbs"));
+        assert!(rank("WakuwakuDockThumbs") > rank("IME"));
+        assert!(rank("MSCTFIME UI") == rank("IME"));
     }
 
     // A thread of this test's own process, held, its stack read as the

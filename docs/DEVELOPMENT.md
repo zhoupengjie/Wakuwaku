@@ -74,8 +74,8 @@ src-tauri/
       win/thread.rs       自己的线程：隐藏窗口和消息循环（run、wndproc）、WinEvent 和 shell 钩子（on_event、on_shell）、每半秒的 tick、资源管理器重启（on_created）
       win/hold.rs         把 Windows 的任务栏藏起来、还回去（take、give_back）；另一份她拿着时等它放手；资源管理器启动完才接管（#85）；被别的程序反复叫出来时让开（#69 的拉锯）；交接用的截图（strip_picture）
       win/work.rs         工作区自愈：条带的位置、工作区贴着条带设（set_work_area、keep_work）、桌面图标让开、重新占条带、顶栏下面的窗口挪开（keep_under_bar）
-      win/tray.rs         接管托盘：图标画成 PNG 发给页面、Windows 记着哪些放在外面、点击转给程序、请程序重新交图标（claim、ask_soon）
-      win/buttons.rs      窗口按钮：列表在自己的线程上重算再发（taskbar:windows），带上各窗口里的会话；启动程序、窗口的操作和右键菜单
+      win/tray.rs         接管托盘：图标画成 PNG 发给页面（画好的图只归任务栏线程，新页面要整份时发 WM_RESEND_TRAY 给它）、Windows 记着哪些放在外面、点击转给程序、请程序重新交图标（claim、ask_soon）
+      win/buttons.rs      窗口按钮：列表在自己的线程上重算再发（taskbar:windows），带上各窗口里的会话；算列表用的状态只归这个线程（Own，thread_local），任务栏线程看到窗口闪烁、激活、重绘、增减时用 Note 通过通道告诉它；启动程序、窗口的操作和右键菜单
       win/thumbs.rs       缩略图（DWM thumbnail）：任务栏和 dock 列表上的实时画面，dock 图标上的角标
       win/keys.rs         键盘指示：布局、输入法、大写锁定，音量、网络、电池、麦克风/摄像头/位置在用（keys_loop）
       win/look.rs         桌面壁纸和 Windows 的外观（深浅色、强调色、结束任务、秒、任务视图），给条带的云母

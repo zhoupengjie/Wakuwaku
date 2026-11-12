@@ -3,7 +3,7 @@
 // inbox read from a folder of .eml files, and a Sent folder (empty, or read
 // from another folder) that letters can be put in (APPEND).
 //
-//   node test/fake-imap.js [--port 14300] [--dir test/fixtures/mail]
+//   node test/fake-imap.cjs [--port 14300] [--dir test/fixtures/mail]
 //                          [--password test] [--no-idle] [--login-only]
 //                          [--want-id] [--sent <folder>] [--unmarked-sent]
 //                          [--sent-from <folder>] [--many <n>] [--log]

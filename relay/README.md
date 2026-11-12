@@ -101,7 +101,7 @@ npx wrangler deploy
 curl.exe https://wakuwaku-crash.<你的子域名>.workers.dev/
 ```
 
-应该返回 `{"ok":true,"relay":"wakuwaku crash reports"}`。不要拿它测试发报告：发一份合法的报告就会在 Wakuwaku 开一个真的公开 issue。测试请用 `node test/fake-relay.js`（见 docs/DEVELOPMENT.md）。
+应该返回 `{"ok":true,"relay":"wakuwaku crash reports"}`。不要拿它测试发报告：发一份合法的报告就会在 Wakuwaku 开一个真的公开 issue。测试请用 `node test/fake-relay.cjs`（见 docs/DEVELOPMENT.md）。
 
 ---
 

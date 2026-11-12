@@ -5,7 +5,7 @@
 // Gitee keeps them (/gitee/releases/download/<tag>/<file>), sent on to its
 // storage by a redirect as gitee.com does.
 //
-//   node test/fake-release.js --exe <a release exe> [--version 0.2.2] [--port 47390]
+//   node test/fake-release.cjs --exe <a release exe> [--version 0.2.2] [--port 47390]
 //
 // Start an older exe (outside the source tree) with
 //   WAKUWAKU_UPDATE_URL=http://127.0.0.1:47390/github/latest
@@ -36,7 +36,7 @@ const arg = (name, fallback) => {
 }
 const exePath = arg('exe')
 if (!exePath) {
-  console.error('usage: node test/fake-release.js --exe <a release exe> [--version 0.2.2] [--port 47390]')
+  console.error('usage: node test/fake-release.cjs --exe <a release exe> [--version 0.2.2] [--port 47390]')
   process.exit(2)
 }
 const version = arg('version', '0.2.2').replace(/^v/i, '')

@@ -5,7 +5,7 @@
 // in the shape LHM 0.9.6 sends it (HttpServer.cs at its tag): no Version, its
 // Raw* values words like its Value ("62.4 °C").
 //
-//   node test/fake-lhm.js [--port 8085] [--file <data.json>] [--user u --pass p] [--nightly | --old]
+//   node test/fake-lhm.cjs [--port 8085] [--file <data.json>] [--user u --pass p] [--nightly | --old]
 //
 //   --nightly        as LHM built from its source since March 2026: the
 //                    Version at the root ("0.9.6"), Raw* values numbers

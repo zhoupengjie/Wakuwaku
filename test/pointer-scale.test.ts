@@ -1,17 +1,12 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { stripTypeScriptTypes } from 'node:module'
-import path from 'node:path'
 import { test } from 'node:test'
 import vm from 'node:vm'
-
-// A page file as it runs: its types taken out (scripts/build-pages.mjs).
-const pageCode = (file: string) => stripTypeScriptTypes(readFileSync(path.join(import.meta.dirname, '..', 'src', 'pet', file), 'utf8'), { mode: 'strip' }).replace(/\r\n/g, '\n')
+import { pageCode } from './stripped.ts'
 
 test('a DPR-only resize resends unchanged settings hit regions, once per scale', () => {
-  const source = pageCode('island.ts')
+  const source = pageCode('pet', 'island.ts')
   // The strip's thickness and the resize that tells it are the taskbar's look's (island-look.ts).
-  const look = pageCode('island-look.ts')
+  const look = pageCode('pet', 'island-look.ts')
   const solid = source.slice(source.indexOf("\nlet solidSent = ''"), source.indexOf('\nconst solidWatch ='))
   const resize = look.slice(look.indexOf('  let stripThick =')).match(/  window\.addEventListener\('resize', \(\) => \{[\s\S]*?\n  \}\)/)[0]
   const sent = []

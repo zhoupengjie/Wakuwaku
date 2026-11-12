@@ -2,7 +2,7 @@
 // sending anything anywhere (src-tauri/src/crash.rs): relay/relay.js's own
 // handle(), its issues kept in memory instead of on GitHub or Gitee.
 //
-//   node test/fake-relay.js [--port 47391]
+//   node test/fake-relay.cjs [--port 47391]
 //
 // Start the pet with WAKUWAKU_CRASH_URL=http://127.0.0.1:47391/report (a
 // build from the source tree sends then too; two relays, comma-separated).

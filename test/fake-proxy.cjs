@@ -2,11 +2,11 @@
 // (src-tauri/src/mail/proxy.rs) without Clash or v2rayN: one port that
 // speaks HTTP CONNECT and SOCKS5 both, as Clash's mixed port does.
 //
-//   node test/fake-proxy.js [--port 17890] [--map <name>=<host>:<port>,…]
+//   node test/fake-proxy.cjs [--port 17890] [--map <name>=<host>:<port>,…]
 //                           [--http-only | --socks-only] [--only-443] [--log]
 //
 // --map sends a name to a server here (imap.example.test=127.0.0.1:14310 for
-// test/fake-imap.js): the pet's account names a server no DNS knows, so only
+// test/fake-imap.cjs): the pet's account names a server no DNS knows, so only
 // a proxy that looks the name up itself (CONNECT by name, SOCKS5's ATYP 3)
 // gets there; a name not mapped is looked up here and connected to. Each
 // way through is printed (--log: the bytes' count when it closes too).

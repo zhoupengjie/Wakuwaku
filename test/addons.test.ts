@@ -11,9 +11,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
-import { stripTypeScriptTypes } from 'node:module'
 import { test } from 'node:test'
 import * as A from '../src/pet/addons.ts'
+import { pageCode } from './stripped.ts'
 
 function setup(answers = {}) {
   const posted = []
@@ -650,7 +650,7 @@ function frame({ page = '/hello/__waku/main.html', name = '', observer = null } 
   }
   vm.createContext(context)
   // Its types taken out as build-pages.mjs does (lines and columns kept).
-  const sdk = stripTypeScriptTypes(fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'addon', 'sdk.ts'), 'utf8'), { mode: 'strip' })
+  const sdk = pageCode('addon', 'sdk.ts')
   vm.runInContext(sdk, context, {
     filename: 'sdk.ts',
     // Its main, as the frame would load it: here, nothing.

@@ -2,7 +2,7 @@
 // real account: no TLS (set the outgoing server up with security "plain"),
 // one password, every letter it takes written to a folder.
 //
-//   node test/fake-smtp.js [--port 14325] [--dir <folder>] [--password test]
+//   node test/fake-smtp.cjs [--port 14325] [--dir <folder>] [--password test]
 //                          [--auth plain,login | none] [--reject <address>,…]
 //                          [--log]
 //

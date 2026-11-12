@@ -32,6 +32,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const http = require('node:http')
 const { execFileSync } = require('node:child_process')
+const { stripTypeScriptTypes } = require('node:module')
 const os = require('node:os')
 const gitinfo = require('./gitinfo')
 
@@ -55,8 +56,19 @@ const SOURCES = ['src/pet', 'src/shared', 'src/addon', 'examples/plugins', 'pets
 
 // Her pages' scripts and styles, as their HTML loads them, and every script
 // those import (import, import()), each by its published name (x.js) relative
-// to src/pet; what a script imports is read from its source (x.ts).
+// to src/pet; what a script imports is read from its source (x.ts), its
+// types taken out first (an import type brings nothing at run time).
 const IMPORTS = /(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])(\.{1,2}\/[^'"\n]+?)\2/g
+// (Node says each time that its stripping is experimental: not here.)
+function typesOut(code) {
+  const said = process.emitWarning
+  process.emitWarning = () => {}
+  try {
+    return stripTypeScriptTypes(code, { mode: 'strip' })
+  } finally {
+    process.emitWarning = said
+  }
+}
 function pageFiles(page) {
   const html = fs.readFileSync(path.join(PET, page), 'utf8')
   const refs = [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="([^"]+)"/g)].map(m => m[1]).filter(p => !/^[a-z]+:/i.test(p))
@@ -66,7 +78,7 @@ function pageFiles(page) {
     const ref = queue.shift()
     const source = path.resolve(PET, ref).replace(/\.js$/, '.ts')
     if (!fs.existsSync(source)) continue
-    for (const m of fs.readFileSync(source, 'utf8').matchAll(IMPORTS)) {
+    for (const m of typesOut(fs.readFileSync(source, 'utf8')).matchAll(IMPORTS)) {
       const next = path.posix.normalize(path.posix.join(path.posix.dirname(ref), m[3].replace(/\.ts$/, '.js')))
       if (seen.has(next)) continue
       seen.add(next)

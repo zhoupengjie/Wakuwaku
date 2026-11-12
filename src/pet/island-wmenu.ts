@@ -3,9 +3,9 @@
 // taskbar, the desktop), its settings, taken off.
 // Made by island.ts in the section's place as the page starts
 // (wmenuPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// comes in core, its functions and constants as they are; what the island
+// remembers is core.st (island-vars.ts), read and written as st.<name>;
+// what it hands back is the island's again.
 import * as DeskGrid from './deskgrid.ts'
 import * as Placing from './placing.ts'
 import * as WCards from './wcards.ts'
@@ -16,7 +16,7 @@ import type { WmenuCore } from './island.ts'
 
 export function wmenuPart(core: WmenuCore) {
   const {
-    Widgets, barRest, closePop, closeStackPop, closeWidgetPop, el, entryNodes, fillHer, hasMonitorPart, home,
+    st, Widgets, barRest, closePop, closeStackPop, closeWidgetPop, el, entryNodes, fillHer, hasMonitorPart, home,
     isDetailed, island, isleCtx, keepLayout, memberName, openWidgetSettings, ownName, placedAt, popCtx,
     removeEntry, removeMember, rowSize, setRowSize, showCard, stackPop, t, tbLayout, update, watchPresses,
   } = core
@@ -37,9 +37,9 @@ export function wmenuPart(core: WmenuCore) {
     const node = m.entry ? entryNodes.get(m.entry) : null
     const entry = node?._entry || null
     const group = !!entry && Widgets.isGroup(entry)
-    let w = m.widget ? core.allWidgets.find(x => x.id === m.widget) || null : null
-    if (!w && entry) w = group ? node._slides?.[node._at || 0]?.w || null : Widgets.sourcesOf(entry, core.allWidgets)[0] || null
-    const memberOf = x => (x ? entry.items.findIndex(mm => Widgets.sourcesOf(mm, core.allWidgets).includes(x)) : -1)
+    let w = m.widget ? st.allWidgets.find(x => x.id === m.widget) || null : null
+    if (!w && entry) w = group ? node._slides?.[node._at || 0]?.w || null : Widgets.sourcesOf(entry, st.allWidgets)[0] || null
+    const memberOf = x => (x ? entry.items.findIndex(mm => Widgets.sourcesOf(mm, st.allWidgets).includes(x)) : -1)
     const member = group ? (m.member ?? (m.widget ? memberOf(w) : -1)) : -1
     const slide = group && member < 0 ? node._slides?.[node._at || 0] : null
     const shown = slide ? entry.items.findIndex(x => Widgets.memberKey(x) === Widgets.memberKey(slide.member)) : -1
@@ -59,9 +59,9 @@ export function wmenuPart(core: WmenuCore) {
   // Why a size is not there, by kind (the spec's §4).
   function noSize(w, size) {
     const kind = WCards.kindOf(w)
-    if (size === 'L' && kind === 'pomodoro') return t(core.lang, 'menu.why.pomodoro')
-    if (kind === 'countdown') return t(core.lang, size === 'M' ? 'menu.why.countdownM' : 'menu.why.countdownL')
-    return t(core.lang, size === 'M' ? 'menu.noMedium' : 'menu.noLarge')
+    if (size === 'L' && kind === 'pomodoro') return t(st.lang, 'menu.why.pomodoro')
+    if (kind === 'countdown') return t(st.lang, size === 'M' ? 'menu.why.countdownM' : 'menu.why.countdownL')
+    return t(st.lang, size === 'M' ? 'menu.noMedium' : 'menu.noLarge')
   }
 
   function menuHTML(m) {
@@ -75,7 +75,7 @@ export function wmenuPart(core: WmenuCore) {
     const opt = (act, v, label, on, why = '') => `<button type="button" class="wmo${on ? ' on' : ''}${why ? ' off' : ''}" data-act="${act}" data-v="${v}"${why ? ` aria-disabled="true" title="${esc(why)}" data-why="${esc(why)}"` : ''}>${esc(label)}</button>`
     const item = (act, label, why = '', v = '') => `<button type="button" class="wmi${why ? ' off' : ''}" data-act="${act}" data-v="${esc(v)}"${why ? ` aria-disabled="true" title="${esc(why)}" data-why="${esc(why)}"` : ''}>${esc(label)}</button>`
     const line = (label, html) => `<div class="wmr"><span class="wml">${esc(label)}</span><span class="wms">${html}</span></div>`
-    const name = w ? WCards.titleOf(w, ctx) : group && member < 0 ? Widgets.nameOf(core.lang, entry, core.allWidgets, isDetailed()) : entry ? memberName(group ? entry.items[member] : entry) : ''
+    const name = w ? WCards.titleOf(w, ctx) : group && member < 0 ? Widgets.nameOf(st.lang, entry, st.allWidgets, isDetailed()) : entry ? memberName(group ? entry.items[member] : entry) : ''
     const glyph = w ? WCards.glyphHTML(w, 'wmg') : entry ? WCards.memberGlyph(group ? entry.items[Math.max(0, member)] : entry) : ''
     const parts = [`<div class="wmh" style="--c:${w ? WCards.colorOf(w, ctx) : 'currentColor'}">${glyph}<b>${esc(name)}</b></div>`]
     const sizes = w ? Widgets.sizesOf(w) : ['s', 'm']
@@ -84,11 +84,11 @@ export function wmenuPart(core: WmenuCore) {
     if (!(group && member < 0)) {
       if (bar && !group) {
         const now = node?.dataset.size === 'S' || node?.classList.contains('S') ? 'S' : 'M'
-        parts.push(line(t(core.lang, 'menu.size'), opt('size', 'S', t(core.lang, 'menu.s'), now === 'S') + opt('size', 'M', t(core.lang, 'menu.m'), now === 'M', sizes.includes('m') || !w ? '' : noSize(w, 'M')) + opt('size', 'L', t(core.lang, 'menu.l'), false, t(core.lang, 'menu.noLargeBar'))))
+        parts.push(line(t(st.lang, 'menu.size'), opt('size', 'S', t(st.lang, 'menu.s'), now === 'S') + opt('size', 'M', t(st.lang, 'menu.m'), now === 'M', sizes.includes('m') || !w ? '' : noSize(w, 'M')) + opt('size', 'L', t(st.lang, 'menu.l'), false, t(st.lang, 'menu.noLargeBar'))))
       } else if (!bar && w) {
         const now = rowSize(w)
-        const open = core.cardFor === w.id
-        parts.push(line(t(core.lang, 'menu.size'), opt('size', 'S', t(core.lang, 'menu.s'), now === 'S' && !open) + opt('size', 'M', t(core.lang, 'menu.m'), now === 'M' && !open, sizes.includes('m') ? '' : noSize(w, 'M')) + opt('size', 'L', t(core.lang, 'menu.l'), open, WCards.hasCard(w) ? '' : noSize(w, 'L'))))
+        const open = st.cardFor === w.id
+        parts.push(line(t(st.lang, 'menu.size'), opt('size', 'S', t(st.lang, 'menu.s'), now === 'S' && !open) + opt('size', 'M', t(st.lang, 'menu.m'), now === 'M' && !open, sizes.includes('m') ? '' : noSize(w, 'M')) + opt('size', 'L', t(st.lang, 'menu.l'), open, WCards.hasCard(w) ? '' : noSize(w, 'L'))))
       }
     }
     // Where it goes: the taskbar (only where she lives there), the island, the desktop.
@@ -96,73 +96,73 @@ export function wmenuPart(core: WmenuCore) {
     // capsule's in the open island (it lists those alone).
     if (w || entry) {
       const place = entry ? 'bar' : placeOf(w)
-      const notBar = home() === 'taskbar' ? '' : t(core.lang, 'menu.notTaskbar')
-      parts.push(line(t(core.lang, 'menu.where'), opt('where', 'bar', t(core.lang, 'menu.bar'), place === 'bar', place === 'bar' ? '' : notBar) + opt('where', 'isle', t(core.lang, 'menu.isle'), place === 'isle') + opt('where', 'desk', t(core.lang, 'menu.desk'), place === 'desk', pet.mac ? t(core.lang, 'menu.noDesk') : '')))
+      const notBar = home() === 'taskbar' ? '' : t(st.lang, 'menu.notTaskbar')
+      parts.push(line(t(st.lang, 'menu.where'), opt('where', 'bar', t(st.lang, 'menu.bar'), place === 'bar', place === 'bar' ? '' : notBar) + opt('where', 'isle', t(st.lang, 'menu.isle'), place === 'isle') + opt('where', 'desk', t(st.lang, 'menu.desk'), place === 'desk', pet.mac ? t(st.lang, 'menu.noDesk') : '')))
     }
     parts.push('<div class="wmsep"></div>')
     // With others in one place, or apart again.
     if (bar && entry) {
       if (group && member < 0) {
-        parts.push(line(t(core.lang, 'menu.group'), opt('regroup', 'carousel', t(core.lang, 'menu.carousel'), entry.type === 'carousel') + opt('regroup', 'stack', t(core.lang, 'menu.stack'), entry.type === 'stack')))
+        parts.push(line(t(st.lang, 'menu.group'), opt('regroup', 'carousel', t(st.lang, 'menu.carousel'), entry.type === 'carousel') + opt('regroup', 'stack', t(st.lang, 'menu.stack'), entry.type === 'stack')))
         // The one it shows, out of it.
-        if (shown >= 0) parts.push(item('takeOut', t(core.lang, 'menu.takeOut', { name: shownW ? WCards.titleOf(shownW, ctx) : memberName(entry.items[shown]) }), '', String(shown)))
-        parts.push(item('ungroup', t(core.lang, 'menu.ungroup')))
+        if (shown >= 0) parts.push(item('takeOut', t(st.lang, 'menu.takeOut', { name: shownW ? WCards.titleOf(shownW, ctx) : memberName(entry.items[shown]) }), '', String(shown)))
+        parts.push(item('ungroup', t(st.lang, 'menu.ungroup')))
       } else if (group) {
-        parts.push(item('takeOut', t(core.lang, entry.type === 'stack' ? 'menu.outOfStack' : 'menu.outOfCarousel'), '', String(member)))
+        parts.push(item('takeOut', t(st.lang, entry.type === 'stack' ? 'menu.outOfStack' : 'menu.outOfCarousel'), '', String(member)))
       } else {
         // The one beside it: a group it may join (its kind kept), or both
         // made one of either kind; a single one by its name (天气).
         const next = neighbourOf(entry.id)
         if (!next) {
-          const why = t(core.lang, 'menu.noNeighbour')
-          parts.push(item('group', t(core.lang, 'menu.stackWithNone'), why, 'stack'), item('group', t(core.lang, 'menu.carouselWithNone'), why, 'carousel'))
+          const why = t(st.lang, 'menu.noNeighbour')
+          parts.push(item('group', t(st.lang, 'menu.stackWithNone'), why, 'stack'), item('group', t(st.lang, 'menu.carouselWithNone'), why, 'carousel'))
         } else if (Widgets.isGroup(next)) {
           const n = next.items.length
           const other = next.type === 'stack' ? 'carousel' : 'stack'
-          const full = n >= 8 ? t(core.lang, 'menu.groupFull') : ''
-          parts.push(item('join', t(core.lang, `menu.join.${next.type}`, { n }), full), item('group', t(core.lang, `menu.${other}WithGroup.${next.type}`), '', other))
+          const full = n >= 8 ? t(st.lang, 'menu.groupFull') : ''
+          parts.push(item('join', t(st.lang, `menu.join.${next.type}`, { n }), full), item('group', t(st.lang, `menu.${other}WithGroup.${next.type}`), '', other))
         } else {
-          const w = Widgets.sourcesOf(next, core.allWidgets)[0]
+          const w = Widgets.sourcesOf(next, st.allWidgets)[0]
           const name = w ? WCards.titleOf(w, ctx) : memberName(next)
-          parts.push(item('group', t(core.lang, 'menu.carouselWith', { name }), '', 'carousel'), item('group', t(core.lang, 'menu.stackWith', { name }), '', 'stack'))
+          parts.push(item('group', t(st.lang, 'menu.carouselWith', { name }), '', 'carousel'), item('group', t(st.lang, 'menu.stackWith', { name }), '', 'stack'))
         }
       }
     }
     // Into a board on the desktop (§7): each there is (three at most), or a
     // new one; never a group, never on a Mac.
-    if (pet.mac) parts.push(item('board', t(core.lang, 'menu.board'), t(core.lang, 'menu.noDesk')))
-    else if (group && member < 0) parts.push(item('board', t(core.lang, 'menu.board'), t(core.lang, 'desk.noStackInBoard')))
+    if (pet.mac) parts.push(item('board', t(st.lang, 'menu.board'), t(st.lang, 'menu.noDesk')))
+    else if (group && member < 0) parts.push(item('board', t(st.lang, 'menu.board'), t(st.lang, 'desk.noStackInBoard')))
     else if (w || entry) {
       const it = menuItemOf(w, entry, member)
       const inBoard = b => !!it && b.items.some(x => DeskGrid.keyOf(x) === keyFor(it))
       for (const b of core.deskBoards().slice(0, 3)) {
         if (inBoard(b)) continue
-        parts.push(item('board', t(core.lang, 'desk.toBoard', { name: core.boardName(b) }), it && DeskGrid.boardFirst(b, core.boardSize(it)) ? '' : t(core.lang, 'desk.boardFull'), b.id))
+        parts.push(item('board', t(st.lang, 'desk.toBoard', { name: core.boardName(b) }), it && DeskGrid.boardFirst(b, core.boardSize(it)) ? '' : t(st.lang, 'desk.boardFull'), b.id))
       }
-      parts.push(item('board', t(core.lang, 'desk.newBoard'), '', 'new'))
+      parts.push(item('board', t(st.lang, 'desk.newBoard'), '', 'new'))
     }
-    if (w) parts.push(item('settings', t(core.lang, 'menu.settings')))
+    if (w) parts.push(item('settings', t(st.lang, 'menu.settings')))
     // picker.ts: in the open island, a member's way of showing in her
     // capsule (under its name), and out of it (移出胶囊).
     const isle = !bar && w ? Picker?.isleMenu?.(w, { opt, line }) : null
     if (isle) parts.splice(1, 0, ...isle.lines)
-    parts.push(item('remove', isle?.remove || t(core.lang, bar && entry ? 'menu.remove' : 'capsule.out')))
+    parts.push(item('remove', isle?.remove || t(st.lang, bar && entry ? 'menu.remove' : 'capsule.out')))
     parts.push('<div class="wmwhy" hidden></div>')
     return parts.join('')
   }
 
   function openMenu(m, near, at = null) {
-    if (core.popFor) closePop()
-    if (core.imeOpen) core.closeImeList()
-    if (core.wgFor && m.where === 'bar') closeWidgetPop()
-    core.menuFor = m
+    if (st.popFor) closePop()
+    if (st.imeOpen) core.closeImeList()
+    if (st.wgFor && m.where === 'bar') closeWidgetPop()
+    st.menuFor = m
     wmenu.innerHTML = menuHTML(m)
     fillHer(wmenu, 16)
     wmenu.hidden = false
     wmenu.classList.toggle('isle', m.where === 'isle')
     if (m.where === 'bar') {
       if (wmenu.parentElement !== barRest) barRest.append(wmenu)
-      const over = core.stackFor && !stackPop.hidden && stackPop.contains(near) ? stackPop : near
+      const over = st.stackFor && !stackPop.hidden && stackPop.contains(near) ? stackPop : near
       const pos = core.besideOrOver(over, wmenu, 8)
       wmenu.style.left = pos.left === undefined ? '' : `${pos.left}px`
       wmenu.style.top = pos.top === undefined ? '' : `${pos.top}px`
@@ -178,21 +178,21 @@ export function wmenuPart(core: WmenuCore) {
       wmenu.style.left = `${Math.round(x)}px`
       wmenu.style.top = `${Math.round(y)}px`
       wmenu.style.bottom = ''
-      core.menuRoom = Math.ceil(y + wmenu.offsetHeight + 10)
+      st.menuRoom = Math.ceil(y + wmenu.offsetHeight + 10)
       update()
     }
     watchPresses()
   }
 
   function closeMenu() {
-    if (!core.menuFor) return
-    const wasIsle = core.menuFor.where === 'isle'
-    core.menuFor = null
+    if (!st.menuFor) return
+    const wasIsle = st.menuFor.where === 'isle'
+    st.menuFor = null
     wmenu.hidden = true
     wmenu.querySelector('.wmwhy')?.setAttribute('hidden', '')
     watchPresses()
     if (wasIsle) {
-      core.menuRoom = 0
+      st.menuRoom = 0
       update()
     }
   }
@@ -212,8 +212,8 @@ export function wmenuPart(core: WmenuCore) {
   wmenu.addEventListener('click', e => {
     e.stopPropagation()
     const b = e.target.closest('[data-act]')
-    if (!b || b.classList.contains('off') || !core.menuFor) return
-    const m = core.menuFor
+    if (!b || b.classList.contains('off') || !st.menuFor) return
+    const m = st.menuFor
     const { entry, w, member } = menuTarget(m)
     const v = b.dataset.v
     closeMenu()
@@ -221,8 +221,8 @@ export function wmenuPart(core: WmenuCore) {
       case 'size':
         if (m.where === 'bar' && entry) return keepLayout(withEntry(entry.id, p => ({ ...p, size: v })))
         if (!w) return
-        if (v === 'L') return showCard(core.cardFor === w.id ? null : w.id)
-        if (core.cardFor === w.id) showCard(null)
+        if (v === 'L') return showCard(st.cardFor === w.id ? null : w.id)
+        if (st.cardFor === w.id) showCard(null)
         return setRowSize(w.id, v)
       case 'where':
         if (v === 'bar' && w && !entry) return placeWidget(menuItemOf(w), 'bar')
@@ -247,7 +247,7 @@ export function wmenuPart(core: WmenuCore) {
       case 'regroup':
         return entry && keepLayout(Widgets.regroup(tbLayout(), entry.id, v))
       case 'ungroup':
-        if (core.stackFor === entry?.id) closeStackPop()
+        if (st.stackFor === entry?.id) closeStackPop()
         return entry && keepLayout(Widgets.ungroup(tbLayout(), entry.id, core.newId))
       case 'takeOut':
         return entry && keepLayout(Widgets.takeOut(tbLayout(), entry.id, Number(v), core.newId))
@@ -261,7 +261,7 @@ export function wmenuPart(core: WmenuCore) {
         if (Picker?.remove(m.where === 'bar' && entry ? { entry: entry.id, member } : { widget: w })) return
         if (m.where === 'bar' && entry) return Widgets.isGroup(entry) && member >= 0 ? removeMember(entry.id, member) : removeEntry(entry.id)
         // Out of her capsule with no picker to do it: off (put nowhere now).
-        if (w) return pet.settings.set({ widgetsOff: [...new Set([...(core.config.widgetsOff || []), w.id])] })
+        if (w) return pet.settings.set({ widgetsOff: [...new Set([...(st.config.widgetsOff || []), w.id])] })
     }
   })
 
@@ -277,8 +277,8 @@ export function wmenuPart(core: WmenuCore) {
   // puts one), medium; a plugin's widget as its plugin (all of them, in turn).
   function putOnBar(w) {
     const source = w.plugin ? { type: 'plugin', of: w.plugin } : { type: 'widget', of: w.id }
-    if (Widgets.shownOn(tbLayout(), core.allWidgets).has(w.id)) return
-    const named = w.private ? {} : w.plugin ? ownName(w.plugin) : { name: [...String(Widgets.words(core.lang, w).label)].slice(0, 40).join('') }
+    if (Widgets.shownOn(tbLayout(), st.allWidgets).has(w.id)) return
+    const named = w.private ? {} : w.plugin ? ownName(w.plugin) : { name: [...String(Widgets.words(st.lang, w).label)].slice(0, 40).join('') }
     const entry = { id: core.newId(), ...source, size: Widgets.sizesOf(w).includes('m') ? 'M' : 'S', ...(w.icon in Widgets.ICONS ? { icon: w.icon } : {}), ...named }
     const layout = tbLayout()
     layout.right.unshift(entry)
@@ -300,19 +300,19 @@ export function wmenuPart(core: WmenuCore) {
     const m = entry ? (Widgets.isGroup(entry) ? entry.items[member] : entry) : null
     if (m) return m.type === 'plugin' ? { plugin: m.of } : { id: m.of }
     if (!w) return null
-    if (w.plugin && !DeskGrid.has(core.config.deskLayout, { id: w.id })) return { plugin: w.plugin }
+    if (w.plugin && !DeskGrid.has(st.config.deskLayout, { id: w.id })) return { plugin: w.plugin }
     return { id: w.id }
   }
   // Where a widget is now: on the desktop (alone, stacked, in a board), on
   // the strip (the taskbar her home), else in the island.
   function placeOf(w) {
     if (!w) return 'isle'
-    if (DeskGrid.has(core.config.deskLayout, { id: w.id }) || (w.plugin && DeskGrid.has(core.config.deskLayout, { plugin: w.plugin }))) return 'desk'
-    if (core.placedOut.has(w.id) || (w.id === 'monitor' && home() === 'taskbar' && hasMonitorPart())) return 'bar'
+    if (DeskGrid.has(st.config.deskLayout, { id: w.id }) || (w.plugin && DeskGrid.has(st.config.deskLayout, { plugin: w.plugin }))) return 'desk'
+    if (st.placedOut.has(w.id) || (w.id === 'monitor' && home() === 'taskbar' && hasMonitorPart())) return 'bar'
     return 'isle'
   }
   function whereOf(item) {
-    if (DeskGrid.has(core.config.deskLayout, item)) return 'desk'
+    if (DeskGrid.has(st.config.deskLayout, item)) return 'desk'
     if (isMonitorItem(item) && home() === 'taskbar' && hasMonitorPart()) return 'bar'
     const keys = new Set(Object.values(tbLayout()).flatMap(run => run.filter(p => typeof p !== 'string').flatMap(Widgets.membersOf).map(Widgets.memberKey)))
     return keys.has(keyFor(item)) ? 'bar' : 'isle'
@@ -322,14 +322,14 @@ export function wmenuPart(core: WmenuCore) {
   // while it is on, or nowhere: null), a plugin's widgets standing on the
   // desktop by themselves counted as it.
   function placeNow(item, on) {
-    const keys = [keyFor(item), ...(item.plugin ? core.allWidgets.filter(w => w.plugin === item.plugin).map(w => `widget:${w.id}`) : [])]
-    const p = Placing.whereIs({ keys, on, taskbar: home() === 'taskbar' ? tbLayout() : null, desk: core.config.deskLayout, home: home() })
+    const keys = [keyFor(item), ...(item.plugin ? st.allWidgets.filter(w => w.plugin === item.plugin).map(w => `widget:${w.id}`) : [])]
+    const p = Placing.whereIs({ keys, on, taskbar: home() === 'taskbar' ? tbLayout() : null, desk: st.config.deskLayout, home: home() })
     return p.board ? { at: 'board', name: core.boardName(p.board) } : { at: p.at }
   }
   function placeWidget(item, where) {
     const key = keyFor(item)
     // Off the desktop as it goes elsewhere (the desktop's pages keep the places).
-    if (where !== 'desk' && DeskGrid.has(core.config.deskLayout, item)) core.deskOff([item])
+    if (where !== 'desk' && DeskGrid.has(st.config.deskLayout, item)) core.deskOff([item])
     if (where === 'bar') {
       if (whereOf(item) === 'bar') return
       const layout = tbLayout()
@@ -339,9 +339,9 @@ export function wmenuPart(core: WmenuCore) {
         layout.right.unshift('monitor')
         return keepLayout(layout)
       }
-      const w = item.plugin ? null : core.allWidgets.find(x => x.id === item.id)
+      const w = item.plugin ? null : st.allWidgets.find(x => x.id === item.id)
       const source = item.plugin ? { type: 'plugin', of: item.plugin } : { type: 'widget', of: item.id }
-      const named = w && !w.private ? { name: [...String(Widgets.words(core.lang, w).label)].slice(0, 40).join('') } : item.plugin ? ownName(item.plugin) : {}
+      const named = w && !w.private ? { name: [...String(Widgets.words(st.lang, w).label)].slice(0, 40).join('') } : item.plugin ? ownName(item.plugin) : {}
       const icon = (w?.icon || item.icon) in Widgets.ICONS ? { icon: w?.icon || item.icon } : {}
       layout.right.unshift({ id: core.newId(), ...source, size: !w || Widgets.sizesOf(w).includes('m') ? 'M' : 'S', ...icon, ...named })
       placedAt.set(key, Date.now())
@@ -364,7 +364,7 @@ export function wmenuPart(core: WmenuCore) {
     // preset's for one put on the desktop from the capsule).
     if (off || where === 'isle') keepLayout(layout)
     if (where === 'desk') return core.putOnDesk(item)
-    if (item.id && (core.config.widgetsOff || []).includes(item.id)) pet.settings.set({ widgetsOff: core.config.widgetsOff.filter(x => x !== item.id) })
+    if (item.id && (st.config.widgetsOff || []).includes(item.id)) pet.settings.set({ widgetsOff: st.config.widgetsOff.filter(x => x !== item.id) })
   }
 
   // A widget or plugin (by its key) off a taskbar layout: alone, or out of

@@ -3,15 +3,15 @@
 // and the list of input methods a press on it opens.
 // Made by island.ts in the section's place as the page starts
 // (imePart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// comes in core, its functions and constants as they are; what the island
+// remembers is core.st (island-vars.ts), read and written as st.<name>;
+// what it hands back is the island's again.
 import { pet } from './bridge.ts'
 import type { ImeCore } from './island.ts'
 
 export function imePart(core: ImeCore) {
   const {
-    besideOrOver, capsMark, closePop, closeWidgetPop, el, imeMark, imePop, isSide, showBattery, showNet,
+    st, besideOrOver, capsMark, closePop, closeWidgetPop, el, imeMark, imePop, isSide, showBattery, showNet,
     showPrivacy, showVolume, t, watchPresses,
   } = core
 
@@ -76,8 +76,8 @@ export function imePart(core: ImeCore) {
   // switches the window in front to it (inputs.rs pick), and the last row
   // opens Windows' languages. Windows' own list where none can be had.
   async function openImeList() {
-    if (core.popFor) closePop()
-    if (core.wgFor) closeWidgetPop()
+    if (st.popFor) closePop()
+    if (st.wgFor) closeWidgetPop()
     const list = await pet.taskbar.inputs()
     if (!Array.isArray(list) || !list.length) return pet.taskbar.open('inputs')
     const rows = list.map(m => {
@@ -94,11 +94,11 @@ export function imePart(core: ImeCore) {
       row.append(lines)
       return row
     })
-    const more = el('div', 'witem', t(core.lang, 'taskbar.imeMore'))
+    const more = el('div', 'witem', t(st.lang, 'taskbar.imeMore'))
     more.dataset.input = ''
     imePop.replaceChildren(...rows, more)
     imePop.hidden = false
-    core.imeOpen = true
+    st.imeOpen = true
     const at = besideOrOver(imeMark, imePop, isSide() ? 8 : 4)
     imePop.style.left = at.left === undefined ? '' : `${at.left}px`
     imePop.style.top = at.top === undefined ? '' : `${at.top}px`
@@ -106,7 +106,7 @@ export function imePart(core: ImeCore) {
   }
 
   function closeImeList() {
-    core.imeOpen = false
+    st.imeOpen = false
     imePop.hidden = true
     watchPresses()
   }

@@ -3,21 +3,22 @@
 // §5): stacks and carousels taking turns.
 // Made by island.ts in the section's place as the page starts
 // (layoutPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// comes in core, its functions and constants as they are; what the island
+// remembers is core.st (island-vars.ts), read and written as st.<name>;
+// what it hands back is the island's again.
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
-import type { LayoutCore, TbLayout } from './island.ts'
+import type { LayoutCore } from './island.ts'
+import type { TbLayout } from './island-vars.ts'
 
 // A carousel's node on the strip, held while the pointer is on it.
 type CarouselNode = HTMLElement & { _held?: boolean }
 
 export function layoutPart(core: LayoutCore) {
   const {
-    CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, barRest, body, clockBox, deskEdge, el,
+    st, CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, barRest, body, clockBox, deskEdge, el,
     face, facesBox, frontBox, growNode, home, isCapsule, isDetailed, isLight, isOn, isSide, isSlim, isSplit,
     isStripLight, island, keysBox, len, lo, onPixels, privBox, quickBox, sheetImage, showFrame, sizeOf,
     snapStart, startButton, startPart, t, takeWidgets, taskCompactH, taskViewButton, trayBox, widgetFaces,
@@ -43,7 +44,7 @@ export function layoutPart(core: LayoutCore) {
   // Split, the top bar's: no Start, no programs (they are in the dock), her
   // in the middle (docs/design/specs/dock-topbar.md §2); quick settings and
   // the clock in the dock too if set so (splitKeys dock, bar.ts).
-  const inDock = () => ['start', 'apps', ...(core.config.splitKeys === 'dock' ? ['quick', 'clock'] : [])]
+  const inDock = () => ['start', 'apps', ...(st.config.splitKeys === 'dock' ? ['quick', 'clock'] : [])]
   const splitParts = () => TB_PARTS.filter(p => !inDock().includes(p))
   const splitPreset = () => ({ left: ['front'], center: ['her'], right: TB_RIGHT.filter(p => !inDock().includes(p)) })
   // On the top bar the program in front is always there (it may be moved).
@@ -75,8 +76,8 @@ export function layoutPart(core: LayoutCore) {
   // middle (edgeOf). Else, on a return to the taskbar, the program in front
   // stayed at the strip's left end, before her, moved to the middle, with
   // Start and the programs after her (the user, 2026-11-07).
-  function tbLayout(saved = core.editLayout || core.config.taskbarLayout): TbLayout {
-    const base = saved && typeof saved === 'object' ? saved : core.config.taskbarAlign === 'left' ? TB_PRESETS.left : TB_PRESETS.win11
+  function tbLayout(saved = st.editLayout || st.config.taskbarLayout): TbLayout {
+    const base = saved && typeof saved === 'object' ? saved : st.config.taskbarAlign === 'left' ? TB_PRESETS.left : TB_PRESETS.win11
     if (isSplit()) return Widgets.monitorAsPart(Widgets.layoutOf(Widgets.splitOf(base, inDock()), splitParts(), splitPreset(), SPLIT_OPTIONAL))
     return Widgets.monitorAsPart(Widgets.layoutOf(Widgets.edgeOf(base), TB_PARTS, TB_PRESETS.win11, TB_OPTIONAL))
   }
@@ -115,8 +116,8 @@ export function layoutPart(core: LayoutCore) {
   function arrangeTaskbar() {
     const layout = tbLayout()
     const key = JSON.stringify(layout)
-    if (key === core.arranged) return
-    core.arranged = key
+    if (key === st.arranged) return
+    st.arranged = key
     for (const k of Object.keys(zones)) zones[k].replaceChildren(...layout[k].map(p => (typeof p === 'string' ? PART_NODES[p] : entryNode(p))))
     const ids = new Set(Object.values(layout).flatMap(run => run.filter(p => typeof p !== 'string').map(p => p.id)))
     for (const id of [...entryNodes.keys()]) if (!ids.has(id)) entryNodes.delete(id)
@@ -128,7 +129,7 @@ export function layoutPart(core: LayoutCore) {
     for (const k of Object.keys(zones)) zones[k].classList.toggle('stretch', stretch(k))
     barRest.classList.toggle('tb-stretch', Object.keys(zones).some(stretch))
     // What the strip shows takes no turns in the island too.
-    takeWidgets(core.allWidgets)
+    takeWidgets(st.allWidgets)
   }
 
   // Each widget put there, as big as it is set and it has (widgets.ts
@@ -144,7 +145,7 @@ export function layoutPart(core: LayoutCore) {
   // What the widgets on the strip are drawn with (wcards.ts ctx), as its
   // words are; what opens from them (a card, a stack, a menu), as Windows'
   // mode, as their ground is.
-  const barCtx = () => ({ lang: core.lang, light: isStripLight(), detailed: isDetailed(), width: core.STACK_CARD_W, hour: new Date().getHours(), now: Date.now() })
+  const barCtx = () => ({ lang: st.lang, light: isStripLight(), detailed: isDetailed(), width: core.STACK_CARD_W, hour: new Date().getHours(), now: Date.now() })
   const popCtx = () => ({ ...barCtx(), light: isLight() })
   // Placed this long ago at most, a widget with nothing yet is loading.
   const LOADING_MS = 20000
@@ -159,7 +160,7 @@ export function layoutPart(core: LayoutCore) {
     if ((p?.state === 'running' || (m.of === 'monitor' && monitorWanted())) && at && Date.now() - at < LOADING_MS) return 'loading'
     return 'none'
   }
-  const monitorWanted = () => core.allWidgets.some(w => w.id === 'monitor')
+  const monitorWanted = () => st.allWidgets.some(w => w.id === 'monitor')
   // Its size as drawn: M where it has a medium size, else S.
   const sizeFor = (size, w) => (size === 'M' && (!w || Widgets.sizesOf(w).includes('m')) ? 'M' : 'S')
 
@@ -172,31 +173,31 @@ export function layoutPart(core: LayoutCore) {
       // the strip's until it has been placed.
       const ctx = { ...strip, light: node._inked ? node.classList.contains('ink-light') : strip.light }
       const e = node._entry
-      const name = Widgets.nameOf(core.lang, e, core.allWidgets, detailed)
+      const name = Widgets.nameOf(st.lang, e, st.allWidgets, detailed)
       node.dataset.label = name
       if (Widgets.isGroup(e)) {
         drawGroup(node, e, ctx)
         continue
       }
       if (!Widgets.isSource(e)) continue
-      const from = Widgets.sourcesOf(e, core.allWidgets)
+      const from = Widgets.sourcesOf(e, st.allWidgets)
       const w = from.length ? from[turn % from.length] : null
       // A plugin with nothing to say: maybe it wants its settings first.
       if (!w && e.type === 'plugin') askPlugins()
       const state = w ? '' : emptyState(e)
       const size = sizeFor(node.dataset.size, w)
-      const drawn = JSON.stringify([size, name, w && [w.label, w.value, w.detail, w.color, w.private], state, ctx.light, detailed, core.lang])
+      const drawn = JSON.stringify([size, name, w && [w.label, w.value, w.detail, w.color, w.private], state, ctx.light, detailed, st.lang])
       if (node._drawn === drawn) continue
       node._drawn = drawn
       node.classList.toggle('empty', !w)
       node.classList.toggle('S', size === 'S')
-      const said = w ? Widgets.words(core.lang, w, detailed) : null
-      node.title = w ? [said.label, said.value].filter(Boolean).join(' · ') : `${name} · ${t(core.lang, state === 'needs' ? 'taskbar.w.needs' : 'taskbar.w.none')}`
+      const said = w ? Widgets.words(st.lang, w, detailed) : null
+      node.title = w ? [said.label, said.value].filter(Boolean).join(' · ') : `${name} · ${t(st.lang, state === 'needs' ? 'taskbar.w.needs' : 'taskbar.w.none')}`
       node.innerHTML = w ? WCards.faceHTML(w, size, ctx) : WCards.emptyFaceHTML(e, name, size, state, ctx)
       fillHer(node, 16)
     }
-    if (core.wgFor) core.drawWidgetPop()
-    if (core.stackFor) core.drawStackPop()
+    if (st.wgFor) core.drawWidgetPop()
+    if (st.stackFor) core.drawStackPop()
     tickCarousels()
   }
 
@@ -207,13 +208,13 @@ export function layoutPart(core: LayoutCore) {
     for (const slot of root.querySelectorAll('.wher:empty')) slot.append(herBadge(px))
   }
   function herBadge(px) {
-    if (!core.spriteUrl) return face('idle', px)
+    if (!st.spriteUrl) return face('idle', px)
     const scale = px * PER_PX
     const node = el('span', 'still-her badge')
     node.style.cssText = `width:${px}px;height:${px}px`
     const sheet = el('span', 'sheet')
     sheet.style.cssText = `transform:translate(${-(CELL_W * scale - px) / 2}px, -2px) scale(${scale})`
-    sheetImage(sheet, core.spriteUrl)
+    sheetImage(sheet, st.spriteUrl)
     const clip = CLIPS[MOOD_CLIP.idle]
     if (clip) showFrame(sheet, clip.row, 0)
     node.append(sheet)
@@ -236,19 +237,19 @@ export function layoutPart(core: LayoutCore) {
   const stillMotionNow = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
   function drawGroup(node, e, ctx) {
-    const slides = Widgets.slidesOf(e, core.allWidgets)
+    const slides = Widgets.slidesOf(e, st.allWidgets)
     const size = node.dataset.size === 'S' ? 'S' : 'M'
     const face = s => (s.w ? WCards.faceHTML(s.w, sizeFor(size, s.w), ctx) : WCards.emptyFaceHTML(s.member, memberName(s.member), size, emptyState(s.member), ctx))
-    const drawn = JSON.stringify([e.type, size, slides.map(s => (s.w ? [s.w.id, s.w.label, s.w.value, s.w.detail, s.w.color, s.w.private] : [Widgets.memberKey(s.member), emptyState(s.member)])), ctx.light, ctx.detailed, core.lang])
+    const drawn = JSON.stringify([e.type, size, slides.map(s => (s.w ? [s.w.id, s.w.label, s.w.value, s.w.detail, s.w.color, s.w.private] : [Widgets.memberKey(s.member), emptyState(s.member)])), ctx.light, ctx.detailed, st.lang])
     // A plugin's member with nothing (its settings first?).
     if (slides.some(s => !s.w && s.member.type === 'plugin')) askPlugins()
     if (e.type === 'stack') {
-      node.classList.toggle('open', core.stackFor === e.id)
+      node.classList.toggle('open', st.stackFor === e.id)
       if (node._drawn === drawn) return
       node._drawn = drawn
       const top = slides[0]
       node.classList.toggle('empty', !top?.w)
-      node.title = t(core.lang, 'taskbar.w.stackTip', { n: slides.length })
+      node.title = t(st.lang, 'taskbar.w.stackTip', { n: slides.length })
       node.innerHTML = top ? face(top) : ''
       fillHer(node, 16)
       return
@@ -267,7 +268,7 @@ export function layoutPart(core: LayoutCore) {
       node._slides = slides
       const html = slides.map(s => `<span class="tws">${face(s)}</span>`).join('')
       node.innerHTML = `<span class="reel">${html}${slides.length > 1 ? html : ''}</span>${slides.length > 1 ? `<span class="dots">${slides.map(() => '<i></i>').join('')}</span>` : ''}`
-      node.title = t(core.lang, 'taskbar.w.carouselTip', { n: slides.length })
+      node.title = t(st.lang, 'taskbar.w.carouselTip', { n: slides.length })
       fillHer(node, 16)
       state.at = Math.min(state.at, Math.max(0, slides.length - 1))
       showSlide(node, state.at, false)
@@ -319,7 +320,7 @@ export function layoutPart(core: LayoutCore) {
   function tickCarousels() {
     clearTimeout(carouselTimer)
     carouselTimer = 0
-    if (!isOn() || home() !== 'taskbar' || core.quiet || stillMotionNow() || core.editLayout || document.hidden) return
+    if (!isOn() || home() !== 'taskbar' || st.quiet || stillMotionNow() || st.editLayout || document.hidden) return
     const now = Date.now()
     let soonest = Infinity
     for (const [id, state] of carousels) {
@@ -366,7 +367,7 @@ export function layoutPart(core: LayoutCore) {
     'wheel',
     e => {
       const node = (e.target as HTMLElement).closest('.tw-carousel')
-      if (!node || core.editLayout) return
+      if (!node || st.editLayout) return
       e.preventDefault()
       turnCarousel(node.dataset.entry, -1, e.deltaY > 0 ? 1 : -1)
     },
@@ -376,12 +377,12 @@ export function layoutPart(core: LayoutCore) {
   document.addEventListener('visibilitychange', () => tickCarousels())
 
   // A member's name, as put there (a plugin's, a widget's label as it was).
-  const memberName = m => Widgets.nameOf(core.lang, { ...m, id: 'w0' }, core.allWidgets, isDetailed())
+  const memberName = m => Widgets.nameOf(st.lang, { ...m, id: 'w0' }, st.allWidgets, isDetailed())
   // The name kept with someone else's plugin as it is put somewhere (her
   // own she knows by their ids): its own, as its widgets say it, for while
   // it has nothing to say.
   function ownName(id) {
-    const name = t(core.lang, `w.ex.${id}`) === `w.ex.${id}` ? Widgets.pluginName(core.lang, id, core.allWidgets) : ''
+    const name = t(st.lang, `w.ex.${id}`) === `w.ex.${id}` ? Widgets.pluginName(st.lang, id, st.allWidgets) : ''
     return name ? { name: [...name].slice(0, 40).join('') } : {}
   }
 
@@ -400,11 +401,11 @@ export function layoutPart(core: LayoutCore) {
     if (!Array.isArray(list)) return
     pluginsSaid.list = list
     for (const node of entryNodes.values()) node._drawn = ''
-    if (core.taskbarBuilt && home() === 'taskbar') drawEntries()
+    if (st.taskbarBuilt && home() === 'taskbar') drawEntries()
   }
   const needsSettings = e => e.type === 'plugin' && !!pluginsSaid.list.find(p => p.id === e.of)?.missing
   setInterval(() => {
-    if (core.taskbarBuilt && home() === 'taskbar' && entryNodes.size) drawEntries()
+    if (st.taskbarBuilt && home() === 'taskbar' && entryNodes.size) drawEntries()
   }, ENTRY_TURN_MS)
 
   // Her island over its slot, as wide as it is: from the strip's left, or,
@@ -422,7 +423,7 @@ export function layoutPart(core: LayoutCore) {
     const pad = isCapsule() ? CAPSULE_X : 0
     herSlot.style.width = `${onPixels(sizeOf('compact').width + 2 * pad)}px`
     herSlot.style.marginRight = `${pad ? 2 : 4}px`
-    const shifted = (core.oledOn && parseFloat(document.documentElement.style.getPropertyValue('--oled-x'))) || 0
+    const shifted = (st.oledOn && parseFloat(document.documentElement.style.getPropertyValue('--oled-x'))) || 0
     const r = herSlot.getBoundingClientRect()
     const left = r.left - shifted + pad
     // In the middle run (the top bar's, split: her in the middle) what it
@@ -431,7 +432,7 @@ export function layoutPart(core: LayoutCore) {
     const atRight = !mid && (r.left + r.right) / 2 - shifted > innerWidth / 2
     body.classList.toggle('isl-right', atRight)
     body.classList.toggle('isl-mid', mid)
-    core.slotMiddle = mid ? (r.left + r.right) / 2 - shifted : null
+    st.slotMiddle = mid ? (r.left + r.right) / 2 - shifted : null
     placeMid()
     document.documentElement.style.setProperty('--isl-x', `${onPixels(atRight ? innerWidth - (r.right - shifted - pad) : left)}px`)
     const seat = Math.round(left + taskCompactH() / 2)
@@ -440,13 +441,13 @@ export function layoutPart(core: LayoutCore) {
       pet.seat(seat)
     }
   }
-  const midLeft = width => Math.min(Math.max(8, core.slotMiddle - width / 2), innerWidth - width - 8)
+  const midLeft = width => Math.min(Math.max(8, st.slotMiddle - width / 2), innerWidth - width - 8)
   // Its left edge there for the width it has (or is going to: setSize), set
   // as the width is, on the same spring (style.css isl-mid), so it grows and
   // shrinks about its middle all the way.
   function placeMid(width = parseFloat(island.style.width)) {
-    if (core.slotMiddle == null || !(width > 0)) return
-    document.documentElement.style.setProperty('--isl-mx', `${onPixels(core.view === 'compact' ? core.slotMiddle - width / 2 : midLeft(width))}px`)
+    if (st.slotMiddle == null || !(width > 0)) return
+    document.documentElement.style.setProperty('--isl-mx', `${onPixels(st.view === 'compact' ? st.slotMiddle - width / 2 : midLeft(width))}px`)
   }
   // On a side bar: the slot as tall as her upright capsule, from the bar's
   // top, or from its foot in its lower half (isl-low: what it grows into
@@ -458,7 +459,7 @@ export function layoutPart(core: LayoutCore) {
     herSlot.style.marginRight = ''
     herSlot.style.height = `${onPixels(cap.height + 2 * pad)}px`
     herSlot.style.marginBottom = `${pad ? 2 : 4}px`
-    const shifted = (core.oledOn && parseFloat(document.documentElement.style.getPropertyValue('--oled-y'))) || 0
+    const shifted = (st.oledOn && parseFloat(document.documentElement.style.getPropertyValue('--oled-y'))) || 0
     const r = herSlot.getBoundingClientRect()
     const top = r.top - shifted + pad
     const low = (r.top + r.bottom) / 2 - shifted > innerHeight / 2
@@ -481,7 +482,7 @@ export function layoutPart(core: LayoutCore) {
   // in front changes its width with each window (drawFront), and the middle
   // run with her capsule in it went along with it, then slid back.
   const slotWatch = new ResizeObserver(() => {
-    if (!core.taskbarBuilt || !isOn() || home() !== 'taskbar') return
+    if (!st.taskbarBuilt || !isOn() || home() !== 'taskbar') return
     alignApps()
     placeSlot()
   })
@@ -502,23 +503,23 @@ export function layoutPart(core: LayoutCore) {
   const flashSince = new Map()
 
   function fillTaskbar() {
-    if (!core.taskbarBuilt) {
+    if (!st.taskbarBuilt) {
       // As wide as the strip: her island lies over its slot in it (placeSlot).
       barRest.style.left = '0px'
       barRest.replaceChildren(core.glide, zones.left, zones.center, growNode, zones.right, deskEdge, core.pop, core.wgPop, core.stackPop, core.imePop)
-      core.taskbarBuilt = true
-      core.trayDrawn = ''
-      core.windowsDrawn = ''
+      st.taskbarBuilt = true
+      st.trayDrawn = ''
+      st.windowsDrawn = ''
     }
     arrangeTaskbar()
     drawEntries()
     // The programs' buttons as icons alone (taskbarButtons), or with their titles.
-    barRest.classList.toggle('icons', isSide() || core.config.taskbarButtons !== 'labels')
-    startButton.title = t(core.lang, 'taskbar.start')
-    taskViewButton.title = t(core.lang, 'taskbar.taskView')
-    taskViewButton.hidden = !core.look.taskView
-    quickBox.title = t(core.lang, 'taskbar.quick')
-    deskEdge.title = t(core.lang, 'taskbar.desktop')
+    barRest.classList.toggle('icons', isSide() || st.config.taskbarButtons !== 'labels')
+    startButton.title = t(st.lang, 'taskbar.start')
+    taskViewButton.title = t(st.lang, 'taskbar.taskView')
+    taskViewButton.hidden = !st.look.taskView
+    quickBox.title = t(st.lang, 'taskbar.quick')
+    deskEdge.title = t(st.lang, 'taskbar.desktop')
     facesBox.replaceChildren(...widgetFaces())
     core.drawFront()
     core.drawWindows()
@@ -529,7 +530,7 @@ export function layoutPart(core: LayoutCore) {
     snapStart()
     core.inkParts()
     // Editing: picker.ts's popover over its widget, where it is now.
-    if (core.editLayout) Picker?.relaid()
+    if (st.editLayout) Picker?.relaid()
   }
 
   // The middle run in the middle of the screen, as Windows 11 has Start and
@@ -548,7 +549,7 @@ export function layoutPart(core: LayoutCore) {
   let middleLength = null
 
   function alignApps() {
-    if (!core.taskbarBuilt) return
+    if (!st.taskbarBuilt) return
     core.fadeWins()
     const middle = zones.center
     // Along the bar: its left margin, a side bar's top one (the other none).
@@ -560,7 +561,7 @@ export function layoutPart(core: LayoutCore) {
     // Empty, it is still a place to drop a part while the layout is edited;
     // with a flexible spacer anywhere, the spacer places it.
     let still = false
-    if ((middle.childElementCount || core.editLayout) && !barRest.classList.contains('tb-stretch')) {
+    if ((middle.childElementCount || st.editLayout) && !barRest.classList.contains('tb-stretch')) {
       const now = parseFloat(getComputedStyle(middle)[margin]) || 0
       const start = middle.getBoundingClientRect()
       const length = len(start)
@@ -570,7 +571,7 @@ export function layoutPart(core: LayoutCore) {
       // Where it lies without OLED's shift (which moves the bar after): the
       // margin taken from where it is drawn undid the shift, and the middle
       // ones stayed put across.
-      const shifted = (core.oledOn && parseFloat(document.documentElement.style.getPropertyValue(isSide() ? '--oled-y' : '--oled-x'))) || 0
+      const shifted = (st.oledOn && parseFloat(document.documentElement.style.getPropertyValue(isSide() ? '--oled-y' : '--oled-x'))) || 0
       want = Math.round(Math.max(0, Math.min(((isSide() ? innerHeight : innerWidth) - length) / 2 - (lo(start) - shifted - now), room)))
       // A side bar's middle run gives way when crowded (its programs then
       // scroll), so its own height and the room left are worked out from
@@ -602,13 +603,13 @@ export function layoutPart(core: LayoutCore) {
   }
   zones.center.addEventListener('transitionend', e => {
     if (e.target !== zones.center || (e.propertyName !== 'margin-left' && e.propertyName !== 'margin-top')) return
-    if (core.popFor) core.drawPop()
-    if (core.glideOn?.isConnected) core.glideTo(core.glideOn, true)
+    if (st.popFor) core.drawPop()
+    if (st.glideOn?.isConnected) core.glideTo(st.glideOn, true)
     placeSlot()
     snapStart()
     core.inkParts()
-    if (core.editLayout) Picker?.relaid()
-    if (core.wgFor) core.drawWidgetPop()
+    if (st.editLayout) Picker?.relaid()
+    if (st.wgFor) core.drawWidgetPop()
     requestAnimationFrame(core.sendTrayRects)
   })
 

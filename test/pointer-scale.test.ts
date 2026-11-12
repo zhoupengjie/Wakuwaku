@@ -7,7 +7,7 @@ test('a DPR-only resize resends unchanged settings hit regions, once per scale',
   const source = pageCode('pet', 'island.ts')
   // The strip's thickness and the resize that tells it are the taskbar's look's (island-look.ts).
   const look = pageCode('pet', 'island-look.ts')
-  const solid = source.slice(source.indexOf("\nlet solidSent = ''"), source.indexOf('\nconst solidWatch ='))
+  const solid = source.slice(source.indexOf('\nfunction sendSolid()'), source.indexOf('\nconst solidWatch ='))
   const resize = look.slice(look.indexOf('  let stripThick =')).match(/  window\.addEventListener\('resize', \(\) => \{[\s\S]*?\n  \}\)/)[0]
   const sent = []
   const listeners: Record<string, () => void> = {}
@@ -17,7 +17,8 @@ test('a DPR-only resize resends unchanged settings hit regions, once per scale',
   const page = vm.createContext({
     devicePixelRatio: 1,
     stripThick: 48,
-    editLayout: null,
+    // What the page remembers (island-vars.ts): the layout being edited, the rects last sent.
+    st: { editLayout: null, solidSent: '' },
     isOn: () => true,
     fitPage: () => {},
     document: { documentElement: { style: { setProperty: () => {} } } },

@@ -3,16 +3,16 @@
 // microphone, camera or location, the clock and the program in front.
 // Made by island.ts in the section's place as the page starts
 // (rightPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// comes in core, its functions and constants as they are; what the island
+// remembers is core.st (island-vars.ts), read and written as st.<name>;
+// what it hands back is the island's again.
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
 import type { RightCore } from './island.ts'
 
 export function rightPart(core: RightCore) {
   const {
-    Widgets, el, home, isDetailed, isPinned, isSide, island, stripHue, stripInk, t,
+    st, Widgets, el, home, isDetailed, isPinned, isSide, island, stripHue, stripInk, t,
   } = core
 
   // Start and the programs, the monitor, the tray's icons, the clock and the
@@ -35,11 +35,11 @@ export function rightPart(core: RightCore) {
   // the widgets take their turns at its left end, in her place (fillCompact).
   function widgetFaces() {
     const faces = []
-    const w = core.widgets.length && home() !== 'taskbar' ? core.widgets[core.widgetAt % core.widgets.length] : null
+    const w = st.widgets.length && home() !== 'taskbar' ? st.widgets[st.widgetAt % st.widgets.length] : null
     if (w) {
-      const { label, value } = Widgets.words(core.lang, w, isDetailed())
+      const { label, value } = Widgets.words(st.lang, w, isDetailed())
       const face = el('span', 'face')
-      face.insertAdjacentHTML('afterbegin', Widgets.iconHTML(w, core.lang))
+      face.insertAdjacentHTML('afterbegin', Widgets.iconHTML(w, st.lang))
       face.firstChild.style.color = stripInk(w.color) || stripHue().idle
       const v = el('span', 'v', value)
       v.style.color = stripInk(w.color) || stripHue().idle
@@ -50,7 +50,7 @@ export function rightPart(core: RightCore) {
     if (isPinned()) {
       const inRows = home() === 'taskbar'
       const readings = el('span', inRows ? 'face mon rows' : 'face mon')
-      readings.innerHTML = inRows ? Widgets.rowsHTML(core.monitor, isSide()) : Widgets.partsHTML(core.monitor)
+      readings.innerHTML = inRows ? Widgets.rowsHTML(st.monitor, isSide()) : Widgets.partsHTML(st.monitor)
       faces.push(readings)
     }
     return faces
@@ -228,7 +228,7 @@ export function rightPart(core: RightCore) {
   quickBox.addEventListener(
     'wheel',
     e => {
-      if (core.editLayout) return
+      if (st.editLayout) return
       e.preventDefault()
       const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY
       wheelGathered = Math.abs(dy) >= 50 ? Math.sign(dy) * 100 : wheelGathered + dy
@@ -252,7 +252,7 @@ export function rightPart(core: RightCore) {
     // Muted, the waves' room is the struck-through speaker's, unseen.
     volBack.textContent = muted ? volFront.textContent : ''
     volBack.hidden = !!muted
-    volMark.title = level == null ? '' : muted ? t(core.lang, 'taskbar.muted') : t(core.lang, 'taskbar.volume', { n: level })
+    volMark.title = level == null ? '' : muted ? t(st.lang, 'taskbar.muted') : t(st.lang, 'taskbar.volume', { n: level })
   }
   // { percent, plugged, charging, saver, critical, left (s), shown } (widgets.rs battery_state), or none.
   function showBattery(b) {
@@ -278,9 +278,9 @@ export function rightPart(core: RightCore) {
     batText.textContent = `${n}%`
     batText.hidden = !b.shown
     const left = Number.isFinite(b.left) ? Math.round(b.left / 60) : null
-    const time = left == null ? '' : left >= 60 ? t(core.lang, 'taskbar.hm', { h: Math.floor(left / 60), m: left % 60 }) : t(core.lang, 'taskbar.m', { m: left })
-    const said = plugged ? t(core.lang, 'taskbar.batteryPlugged', { n }) : time ? t(core.lang, 'taskbar.batteryLeft', { n, time }) : t(core.lang, 'taskbar.battery', { n })
-    batMark.title = b.saver ? `${said}\n${t(core.lang, 'taskbar.batterySaver')}` : said
+    const time = left == null ? '' : left >= 60 ? t(st.lang, 'taskbar.hm', { h: Math.floor(left / 60), m: left % 60 }) : t(st.lang, 'taskbar.m', { m: left })
+    const said = plugged ? t(st.lang, 'taskbar.batteryPlugged', { n }) : time ? t(st.lang, 'taskbar.batteryLeft', { n, time }) : t(st.lang, 'taskbar.battery', { n })
+    batMark.title = b.saver ? `${said}\n${t(st.lang, 'taskbar.batterySaver')}` : said
   }
   // What is using the microphone, the camera, the location, as Windows'
   // taskbar shows it before the input method; a press, its privacy settings.
@@ -297,7 +297,7 @@ export function rightPart(core: RightCore) {
         .map(k => {
           const mark = el('span', 'fi', PRIVACY[k])
           mark.dataset.bar = `privacy-${k}`
-          mark.title = t(core.lang, `taskbar.inUse.${k}`, { apps: use[k].join(core.lang === 'zh' ? '、' : ', ') })
+          mark.title = t(st.lang, `taskbar.inUse.${k}`, { apps: use[k].join(st.lang === 'zh' ? '、' : ', ') })
           return mark
         }),
     )

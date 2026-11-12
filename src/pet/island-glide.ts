@@ -3,9 +3,9 @@
 // kept up while the pointer is on its way to it.
 // Made by island.ts in the section's place as the page starts
 // (glidePart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// comes in core, its functions and constants as they are; what the island
+// remembers is core.st (island-vars.ts), read and written as st.<name>;
+// what it hands back is the island's again.
 import * as Presses from './presses.ts'
 import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
@@ -13,7 +13,7 @@ import type { GlideCore } from './island.ts'
 
 export function glidePart(core: GlideCore) {
   const {
-    alignApps, barRest, body, crossLo, el, entryNodes, flashSince, hi, home, imeMark, isOn, isSide, lo,
+    st, alignApps, barRest, body, crossLo, el, entryNodes, flashSince, hi, home, imeMark, isOn, isSide, lo,
     openedUp, placeSlot, t, trayBox, windowsBox,
   } = core
 
@@ -38,7 +38,7 @@ export function glidePart(core: GlideCore) {
     const [from, to, crossFrom, crossSize] = isSide() ? ['top', 'bottom', 'left', 'width'] : ['left', 'right', 'top', 'height']
     const left = lo(r) - lo(bar)
     const right = hi(bar) - hi(r)
-    const was = core.glideOn && glide.classList.contains('on') && glide.dataset.axis === from ? parseFloat(glide.style[from]) : null
+    const was = st.glideOn && glide.classList.contains('on') && glide.dataset.axis === from ? parseFloat(glide.style[from]) : null
     if (glide.dataset.axis !== from) {
       for (const p of ['left', 'right', 'top', 'bottom', 'width', 'height']) glide.style[p] = ''
       glide.dataset.axis = from
@@ -63,14 +63,14 @@ export function glidePart(core: GlideCore) {
     }
     glide.classList.add('on')
     glide.classList.toggle('ink-light', core.inkOf(node))
-    core.glideOn = node
+    st.glideOn = node
   }
 
   function glideOff() {
     clearTimeout(glideTimer)
     glideTimer = setTimeout(() => {
       glide.classList.remove('on', 'down')
-      core.glideOn = null
+      st.glideOn = null
     }, 90)
   }
 
@@ -94,7 +94,7 @@ export function glidePart(core: GlideCore) {
     true,
   )
   barRest.addEventListener('pointerdown', e => {
-    if (e.button === 0 && core.glideOn && (e.target as HTMLElement).closest(GLIDE_ON) === core.glideOn) glide.classList.add('down')
+    if (e.button === 0 && st.glideOn && (e.target as HTMLElement).closest(GLIDE_ON) === st.glideOn) glide.classList.add('down')
   })
   window.addEventListener('pointerup', () => glide.classList.remove('down'))
   window.addEventListener('resize', () => {
@@ -113,11 +113,11 @@ export function glidePart(core: GlideCore) {
   // island says how they are.
   // The programs' buttons in the order dragged (taskbarOrder, their keys,
   // those not running kept), the rest after, as they came.
-  const appOrder = () => (Array.isArray(core.config.taskbarOrder) ? core.config.taskbarOrder.map(String) : [])
+  const appOrder = () => (Array.isArray(st.config.taskbarOrder) ? st.config.taskbarOrder.map(String) : [])
   function orderedApps() {
     const order = appOrder()
     const rank = a => (order.includes(a.app) ? order.indexOf(a.app) : Infinity)
-    return core.taskWindows
+    return st.taskWindows
       .map((a, n) => [a, n])
       .sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1])
       .map(([a]) => a)
@@ -135,9 +135,9 @@ export function glidePart(core: GlideCore) {
 
   function drawWindows() {
     const apps = orderedApps()
-    const drawn = JSON.stringify([apps, core.lang])
-    if (drawn === core.windowsDrawn) return
-    core.windowsDrawn = drawn
+    const drawn = JSON.stringify([apps, st.lang])
+    if (drawn === st.windowsDrawn) return
+    st.windowsDrawn = drawn
     const now = Date.now()
     const flashing = new Set(apps.flatMap(a => (a.windows || []).filter(w => w.flash).map(w => w.id)))
     for (const id of [...flashSince.keys()]) if (!flashing.has(id)) flashSince.delete(id)
@@ -158,12 +158,12 @@ export function glidePart(core: GlideCore) {
         button.dataset.app = app.app
         // As Windows' own buttons say themselves to a screen reader.
         button.setAttribute('role', 'button')
-        if (core.buttonsDrawn) {
+        if (st.buttonsDrawn) {
           button.classList.add('fresh')
           fresh.push(button)
         }
       }
-      button.setAttribute('aria-label', t(core.lang, !windows.length ? 'taskbar.ariaPinned' : windows.length > 1 ? 'taskbar.ariaMany' : 'taskbar.ariaOne', { name: app.name || '', n: windows.length }))
+      button.setAttribute('aria-label', t(st.lang, !windows.length ? 'taskbar.ariaPinned' : windows.length > 1 ? 'taskbar.ariaMany' : 'taskbar.ariaOne', { name: app.name || '', n: windows.length }))
       button.classList.toggle('front', windows.some(w => w.front))
       button.classList.toggle('min', windows.length > 0 && windows.every(w => w.min))
       const flashes = windows.filter(w => w.flash)
@@ -185,8 +185,8 @@ export function glidePart(core: GlideCore) {
       if (windowsBox.children[i] !== b) windowsBox.insertBefore(b, windowsBox.children[i] || null)
     })
     if (fresh.length) requestAnimationFrame(() => requestAnimationFrame(() => fresh.forEach(b => b.classList.remove('fresh'))))
-    core.buttonsDrawn = true
-    if (core.popFor) core.drawPop()
+    st.buttonsDrawn = true
+    if (st.popFor) core.drawPop()
   }
 
   // A button's insides as its program is now: its icon (or its first
@@ -241,37 +241,37 @@ export function glidePart(core: GlideCore) {
   barRest.append(pop)
   // Its room for the pointer down to the buttons (style.css .wreach, #56).
   const popReach = el('span', 'wreach')
-  const appOf = key => core.taskWindows.find(a => a.app === key)
+  const appOf = key => st.taskWindows.find(a => a.app === key)
   // File Explorer's button, by its program: explorer.exe, the shell itself.
   const isExplorer = path => /(^|[\\/])explorer\.exe$/i.test(path || '')
 
   function openPop(key, kind) {
-    if (core.wgFor) core.closeWidgetPop()
-    if (core.imeOpen) core.closeImeList()
-    clearTimeout(core.popTimer)
-    core.popFor = { app: key, kind }
+    if (st.wgFor) core.closeWidgetPop()
+    if (st.imeOpen) core.closeImeList()
+    clearTimeout(st.popTimer)
+    st.popFor = { app: key, kind }
     core.drawPop()
     watchPresses()
     // Windows' End task as its setting is now (the look tells it only every
     // half minute): the menu drawn again should it have changed.
     if (kind === 'menu')
       pet.taskbar.endTask().then(on => {
-        if (on === core.look.endTask) return
-        core.look.endTask = on === true
-        if (core.popFor?.kind === 'menu') core.drawPop()
+        if (on === st.look.endTask) return
+        st.look.endTask = on === true
+        if (st.popFor?.kind === 'menu') core.drawPop()
       })
   }
 
   function closePop() {
-    clearTimeout(core.popMoveTimer)
-    core.popMoving = false
-    core.popShown = null
+    clearTimeout(st.popMoveTimer)
+    st.popMoving = false
+    st.popShown = null
     pop.getAnimations().forEach(a => a.id === 'slide' && a.cancel())
     pop.classList.remove('sliding', 'rising')
     pop.style.width = ''
     pop.style.height = ''
-    clearTimeout(core.popTimer)
-    core.popFor = null
+    clearTimeout(st.popTimer)
+    st.popFor = null
     pop.hidden = true
     core.sendThumbs()
     watchPresses()
@@ -283,7 +283,7 @@ export function glidePart(core: GlideCore) {
   let watching = false
   function watchPresses() {
     // picker.ts: its capsule panel, its popover, closed by a press elsewhere too.
-    const want = !!core.popFor || core.trayOpen || !!core.wgFor || !!core.stackFor || core.menuFor?.where === 'bar' || core.imeOpen || !!Picker?.watches()
+    const want = !!st.popFor || st.trayOpen || !!st.wgFor || !!st.stackFor || st.menuFor?.where === 'bar' || st.imeOpen || !!Picker?.watches()
     if (want === watching) return
     watching = want
     pet.taskbar.watch(want)
@@ -292,12 +292,12 @@ export function glidePart(core: GlideCore) {
   pet.onPress(at => {
     if (!isOn() || home() !== 'taskbar' || !at) return
     const over = document.elementFromPoint(at.x, at.y)
-    if (core.popFor && !(over && (pop.contains(over) || windowsBox.contains(over)))) closePop()
-    if (core.trayOpen && !(over && trayBox.contains(over))) core.openTray(false)
-    if (core.wgFor && !(over && (core.wgPop.contains(over) || entryNodes.get(core.wgFor)?.contains(over) || core.stackPop.contains(over)))) core.closeWidgetPop()
-    if (core.stackFor && !(over && (core.stackPop.contains(over) || entryNodes.get(core.stackFor)?.contains(over) || core.wgPop.contains(over) || core.wmenu.contains(over)))) core.closeStackPop()
-    if (core.menuFor?.where === 'bar' && !(over && core.wmenu.contains(over))) core.closeMenu()
-    if (core.imeOpen && !(over && (core.imePop.contains(over) || imeMark.contains(over)))) core.closeImeList()
+    if (st.popFor && !(over && (pop.contains(over) || windowsBox.contains(over)))) closePop()
+    if (st.trayOpen && !(over && trayBox.contains(over))) core.openTray(false)
+    if (st.wgFor && !(over && (core.wgPop.contains(over) || entryNodes.get(st.wgFor)?.contains(over) || core.stackPop.contains(over)))) core.closeWidgetPop()
+    if (st.stackFor && !(over && (core.stackPop.contains(over) || entryNodes.get(st.stackFor)?.contains(over) || core.wgPop.contains(over) || core.wmenu.contains(over)))) core.closeStackPop()
+    if (st.menuFor?.where === 'bar' && !(over && core.wmenu.contains(over))) core.closeMenu()
+    if (st.imeOpen && !(over && (core.imePop.contains(over) || imeMark.contains(over)))) core.closeImeList()
   })
 
   return { appOf, appOrder, closePop, drawWindows, fadeWins, glide, glideTo, isExplorer, openPop, orderedApps, pop, popReach, watchPresses }

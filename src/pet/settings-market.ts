@@ -15,7 +15,7 @@ import type { SettingsCore } from './settings.ts'
 
 export function marketPart(core: SettingsCore) {
   const {
-    st, pieces, AddonUI, COLOR, T, Widgets, body, draw, esc, freshRows, market, sec, seg, setHTML, sheet,
+    st, pieces, go, AddonUI, COLOR, T, Widgets, body, draw, esc, freshRows, market, sec, seg, setHTML, sheet,
     showPart, toastEl,
   } = core
   const { addonById, andList, canDoHTML, crumbHTML, packById } = pieces.addons
@@ -278,12 +278,12 @@ export function marketPart(core: SettingsCore) {
     const key = AddonUI.isPack(done) ? AddonUI.packKey(done) : done.id
     freshRows.add(key)
     if (!AddonUI.isPack(done)) AddonUI.news.add(done.id)
-    st.sub = null
+    go({ type: 'sub-off' })
     toast(AddonUI.installedWords(done, T))
     st.snap = await pet.settings.get()
     draw()
     core.relayout()
-    st.partToShow = `widgets:${key}`
+    go({ type: 'part', part: `widgets:${key}` })
     showPart()
   }
   // Taken away, once asked (卸载 on its page): its page goes back to the
@@ -301,7 +301,8 @@ export function marketPart(core: SettingsCore) {
       if (got.snapshot) st.snap = got.snapshot
       freshRows.delete(kind ? AddonUI.packKey({ kind, id }) : id)
       if (!kind) AddonUI.news.placed(id)
-      if ((st.sub?.page === 'addon' || st.sub?.page === 'pack') && st.sub.id === id) st.sub = null
+      // Its own page, if it shows, goes.
+      go({ type: 'gone', id })
     } else if (got?.error) toast(got.error)
     draw(true)
     core.relayout()

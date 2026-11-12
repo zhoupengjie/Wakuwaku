@@ -22,7 +22,7 @@ interface Failure {
 
 export function agentsPart(core: SettingsCore) {
   const {
-    st, pieces, Agents, COLOR, T, draw, esc, nameList, patch, row, sec, seg, sw,
+    st, pieces, go, Agents, COLOR, T, draw, esc, nameList, patch, row, sec, seg, sw,
   } = core
   const { netNow } = pieces.letter
 
@@ -52,7 +52,7 @@ export function agentsPart(core: SettingsCore) {
     if (action === 'install' && !got.ok) {
       failed[id] = { error: got.error || '', kind: got.kind || 'other', folder: got.folder || '' }
       if (id === 'claude') st.pluginOpen = true
-      if (st.tab === 'agents') st.agentOpen = id
+      go({ type: 'failed', id })
     }
     draw()
     core.relayout()
@@ -81,7 +81,7 @@ export function agentsPart(core: SettingsCore) {
     st.snap = got.snapshot
     if (!got.ok) {
       failed.dsh = { error: got.error || '', kind: got.kind || 'other', via }
-      if (st.tab === 'agents') st.agentOpen = 'dsh'
+      go({ type: 'failed', id: 'dsh' })
     }
     draw()
     core.relayout()

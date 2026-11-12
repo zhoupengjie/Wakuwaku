@@ -37,7 +37,10 @@ import { letterPart } from './settings-letter.ts'
 import { agentsPart } from './settings-agents.ts'
 import { welcomePart } from './settings-welcome.ts'
 import { settingsVars } from './settings-vars.ts'
+import * as State from './settings-state.ts'
+import { TABS, PART_OF } from './settings-state.ts'
 import type { SettingsVars } from './settings-vars.ts'
+import type { SettingsEvent } from './settings-state.ts'
 import type { IslandFace } from './island.ts'
 import type { PickerFace } from './picker.ts'
 
@@ -64,6 +67,7 @@ export interface SettingsParts {
 export interface SettingsCore {
   st: SettingsVars
   pieces: SettingsParts
+  go: (e: SettingsEvent) => void
   AGENTS: { [k: string]: string }
   AGENT_NAMES: { [k: string]: string }
   AddonUI: typeof AddonUI
@@ -123,18 +127,15 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // What the settings remember, all of it (settings-vars.ts): st.<name>
   // here and in every part.
   const st = settingsVars(AddonUI.IDLE)
+  // Where they are (st.isOpen, st.tab, st.sub...: settings-state.ts) moves
+  // on here alone, by what happened.
+  function go(e: SettingsEvent) {
+    Object.assign(st, State.next(State.stateOf(st), e))
+  }
   // The island's colours (on black), the same as island.ts.
   const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
-  // Five pages: General (the sessions, the alerts, startup and the
-  // language), Agent (connecting them, right after General), Look (her
-  // home, Windows, her and the pets), Plugins and Mail. The pets, the alerts
-  // and connecting were pages of their own: asked for by those names
-  // (island.rs asks for the pets, or connecting), the page they are part of
-  // opens, scrolled to them (PART_OF, showPart); connecting while the
-  // welcome shows is the welcome, at General's top.
-  const TABS = ['now', 'agents', 'look', 'widgets', 'mail']
+  // The five pages' names (TABS, PART_OF: settings-state.ts).
   const TAB_KEY = { now: 's.tabGeneral', agents: 's.tabAgents', look: 's.tabLook', widgets: 's.tabWidgets', mail: 's.tabMail' }
-  const PART_OF = { pets: 'look', place: 'look', paper: 'look', shortcuts: 'now', alerts: 'now', connect: 'agents', update: 'now', net: 'now', crash: 'now' }
   const HEAD_KEY = { working: 's.headWorking', waiting: 's.headWaiting', done: 's.headDone', review: 's.headReview', error: 's.headError' }
   const SIZES = [['small', 0.4], ['medium', 0.55], ['large', 0.75]]
   const HOMES = ['island', 'taskbar', 'split']
@@ -465,7 +466,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // constants and functions a part uses.
   const pieces = {} as SettingsParts
   const core: SettingsCore = {
-    st, pieces, AGENTS, AGENT_NAMES, AddonUI, Agents, COLOR, Island, MOST_FILES, SIZES, SPINS, T, Widgets,
+    st, pieces, go, AGENTS, AGENT_NAMES, AddonUI, Agents, COLOR, Island, MOST_FILES, SIZES, SPINS, T, Widgets,
     body, drafts, draw, esc, expanded, freshRows, inbox, keepDraft, layer, loadGallery, market, nameList,
     onTaskbar, openHardware, pageAlerts, pageNow, pagePets, part, patch, placeHTML, placeOf, pluginFields,
     pluginNote, redrawMail, relayout, render, row, sec, seg, setHTML, sheet, showPart, sw, thumb, toMarketRow,
@@ -776,9 +777,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // A part of a page asked for by its old page's name (st.partToShow), scrolled to once drawn.
   function showPart() {
     let name = st.partToShow
-    st.partToShow = ''
+    go({ type: 'part-shown' })
     if (!name) return
-    const go = () => {
+    const scroll = () => {
       const at = body.querySelector(`[data-part="${CSS.escape(name)}"]`)
       if (at) body.scrollTop += at.getBoundingClientRect().top - body.getBoundingClientRect().top
       return body.scrollTop
@@ -786,38 +787,26 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // There again as the page is drawn anew in a moment (the default pet put
     // in place, a snapshot coming), unless scrolled since: it was scrolled
     // once, before what came after moved it away (the test session, 2026-10-12).
-    let set = go()
+    let set = scroll()
     for (const ms of [250, 800, 1600]) {
       setTimeout(() => {
-        if (Math.abs(body.scrollTop - set) <= 1) set = go()
+        if (Math.abs(body.scrollTop - set) <= 1) set = scroll()
       }, ms)
     }
   }
 
   function open(next) {
-    // Asked for connecting: the welcome open, folded or not.
-    if (next === 'connect') st.welcomeOpen = true
-    // The market, by category (widgets:market[:widget|pet|wallpaper]: the
-    // picker's 获取更多…, the Look page's): on the Plugins page, in its place.
+    // At what was asked (settings-state.ts open): connecting (the welcome
+    // open, folded or not), the market by category (widgets:market[:widget|
+    // pet|wallpaper]: the picker's 获取更多…, the Look page's: on the
+    // Plugins page, in its place), a part of a page, a widget's row, a page.
     const toMarket = AddonUI.marketLink(next)
+    const wasOpen = st.isOpen
+    go({ type: 'open', to: next, market: !!toMarket, now: Date.now() })
     if (toMarket) {
-      st.tab = 'widgets'
-      st.sub = { page: 'market', back: null }
       market.cat = toMarket.cat
       market.query = ''
-    } else if (PART_OF[next]) {
-      st.tab = PART_OF[next]
-      st.partToShow = next
-    } else if (String(next).startsWith('widgets:')) {
-      // A widget's row on the plugins page (a press on it in the open island).
-      st.tab = 'widgets'
-      st.partToShow = next
-    } else if (TABS.includes(next)) {
-      st.tab = next
     }
-    const wasOpen = st.isOpen
-    st.isOpen = true
-    if (!wasOpen) st.openedAt = Date.now()
     if (!wasOpen) {
       pet.keyboard(true)
       clearInterval(st.clockTimer)
@@ -830,10 +819,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       st.snap = got
       // Connecting while the welcome card shows (nothing connected yet):
       // the card, at General's top; else the Agent page.
-      if (st.partToShow === 'connect' && cardShows()) {
-        st.tab = 'now'
-        st.partToShow = 'welcome'
-      }
+      if (st.partToShow === 'connect') go({ type: 'shown', cardShows: cardShows() })
       draw(true)
       showPart()
       if (st.tab === 'look') loadGallery(false)
@@ -851,15 +837,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   function close(why = 'asked') {
     if (!st.isOpen) return
     console.log('settings close:', why)
-    st.isOpen = false
     // The welcome opened again only for this time: "not now" said since
     // (the island's 不用提醒), the next open shows it folded (the test session).
-    st.welcomeOpen = false
     // The Agent page opens again with its rows closed; the Plugins page as
-    // itself, nothing asked over it, no row edged as new.
-    st.agentOpen = ''
-    st.othersOpen = false
-    st.sub = null
+    // itself (settings-state.ts close), nothing asked over it, no row edged as new.
+    go({ type: 'close' })
     st.gone = null
     st.mkAsk = null
     setRecording(null)
@@ -880,8 +862,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   function setTab(next) {
     if (next === st.tab || !TABS.includes(next)) return
-    st.tab = next
-    st.sub = null
+    go({ type: 'tab', to: next })
     draw(true)
     if (st.tab === 'look') loadGallery(false)
     relayout()
@@ -1183,11 +1164,10 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     if (mkItem) return openSub({ page: 'mkItem', id: mkItem.dataset.mkItem })
     if (at('[data-mk-retry]')) return loadMarket(true)
     if (at('[data-mk-net]')) {
-      st.tab = 'now'
-      st.sub = null
+      go({ type: 'page', tab: 'now' })
       draw(true)
       relayout()
-      st.partToShow = 'net'
+      go({ type: 'part', part: 'net' })
       return showPart()
     }
     const mkAll = at('[data-mk-all]')
@@ -1319,7 +1299,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const updateButton = at('[data-update]')
     if (updateButton && !updateButton.disabled) return pet.settings.update(updateButton.dataset.update).then(got => ((st.snap = got), draw()))
     // The Network proxy: shown (from an update not reached), tried.
-    if (at('[data-net-go]')) return ((st.partToShow = 'net'), showPart())
+    if (at('[data-net-go]')) return (go({ type: 'part', part: 'net' }), showPart())
     const netButton = at('[data-net-test]')
     if (netButton && !netButton.disabled) return runNetTest()
     if (at('[data-crash-show]')) return ((st.crashShown = !st.crashShown), draw())
@@ -1358,13 +1338,13 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const agentRowAt = at('[data-ag-open]')
     if (agentRowAt) {
       const id = agentRowAt.dataset.agOpen
-      st.agentOpen = st.agentOpen === id && !agentRowAt.hasAttribute('data-ag-keep') ? '' : id
+      go({ type: 'agent', id, keep: agentRowAt.hasAttribute('data-ag-keep') })
       draw()
       relayout()
       return requestAnimationFrame(() => body.querySelector(`.ag-row[data-ag-open="${id}"] + .ag-det`)?.scrollIntoView({ block: 'nearest' }))
     }
     if (at('[data-ag-others]')) {
-      st.othersOpen = !st.othersOpen
+      go({ type: 'others' })
       draw()
       return relayout()
     }
@@ -1383,12 +1363,12 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // The welcome folded ("not now", the island's hint put away too), or
     // opened again from its row.
     if (at('[data-welcome-later]')) {
-      st.welcomeOpen = false
+      go({ type: 'welcome', open: false })
       patch({ connectHintOff: true })
       return relayout()
     }
     if (at('[data-welcome-open]')) {
-      st.welcomeOpen = true
+      go({ type: 'welcome', open: true })
       draw()
       return relayout()
     }

@@ -13,7 +13,7 @@ import type { SettingsCore } from './settings.ts'
 
 export function pluginsPart(core: SettingsCore) {
   const {
-    st, pieces, AddonUI, COLOR, SPINS, T, Widgets, drafts, esc, market, openHardware, placeHTML, placeOf,
+    st, pieces, go, AddonUI, COLOR, SPINS, T, Widgets, drafts, esc, market, openHardware, placeHTML, placeOf,
     pluginFields, pluginNote, render, row, sec, seg, sw, widgetRows,
   } = core
   const { SUBS, addonRow, packsGroup } = pieces.addons
@@ -232,7 +232,7 @@ export function pluginsPart(core: SettingsCore) {
   function pageWidgets() {
     const own = st.sub && SUBS[st.sub.page]?.(st.sub)
     if (own) return own
-    st.sub = null
+    go({ type: 'sub-off' })
     const s = st.snap.settings
     const left = ms => (ms >= 60000 ? T('settings.minutes', { n: Math.round(ms / 60000) }) : T('settings.seconds', { n: Math.max(1, Math.round(ms / 1000)) }))
     const rows = widgetRows()

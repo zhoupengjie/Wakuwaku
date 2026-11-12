@@ -1,24 +1,17 @@
 // What the settings remember (settings.ts and its parts, settings-*.ts):
 // every value that changes as they are used, in one object made as the
 // settings are (settingsVars: st in settingsPage, handed to each part in
-// its core), read and written as st.<name> wherever it is used. Only types
+// its core), read and written as st.<name> wherever it is used; where
+// they are (SettingsState: st.isOpen, st.tab, st.sub...) read alone, moved
+// on by settings-state.ts's events (settingsPage go). Only types
 // and the values they start at: nothing here runs or touches the page. (The
 // objects whose insides change, the gallery, the market, the inbox and the
 // like, stay consts in settingsPage.)
 import type * as AddonUI from './addonui.ts'
+import { initial, type SettingsState } from './settings-state.ts'
 
-export interface SettingsVars {
-  // --- Open, and where ---------------------------------------------------------------
-  isOpen: boolean
-  // When they last opened: on a Mac the loss of focus that comes with taking
-  // the keyboard is not a click outside (opened from her menu, the menu going
-  // away gave a blur at once, and they shut as they opened, 2026-10-14). On
-  // Windows a blur closes them at once, as ever.
-  openedAt: number
-  // The page shown (TABS), and a part of it asked for by its old page's
-  // name, to scroll to once drawn (showPart).
-  tab: string
-  partToShow: string
+export interface SettingsVars extends SettingsState {
+  // --- Open --------------------------------------------------------------------------
   // What main last sent (settings.rs snapshot: the settings, the sessions,
   // the agents, the plugins...), and the language it is in.
   snap: any
@@ -36,15 +29,9 @@ export interface SettingsVars {
   // meanwhile, setRecording), and those Windows would not give her.
   recordingShortcut: string | null
   failedShortcuts: Set<string> | null
-  // The welcome open at General's top (settings-welcome.ts): asked for by
-  // connecting, or not said "not now" to; folded to one row otherwise.
-  welcomeOpen: boolean
-  // The Agent page: an agent being connected, the plugin's row open, the
-  // agent whose row is open, the others not found folded out.
+  // The Agent page: an agent being connected, the plugin's row open.
   connecting: string
   pluginOpen: boolean
-  agentOpen: string
-  othersOpen: boolean
 
   // --- Look --------------------------------------------------------------------------
   // The download box: what is typed, and how the last download went.
@@ -69,14 +56,11 @@ export interface SettingsVars {
   // --- Plugins -----------------------------------------------------------------------
   // The plugin whose settings are folded out.
   openPlugin: string
-  // Other people's plugins (addons.rs; addonui.ts the logic): a part of the
-  // Plugins page opened in its place (sub: { page, id, back }: a plugin's
-  // own page, a pack's ({ kind } too), the market, one of the market's),
-  // the confirm layer over the panel (installing from a file, by
-  // AddonUI.next's steps; taking one away: gone { id, busy }, a pack's with
-  // its kind), Windows' dialog open for a .zip (its focus does not close
-  // them).
-  sub: any
+  // Other people's plugins (addons.rs; addonui.ts the logic; the part of
+  // the Plugins page opened in its place is st.sub): the confirm layer over
+  // the panel (installing from a file, by AddonUI.next's steps; taking one
+  // away: gone { id, busy }, a pack's with its kind), Windows' dialog open
+  // for a .zip (its focus does not close them).
   flow: any
   gone: any
   pickingZip: boolean
@@ -126,10 +110,7 @@ export interface SettingsVars {
 
 export function settingsVars(idleFlow: typeof AddonUI.IDLE): SettingsVars {
   return {
-    isOpen: false,
-    openedAt: 0,
-    tab: 'now',
-    partToShow: '',
+    ...initial(),
     snap: null,
     lang: 'en',
     clockTimer: undefined,
@@ -138,11 +119,8 @@ export function settingsVars(idleFlow: typeof AddonUI.IDLE): SettingsVars {
     holdCustom: false,
     recordingShortcut: null,
     failedShortcuts: null,
-    welcomeOpen: false,
     connecting: '',
     pluginOpen: false,
-    agentOpen: '',
-    othersOpen: false,
 
     typedRef: '',
     fetching: null,
@@ -155,7 +133,6 @@ export function settingsVars(idleFlow: typeof AddonUI.IDLE): SettingsVars {
     lhmAsking: 0,
 
     openPlugin: '',
-    sub: null,
     flow: idleFlow,
     gone: null,
     pickingZip: false,

@@ -13,7 +13,7 @@ import type { SettingsCore } from './settings.ts'
 
 export function addonsPart(core: SettingsCore) {
   const {
-    st, pieces, AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part,
+    st, pieces, go, AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part,
     placeHTML, placeOf, sec, seg, showPart, sw,
   } = core
 
@@ -96,12 +96,12 @@ export function addonsPart(core: SettingsCore) {
     return `<div class="crumb"><button class="crumb-b" data-sub-back title="${esc(T('addons.back'))}" aria-label="${esc(T('addons.back'))}">&#xE76B;</button><span class="path ellip">${parts}</span></div>`
   }
   function openSub(next) {
-    st.sub = { ...next, back: st.sub }
+    go({ type: 'sub', sub: next })
     draw(true)
     core.relayout()
   }
   function backSub() {
-    st.sub = st.sub?.back || null
+    go({ type: 'back' })
     draw(true)
     core.relayout()
   }
@@ -138,9 +138,7 @@ export function addonsPart(core: SettingsCore) {
   // Its 在「外观」里选: the Look page, at its kind's part (her pets, the wallpaper).
   const toLookButton = kind => `<button class="pbtn sm" data-pack-look="${esc(kind)}">${esc(T('packs.toLook'))}</button>`
   function toLook(kind) {
-    st.tab = 'look'
-    st.sub = null
-    st.partToShow = AddonUI.lookPartOf(kind)
+    go({ type: 'page', tab: 'look', part: AddonUI.lookPartOf(kind) })
     draw(true)
     loadGallery(false)
     core.relayout()

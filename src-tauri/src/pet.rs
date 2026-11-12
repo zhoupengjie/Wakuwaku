@@ -282,6 +282,7 @@ pub fn create(sh: &Shared) -> tauri::Result<()> {
         (w.size, w.sf())
     };
 
+    crate::main_wait::check("building a window");
     let win = WebviewWindowBuilder::new(&sh.app, "pet", WebviewUrl::App("pet/index.html?role=pet".into()))
         .title("wakuwaku")
         .inner_size(size.0 as f64 / sf, size.1 as f64 / sf)
@@ -460,7 +461,7 @@ pub fn keep_on_screen(sh: &Shared) {
     #[cfg(windows)]
     {
         use std::sync::atomic::Ordering;
-        let minimized = win.hwnd().is_ok_and(|h| crate::frameless::minimized(h.0 as isize));
+        let minimized = crate::main_wait::hwnd(&win).is_some_and(crate::frameless::minimized);
         if MINIMIZED.swap(minimized, Ordering::SeqCst) != minimized {
             sh.log(if minimized { "pet: minimized by another program; left so till it is given back" } else { "pet: given back after it was minimized" });
         }
@@ -468,7 +469,7 @@ pub fn keep_on_screen(sh: &Shared) {
             return;
         }
     }
-    let (Ok(pos), Ok(size)) = (win.outer_position(), win.outer_size()) else { return };
+    let (Some(pos), Some(size)) = (crate::main_wait::outer_position(&win), crate::main_wait::outer_size(&win)) else { return };
     let screens = sh.screens();
     let scale = scale(sh);
     let fix = {
@@ -945,7 +946,7 @@ pub fn stop_walking(sh: &Shared) {
 
 // Where the window is, for checks.
 pub fn where_(sh: &Shared) -> Value {
-    let actual = window(sh).and_then(|win| win.outer_position().ok()).map(|p| json!([p.x, p.y]));
+    let actual = window(sh).and_then(|win| crate::main_wait::outer_position(&win)).map(|p| json!([p.x, p.y]));
     let w = sh.win.lock().unwrap();
     json!({
         "actual": actual,

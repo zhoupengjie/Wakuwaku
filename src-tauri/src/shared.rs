@@ -333,8 +333,7 @@ impl Shared {
     // would show it (her page, not ready for a good while yet).
     pub fn own_window(&self, _win: &WebviewWindow) {
         #[cfg(windows)]
-        if let Ok(hwnd) = _win.hwnd() {
-            let hwnd = hwnd.0 as isize;
+        if let Some(hwnd) = crate::main_wait::hwnd(&_win) {
             self.own.lock().unwrap().push(hwnd);
             let _ = _win.run_on_main_thread(move || frameless::keep(hwnd));
         }
@@ -857,7 +856,7 @@ impl Shared {
     // hers still has it (a click elsewhere already moved it on).
     pub fn set_keyboard(&self, window: &WebviewWindow, on: bool) {
         #[cfg(windows)]
-        let mine = window.hwnd().map(|h| h.0 as isize).unwrap_or(0);
+        let mine = crate::main_wait::hwnd(&window).unwrap_or(0);
         #[cfg(not(windows))]
         let mine = 0isize;
         if on {

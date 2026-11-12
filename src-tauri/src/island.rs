@@ -326,7 +326,7 @@ fn window(sh: &Shared) -> Option<WebviewWindow> {
 fn alive(win: &WebviewWindow) -> bool {
     #[cfg(windows)]
     {
-        crate::embed::is_window(win.hwnd().map(|h| h.0 as isize).unwrap_or(0))
+        crate::embed::is_window(crate::main_wait::hwnd(&win).unwrap_or(0))
     }
     #[cfg(not(windows))]
     {
@@ -1045,8 +1045,8 @@ fn lay_steps(now: Option<(i32, i32)>, (w, h): (i32, i32)) -> Vec<Step> {
 // rect, on any thread); None where it cannot be asked.
 fn current_size(_win: &WebviewWindow) -> Option<(i32, i32)> {
     #[cfg(windows)]
-    if let Ok(h) = _win.hwnd() {
-        return crate::frameless::rect(h.0 as isize).map(|r| (r.2, r.3));
+    if let Some(h) = crate::main_wait::hwnd(&_win) {
+        return crate::frameless::rect(h).map(|r| (r.2, r.3));
     }
     None
 }
@@ -1073,10 +1073,10 @@ fn lay_again(sh: &Shared, why: &str) {
     // moving it off a display unplugged, the list of displays not yet
     // without it), its place is still to come, and laid now it went back
     // on the display going away for a moment.
-    if win.scale_factor().is_ok_and(|sf| (sf - meant.sf).abs() > 0.01) {
+    if crate::main_wait::scale_factor(&win).is_some_and(|sf| (sf - meant.sf).abs() > 0.01) {
         return;
     }
-    let now = win.outer_size().map(|s| (s.width as i32, s.height as i32)).unwrap_or(size);
+    let now = crate::main_wait::outer_size(&win).map(|s| (s.width as i32, s.height as i32)).unwrap_or(size);
     if now != size {
         sh.log(&format!("island: sized by Windows to {}x{} ({why}); laid again at {pos:?} {size:?} on {:?} at {}", now.0, now.1, meant.mon, meant.sf));
         lay(&win, pos, size);
@@ -1116,6 +1116,7 @@ fn create(sh: &Arc<Shared>) {
     // for it, and building there waits on itself.
     let sh = sh.clone();
     std::thread::spawn(move || {
+        crate::main_wait::check("building a window");
         let built = WebviewWindowBuilder::new(&sh.app, "island", WebviewUrl::App("pet/index.html?role=island".into()))
             .title("wakuwaku island")
             .inner_size(size.0 as f64 / sf, size.1 as f64 / sf)
@@ -1163,9 +1164,9 @@ fn create(sh: &Arc<Shared>) {
                     }
                 });
                 #[cfg(windows)]
-                if let Ok(hwnd) = win.hwnd() {
-                    sh.island.lock().unwrap().hwnd = hwnd.0 as isize;
-                    crate::tasks::no_transitions(hwnd.0 as isize);
+                if let Some(hwnd) = crate::main_wait::hwnd(&win) {
+                    sh.island.lock().unwrap().hwnd = hwnd;
+                    crate::tasks::no_transitions(hwnd);
                 }
                 sh.own_window(&win);
                 // Its renderer gone: told, and the page loaded again (crash.rs).
@@ -1607,8 +1608,8 @@ static MINIMIZED: AtomicBool = AtomicBool::new(false);
 
 fn is_minimized(_win: &WebviewWindow) -> bool {
     #[cfg(windows)]
-    if let Ok(h) = _win.hwnd() {
-        return crate::frameless::minimized(h.0 as isize);
+    if let Some(h) = crate::main_wait::hwnd(&_win) {
+        return crate::frameless::minimized(h);
     }
     false
 }
@@ -1651,8 +1652,8 @@ pub fn keep_on_screen(sh: &Shared) {
         lay(&win, pos, size);
         // Any frame drawn on it meanwhile wiped (frameless.rs).
         #[cfg(windows)]
-        if let Ok(h) = win.hwnd() {
-            crate::frameless::wipe(h.0 as isize);
+        if let Some(h) = crate::main_wait::hwnd(&win) {
+            crate::frameless::wipe(h);
         }
     }
     lay_again(sh, "seen by the look");
@@ -1661,14 +1662,14 @@ pub fn keep_on_screen(sh: &Shared) {
     if sh.home() != "taskbar" {
         return;
     }
-    if let Ok(at) = win.outer_position() {
+    if let Some(at) = crate::main_wait::outer_position(&win) {
         if (at.x, at.y) != pos && sh.island.lock().unwrap().pos == pos {
             sh.log(&format!("island: moved by Windows to ({}, {}); put back at {pos:?}", at.x, at.y));
             lay(&win, pos, size);
             // Windows took it for a window of its own: any frame it drew on it wiped (frameless.rs).
             #[cfg(windows)]
-            if let Ok(h) = win.hwnd() {
-                crate::frameless::wipe(h.0 as isize);
+            if let Some(h) = crate::main_wait::hwnd(&win) {
+                crate::frameless::wipe(h);
             }
         }
     }
@@ -2213,7 +2214,7 @@ pub fn keep_on_top(sh: &Arc<Shared>) {
 }
 
 pub fn where_(sh: &Shared) -> Value {
-    let actual = window(sh).and_then(|win| win.outer_position().ok()).map(|p| json!([p.x, p.y]));
+    let actual = window(sh).and_then(|win| crate::main_wait::outer_position(&win)).map(|p| json!([p.x, p.y]));
     let isl = sh.island.lock().unwrap();
     json!({
         "actual": actual,

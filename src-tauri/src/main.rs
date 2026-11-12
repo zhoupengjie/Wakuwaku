@@ -89,6 +89,7 @@ mod jump;
 mod lhm;
 mod lhm_setup;
 mod lock;
+mod main_wait;
 mod logon;
 mod loops;
 mod mail;
@@ -418,6 +419,8 @@ fn main() {
         })
         .on_menu_event(|app, event| tray::on_menu(&shared(app), event.id().as_ref()))
         .setup(move |app| {
+            // The thread Tauri answers its getters on (main_wait.rs).
+            main_wait::here();
             // On macOS she is an accessory, as a menu-bar app is: no Dock icon,
             // and the menu bar is never hers, even while her settings are open.
             #[cfg(target_os = "macos")]

@@ -42,6 +42,8 @@ pub enum Over {
 // (home or out, her pet, her size), do not disturb, the settings, quit.
 // Over her island at the top of the screen: its widgets and the rest of hers.
 pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
+    // Each item made waits for the main thread (main_wait.rs).
+    crate::main_wait::check("building a menu");
     let app = &sh.app;
     let lang = sh.lang();
     let t = |key: &str| i18n::t(lang, key);
@@ -164,6 +166,8 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
 // the strip is; each opens what Windows' opens (taskbar/win/flyouts.rs open). None for
 // another part: hers.
 pub fn part_menu(sh: &Shared, part: &str) -> Option<tauri::Result<Menu<Wry>>> {
+    // Each item made waits for the main thread (main_wait.rs).
+    crate::main_wait::check("building a menu");
     let items: &[&str] = match part {
         "volume" => &["soundFix", "-", "mixer", "sound"],
         "network" => &["netFix", "-", "network"],

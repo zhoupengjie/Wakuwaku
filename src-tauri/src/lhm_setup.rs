@@ -753,7 +753,7 @@ fn owner(sh: &Shared) -> isize {
     #[cfg(windows)]
     {
         use tauri::Manager;
-        sh.app.get_webview_window("island").and_then(|w| w.hwnd().ok()).map(|h| h.0 as isize).unwrap_or(0)
+        sh.app.get_webview_window("island").and_then(|w| crate::main_wait::hwnd(&w)).unwrap_or(0)
     }
     #[cfg(not(windows))]
     {

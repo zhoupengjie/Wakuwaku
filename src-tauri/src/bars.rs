@@ -417,6 +417,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
         let thick = (island::TASKBAR_H * area.sf).round() as i32;
         // The dock: the band along the foot, its glass in its middle (dock_glass).
         let strip = if dock { dock_band(area.mon, area.sf) } else { edge.strip(area.mon, thick) };
+        crate::main_wait::check("building a window");
         let built = WebviewWindowBuilder::new(&sh.app, &label, WebviewUrl::App("pet/bar.html".into()))
             .title("wakuwaku bar")
             .inner_size(strip.2 as f64 / area.sf, strip.3 as f64 / area.sf)
@@ -440,7 +441,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
             Err(err) => return sh.log(&format!("bars: {label} not made: {err}")),
         };
         #[cfg(windows)]
-        let hwnd = win.hwnd().map(|h| h.0 as isize).unwrap_or(0);
+        let hwnd = crate::main_wait::hwnd(&win).unwrap_or(0);
         #[cfg(not(windows))]
         let hwnd = 0;
         crate::tasks::no_transitions(hwnd);
@@ -482,8 +483,8 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
             return;
         }
         let _ = win.show();
-        let laid = match (win.outer_position(), win.outer_size()) {
-            (Ok(p), Ok(s)) => format!("({}, {}, {}, {})", p.x, p.y, s.width, s.height),
+        let laid = match (crate::main_wait::outer_position(&win), crate::main_wait::outer_size(&win)) {
+            (Some(p), Some(s)) => format!("({}, {}, {}, {})", p.x, p.y, s.width, s.height),
             _ => "?".into(),
         };
         sh.log(&format!("bars: {label} on {:?} at {}%, strip {granted:?} along the {edge:?}, window {laid}", area.mon, (area.sf * 100.0).round()));
@@ -1073,6 +1074,7 @@ pub fn bar_pop_over(app: tauri::AppHandle, window: WebviewWindow, over: bool) {
 fn make_pop(sh: &Arc<Shared>) {
     let sh = sh.clone();
     std::thread::spawn(move || {
+        crate::main_wait::check("building a window");
         let built = WebviewWindowBuilder::new(&sh.app, POP, WebviewUrl::App("pet/barpop.html".into()))
             .title("wakuwaku bar list")
             .inner_size(420.0, 300.0)
@@ -1094,7 +1096,7 @@ fn make_pop(sh: &Arc<Shared>) {
         match built {
             Ok(win) => {
                 #[cfg(windows)]
-                crate::tasks::no_transitions(win.hwnd().map(|h| h.0 as isize).unwrap_or(0));
+                crate::tasks::no_transitions(crate::main_wait::hwnd(&win).unwrap_or(0));
                 sh.own_window(&win);
                 // Zoomed before its page lays out the first list (fit_zoom).
                 let want = 1.0 / island::text_size(&sh);

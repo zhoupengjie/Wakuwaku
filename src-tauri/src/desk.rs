@@ -406,6 +406,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area) {
     let sh = sh.clone();
     std::thread::spawn(move || {
         let rect = window_rect(area.mon);
+        crate::main_wait::check("building a window");
         let built = WebviewWindowBuilder::new(&sh.app, &label, WebviewUrl::App("pet/desk.html".into()))
             .title("wakuwaku desk")
             .inner_size(rect.2 as f64 / area.sf, rect.3 as f64 / area.sf)
@@ -427,7 +428,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area) {
             Err(err) => return sh.log(&format!("desk: {label} not made: {err}")),
         };
         #[cfg(windows)]
-        let hwnd = win.hwnd().map(|h| h.0 as isize).unwrap_or(0);
+        let hwnd = crate::main_wait::hwnd(&win).unwrap_or(0);
         #[cfg(not(windows))]
         let hwnd = 0;
         crate::tasks::no_transitions(hwnd);
@@ -805,8 +806,8 @@ pub fn desk_type(app: tauri::AppHandle, window: WebviewWindow, on: bool) {
     count(&COMMANDS);
     let sh = shared_of(&app);
     #[cfg(windows)]
-    if let Ok(h) = window.hwnd() {
-        imp::take_keys(h.0 as isize, on);
+    if let Some(h) = crate::main_wait::hwnd(&window) {
+        imp::take_keys(h, on);
     }
     if on {
         let _ = window.set_focus();
@@ -1240,7 +1241,7 @@ pub fn key_of(sh: &Shared, mon: Mon) -> String {
     if let Some((_, k)) = KEYS.lock().unwrap().iter().find(|(m, _)| *m == mon) {
         return k.clone();
     }
-    let name = sh.app.available_monitors().unwrap_or_default().into_iter().find(|m| (m.position().x, m.position().y, m.size().width as i32, m.size().height as i32) == mon).and_then(|m| m.name().cloned());
+    let name = crate::main_wait::monitors(&sh.app).into_iter().find(|m| (m.position().x, m.position().y, m.size().width as i32, m.size().height as i32) == mon).and_then(|m| m.name().cloned());
     let key = key_for(name.as_deref(), mon);
     let mut keys = KEYS.lock().unwrap();
     keys.retain(|(m, _)| *m != mon);

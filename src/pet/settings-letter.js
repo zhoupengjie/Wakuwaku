@@ -295,7 +295,10 @@ window.SettingsParts.letter = function (core) {
     const light = document.body.classList.contains('set-light')
     const fg = light ? '#1b1b1b' : '#f5f5f7'
     const link = light ? '#005fb8' : '#5e9eff'
-    const doc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src http: https: data: cid:; style-src 'unsafe-inline'; font-src data:"><style>
+    // no-referrer in the letter itself: the frame's referrerpolicy is for
+    // its own request alone, and its pictures would tell their servers her
+    // page's address.
+    const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src http: https: data: cid:; style-src 'unsafe-inline'; font-src data:"><style>
       html,body{width:100%;max-width:100%;margin:0;padding:0;overflow-x:hidden;background:transparent;color:${fg};color-scheme:${light ? 'light' : 'dark'};font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:13px;line-height:1.5}
       *,*::before,*::after{box-sizing:border-box;max-width:100%!important;min-width:0!important}
       img,video,svg,canvas,iframe{height:auto!important}

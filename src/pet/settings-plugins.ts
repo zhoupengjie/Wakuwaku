@@ -3,15 +3,17 @@
 // sensors: Windows' own, the CPU helper, or LibreHardwareMonitor).
 // Made by settings.ts in the section's place as the page starts
 // (pluginsPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// settings' again.
+// comes in core, its functions and constants as they are; what the settings
+// remember is core.st (settings-vars.ts), read and written as st.<name>;
+// what it hands back is the settings' again.
 import * as AddonUI from './addonui.ts'
 import * as Widgets from './widgets.ts'
+import type { SettingsVars } from './settings-vars.ts'
 
-// What this part takes of the settings' core: the names it reads (and,
-// of its lets, writes); settings.ts's call is checked against them.
+// What this part takes of the settings' core: the names it reads;
+// settings.ts's call is checked against them.
 export interface PluginsCore {
+  st: SettingsVars
   AddonUI: any
   COLOR: any
   SPINS: any
@@ -21,10 +23,8 @@ export interface PluginsCore {
   addonRow: any
   drafts: any
   esc: any
-  lang: any
   market: any
   openHardware: any
-  openPlugin: any
   packsGroup: any
   placeHTML: any
   placeOf: any
@@ -34,15 +34,13 @@ export interface PluginsCore {
   row: any
   sec: any
   seg: any
-  snap: any
-  sub: any
   sw: any
   widgetRows: any
 }
 
 export function pluginsPart(core: PluginsCore) {
   const {
-    AddonUI, COLOR, SPINS, SUBS, T, Widgets, addonRow, drafts, esc, market, openHardware, packsGroup,
+    st, AddonUI, COLOR, SPINS, SUBS, T, Widgets, addonRow, drafts, esc, market, openHardware, packsGroup,
     placeHTML, placeOf, pluginFields, pluginNote, render, row, sec, seg, sw, widgetRows,
   } = core
 
@@ -52,14 +50,14 @@ export function pluginsPart(core: PluginsCore) {
   // picks; none chosen, the one in effect, snap.monitorSource), and those
   // sensors.
   function monitorFields() {
-    const m = core.snap.settings.monitor || {}
-    const source = core.snap.monitorSource === 'lhm' ? 'lhm' : 'builtin'
+    const m = st.snap.settings.monitor || {}
+    const source = st.snap.monitorSource === 'lhm' ? 'lhm' : 'builtin'
     const every = m.every || 2
     const pace = `<div class="fr"><span class="fl">${esc(T('mon.every'))}</span><span class="grow"></span><button class="pbtn sm" data-every="-1" ${every <= 1 ? 'disabled' : ''}>−</button><span class="every">${esc(T('settings.seconds', { n: every }))}</span><button class="pbtn sm" data-every="1" ${every >= 10 ? 'disabled' : ''}>+</button></div>`
     const pin = `<div class="fr"><span class="fl">${esc(T('mon.pin'))}</span><span class="d grow">${esc(T('mon.pinNote'))}</span>${sw('mon:pin', m.pin !== false)}</div>`
     // The one in effect; none chosen yet, it says how that one was found
     // (hw.rs Source::in_effect), and picking one keeps it.
-    const auto = core.snap.settings.monitorSource == null ? `<div class="note lhm-note">${esc(T('mon.sourceAuto'))}</div>` : ''
+    const auto = st.snap.settings.monitorSource == null ? `<div class="note lhm-note">${esc(T('mon.sourceAuto'))}</div>` : ''
     const from = `<div class="fr lhm-head"><span class="fl">${esc(T('mon.source'))}</span><span class="grow"></span>${seg('monitorSource', [['builtin', T('mon.sourceBuiltin')], ['lhm', 'LibreHardwareMonitor']], source)}</div>${auto}`
     if (source === 'builtin') return `<div class="pf">${pin}${pace}${from}${builtinFields()}</div>`
     const parts = ['cpu', 'mem', 'net', 'battery'].map(k => `<div class="fr"><span class="fl">${esc(T(`mon.${k}`))}</span><span class="grow"></span>${sw('mon:' + k, m[k] !== false)}</div>`)
@@ -95,12 +93,12 @@ export function pluginsPart(core: PluginsCore) {
   // monitor's own switches, the rest picked; an NVMe drive's health in its
   // own line, for the settings alone.
   function builtinFields() {
-    const v = core.snap.hw
+    const v = st.snap.hw
     if (!v || !Array.isArray(v.hardware)) return `<div class="note lhm-note">${esc(T('hw.unread'))}</div>`
     const hardwareName = h => h.name || T(`hw.${h.class}`)
     const groups = v.hardware.map(h => {
       const health = h.health ? `<div class="fr lsen info"><span class="fl">${esc(T('hw.health'))}</span><span class="d">${esc(T('hw.healthReading', { used: h.health.used, spare: h.health.spare, hours: h.health.hours }))}</span></div>` : ''
-      const about = h.about && typeof h.about === 'object' ? render(core.lang, h.about) : h.about || ''
+      const about = h.about && typeof h.about === 'object' ? render(st.lang, h.about) : h.about || ''
       const list = (v.sensors || []).filter(s => s.hardwareId === h.id).map(s => ({ ...s, name: T(s.label) }))
       return { id: h.id, name: hardwareName(h), about, list, more: health }
     })
@@ -116,7 +114,7 @@ export function pluginsPart(core: PluginsCore) {
   // (the task is there but nothing comes — a VM may not expose the
   // registers). Turning it off removes the task and leaves PawnIO installed.
   function cpuSensorsRow() {
-    const cs = core.snap.cpuSensors || {}
+    const cs = st.snap.cpuSensors || {}
     const state = cs.state || 'off'
     const on = cs.on === true
     // needsUpdate: set up again to copy the newer helper. Off: set up (or,
@@ -149,7 +147,7 @@ export function pluginsPart(core: PluginsCore) {
   // port, and a user and password for its authentication.
   function sensorFields(m) {
     const head = `<div class="note lhm-note">${esc(T('mon.lhmNote'))}</div>`
-    const v = core.snap.lhm || {}
+    const v = st.snap.lhm || {}
     const port = m.lhmPort || 8085
     const status =
       v.status === 'found'
@@ -196,7 +194,7 @@ export function pluginsPart(core: PluginsCore) {
   // went wrong last above it. Nothing off Windows, nor till it was first
   // looked for (looking).
   function lhmSetup(port, note) {
-    const u = core.snap.lhmSetup
+    const u = st.snap.lhmSetup
     if (!u || !u.step || u.step === 'off' || u.step === 'looking') return note
     const line = (text, bad?) => `<div class="note lhm-note${bad ? ' bad' : ''}">${text}</div>`
     const button = (what, label, accent?) => `<div class="fr"><span class="fl"></span><span class="grow"></span><button class="pbtn sm${accent ? ' al' : ''}" data-lhm="${what}">${esc(label)}</button></div>`
@@ -258,10 +256,10 @@ export function pluginsPart(core: PluginsCore) {
   // one's own page, a pack's, the market or one of its own in place of all
   // this while it is open (sub).
   function pageWidgets() {
-    const own = core.sub && SUBS[core.sub.page]?.(core.sub)
+    const own = st.sub && SUBS[st.sub.page]?.(st.sub)
     if (own) return own
-    core.sub = null
-    const s = core.snap.settings
+    st.sub = null
+    const s = st.snap.settings
     const left = ms => (ms >= 60000 ? T('settings.minutes', { n: Math.round(ms / 60000) }) : T('settings.seconds', { n: Math.max(1, Math.round(ms / 1000)) }))
     const rows = widgetRows()
       .map(r => {
@@ -269,16 +267,16 @@ export function pluginsPart(core: PluginsCore) {
         if (r.plugin) {
           const p = r.plugin
           const place = placeOf({ plugin: p.id }, p.on)
-          const says = r.mine.map(w => Widgets.words(core.lang, w, s.details !== false)).map(({ label, value }) => [label, value].filter(Boolean).join(' ')).join(' · ')
+          const says = r.mine.map(w => Widgets.words(st.lang, w, s.details !== false)).map(({ label, value }) => [label, value].filter(Boolean).join(' ')).join(' · ')
           const note = pluginNote(p, r.mine, !!place.at)
           const color = (r.mine[0] && r.mine[0].color) || (p.on ? '#5e9bff' : COLOR.idle)
-          const isOpen = core.openPlugin === p.id
+          const isOpen = st.openPlugin === p.id
           const more = p.params.length ? `<button class="pbtn sm" data-pexp="${esc(p.id)}">${esc(T(isOpen ? 'pl.fold' : 'pl.settings'))}</button>` : ''
           return `<div class="r" data-part="widgets:${esc(r.key)}"><span class="wi" style="color:${esc(color)}">${Widgets.icon(p.icon)}</span><div class="grow"><div class="ellip">${esc(T(`w.ex.${p.id}`))}<span class="d"> ${esc(says)}</span></div><div class="d${note.bad ? ' bad' : ''}">${esc(note.text)}</div></div>${more}${placeHTML(place, `plugin:${p.id}`)}</div>${isOpen ? pluginFields(p) : ''}`
         }
         const w = r.widget
         const place = placeOf({ id: w.id }, w.on)
-        const { label, value } = Widgets.words(core.lang, w, s.details !== false)
+        const { label, value } = Widgets.words(st.lang, w, s.details !== false)
         // A built-in one says what it shows; on, with nothing read, says so.
         const builtIn = w.builtIn && [T('w.builtIn'), T(`w.about.${w.id}`), w.on && w.value == null ? T('w.unread') : ''].filter(Boolean).join(' · ')
         const from = builtIn || (w.from === 'mail' ? T('w.fromMail') : [T('w.script', { time: left(w.leftMs || 0) }), w.private ? T('w.private') : ''].filter(Boolean).join(' · '))
@@ -286,18 +284,18 @@ export function pluginsPart(core: PluginsCore) {
         // The monitor: its readings as icon and number, its settings folded under it.
         const says = Widgets.partsOf(w) ? ` ${Widgets.partsHTML(w)}` : `<span class="d"> ${esc(value)}</span>`
         const isMonitor = w.id === 'monitor'
-        const more = isMonitor ? `<button class="pbtn sm" data-pexp="monitor">${esc(T(core.openPlugin === 'monitor' ? 'pl.fold' : 'pl.settings'))}</button>` : ''
-        return `<div class="r" data-part="widgets:${esc(r.key)}"><span class="wi" style="color:${esc(w.color || COLOR.idle)}">${Widgets.iconHTML(w, core.lang)}</span><div class="grow"><div class="ellip">${esc(label)}${says}</div><div class="d">${esc(state)}</div></div>${more}${placeHTML(place, `widget:${w.id}`)}</div>${isMonitor && core.openPlugin === 'monitor' ? monitorFields() : ''}`
+        const more = isMonitor ? `<button class="pbtn sm" data-pexp="monitor">${esc(T(st.openPlugin === 'monitor' ? 'pl.fold' : 'pl.settings'))}</button>` : ''
+        return `<div class="r" data-part="widgets:${esc(r.key)}"><span class="wi" style="color:${esc(w.color || COLOR.idle)}">${Widgets.iconHTML(w, st.lang)}</span><div class="grow"><div class="ellip">${esc(label)}${says}</div><div class="d">${esc(state)}</div></div>${more}${placeHTML(place, `widget:${w.id}`)}</div>${isMonitor && st.openPlugin === 'monitor' ? monitorFields() : ''}`
       })
       .join('')
     const spins = SPINS.map(n => [n, n ? T('settings.seconds', { n }) : T('w.spinOff')])
-    const example = `Invoke-RestMethod -Method Post http://127.0.0.1:${core.snap.port}/widget -ContentType application/json -Body '{"id":"hello","label":"Hello","value":"42","icon":"star"}'`
-    const broken = (core.snap.addonsBroken || []).map(b => `<div class="note ad-broken ellip" title="${esc(b.reason || '')}">${esc(AddonUI.brokenLine(b, T))}</div>`).join('')
+    const example = `Invoke-RestMethod -Method Post http://127.0.0.1:${st.snap.port}/widget -ContentType application/json -Body '{"id":"hello","label":"Hello","value":"42","icon":"star"}'`
+    const broken = (st.snap.addonsBroken || []).map(b => `<div class="note ad-broken ellip" title="${esc(b.reason || '')}">${esc(AddonUI.brokenLine(b, T))}</div>`).join('')
     const fromFile = `<div class="r jumps" data-addon-file role="button" tabindex="0"><div class="grow"><div>${esc(T('addons.fromFile'))}</div><div class="d">${esc(T('addons.fromFileNote'))}</div></div><span class="chev">&#xE76C;</span></div>`
     // At its top (spec §1, §3): 获取更多 ›, to the market; under it, when
     // updates wait for the person, 「N 个插件有更新 · 全部更新」.
     const more = `<div class="grp"><div class="r jumps mk-entry" data-mk-open role="button" tabindex="0"><span class="mk-big">&#xE719;</span><div class="grow"><div class="t">${esc(T('mk.title'))}</div><div class="d">${esc(T('mk.entryNote'))}</div></div><span class="chev">&#xE76C;</span></div></div>`
-    const ups = AddonUI.updatesBanner(core.snap.marketUpdates, T)
+    const ups = AddonUI.updatesBanner(st.snap.marketUpdates, T)
     const banner = ups ? `<div class="mk-banner"><span class="grow">${esc(ups.text)}</span><button class="pbtn sm al" data-mk-all${market.updating ? ' disabled' : ''}>${esc(market.updating ? T('mk.updatingAll') : ups.button)}</button></div>` : ''
     return `${more}${banner}${sec(T('w.section'))}<div class="grp"><div class="note">${esc(T('w.note'))}</div>${rows}${broken}</div>
       ${packsGroup()}

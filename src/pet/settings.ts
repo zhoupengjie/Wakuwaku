@@ -36,6 +36,7 @@ import { mailPart } from './settings-mail.ts'
 import { letterPart } from './settings-letter.ts'
 import { agentsPart } from './settings-agents.ts'
 import { welcomePart } from './settings-welcome.ts'
+import { settingsVars } from './settings-vars.ts'
 import type { IslandFace } from './island.ts'
 import type { PickerFace } from './picker.ts'
 
@@ -45,6 +46,9 @@ export type SettingsFace = ReturnType<typeof settingsPage>
 // island and the picker (none unless the island is on); what the others see
 // of them.
 export function settingsPage(Island: IslandFace | null, Picker: PickerFace | null) {
+  // What the settings remember, all of it (settings-vars.ts): st.<name>
+  // here and in every part.
+  const st = settingsVars(AddonUI.IDLE)
   // The island's colours (on black), the same as island.ts.
   const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
   // Five pages: General (the sessions, the alerts, startup and the
@@ -79,138 +83,72 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   const layer = document.getElementById('island-settings')
-  let isOpen = false
-  // When they last opened: on a Mac the loss of focus that comes with taking
-  // the keyboard is not a click outside (opened from her menu, the menu going
-  // away gave a blur at once, and they shut as they opened, 2026-10-14). On
-  // Windows a blur closes them at once, as ever.
-  let openedAt = 0
+  // On a Mac, a blur this soon after they opened (st.openedAt) is the
+  // keyboard taken, not a click outside.
   const BLUR_GRACE_MS = 500
-  let tab = 'now'
-  let snap = null
-  let lang = 'en'
-  // The crash report shown, as it would be sent (pageCrash).
-  let crashShown = false
-  // The download box: what is typed, and how the last download went.
-  let typedRef = ''
-  let fetching = null
-  let fetchNote = { text: '', isError: false }
   // The gallery, loaded the first time the pets page is shown; or what a
   // search finds there, the words typed in the download box (a link there
   // is downloaded, any other words are looked for as the site's own search
   // box looks: a name, part of one, a word of its description). Each ask
   // numbered: a slower answer to an earlier search never lands over a later.
   const gallery = { sort: 'popular', query: '', items: [], page: 0, totalPages: 1, total: 0, loading: false, error: '', getting: '', asked: 0 }
-  let searchTimer
   const isLink = text => /:\/\/|codex-pets\.net/i.test(text)
-  let thumbTimers = []
-  let clockTimer
-  // The plugins page: the plugin whose settings are folded out, and what is
-  // typed in them and not yet kept ("weather.City": "上海").
-  let openPlugin = ''
+  // The plugins page: what is typed in a plugin's settings folded out
+  // (st.openPlugin) and not yet kept ("weather.City": "上海").
   const drafts = {}
-  // Other people's plugins (addons.rs; addonui.ts the logic): a part of the
-  // Plugins page opened in its place (sub: { page, id, back }: a plugin's
-  // own page, a pack's ({ kind } too), the market, one of the market's),
-  // the confirm layer over the panel (installing from a file, by
-  // AddonUI.next's steps; taking one away: gone { id, busy }, a pack's with
-  // its kind), Windows' dialog open for a .zip (its focus does not close
-  // them), and those installed while they are open (their rows edged in
-  // the accent until they close; a pack's by AddonUI.packKey).
-  let sub = null
-  let flow = AddonUI.IDLE
-  let gone = null
-  // A plugin whose newly-asked permissions are being allowed (finding 1).
-  let approveFor = null
-  let pickingZip = false
+  // Other people's plugins installed while the settings are open (their
+  // rows edged in the accent until they close; a pack's by AddonUI.packKey).
   const freshRows = new Set()
   // The plugin market (market.rs; addonui.ts its words and steps), a part
   // of the Plugins page (sub market, an item's page mkItem): its index as
   // last read (items null until one was), when, what went wrong reading it,
   // being read; the category and the words looked for; each download's last
-  // word (market:progress) by id; 全部更新 under way. Asked over the panel
-  // (mkAsk): installing one that asks for more than the web ({ kind:
-  // 'install', id }), or 全部更新 when one asks for more ({ kind: 'updates' }).
+  // word (market:progress) by id; 全部更新 under way. (What is asked over
+  // the panel is st.mkAsk.)
   const market = { items: null, at: 0, error: null, loading: false, cat: 'all', query: '', jobs: {}, updating: false }
-  let mkAsk = null
-  let recordingShortcut = null
   // Recording one: her global shortcuts let go meanwhile, so the keys
   // pressed reach this page (shortcuts.rs pause).
   const setRecording = key => {
-    if (key === recordingShortcut) return
-    recordingShortcut = key
+    if (key === st.recordingShortcut) return
+    st.recordingShortcut = key
     pet.shortcutsPause?.(key !== null)
   }
-  let failedShortcuts = null
   pet.onShortcutStatus && pet.onShortcutStatus(({ failed }: { failed?: string[] } = {}) => {
-    failedShortcuts = new Set(failed || [])
-    if (snap) snap.shortcutsFailed = failed || []
+    st.failedShortcuts = new Set(failed || [])
+    if (st.snap) st.snap.shortcutsFailed = failed || []
     draw()
   })
-  // Custom picked for how long endings stay, its box shown before anything
-  // is typed in it (until the settings close or another choice is picked).
-  let holdCustom = false
   // The monitor's hardware (LibreHardwareMonitor's) folded out, by its id.
   const openHardware = new Set()
-  // The mail account being set up or changed, as Thunderbird's dialog has
-  // it: the address and password; then (step found) the server looked up,
-  // or (step manual) the server's fields; busy while looking or signing in;
-  // what came of the last try. Null while none is.
-  let mailForm = null
-  // An account's delete asked once: asked again, it goes.
-  let mailDelete = ''
-  // A proxy address as typed and not yet kept (key: mailProxy, netProxy): being typed,
-  // or (bad) not read as address:port.
-  let proxyTyped = null
   // The Mail page's inbox: whose (an account id), its newest letters and how
-  // many there are, how many asked for, busy, what went wrong. The letter
-  // open ({ uid, busy | letter, summary | error }), null while the list
-  // shows. What came of handing one to an agent, for a few seconds.
+  // many there are, how many asked for, busy, what went wrong (the letter
+  // open is st.reading).
   // threads: its conversations as kept (threads.rs), each with its letters;
   // total: how many there are; letters: how many letters the inbox holds;
   // rev: the store's revision they are of (a newer one, asked again);
   // syncing: a first sync still under way. The conversations folded out.
   const inbox = { id: '', for: '', filter: 'all', threads: [], total: 0, letters: 0, count: 50, busy: false, error: null, errors: [], rev: 0, syncing: false }
   const expanded = new Set()
-  // A letter to open once the Mail page shows (a click on the island's word that an agent answered).
-  let letterToOpen = null
-  let reading = null
-  let handNote = null
-  let handNoteTimer
   // The agents that read mail (agents.ts mail): their short names, and
   // their names on the Mail page's settings.
   const AGENTS = Object.fromEntries(Agents.TABLE.filter(a => a.mail).map(a => [a.id, a.mail]))
   const AGENT_NAMES = Object.fromEntries(Agents.TABLE.filter(a => a.mail).map(a => [a.id, a.name]))
-  // The letter being written, one at a time: from which account, to whom,
-  // the subject and text, the letter it answers or passes on, files added;
-  // touched once typed in; sending, what went wrong. Kept until sent or
-  // thrown away, across a restart too (in the data folder, mail.rs
-  // mail_draft: each copy of the pet its own, which the page's storage is
-  // not; its files left out). writing: it shows; else the inbox does, with
-  // a line to go back to it. A discard asked once: asked again, it goes.
-  let draft = null
-  let writing = false
-  let dropSure = false
-  let draftTimer
-  // The file picker is open for a letter's files: the focus it takes does
-  // not close the settings (the desktop's picture has its own, pickingPaper).
-  let picking = false
   // The most a letter takes with it (as send.rs has it).
   const MOST_FILES = 25 << 20
 
   // The letter left being written, as kept (none begun meanwhile).
   pet.mail.draft().then(d => {
-    if (draft || !d || typeof d !== 'object' || !d.account) return
-    draft = { ...d, files: [], busy: false, error: null, note: null }
-    if (isOpen) draw()
+    if (st.draft || !d || typeof d !== 'object' || !d.account) return
+    st.draft = { ...d, files: [], busy: false, error: null, note: null }
+    if (st.isOpen) draw()
   })
 
   function keepDraft() {
-    clearTimeout(draftTimer)
-    draftTimer = setTimeout(() => pet.mail.keepDraft(draft ? { ...draft, files: [], busy: false, error: null, note: null } : null), 300)
+    clearTimeout(st.draftTimer)
+    st.draftTimer = setTimeout(() => pet.mail.keepDraft(st.draft ? { ...st.draft, files: [], busy: false, error: null, note: null } : null), 300)
   }
 
-  const T = (key, vars?) => t(lang, key, vars)
+  const T = (key, vars?) => t(st.lang, key, vars)
   const esc = value =>
     String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
   const svg = name => `<svg class="ic" viewBox="0 0 24 24">${ICON[name]}</svg>`
@@ -319,8 +257,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   function startThumbs() {
-    for (const timer of thumbTimers) clearTimeout(timer)
-    thumbTimers = []
+    for (const timer of st.thumbTimers) clearTimeout(timer)
+    st.thumbTimers = []
     for (const el of layer.querySelectorAll('.thumb')) {
       const { row: r, frames, ms } = CLIPS[el.dataset.clip] || CLIPS.idle
       const sheet = el.querySelector('.sheet')
@@ -329,7 +267,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         sheet.style.backgroundPosition = `${-frame * 192}px ${-r * 208}px`
         frame = (frame + 1) % frames
         const timer = setTimeout(step, ms)
-        thumbTimers.push(timer)
+        st.thumbTimers.push(timer)
       }
       step()
     }
@@ -347,7 +285,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
     if (det.steps.length) {
       const list = det.steps
-        .map(st => `<div class="s-step${st.ok ? '' : ' err'}"><span class="fi s-st-ic">${st.ok ? '\uE73E' : '\uE711'}</span><span class="ellip">${esc(st.text)}</span></div>`)
+        .map(step => `<div class="s-step${step.ok ? '' : ' err'}"><span class="fi s-st-ic">${step.ok ? '\uE73E' : '\uE711'}</span><span class="ellip">${esc(step.text)}</span></div>`)
         .join('')
       rows.push(kv('s.recentSteps', `<div class="s-steps">${list}</div>`))
     }
@@ -355,8 +293,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   function pageNow() {
-    const s = snap.settings
-    const sessions = snap.sessions || []
+    const s = st.snap.settings
+    const sessions = st.snap.sessions || []
     const alive = new Set(sessions.map(x => x.id))
     for (const id of sessionOpen) if (!alive.has(id)) sessionOpen.delete(id)
     // Each session: its name, and where it is (or how its turn ended).
@@ -367,11 +305,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
             const name = Status.nameOf(x, detailed)
             const what = [
               (x.agent && Agents.byId(x.agent)?.name) || '',
-              Status.status(lang, x, { detailed, withClock: false }),
+              Status.status(st.lang, x, { detailed, withClock: false }),
               detailed && x.name && x.project !== name ? x.project : '',
               detailed && Status.isEnding(x) ? x.reply : '',
             ].filter(Boolean)
-            const det = Status.detailsOf(lang, x, { detailed })
+            const det = Status.detailsOf(st.lang, x, { detailed })
             const open = !!det && sessionOpen.has(x.id)
             const exp = detailed
               ? det
@@ -387,7 +325,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       : `<div class="note">${esc(T('home.noSessions', { list: toolNames(toolsHere()) }))}</div>`
     // Her out on the desktop; and her home, the next one at a press.
     const tiles = [
-      ['show', 'eye', T('s.outTile'), !snap.hidden && s.out === true],
+      ['show', 'eye', T('s.outTile'), !st.snap.hidden && s.out === true],
       ['dnd', 'moon', T('menu.dnd'), s.dnd],
       ['sound', 'sound', T('settings.sound'), s.sound],
       ['home', 'pill', T(HOME_KEY[s.display] || 's.displayIsland'), true],
@@ -408,21 +346,21 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // 使用; then 获取更多宠物… (the market on its pets); the gallery of
   // codex-pets.net and its download box as ever.
   function pagePets() {
-    const current = snap.settings.pet
+    const current = st.snap.settings.pet
     // 删除 on those in her own folder (downloaded, or the market's), asked
     // first (petDeleteLayerOf); never Codex's, nor the only one (the user,
     // 2026-11-08: 宠物增加删除按钮).
-    const canDelete = p => p.mine && snap.pets.length > 1
-    const installed = snap.pets.length
-      ? snap.pets
+    const canDelete = p => p.mine && st.snap.pets.length > 1
+    const installed = st.snap.pets.length
+      ? st.snap.pets
           .map(
             p => `<div class="r petrow">${thumb(52, p.url, p.version)}<div class="grow"><div>${esc(p.name)}</div><div class="d">${esc(AddonUI.petNote(p, T))}</div></div>
             ${p.id === current ? `<span class="d in-use">${esc(T('home.inUse'))}</span>` : `<button class="pbtn" data-use="${esc(p.id)}">${esc(T('home.use'))}</button>`}${canDelete(p) ? `<button class="pbtn no" data-pet-delete="${esc(p.id)}">${esc(T('pets.delete'))}</button>` : ''}</div>`,
           )
           .join('')
       : `<div class="note">${esc(T('settings.petsEmpty'))}</div>`
-    const note = fetchNote.text ? `<div class="note${fetchNote.isError ? ' err' : ''}">${esc(fetchNote.text)}</div>` : `<div class="note">${esc(T('settings.fetchNote'))}</div>`
-    const have = new Set(snap.pets.map(p => p.id))
+    const note = st.fetchNote.text ? `<div class="note${st.fetchNote.isError ? ' err' : ''}">${esc(st.fetchNote.text)}</div>` : `<div class="note">${esc(T('settings.fetchNote'))}</div>`
+    const have = new Set(st.snap.pets.map(p => p.id))
     const cards = gallery.items
       .map(
         g => `<div class="card"><div class="pv">${g.preview ? `<img src="${esc(g.preview)}" alt="" loading="lazy">` : ''}</div>
@@ -433,12 +371,12 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const more =
       gallery.loading ? `<div class="note">${esc(T('home.getting'))}</div>` : gallery.page < gallery.totalPages ? `<button class="pbtn wide" data-more>${esc(T('home.more'))}</button>` : ''
     // The button downloads a link, and looks for other words.
-    const fetchLabel = fetching ? T('settings.fetching') : T(isLink(typedRef.trim()) ? 'settings.fetch' : 's.search')
+    const fetchLabel = st.fetching ? T('settings.fetching') : T(isLink(st.typedRef.trim()) ? 'settings.fetch' : 's.search')
     const q = gallery.query
     const listTitle = !q ? T('home.gallery') : gallery.loading && !gallery.items.length ? T('s.searching', { q }) : T('s.found', { q, n: gallery.total })
     const none = q && !gallery.loading && !gallery.error && !gallery.items.length ? `<div class="note">${esc(T('s.foundNone', { q }))}</div>` : ''
     return `${sec(T('home.installed'))}<div class="grp">${installed}${toMarketRow('pet', 'packs.morePets', 'packs.morePetsNote')}</div>
-      ${sec(T('s.download'))}<div class="grp"><div class="r"><input class="in" id="s-ref" spellcheck="false" placeholder="${esc(T('s.fetchPlaceholder'))}"><button class="pbtn al" data-fetch ${fetching ? 'disabled' : ''}>${esc(fetchLabel)}</button></div>${note}</div>
+      ${sec(T('s.download'))}<div class="grp"><div class="r"><input class="in" id="s-ref" spellcheck="false" placeholder="${esc(T('s.fetchPlaceholder'))}"><button class="pbtn al" data-fetch ${st.fetching ? 'disabled' : ''}>${esc(fetchLabel)}</button></div>${note}</div>
       <div class="sec row-sec"><span class="ellip">${esc(listTitle)}</span><span class="grow"></span>${seg('gallery', [['popular', T('home.popular')], ['newest', T('home.newest')]], gallery.sort)}</div>
       ${gallery.error ? `<div class="note err">${esc(T('home.galleryError', { message: gallery.error }))}</div>` : ''}${none}
       <div class="cards">${cards}</div>${more}
@@ -446,34 +384,19 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   // --- Her island's look (island-look.ts drawIslandLook) ---------------------------------
-  let ilookOpen = false
-  // The mode being set: '' follows Windows' own.
-  let ilookMode = ''
-  // Windows' dialog open for the desktop's picture: its own mark, held until
-  // the dialog answers (picking, a letter's files', is let go a second after
-  // the island has the focus again, which a press on it mid-dialog gives).
-  let pickingPaper = false
-  // Windows' question for LibreHardwareMonitor (run as administrator) takes
-  // the focus too: from the press, and while its job is at that stage.
-  let lhmAsking = 0
   // In settings-look.ts:
   const {
     ACCENT_PICKER, ilookDefault, ilookFor, ilookInput, ilookOf, ilookPresets, ilookSave, lhmAsks, pageLook,
     paperDo, winMode,
   } = lookPart({
-    AddonUI, COLOR, Island, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
+    st, AddonUI, COLOR, Island, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
     get displaysRow() { return displaysRow },
-    get ilookMode() { return ilookMode },
-    get ilookOpen() { return ilookOpen },
-    get lhmAsking() { return lhmAsking },
     get packTile() { return packTile },
     get screenRow() { return screenRow },
-    get pickingPaper() { return pickingPaper }, set pickingPaper(v) { pickingPaper = v },
-    get snap() { return snap }, set snap(v) { snap = v },
   })
 
   function pageAlerts() {
-    const s = snap.settings
+    const s = st.snap.settings
     // When she has something to tell that needs no answer (a turn's end, a
     // hello, a plugin's nudge): the island open, a ring round it (the flow
     // light, the default), or the dot alone (island-ring.ts cue); its three
@@ -494,7 +417,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const holdOff = cue === 'none'
     const holds = HOLDS.map(h => [h, h === 'seen' ? T('s.holdSeen') : h >= 60 ? T('settings.minutes', { n: h / 60 }) : T('settings.seconds', { n: h })])
     holds.push(['custom', T('s.holdCustom')])
-    const holdOn = Flow.holdChoice(s.hold, holdCustom)
+    const holdOn = Flow.holdChoice(s.hold, st.holdCustom)
     const range = esc(T('s.holdRange', { min: Flow.HOLD_MIN, max: Flow.HOLD_MAX }))
     const typed = 'hold:secs' in drafts ? drafts['hold:secs'] : Number.isInteger(s.hold) ? String(s.hold) : ''
     const secs =
@@ -516,7 +439,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       ${sec(T('settings.prompts'))}<div class="grp">${row(esc(T('settings.promptWait')), esc(T('settings.promptWaitNote')), seg('promptWaitSec', waits, s.promptWaitSec))}</div>
       ${sec(T('s.quiet'))}<div class="grp">
         ${row(esc(T('menu.dnd')), esc(T('s.dndNote')), sw('dnd', s.dnd))}
-        ${row(esc(T('settings.hideInFullscreen')), '', sw('hideInFullscreen', s.hideInFullscreen, snap.fullscreenAvailable ? '' : 'disabled'))}
+        ${row(esc(T('settings.hideInFullscreen')), '', sw('hideInFullscreen', s.hideInFullscreen, st.snap.fullscreenAvailable ? '' : 'disabled'))}
       </div>`
   }
 
@@ -526,13 +449,13 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // own, packsGroup), and the widgets of anyone else's scripts.
   function widgetRows() {
     const rank = key => {
-      const i = (snap.settings.widgetOrder || []).indexOf(key)
+      const i = (st.snap.settings.widgetOrder || []).indexOf(key)
       return i < 0 ? Infinity : i
     }
-    const widgets = snap.widgets || []
+    const widgets = st.snap.widgets || []
     const rows = [
       ...widgets.filter(w => w.builtIn).map(w => ({ key: w.id, widget: w })),
-      ...(snap.plugins || []).map(p => ({ key: p.id, plugin: p, mine: widgets.filter(w => w.plugin === p.id) })),
+      ...(st.snap.plugins || []).map(p => ({ key: p.id, plugin: p, mine: widgets.filter(w => w.plugin === p.id) })),
       ...addonsNow().map(a => ({ key: a.id, addon: a, mine: widgets.filter(w => w.plugin === a.id) })),
       ...widgets.filter(w => !w.builtIn && !w.plugin).map(w => ({ key: w.id, widget: w })),
     ]
@@ -586,18 +509,12 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     SUBS, addonById, addonField, addonRow, addonsNow, andList, backSub, canDoHTML, crumbHTML, openSub,
     packById, packTile, packsGroup, toLook,
   } = addonsPart({
-    AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part, placeHTML, placeOf,
+    st, AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part, placeHTML, placeOf,
     sec, seg, showPart, sw,
-    get lang() { return lang },
     get marketItem() { return marketItem },
     get marketItemPage() { return marketItemPage },
     get marketPage() { return marketPage },
-    get openPlugin() { return openPlugin },
     get relayout() { return relayout },
-    get snap() { return snap },
-    get partToShow() { return partToShow }, set partToShow(v) { partToShow = v },
-    get sub() { return sub }, set sub(v) { sub = v },
-    get tab() { return tab }, set tab(v) { tab = v },
   })
 
   // --- The market (market.rs; addonui.ts) ------------------------------------------------
@@ -606,32 +523,17 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     approveGo, drawSheet, fillCards, flowStep, installFromFile, installGo, loadMarket, marketInstall,
     marketItem, marketItemPage, marketPage, toast, uninstallGo, updateAll,
   } = marketPart({
-    AddonUI, COLOR, T, Widgets, addonById, andList, body, canDoHTML, crumbHTML, draw, esc, freshRows, market,
+    st, AddonUI, COLOR, T, Widgets, addonById, andList, body, canDoHTML, crumbHTML, draw, esc, freshRows, market,
     packById, sec, seg, setHTML, sheet, showPart, toastEl,
-    get isOpen() { return isOpen },
-    get lang() { return lang },
     get netNow() { return netNow },
     get relayout() { return relayout },
-    get tab() { return tab },
-    get approveFor() { return approveFor }, set approveFor(v) { approveFor = v },
-    get flow() { return flow }, set flow(v) { flow = v },
-    get gone() { return gone }, set gone(v) { gone = v },
-    get mkAsk() { return mkAsk }, set mkAsk(v) { mkAsk = v },
-    get partToShow() { return partToShow }, set partToShow(v) { partToShow = v },
-    get pickingZip() { return pickingZip }, set pickingZip(v) { pickingZip = v },
-    get snap() { return snap }, set snap(v) { snap = v },
-    get sub() { return sub }, set sub(v) { sub = v },
   })
 
   // --- The Plugins page, and the monitor's sensors -------------------------------------
   // In settings-plugins.ts:
   const { pageWidgets, picksKey } = pluginsPart({
-    AddonUI, COLOR, SPINS, SUBS, T, Widgets, addonRow, drafts, esc, market, openHardware, packsGroup,
+    st, AddonUI, COLOR, SPINS, SUBS, T, Widgets, addonRow, drafts, esc, market, openHardware, packsGroup,
     placeHTML, placeOf, pluginFields, pluginNote, render, row, sec, seg, sw, widgetRows,
-    get lang() { return lang },
-    get openPlugin() { return openPlugin },
-    get snap() { return snap },
-    get sub() { return sub }, set sub(v) { sub = v },
   })
 
   // --- Mail accounts and the inbox -----------------------------------------------------
@@ -642,47 +544,23 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     labelOf, listed, loginWhy, mailDate, mailError, mailFix, mailFormHTML, mailList, mailNote, mailSaid,
     mailSize, outFields, people, providerOf, proxyFields, setConf, talkHTML, talkOf, twoPanes, where,
   } = mailPart({
-    AGENTS, AGENT_NAMES, Agents, T, esc, expanded, inbox, patch, row, sec, seg,
-    get draft() { return draft },
-    get handNote() { return handNote },
-    get lang() { return lang },
-    get mailDelete() { return mailDelete },
-    get mailForm() { return mailForm },
+    st, AGENTS, AGENT_NAMES, Agents, T, esc, expanded, inbox, patch, row, sec, seg,
     get proxySetting() { return proxySetting },
-    get reading() { return reading },
-    get snap() { return snap },
-    get tab() { return tab },
     get waySetting() { return waySetting },
-    get writing() { return writing },
   })
 
   // --- Writing a letter ----------------------------------------------------------------------
-  // The same menu as a picker: a model or an effort, the one set ticked.
-  let menuPick = null
   // In settings-letter.ts:
   const {
     addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu,
     openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setProxy,
     star, step, waySetting, write, writeAbout,
   } = letterPart({
-    AGENTS, COLOR, MOST_FILES, PROXY_KINDS, T, Widgets, accountOf, agentsHTML, body, choicesOf, confOf, draw,
+    st, AGENTS, COLOR, MOST_FILES, PROXY_KINDS, T, Widgets, accountOf, agentsHTML, body, choicesOf, confOf, draw,
     esc, expanded, firstAgent, handButtons, inbox, inboxHTML, inboxId, isLetter, isReading, keepDraft,
     labelOf, layer, listed, loginWhy, mailDate, mailError, mailFormHTML, mailList, mailNote, mailSize, patch,
     people, providerOf, redrawMail, row, sec, seg, setConf, sw, talkHTML, talkOf, twoPanes, where,
-    get lang() { return lang },
-    get mailForm() { return mailForm },
     get relayout() { return relayout },
-    get snap() { return snap },
-    get tab() { return tab },
-    get draft() { return draft }, set draft(v) { draft = v },
-    get dropSure() { return dropSure }, set dropSure(v) { dropSure = v },
-    get handNote() { return handNote }, set handNote(v) { handNote = v },
-    get handNoteTimer() { return handNoteTimer }, set handNoteTimer(v) { handNoteTimer = v },
-    get menuPick() { return menuPick }, set menuPick(v) { menuPick = v },
-    get picking() { return picking }, set picking(v) { picking = v },
-    get proxyTyped() { return proxyTyped }, set proxyTyped(v) { proxyTyped = v },
-    get reading() { return reading }, set reading(v) { reading = v },
-    get writing() { return writing }, set writing(v) { writing = v },
   })
 
   // --- The Agent page (agents.ts) ---------------------------------------------------------
@@ -701,26 +579,14 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // settings.json). Connect all at the top, for those not connected yet;
   // those not found folded under "Other supported tools", each with where
   // to get it.
-  let connecting = ''
-  let pluginOpen = false
-  let agentOpen = ''
-  let othersOpen = false
   // In settings-agents.ts:
   const {
     aboutHTML, agentDo, connectAll, dshSwitch, failed, known, pageAgents, pageCrash, pageUpdate, sessionOpen,
   } = agentsPart({
-    Agents, COLOR, T, draw, esc, nameList, netNow, patch, row, sec, seg, sw,
-    get crashShown() { return crashShown },
+    st, Agents, COLOR, T, draw, esc, nameList, netNow, patch, row, sec, seg, sw,
     get failedHTML() { return failedHTML },
-    get lang() { return lang },
-    get othersOpen() { return othersOpen },
     get relayout() { return relayout },
-    get tab() { return tab },
     get toolNames() { return toolNames },
-    get agentOpen() { return agentOpen }, set agentOpen(v) { agentOpen = v },
-    get connecting() { return connecting }, set connecting(v) { connecting = v },
-    get pluginOpen() { return pluginOpen }, set pluginOpen(v) { pluginOpen = v },
-    get snap() { return snap }, set snap(v) { snap = v },
   })
 
   // --- The welcome: the agents connected, at the top of General -----------------------
@@ -736,36 +602,28 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // "Not now" said (connectHintOff: the welcome's 以后再说, the island's
   // 不用提醒) and nothing connected: the welcome folded to one row at the
   // page's top; opened again by its 去连接, or by asking for connecting.
-  let welcomeOpen = false
   // In settings-welcome.ts:
   const {
     PAGES, cardShows, displaysRow, failedHTML, screenRow, toolNames, toolsHere,
   } = welcomePart({
-    Agents, COLOR, Island, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
+    st, Agents, COLOR, Island, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
     pageMail, pageNet, pageNow, pageUpdate, pageWidgets, part, row, sec, seg, sw, thumb, winMode,
-    get connecting() { return connecting },
-    get failedShortcuts() { return failedShortcuts },
-    get lang() { return lang },
-    get pluginOpen() { return pluginOpen },
-    get recordingShortcut() { return recordingShortcut },
-    get snap() { return snap },
-    get welcomeOpen() { return welcomeOpen },
   })
 
   // --- Drawing --------------------------------------------------------------------------------
 
   function drawHead() {
-    const now = snap.now
-    const chosen = snap.pets.find(p => p.id === snap.settings.pet)
+    const now = st.snap.now
+    const chosen = st.snap.pets.find(p => p.id === st.snap.settings.pet)
     const title = now.mood === 'idle' ? T('s.headIdle', { name: chosen ? chosen.name : 'Wakuwaku' }) : T(HEAD_KEY[now.mood])
-    const asks = (snap.asks || []).length
-    const sub = [Status.nameOf(now, snap.settings.details !== false), asks ? T('s.asksWaiting', { n: asks }) : ''].filter(Boolean).join(' · ')
+    const asks = (st.snap.asks || []).length
+    const sub = [Status.nameOf(now, st.snap.settings.details !== false), asks ? T('s.asksWaiting', { n: asks }) : ''].filter(Boolean).join(' · ')
     // By ✕, in Windows' own glyphs: locked, a click outside (or on the head)
     // closes them no more; on top, over every window as well (locked too:
     // on top and gone at the next click outside is no use). island.rs
     // keep_on_top.
-    const locked = !!snap.settings.settingsPin
-    const onTop = locked && !!snap.settings.settingsTop
+    const locked = !!st.snap.settings.settingsPin
+    const onTop = locked && !!st.snap.settings.settingsTop
     const lock = `<button class="x g${locked ? ' on' : ''}" data-lock title="${esc(T(locked ? 's.locked' : 's.lock'))}">${locked ? '&#xE72E;' : '&#xE785;'}</button>`
     const top = `<button class="x g${onTop ? ' on' : ''}" data-top title="${esc(T(onTop ? 's.onTop' : 's.top'))}">${onTop ? '&#xE840;' : '&#xE718;'}</button>`
     setHTML(
@@ -775,15 +633,15 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   function drawTabs() {
-    const i = TABS.indexOf(tab)
+    const i = TABS.indexOf(st.tab)
     tabs.querySelector('.ind').style.transform = `translateX(${i * 100}%)`
     for (const b of tabs.querySelectorAll('button')) {
-      b.classList.toggle('on', b.dataset.tab === tab)
+      b.classList.toggle('on', b.dataset.tab === st.tab)
       b.querySelector('span').textContent = T(TAB_KEY[b.dataset.tab])
     }
-    tabs.querySelector('[data-tab="now"] .n').hidden = !(snap.asks || []).length
+    tabs.querySelector('[data-tab="now"] .n').hidden = !(st.snap.asks || []).length
     // An agent that wants the person (amber): the same dot on the Agent page's.
-    tabs.querySelector('[data-tab="agents"] .n').hidden = !Agents.summary(snap, known()).wants.length
+    tabs.querySelector('[data-tab="agents"] .n').hidden = !Agents.summary(st.snap, known()).wants.length
   }
 
   // The page, kept as it is when nothing changed; redrawn, the box being
@@ -795,7 +653,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       box &&
       (box.id ? `#${box.id}` : box.dataset.field ? `[data-field="${box.dataset.field}"]` : box.dataset.mon ? `[data-mon="${box.dataset.mon}"]` : box.dataset.hold ? '[data-hold]' : box.dataset.mf ? `[data-mf="${box.dataset.mf}"]` : box.dataset.w ? `[data-w="${box.dataset.w}"]` : box.dataset.proxyAt !== undefined ? `[data-proxy-at="${box.dataset.proxyAt}"]` : null)
     const caret = which ? box.selectionStart : null
-    const changed = setHTML(body, PAGES[tab]())
+    const changed = setHTML(body, PAGES[st.tab]())
     if (reset) {
       body.scrollTop = 0
       // Two panes: what is on the right from its top; the list stays where it
@@ -808,7 +666,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // Left as it is while it has the focus: set again, a word half-made in
     // an input method was lost (results landing while one typed).
     const again = (document.getElementById('s-ref') as HTMLInputElement)
-    if (again && again.value !== typedRef) again.value = typedRef
+    if (again && again.value !== st.typedRef) again.value = st.typedRef
     const back = which && body.querySelector<HTMLInputElement | HTMLTextAreaElement>(which)
     if (back && back !== document.activeElement) {
       back.focus()
@@ -820,8 +678,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   function draw(reset = false) {
-    if (!isOpen || !snap) return
-    lang = snap.lang || lang
+    if (!st.isOpen || !st.snap) return
+    st.lang = st.snap.lang || st.lang
     // The Mail page in two panes is wider.
     const wide = twoPanes()
     layer.classList.toggle('wide', wide)
@@ -831,8 +689,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     drawBody(reset)
     drawSheet()
     // Locked (the button by ✕), a click outside closes them no more.
-    foot.querySelector('.foot-text').textContent = T(snap.settings.settingsPin ? 's.footLocked' : 's.foot')
-    foot.querySelector('.ver').textContent = `v${snap.version}`
+    foot.querySelector('.foot-text').textContent = T(st.snap.settings.settingsPin ? 's.footLocked' : 's.foot')
+    foot.querySelector('.ver').textContent = `v${st.snap.version}`
     tick()
     // The same height on every page, however much it holds: the head and
     // the tabs stay where they are from one page to the next (on the
@@ -850,12 +708,10 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   // --- Open and close ----------------------------------------------------------------------------
 
-  // A part of a page asked for by its old page's name, to scroll to once drawn.
-  let partToShow = ''
-
+  // A part of a page asked for by its old page's name (st.partToShow), scrolled to once drawn.
   function showPart() {
-    let name = partToShow
-    partToShow = ''
+    let name = st.partToShow
+    st.partToShow = ''
     if (!name) return
     const go = () => {
       const at = body.querySelector(`[data-part="${CSS.escape(name)}"]`)
@@ -875,51 +731,51 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   function open(next) {
     // Asked for connecting: the welcome open, folded or not.
-    if (next === 'connect') welcomeOpen = true
+    if (next === 'connect') st.welcomeOpen = true
     // The market, by category (widgets:market[:widget|pet|wallpaper]: the
     // picker's 获取更多…, the Look page's): on the Plugins page, in its place.
     const toMarket = AddonUI.marketLink(next)
     if (toMarket) {
-      tab = 'widgets'
-      sub = { page: 'market', back: null }
+      st.tab = 'widgets'
+      st.sub = { page: 'market', back: null }
       market.cat = toMarket.cat
       market.query = ''
     } else if (PART_OF[next]) {
-      tab = PART_OF[next]
-      partToShow = next
+      st.tab = PART_OF[next]
+      st.partToShow = next
     } else if (String(next).startsWith('widgets:')) {
       // A widget's row on the plugins page (a press on it in the open island).
-      tab = 'widgets'
-      partToShow = next
+      st.tab = 'widgets'
+      st.partToShow = next
     } else if (TABS.includes(next)) {
-      tab = next
+      st.tab = next
     }
-    const wasOpen = isOpen
-    isOpen = true
-    if (!wasOpen) openedAt = Date.now()
+    const wasOpen = st.isOpen
+    st.isOpen = true
+    if (!wasOpen) st.openedAt = Date.now()
     if (!wasOpen) {
       pet.keyboard(true)
-      clearInterval(clockTimer)
-      clockTimer = setInterval(tick, 1000)
+      clearInterval(st.clockTimer)
+      st.clockTimer = setInterval(tick, 1000)
     } else if (!document.hasFocus()) {
       // Locked and gone under another window: asked for again, to the front.
       pet.keyboard(true)
     }
     pet.settings.get().then(got => {
-      snap = got
+      st.snap = got
       // Connecting while the welcome card shows (nothing connected yet):
       // the card, at General's top; else the Agent page.
-      if (partToShow === 'connect' && cardShows()) {
-        tab = 'now'
-        partToShow = 'welcome'
+      if (st.partToShow === 'connect' && cardShows()) {
+        st.tab = 'now'
+        st.partToShow = 'welcome'
       }
       draw(true)
       showPart()
-      if (tab === 'look') loadGallery(false)
-      if (tab === 'widgets' && sub?.page === 'market') loadMarket(false)
-      if (tab === 'mail' && letterToOpen) {
-        const { account, uid, folder } = letterToOpen
-        letterToOpen = null
+      if (st.tab === 'look') loadGallery(false)
+      if (st.tab === 'widgets' && st.sub?.page === 'market') loadMarket(false)
+      if (st.tab === 'mail' && st.letterToOpen) {
+        const { account, uid, folder } = st.letterToOpen
+        st.letterToOpen = null
         openLetter(account, uid, folder || 'inbox')
       }
       layer.focus({ preventScroll: true })
@@ -928,50 +784,50 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   function close(why = 'asked') {
-    if (!isOpen) return
+    if (!st.isOpen) return
     console.log('settings close:', why)
-    isOpen = false
+    st.isOpen = false
     // The welcome opened again only for this time: "not now" said since
     // (the island's 不用提醒), the next open shows it folded (the test session).
-    welcomeOpen = false
+    st.welcomeOpen = false
     // The Agent page opens again with its rows closed; the Plugins page as
     // itself, nothing asked over it, no row edged as new.
-    agentOpen = ''
-    othersOpen = false
-    sub = null
-    gone = null
-    mkAsk = null
+    st.agentOpen = ''
+    st.othersOpen = false
+    st.sub = null
+    st.gone = null
+    st.mkAsk = null
     setRecording(null)
-    if (flow.step === 'ask' || flow.step === 'refused') flow = AddonUI.IDLE
+    if (st.flow.step === 'ask' || st.flow.step === 'refused') st.flow = AddonUI.IDLE
     freshRows.clear()
     drawSheet()
     toastEl.hidden = true
-    clearInterval(clockTimer)
-    for (const timer of thumbTimers) clearTimeout(timer)
-    thumbTimers = []
+    clearInterval(st.clockTimer)
+    for (const timer of st.thumbTimers) clearTimeout(timer)
+    st.thumbTimers = []
     // Seconds being typed are kept as the box is left (holdTyped); Custom is
     // on next time only for a custom number kept.
     if (layer.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
-    holdCustom = false
+    st.holdCustom = false
     pet.settingsClosed()
     Island?.changed()
   }
 
   function setTab(next) {
-    if (next === tab || !TABS.includes(next)) return
-    tab = next
-    sub = null
+    if (next === st.tab || !TABS.includes(next)) return
+    st.tab = next
+    st.sub = null
     draw(true)
-    if (tab === 'look') loadGallery(false)
+    if (st.tab === 'look') loadGallery(false)
     relayout()
   }
 
   // A change: shown at once, then whatever main makes of it.
   function patch(change) {
-    Object.assign(snap.settings, change)
+    Object.assign(st.snap.settings, change)
     draw()
     pet.settings.set(change).then(got => {
-      snap = got
+      st.snap = got
       draw()
     })
   }
@@ -1000,7 +856,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // The gallery as a search finds it (no words: the gallery itself), from
   // its first page.
   function search(text) {
-    clearTimeout(searchTimer)
+    clearTimeout(st.searchTimer)
     const query = text.trim()
     if (query === gallery.query) return
     gallery.query = query
@@ -1013,28 +869,28 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // Typed: looked for a moment after the last key (a link is not looked
   // for; the button downloads it), the button saying which it does.
   function searchSoon() {
-    clearTimeout(searchTimer)
-    const text = typedRef.trim()
+    clearTimeout(st.searchTimer)
+    const text = st.typedRef.trim()
     const button = layer.querySelector('[data-fetch]')
-    if (button && !fetching) button.textContent = T(isLink(text) ? 'settings.fetch' : 's.search')
-    if (!isLink(text)) searchTimer = setTimeout(() => search(text), 400)
+    if (button && !st.fetching) button.textContent = T(isLink(text) ? 'settings.fetch' : 's.search')
+    if (!isLink(text)) st.searchTimer = setTimeout(() => search(text), 400)
   }
 
   async function fetchPet(reference, fromGallery) {
-    if (fetching || gallery.getting) return
+    if (st.fetching || gallery.getting) return
     if (fromGallery) gallery.getting = reference
-    else fetching = reference
-    fetchNote = { text: '', isError: false }
+    else st.fetching = reference
+    st.fetchNote = { text: '', isError: false }
     draw()
     const got = await pet.settings.fetch(reference)
-    fetching = null
+    st.fetching = null
     gallery.getting = ''
-    if (got.snapshot) snap = got.snapshot
+    if (got.snapshot) st.snap = got.snapshot
     if (got.ok) {
-      fetchNote = { text: [T('settings.fetched', { name: got.pet.name, author: got.pet.author }), got.warning].filter(Boolean).join(' '), isError: false }
-      if (!fromGallery) typedRef = ''
+      st.fetchNote = { text: [T('settings.fetched', { name: got.pet.name, author: got.pet.author }), got.warning].filter(Boolean).join(' '), isError: false }
+      if (!fromGallery) st.typedRef = ''
     } else {
-      fetchNote = { text: got.error, isError: true }
+      st.fetchNote = { text: got.error, isError: true }
     }
     draw()
     relayout()
@@ -1075,30 +931,30 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       if (what === 'approve') return approveGo()
       // The market's: installing one that asks for more, 全部更新 asked first.
       if (what === 'mkgo' || what === 'mkall') {
-        const asked = mkAsk
-        mkAsk = null
+        const asked = st.mkAsk
+        st.mkAsk = null
         drawSheet()
         return what === 'mkgo' ? marketInstall(asked?.id, true) : updateAll(true)
       }
-      if (what === 'cancel' && !(gone?.busy || flow.step === 'installing')) {
-        gone = null
-        mkAsk = null
-        approveFor = null
+      if (what === 'cancel' && !(st.gone?.busy || st.flow.step === 'installing')) {
+        st.gone = null
+        st.mkAsk = null
+        st.approveFor = null
         flowStep({ type: 'cancel' })
       }
       return
     }
-    if (at('[data-lock]')) return patch(snap.settings.settingsPin ? { settingsPin: false, settingsTop: false } : { settingsPin: true })
-    if (at('[data-top]')) return patch(snap.settings.settingsPin && snap.settings.settingsTop ? { settingsTop: false } : { settingsPin: true, settingsTop: true })
+    if (at('[data-lock]')) return patch(st.snap.settings.settingsPin ? { settingsPin: false, settingsTop: false } : { settingsPin: true })
+    if (at('[data-top]')) return patch(st.snap.settings.settingsPin && st.snap.settings.settingsTop ? { settingsTop: false } : { settingsPin: true, settingsTop: true })
     if (at('[data-close]')) {
       // Locked: ✕ closes them (and Esc), a press on the head no more.
-      if (snap.settings.settingsPin && !at('.x[data-close]')) return
+      if (st.snap.settings.settingsPin && !at('.x[data-close]')) return
       return close('click')
     }
     const keyBind = at('[data-key-bind]')
     if (keyBind) {
       const key = keyBind.dataset.keyBind
-      setRecording(recordingShortcut === key ? null : key)
+      setRecording(st.recordingShortcut === key ? null : key)
       return draw()
     }
     const keyClear = at('[data-key-clear]')
@@ -1107,7 +963,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       setRecording(null)
       return patch({ [key]: '' })
     }
-    if (recordingShortcut && !at('.kbadge')) {
+    if (st.recordingShortcut && !at('.kbadge')) {
       setRecording(null)
       draw()
     }
@@ -1128,7 +984,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         if (!went) session.querySelector('.d').textContent = T('jump.notFound')
       })
     }
-    const s = snap?.settings
+    const s = st.snap?.settings
     if (!s) return
 
     // Mail: an account set up, changed, kept, removed; its server looked
@@ -1137,10 +993,10 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const toggle = at('[data-sw]')
     if (toggle && !toggle.disabled) {
       const key = toggle.dataset.sw
-      if (key === 'login') return pet.settings.login(!snap.loginAtStart).then(got => ((snap = got), draw()))
+      if (key === 'login') return pet.settings.login(!st.snap.loginAtStart).then(got => ((st.snap = got), draw()))
       // Crash reports: sent by themselves, or never (not asked again).
-      if (key === 'crashReports') return patch({ crashReports: snap.crash?.mode === 'auto' ? 'off' : 'auto' })
-      if (key === 'paperShuffle') return paperDo('shuffle', !snap.winPaper?.shuffle)
+      if (key === 'crashReports') return patch({ crashReports: st.snap.crash?.mode === 'auto' ? 'off' : 'auto' })
+      if (key === 'paperShuffle') return paperDo('shuffle', !st.snap.winPaper?.shuffle)
       if (key === 'ilookBare') return ilookSave(ilookFor(), { ...ilookOf(ilookFor()), bare: !ilookOf(ilookFor()).bare })
       if (key.startsWith('notify.')) return patch({ notify: { ...s.notify, [key.slice(7)]: !s.notify?.[key.slice(7)] } })
       if (key === 'widgetNudge') return patch({ widgetNudge: s.widgetNudge === false })
@@ -1158,7 +1014,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         const source = key.startsWith('lhms:') ? 'lhm' : 'builtin'
         const id = key.slice(key.indexOf(':') + 1)
         const name = picksKey(source)
-        const view = source === 'lhm' ? snap.lhm : snap.hw
+        const view = source === 'lhm' ? st.snap.lhm : st.snap.hw
         const picked = Array.isArray(s.monitor?.[name]) ? s.monitor[name] : (view?.sensors || []).filter(x => x.on && !x.toggle).map(x => x.id)
         return patch({ monitor: { ...(s.monitor || {}), [name]: picked.includes(id) ? picked.filter(x => x !== id) : [...picked, id].slice(-32) } })
       }
@@ -1166,7 +1022,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       // as set, else its default).
       if (key.startsWith('pf:')) {
         const [id, name] = key.slice(3).split('.')
-        const p = (snap.plugins || []).find(x => x.id === id)
+        const p = (st.snap.plugins || []).find(x => x.id === id)
         return p && setPlugin(id, { [name]: !(p.params.find(f => f.name === name) || {}).value })
       }
       if (key.startsWith('af:')) {
@@ -1194,7 +1050,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // A plugin's settings folded out, or in.
     const fold = at('[data-pexp]')
     if (fold) {
-      openPlugin = openPlugin === fold.dataset.pexp ? '' : fold.dataset.pexp
+      st.openPlugin = st.openPlugin === fold.dataset.pexp ? '' : fold.dataset.pexp
       draw()
       return relayout()
     }
@@ -1223,13 +1079,13 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const packOut = at('[data-pack-uninstall]')
     if (packOut) {
       const [kind, id] = packOut.dataset.packUninstall.split(':')
-      gone = { id, kind, busy: false }
+      st.gone = { id, kind, busy: false }
       return drawSheet()
     }
     // A pet's 删除 in the Look page's list: as a pack's 卸载, in its own words.
     const petOut = at('[data-pet-delete]')
     if (petOut) {
-      gone = { id: petOut.dataset.petDelete, kind: 'pet', busy: false, del: true }
+      st.gone = { id: petOut.dataset.petDelete, kind: 'pet', busy: false, del: true }
       return drawSheet()
     }
     // The Look page's 获取更多宠物… and 获取更多壁纸…: the market on its kind.
@@ -1262,11 +1118,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     if (mkItem) return openSub({ page: 'mkItem', id: mkItem.dataset.mkItem })
     if (at('[data-mk-retry]')) return loadMarket(true)
     if (at('[data-mk-net]')) {
-      tab = 'now'
-      sub = null
+      st.tab = 'now'
+      st.sub = null
       draw(true)
       relayout()
-      partToShow = 'net'
+      st.partToShow = 'net'
       return showPart()
     }
     const mkAll = at('[data-mk-all]')
@@ -1275,18 +1131,18 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     if (revive && !revive.disabled) {
       revive.disabled = true
       return pet.addons.revive(revive.dataset.revive).then(got => {
-        if (got && typeof got === 'object' && got.settings) snap = got
+        if (got && typeof got === 'object' && got.settings) st.snap = got
         draw()
       })
     }
     const allow = at('[data-approve]')
     if (allow && !allow.disabled) {
-      approveFor = allow.dataset.approve
+      st.approveFor = allow.dataset.approve
       return drawSheet()
     }
     const out = at('[data-uninstall]')
     if (out) {
-      gone = { id: out.dataset.uninstall, busy: false }
+      st.gone = { id: out.dataset.uninstall, busy: false }
       return drawSheet()
     }
     if (at('[data-addon-file]')) return installFromFile()
@@ -1320,15 +1176,15 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         return layout && patch({ taskbarLayout: layout })
       }
       if (key === 'ilookMode') {
-        ilookMode = raw === winMode() ? '' : raw
+        st.ilookMode = raw === winMode() ? '' : raw
         return draw()
       }
       if (key === 'ilookEdge') return ilookSave(ilookFor(), { ...ilookOf(ilookFor()), edge: raw })
       // How long endings stay: Custom shows the box for its seconds, the
       // caret in it (kept once typed: holdTyped); any other choice at once.
       if (key === 'hold') {
-        holdCustom = raw === 'custom'
-        if (holdCustom) {
+        st.holdCustom = raw === 'custom'
+        if (st.holdCustom) {
           draw()
           const box = layer.querySelector<HTMLInputElement>('[data-hold]')
           box?.focus()
@@ -1336,11 +1192,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
           return
         }
       }
-      if (key === 'paperPosition') return raw !== snap.winPaper?.position && paperDo('position', raw)
-      if (key === 'paperEvery') return Number(raw) !== snap.winPaper?.every && paperDo('every', raw)
+      if (key === 'paperPosition') return raw !== st.snap.winPaper?.position && paperDo('position', raw)
+      if (key === 'paperEvery') return Number(raw) !== st.snap.winPaper?.every && paperDo('every', raw)
       if (key === 'winMode') {
-        if ((raw === 'light') === !!snap.winLook?.light) return
-        return pet.settings.winLook({ light: raw === 'light' }).then(got => ((snap = got), draw()))
+        if ((raw === 'light') === !!st.snap.winLook?.light) return
+        return pet.settings.winLook({ light: raw === 'light' }).then(got => ((st.snap = got), draw()))
       }
       if (key === 'dshVia') return dshSwitch(raw)
       if (key === 'gallery') {
@@ -1359,8 +1215,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     if (tile) {
       const key = tile.dataset.tile
       if (key === 'show') {
-        if (!snap.hidden) return patch({ out: s.out !== true })
-        return pet.settings.showPet(true).then(got => ((snap = got), draw()))
+        if (!st.snap.hidden) return patch({ out: s.out !== true })
+        return pet.settings.showPet(true).then(got => ((st.snap = got), draw()))
       }
       if (key === 'home') return patch({ display: HOMES[(HOMES.indexOf(s.display) + 1) % HOMES.length] })
       return patch({ [key]: !s[key] })
@@ -1374,7 +1230,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
     // Her island's look: folded out or in, a preset, a ground, back to Windows' grey.
     if (at('[data-ilook-fold]')) {
-      ilookOpen = !ilookOpen
+      st.ilookOpen = !st.ilookOpen
       draw()
       return relayout()
     }
@@ -1387,31 +1243,31 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     if (ilookBg) return ilookSave(ilookFor(), { ...ilookOf(ilookFor()), bg: ilookBg.dataset.ilookBg })
     if (at('[data-ilook-reset]')) return ilookSave(ilookFor(), ilookDefault(ilookFor()))
     // Windows' colour dialog takes the focus: not a click outside.
-    if ((e.target as HTMLElement).matches('input[type="color"]')) picking = true
+    if ((e.target as HTMLElement).matches('input[type="color"]')) st.picking = true
     // LibreHardwareMonitor: downloaded, started, its task, its folder (lhm_setup.rs).
     const lhmButton = at('[data-lhm]')
     if (lhmButton && !lhmButton.disabled) {
-      if (['get', 'start', 'startup', 'noStartup', 'remove'].includes(lhmButton.dataset.lhm)) lhmAsking = Date.now()
-      return pet.settings.lhm(lhmButton.dataset.lhm).then(got => ((snap = got), draw()))
+      if (['get', 'start', 'startup', 'noStartup', 'remove'].includes(lhmButton.dataset.lhm)) st.lhmAsking = Date.now()
+      return pet.settings.lhm(lhmButton.dataset.lhm).then(got => ((st.snap = got), draw()))
     }
     // Her updates: look now, the release's notes, Update.
     const updateButton = at('[data-update]')
-    if (updateButton && !updateButton.disabled) return pet.settings.update(updateButton.dataset.update).then(got => ((snap = got), draw()))
+    if (updateButton && !updateButton.disabled) return pet.settings.update(updateButton.dataset.update).then(got => ((st.snap = got), draw()))
     // The Network proxy: shown (from an update not reached), tried.
-    if (at('[data-net-go]')) return ((partToShow = 'net'), showPart())
+    if (at('[data-net-go]')) return ((st.partToShow = 'net'), showPart())
     const netButton = at('[data-net-test]')
     if (netButton && !netButton.disabled) return runNetTest()
-    if (at('[data-crash-show]')) return ((crashShown = !crashShown), draw())
+    if (at('[data-crash-show]')) return ((st.crashShown = !st.crashShown), draw())
     const crashButton = at('[data-crash]')
-    if (crashButton && !crashButton.disabled) return pet.settings.crash(crashButton.dataset.crash).then(got => ((snap = got), draw()))
+    if (crashButton && !crashButton.disabled) return pet.settings.crash(crashButton.dataset.crash).then(got => ((st.snap = got), draw()))
     const paperButton = at('[data-paper]')
     if (paperButton && !paperButton.disabled) return paperDo(paperButton.dataset.paper, paperButton.dataset.packId)
     const accent = at('[data-accent]')
-    if (accent && ACCENT_PICKER) return pet.settings.winLook({ accent: accent.dataset.accent }).then(got => ((snap = got), draw()))
+    if (accent && ACCENT_PICKER) return pet.settings.winLook({ accent: accent.dataset.accent }).then(got => ((st.snap = got), draw()))
     const use = at('[data-use]')
     if (use) return patch({ pet: use.dataset.use })
     if (at('[data-fetch]')) {
-      const text = typedRef.trim()
+      const text = st.typedRef.trim()
       if (!text) return document.getElementById('s-ref')?.focus()
       return isLink(text) ? fetchPet(text, false) : search(text)
     }
@@ -1437,13 +1293,13 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const agentRowAt = at('[data-ag-open]')
     if (agentRowAt) {
       const id = agentRowAt.dataset.agOpen
-      agentOpen = agentOpen === id && !agentRowAt.hasAttribute('data-ag-keep') ? '' : id
+      st.agentOpen = st.agentOpen === id && !agentRowAt.hasAttribute('data-ag-keep') ? '' : id
       draw()
       relayout()
       return requestAnimationFrame(() => body.querySelector(`.ag-row[data-ag-open="${id}"] + .ag-det`)?.scrollIntoView({ block: 'nearest' }))
     }
     if (at('[data-ag-others]')) {
-      othersOpen = !othersOpen
+      st.othersOpen = !st.othersOpen
       draw()
       return relayout()
     }
@@ -1454,7 +1310,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const cpuSensors = at('[data-cpu-sensors]')
     if (cpuSensors) {
       return pet.settings.cpuSensors(cpuSensors.dataset.cpuSensors).then(got => {
-        snap = got.snapshot
+        st.snap = got.snapshot
         draw()
         relayout()
       })
@@ -1462,18 +1318,18 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // The welcome folded ("not now", the island's hint put away too), or
     // opened again from its row.
     if (at('[data-welcome-later]')) {
-      welcomeOpen = false
+      st.welcomeOpen = false
       patch({ connectHintOff: true })
       return relayout()
     }
     if (at('[data-welcome-open]')) {
-      welcomeOpen = true
+      st.welcomeOpen = true
       draw()
       return relayout()
     }
     // The welcome's plugin, folded out or in.
     if (at('[data-plugin-toggle]')) {
-      pluginOpen = !pluginOpen
+      st.pluginOpen = !st.pluginOpen
       draw()
       return relayout()
     }
@@ -1487,8 +1343,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // How a letter goes to an agent: a model or effort picked, a picker
     // opened.
     const picked = at('[data-pick]')
-    if (picked && menuPick) {
-      const pick = menuPick
+    if (picked && st.menuPick) {
+      const pick = st.menuPick
       closeMenu()
       pick(picked.dataset.pick)
       return true
@@ -1522,7 +1378,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const handing = at('[data-hand]')
     if (handing) {
       const [agent, how] = handing.dataset.hand.split(':')
-      const ref = handing.dataset.account ? handing.dataset : { account: reading?.account, uid: reading?.uid, folder: reading?.folder }
+      const ref = handing.dataset.account ? handing.dataset : { account: st.reading?.account, uid: st.reading?.uid, folder: st.reading?.folder }
       if (!handing.disabled) hand(ref.account, Number(ref.uid), agent, how, ref.folder || 'inbox')
       return true
     }
@@ -1542,14 +1398,14 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // cc and bcc shown, files added or taken off.
     if (handleWriting(at)) return true
     const more = at('[data-mail-menu]')
-    if (more && reading) {
+    if (more && st.reading) {
       const r = more.getBoundingClientRect()
-      openMenu(reading.account, reading.uid, reading.folder, r.right - 220, r.bottom + 4)
+      openMenu(st.reading.account, st.reading.uid, st.reading.folder, r.right - 220, r.bottom + 4)
       return true
     }
     const boxPick = at('[data-mail-box]')
     if (boxPick) {
-      const all = snap.mail || []
+      const all = st.snap.mail || []
       openChoices(boxPick, [['*', boxName('*')], ...all.map(a => [a.id, boxName(a.id)])], inboxId(), value => {
         inbox.id = value
         loadInbox(false)
@@ -1565,8 +1421,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // Two panes: the accounts and agents on the right again (a letter being
     // written put aside); one pane or two.
     if (at('[data-mail-setup]')) {
-      reading = null
-      writing = false
+      st.reading = null
+      st.writing = false
       draw(true)
       relayout()
       return true
@@ -1578,7 +1434,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       return true
     }
     if (at('[data-mail-back]')) {
-      reading = null
+      st.reading = null
       draw(true)
       relayout()
       return true
@@ -1604,7 +1460,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const letter = at('.inbox [data-letter]')
     if (letter) {
       // Beside the list, a letter being written is put aside for it.
-      if (twoPanes()) writing = false
+      if (twoPanes()) st.writing = false
       // A conversation folds out as its letter opens.
       if (letter.dataset.thread) expanded.add(letter.dataset.thread)
       openLetter(letter.dataset.account, Number(letter.dataset.letter), letter.dataset.folder || 'inbox')
@@ -1612,42 +1468,42 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
     const turned = at('[data-sw^="mail:"]')
     if (turned) {
-      const a = (snap.mail || []).find(x => x.id === turned.dataset.sw.slice(5))
-      if (a) pet.mail.switch(a.id, !a.on).then(got => ((snap = got), draw()))
+      const a = (st.snap.mail || []).find(x => x.id === turned.dataset.sw.slice(5))
+      if (a) pet.mail.switch(a.id, !a.on).then(got => ((st.snap = got), draw()))
       return true
     }
     if (at('[data-mail-add]')) {
-      mailForm = { id: '', address: '', name: '', password: '', host: '', port: 993, security: 'ssl', auth: 'auto', username: '', ...outFields(null), ...proxyFields(null), step: 'start', advanced: false, probed: null, probedOut: null, busy: '', result: null }
-      mailDelete = ''
+      st.mailForm = { id: '', address: '', name: '', password: '', host: '', port: 993, security: 'ssl', auth: 'auto', username: '', ...outFields(null), ...proxyFields(null), step: 'start', advanced: false, probed: null, probedOut: null, busy: '', result: null }
+      st.mailDelete = ''
       redrawMail('[data-mf="address"]')
       return true
     }
     const change = at('[data-mail-edit]')
     if (change) {
-      const a = (snap.mail || []).find(x => x.id === change.dataset.mailEdit)
+      const a = (st.snap.mail || []).find(x => x.id === change.dataset.mailEdit)
       if (a) {
-        mailForm = { id: a.id, address: a.address, name: a.name || '', password: '', host: a.host, port: a.port, security: a.security, auth: a.auth || 'auto', username: a.username, ...outFields(a.smtp), ...proxyFields(a.proxy), step: 'found', source: '', advanced: true, probed: null, probedOut: null, busy: '', result: null }
+        st.mailForm = { id: a.id, address: a.address, name: a.name || '', password: '', host: a.host, port: a.port, security: a.security, auth: a.auth || 'auto', username: a.username, ...outFields(a.smtp), ...proxyFields(a.proxy), step: 'found', source: '', advanced: true, probed: null, probedOut: null, busy: '', result: null }
         // One from before the pet sent mail: its outgoing server looked up.
-        if (!a.smtp) findOutgoing(mailForm)
+        if (!a.smtp) findOutgoing(st.mailForm)
       }
-      mailDelete = ''
+      st.mailDelete = ''
       redrawMail('[data-mf="password"]')
       return true
     }
     if (at('[data-mail-cancel]')) {
-      mailForm = null
+      st.mailForm = null
       redrawMail()
       return true
     }
     // The fold opened or closed; a way or a method picked; Re-test.
-    if (at('[data-mail-adv]') && mailForm) {
-      mailForm.advanced = !mailForm.advanced
-      redrawMail(mailForm.advanced ? '[data-mf="host"]' : null)
+    if (at('[data-mail-adv]') && st.mailForm) {
+      st.mailForm.advanced = !st.mailForm.advanced
+      redrawMail(st.mailForm.advanced ? '[data-mf="host"]' : null)
       return true
     }
     const mfpick = at('[data-mfpick]')
-    if (mfpick && mailForm) {
-      const f = mailForm
+    if (mfpick && st.mailForm) {
+      const f = st.mailForm
       const key = mfpick.dataset.mfpick
       // The account's own way to its servers; manual for the first time,
       // the address the Mail page or Windows has.
@@ -1656,7 +1512,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         openChoices(mfpick, mode ? PROXY_MODES() : PROXY_KINDS, f[key] || (mode ? '' : 'http'), value => {
           f[key] = value
           if (value === 'manual' && !String(f.proxyAddress || '').trim()) {
-            const known = proxySetting().address ? proxySetting() : snap.mailSystemProxy
+            const known = proxySetting().address ? proxySetting() : st.snap.mailSystemProxy
             Object.assign(f, known ? { proxyKind: known.kind, proxyAddress: known.address } : { proxyAddress: '127.0.0.1:7890' })
           }
           f.probed = f.probedOut = null
@@ -1693,14 +1549,14 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const remove = at('[data-mail-remove]')
     if (remove) {
       const id = remove.dataset.mailRemove
-      if (mailDelete !== id) {
-        mailDelete = id
+      if (st.mailDelete !== id) {
+        st.mailDelete = id
         draw()
         return true
       }
-      mailDelete = ''
-      mailForm = null
-      pet.mail.remove(id).then(got => ((snap = got), draw(), relayout()))
+      st.mailDelete = ''
+      st.mailForm = null
+      pet.mail.remove(id).then(got => ((st.snap = got), draw(), relayout()))
       return true
     }
     return false
@@ -1714,41 +1570,41 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const re = at('[data-w-reply]')
     if (re) {
       closeMenu()
-      const ref = re.dataset.account ? re.dataset : { account: reading?.account, uid: reading?.uid, folder: reading?.folder }
+      const ref = re.dataset.account ? re.dataset : { account: st.reading?.account, uid: st.reading?.uid, folder: st.reading?.folder }
       writeAbout(re.dataset.wReply, ref.account, Number(ref.uid), ref.folder || 'inbox')
       return true
     }
     const use = at('[data-w-use]')
-    if (use && reading?.letter) {
-      const talk = talkOf(reading.letter.key) || reading.talk
+    if (use && st.reading?.letter) {
+      const talk = talkOf(st.reading.letter.key) || st.reading.talk
       const said = talk?.turns?.[Number(use.dataset.wUse)]?.text
-      if (said) write('reply', reading.letter, replyIn(said))
+      if (said) write('reply', st.reading.letter, replyIn(said))
       return true
     }
     if (at('[data-w-open]')) {
-      writing = true
+      st.writing = true
       draw(true)
       relayout()
       return true
     }
-    if (!draft) return false
+    if (!st.draft) return false
     if (at('[data-w-back]')) {
-      writing = false
-      dropSure = false
-      draft.note = null
+      st.writing = false
+      st.dropSure = false
+      st.draft.note = null
       draw(true)
       relayout()
       return true
     }
     if (at('[data-w-drop]')) {
-      if (!dropSure) {
-        dropSure = true
+      if (!st.dropSure) {
+        st.dropSure = true
         draw()
         return true
       }
-      draft = null
-      writing = false
-      dropSure = false
+      st.draft = null
+      st.writing = false
+      st.dropSure = false
       keepDraft()
       draw(true)
       relayout()
@@ -1760,8 +1616,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
     const from = at('[data-w-from]')
     if (from) {
-      const d = draft
-      openChoices(from, (snap.mail || []).map(a => [a.id, a.address]), d.account, v => {
+      const d = st.draft
+      openChoices(from, (st.snap.mail || []).map(a => [a.id, a.address]), d.account, v => {
         d.account = v
         keepDraft()
         draw()
@@ -1769,14 +1625,14 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       return true
     }
     if (at('[data-w-cc]')) {
-      draft.showCc = true
+      st.draft.showCc = true
       redrawMail('[data-w="cc"]')
       return true
     }
     if (at('[data-w-attach]')) {
       const input = body.querySelector('[data-w-file]')
       if (input) {
-        picking = true
+        st.picking = true
         input.click()
       }
       return true
@@ -1784,9 +1640,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const unfile = at('[data-w-unfile]')
     if (unfile) {
       const key = unfile.dataset.wUnfile
-      const list = key[0] === 'o' ? draft.forward?.files : draft.files
+      const list = key[0] === 'o' ? st.draft.forward?.files : st.draft.files
       list?.splice(Number(key.slice(1)), 1)
-      draft.touched = true
+      st.draft.touched = true
       keepDraft()
       redrawMail()
       return true
@@ -1803,7 +1659,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // The server for the address, looked up as Thunderbird does; filled in
   // when found, else the fields to fill.
   async function findServer() {
-    const f = mailForm
+    const f = st.mailForm
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.address.trim())) {
       f.result = { bad: true, text: T('mail.badAddress') }
       return redrawMail('[data-mf="address"]')
@@ -1812,7 +1668,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     f.result = null
     redrawMail()
     const got = await pet.mail.discover(f.address.trim(), formProxy(f))
-    if (mailForm !== f) return
+    if (st.mailForm !== f) return
     f.busy = ''
     f.probed = null
     f.probedOut = null
@@ -1836,26 +1692,26 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     f.findingOut = true
     const got = await pet.mail.discover(f.address, formProxy(f))
     f.findingOut = false
-    if (mailForm !== f) return
+    if (st.mailForm !== f) return
     if (got.ok && got.smtp && !String(f.smtpHost || '').trim()) Object.assign(f, outFields(got.smtp), { smtpUser: f.username || got.smtp.username })
     redrawMail()
   }
 
   // Re-test: both servers, the outgoing one where there is one.
   async function retest() {
-    const f = mailForm
+    const f = st.mailForm
     await probeServer()
-    if (mailForm === f && String(f.smtpHost || '').trim()) await probeOut()
+    if (st.mailForm === f && String(f.smtpHost || '').trim()) await probeOut()
   }
 
   // The outgoing server tried as the incoming one is below.
   async function probeOut() {
-    const f = mailForm
+    const f = st.mailForm
     f.busy = 'probe'
     f.probedOut = null
     redrawMail()
     const got = await pet.mail.probe(String(f.smtpHost).trim(), String(f.smtpPort ?? '').trim(), f.smtpSecurity || 'auto', 'smtp', formProxy(f))
-    if (mailForm !== f) return false
+    if (st.mailForm !== f) return false
     f.busy = ''
     if (got.ok && got.found) {
       Object.assign(f, { smtpSecurity: got.security, smtpPort: got.port })
@@ -1870,7 +1726,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // Re-test: the server tried without signing in; the way and port, when
   // they were to be detected, set to what answered. True when it did.
   async function probeServer() {
-    const f = mailForm
+    const f = st.mailForm
     if (!String(f.host || '').trim()) {
       f.result = { bad: true, text: T('mail.err.fields') }
       redrawMail('[data-mf="host"]')
@@ -1881,7 +1737,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     f.probed = null
     redrawMail()
     const got = await pet.mail.probe(String(f.host).trim(), String(f.port ?? '').trim(), f.security || 'auto', 'imap', formProxy(f))
-    if (mailForm !== f) return false
+    if (st.mailForm !== f) return false
     f.busy = ''
     if (got.ok && got.found) {
       Object.assign(f, { security: got.security, port: got.port })
@@ -1897,7 +1753,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // domain's server, what the user name may be). A way or port still to be
   // detected is, first.
   async function saveAccount() {
-    const f = mailForm
+    const f = st.mailForm
     if (!f.id && !f.password) {
       f.result = { bad: true, text: T('mail.err.password') }
       return redrawMail('[data-mf="password"]')
@@ -1910,10 +1766,10 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       return redrawMail('[data-mf="password"]')
     }
     if ((f.security === 'auto' || !String(f.port ?? '').trim()) && !(await probeServer())) return
-    if (mailForm !== f) return
+    if (st.mailForm !== f) return
     const outHost = String(f.smtpHost || '').trim()
     if (outHost && (f.smtpSecurity === 'auto' || !String(f.smtpPort ?? '').trim()) && !(await probeOut())) return
-    if (mailForm !== f) return
+    if (st.mailForm !== f) return
     f.busy = 'save'
     f.result = null
     redrawMail()
@@ -1924,11 +1780,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     const typed = String(f.password || '')
     const password = providerOf(account.host) === 'google' && APP_PASSWORD.test(typed.trim()) ? typed.replace(/\s/g, '') : typed
     const got = await pet.mail.save(account, password)
-    if (mailForm !== f) return
+    if (st.mailForm !== f) return
     f.busy = ''
     if (got.ok) {
-      mailForm = null
-      snap = got.snapshot
+      st.mailForm = null
+      st.snap = got.snapshot
     } else {
       const domain = got.error?.kind === 'login' && (got.auths || []).some(a => a === 'ntlm' || a === 'gssapi')
       const where = got.out ? { host: outHost, port: f.smtpPort, proxy: account.proxy } : account
@@ -1943,17 +1799,17 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   layer.addEventListener('input', e => {
-    if ((e.target as HTMLElement).dataset.mf && mailForm) mailForm[(e.target as HTMLElement).dataset.mf] = (e.target as HTMLInputElement).value
-    if ((e.target as HTMLElement).dataset.proxyAt !== undefined) proxyTyped = { key: (e.target as HTMLElement).dataset.proxyAt, text: (e.target as HTMLInputElement).value, bad: false }
-    if ((e.target as HTMLElement).dataset.w && draft) {
-      draft[(e.target as HTMLElement).dataset.w] = (e.target as HTMLInputElement).value
-      draft.touched = true
-      dropSure = false
+    if ((e.target as HTMLElement).dataset.mf && st.mailForm) st.mailForm[(e.target as HTMLElement).dataset.mf] = (e.target as HTMLInputElement).value
+    if ((e.target as HTMLElement).dataset.proxyAt !== undefined) st.proxyTyped = { key: (e.target as HTMLElement).dataset.proxyAt, text: (e.target as HTMLInputElement).value, bad: false }
+    if ((e.target as HTMLElement).dataset.w && st.draft) {
+      st.draft[(e.target as HTMLElement).dataset.w] = (e.target as HTMLInputElement).value
+      st.draft.touched = true
+      st.dropSure = false
       keepDraft()
     }
     if ((e.target as HTMLElement).dataset.ilook) ilookInput(e.target, false)
     if ((e.target as HTMLElement).id === 's-ref') {
-      typedRef = (e.target as HTMLInputElement).value
+      st.typedRef = (e.target as HTMLInputElement).value
       // Not mid-word in an input method: once the word is chosen.
       if (!e.isComposing) searchSoon()
     }
@@ -1970,7 +1826,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // The word an input method has chosen: looked for as if typed.
   layer.addEventListener('compositionend', e => {
     if ((e.target as HTMLElement).id !== 's-ref') return
-    typedRef = (e.target as HTMLInputElement).value
+    st.typedRef = (e.target as HTMLInputElement).value
     searchSoon()
   })
 
@@ -1995,7 +1851,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       if (own.type === 'number' && value && !Number.isFinite(n)) return draw()
       return setPlugin(id, { [name]: own.type === 'number' && value ? n : value })
     }
-    const field = ((snap.plugins || []).find(p => p.id === id)?.params || []).find(f => f.name === name)
+    const field = ((st.snap.plugins || []).find(p => p.id === id)?.params || []).find(f => f.name === name)
     if (!field || (field.kind === 'number' && value && !(Number(value) > 0))) return draw()
     setPlugin(id, { [name]: value })
   })
@@ -2008,7 +1864,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     if (!(key in drafts)) return
     const typed = drafts[key]
     delete drafts[key]
-    const m = snap.settings.monitor || {}
+    const m = st.snap.settings.monitor || {}
     if (name === 'lhmPort') {
       const port = typed.trim() ? Number(typed.trim()) : 8085
       if (!Number.isInteger(port) || port < 1 || port > 65535) return draw()
@@ -2024,7 +1880,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   function holdTyped(box) {
     delete drafts['hold:secs']
     const secs = Flow.holdSecs(box.value)
-    const kept = snap.settings.hold
+    const kept = st.snap.settings.hold
     box.value = String(secs ?? (Number.isInteger(kept) ? kept : ''))
     if (secs === null || secs === kept) return draw()
     patch({ hold: secs })
@@ -2034,23 +1890,23 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   layer.addEventListener('focusout', e => {
     if (!(e.target as HTMLElement).dataset?.hold) return
     delete drafts['hold:secs']
-    if ((e.target as HTMLInputElement).value.trim() || Flow.holdChoice(snap?.settings?.hold) === 'custom') return
-    holdCustom = false
+    if ((e.target as HTMLInputElement).value.trim() || Flow.holdChoice(st.snap?.settings?.hold) === 'custom') return
+    st.holdCustom = false
     draw()
   })
 
   // A plugin's settings changed, the others kept.
   function setPlugin(id, change) {
-    const all = snap.settings.plugins || {}
+    const all = st.snap.settings.plugins || {}
     return patch({ plugins: { ...all, [id]: { ...(all[id] || {}), ...change } } })
   }
 
   document.addEventListener('keydown', e => {
-    if (!isOpen) return
-    if (recordingShortcut) {
+    if (!st.isOpen) return
+    if (st.recordingShortcut) {
       e.preventDefault()
       e.stopPropagation()
-      const key = recordingShortcut
+      const key = st.recordingShortcut
       if (e.key === 'Escape') {
         setRecording(null)
         return draw()
@@ -2091,7 +1947,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       parts.push(mainKey)
       const combo = parts.join('+')
 
-      const s = snap.settings
+      const s = st.snap.settings
       const defaults = { shortcutApprove: 'Alt+Y', shortcutDeny: 'Alt+N', shortcutIsland: 'Alt+W' }
       const others = ['shortcutApprove', 'shortcutDeny', 'shortcutIsland'].filter(k => k !== key)
       if (others.some(k => (s[k] ?? defaults[k]).toLowerCase() === combo.toLowerCase())) {
@@ -2108,9 +1964,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       if (!menuEl.hidden) return closeMenu()
       // The question over the panel first: 取消 (not while it works).
       if (!sheet.hidden) {
-        if (!(gone?.busy || flow.step === 'installing')) {
-          gone = null
-          mkAsk = null
+        if (!(st.gone?.busy || st.flow.step === 'installing')) {
+          st.gone = null
+          st.mkAsk = null
           flowStep({ type: 'cancel' })
         }
         return
@@ -2137,11 +1993,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       return
     }
     // Two panes: the letter above or below in the list.
-    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && twoPanes() && !(writing && draft) && menuEl.hidden) {
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && twoPanes() && !(st.writing && st.draft) && menuEl.hidden) {
       e.preventDefault()
       return step(e.key === 'ArrowDown' ? 1 : -1)
     }
-    const i = TABS.indexOf(tab)
+    const i = TABS.indexOf(st.tab)
     if (e.key === 'ArrowRight') {
       e.preventDefault()
       setTab(TABS[(i + 1) % TABS.length])
@@ -2154,30 +2010,30 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   pet.onSettings(({ tab: next }: { tab?: string } = {}) => open(next))
   pet.onSettingsChanged(got => {
-    if (!isOpen) return
-    snap = got
+    if (!st.isOpen) return
+    st.snap = got
     draw()
     // What is kept changed (a sync): the list again, quietly.
-    if (tab === 'mail' && inbox.for && (got.mailRev || 0) !== inbox.rev) loadInbox(false, true)
+    if (st.tab === 'mail' && inbox.for && (got.mailRev || 0) !== inbox.rev) loadInbox(false, true)
   })
   // The keyboard went elsewhere: a click outside the island; not a file
   // picker (a letter's files, the desktop's picture: its own window takes
   // the focus).
   // Locked (the button by ✕), they stay.
-  pet.onBlur(() => !snap?.settings?.settingsPin && !picking && !pickingPaper && !pickingZip && !lhmAsks() && (!pet.mac || Date.now() - openedAt > BLUR_GRACE_MS) && close('blur'))
-  layer.addEventListener('cancel', e => (e.target as HTMLElement).matches?.('[data-w-file]') && (picking = false), true)
-  window.addEventListener('focus', () => setTimeout(() => (picking = false), 1000))
+  pet.onBlur(() => !st.snap?.settings?.settingsPin && !st.picking && !st.pickingPaper && !st.pickingZip && !lhmAsks() && (!pet.mac || Date.now() - st.openedAt > BLUR_GRACE_MS) && close('blur'))
+  layer.addEventListener('cancel', e => (e.target as HTMLElement).matches?.('[data-w-file]') && (st.picking = false), true)
+  window.addEventListener('focus', () => setTimeout(() => (st.picking = false), 1000))
 
   return {
-    isOpen: () => isOpen,
+    isOpen: () => st.isOpen,
     layer,
     askSlot,
     // The language may change from the menu while they are open.
     redraw: () => draw(),
     close,
     // The letter to show once the Mail page opens ({ account, uid }).
-    openLetter: target => (letterToOpen = target),
+    openLetter: target => (st.letterToOpen = target),
     // The plugin whose settings are folded out once the plugins page opens.
-    openPlugin: id => (openPlugin = String(id || '')),
+    openPlugin: id => (st.openPlugin = String(id || '')),
   }
 }

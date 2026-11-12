@@ -437,14 +437,12 @@ pub fn take(sh: &Shared, strip: (i32, i32, i32, i32)) -> bool {
     // Which input method is in front, told by Windows' input switcher
     // (inputs.rs): its mark read again at once when it changes.
     crate::inputs::set_size(icon_px(&keys_sh));
-    let changed = || {
-        KEYS_NOW.store(true, Ordering::SeqCst);
-        wake_keys();
-    };
-    crate::inputs::start(png_of, Box::new(changed), Box::new(move |line: &str| input_sh.log(&format!("taskbar: {line}"))));
+    // Its way in made before: an input method switched at once is not missed.
+    let asks = asks();
+    crate::inputs::start(png_of, Box::new(keys_now_asked), Box::new(move |line: &str| input_sh.log(&format!("taskbar: {line}"))));
     // Win+1…9, Win+T, Win+B hers, not Windows' put away (winkeys.rs).
     crate::winkeys::start(&keys_sh);
-    *KEYS.lock().unwrap() = Some(crate::spawn_named("taskbar keys", move || keys_loop(keys_sh)));
+    *KEYS.lock().unwrap() = Some(crate::spawn_named("taskbar keys", move || keys_loop(keys_sh, asks)));
     true
 }
 
@@ -484,9 +482,11 @@ pub fn give_back(sh: &Shared) {
             log(&format!("giving back: the buttons' thread was {doing}"));
         }
     }
+    // Its way in dropped: its wait ends at once (and what it sent last
+    // stays, as it did, for a page come up after).
+    no_more_asks();
     let keys = KEYS.lock().unwrap().take();
     if let Some(thread) = keys {
-        wake_keys();
         stop_within("the keys' thread", thread);
     }
     if let Some(thread) = crate::inputs::stop() {

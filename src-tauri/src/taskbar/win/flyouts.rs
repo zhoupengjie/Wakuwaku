@@ -44,8 +44,7 @@ pub fn open(what: &str) -> bool {
     // letters; its mark read again at once (keys_loop).
     if what == "ime" {
         let done = tasks::toggle_native();
-        KEYS_NOW.store(true, Ordering::SeqCst);
-        wake_keys();
+        keys_now_asked();
         return done;
     }
     // A press on what shows the microphone, camera or location in use:
@@ -140,8 +139,7 @@ pub fn volume(steps: i32) -> bool {
     let sent = unsafe { SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<Input>() as i32) } == inputs.len() as u32;
     std::thread::spawn(|| {
         std::thread::sleep(Duration::from_millis(80));
-        KEYS_NOW.store(true, Ordering::SeqCst);
-        wake_keys();
+        keys_now_asked();
     });
     sent
 }

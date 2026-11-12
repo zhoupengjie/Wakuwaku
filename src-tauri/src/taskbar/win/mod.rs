@@ -303,7 +303,7 @@ const SETTLE_TICKS: u32 = 3;
 // keeps it; named here for the others (each file has `use super::*`).
 use buttons::{TASKS_STOP, SENT_WINDOWS};
 use flyouts::START_OPEN;
-use keys::{KEYS_NOW, SENT_KEYS};
+use keys::SENT_KEYS;
 use look::{PAPER, LOOK, LOOKS_LEFT};
 use thread::{OURS, TICKS};
 use thumbs::THUMB_HOST;

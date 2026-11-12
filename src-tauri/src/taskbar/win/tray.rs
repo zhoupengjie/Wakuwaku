@@ -41,9 +41,9 @@ pub fn resend(sh: &Shared) {
         let _ = sh.app.emit_to("island", "taskbar:windows", crate::bars::for_main(sh, &windows));
     }
     let keys = SENT_KEYS.lock().unwrap().clone();
-    if !keys.is_null() {
+    if let Some(keys) = keys.filter(|k| !k.is_null()) {
         send_ime_icons(sh, true);
-        let _ = sh.app.emit_to("island", "taskbar:keys", keys);
+        let _ = sh.app.emit_to("island", "taskbar:keys", &*keys);
     }
     let paper = PAPER.lock().unwrap().clone();
     if !paper.is_null() {

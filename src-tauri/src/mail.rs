@@ -35,7 +35,10 @@
 // "mailOffline": "year" (the default) | "90d" | "all" | "opened", how much
 // is kept whole on this computer ahead (store.rs Offline);
 // "mailCodes": true (the default) | false, a code or a link to sign in with
-// in new mail put on the island (codes.rs).
+// in new mail put on the island (codes.rs);
+// "mailPictures": [address], the senders whose letters show their pictures
+// from elsewhere at once (lower case; none: each letter's 显示图片,
+// settings-letter.ts).
 use std::collections::HashMap;
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};

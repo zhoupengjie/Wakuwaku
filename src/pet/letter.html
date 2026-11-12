@@ -1,0 +1,27 @@
+<!doctype html>
+<!--
+  A letter's HTML is drawn in this page (settings-letter.ts mailBodyHTML,
+  fillFrame): the Mail page frames it and puts the letter in from outside,
+  as it is of her own origin. Nothing runs in it: the frame's sandbox has no
+  scripts, and its policy here has none either.
+
+  Its pictures from elsewhere are not asked for: only those the letter
+  carries (cid:, made data: by letters.rs). A picture on the sender's server
+  tells them the letter was opened, when, and from where (a tracking
+  pixel), so a letter shows them in letter-pictures.html alone, when asked
+  for it or for its sender (mailPictures), as Thunderbird does.
+
+  Not a srcdoc: the island's frame guard (addons/files.rs guard_frames) sends a
+  frame to her plugins' pages and these two alone, and about:srcdoc was
+  kept where it was, an empty page; and a srcdoc or about:blank document
+  keeps the policy of the page around it (zhoupengjie/Wakuwaku#129). This
+  page has its own: its styles and its fonts in it; nothing else.
+-->
+<html data-letter>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="referrer" content="no-referrer" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:" />
+  </head>
+  <body></body>
+</html>

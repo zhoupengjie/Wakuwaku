@@ -188,6 +188,22 @@ impl Registry {
     }
 }
 
+// The pages a letter's HTML is drawn in on the Mail page
+// (src/pet/letter.html, without its pictures from elsewhere, and
+// letter-pictures.html, with them; settings-letter.ts mailBodyHTML), in her
+// island's page alone, where the settings are: exactly them, as her pages
+// are served (WebView2's http, or https if asked for), no query nor
+// fragment to carry anything. Hers, not a plugin's, and nothing runs in
+// them: their frame's sandbox has no scripts, their own policy none either
+// (zhoupengjie/Wakuwaku#129: a srcdoc was kept from loading here,
+// about:srcdoc being no plugin's page, and the letter showed empty).
+const LETTER_PAGES: [&str; 2] = ["/pet/letter.html", "/pet/letter-pictures.html"];
+
+pub fn is_letter_page(uri: &str, main: bool) -> bool {
+    let path = uri.strip_prefix("http://tauri.localhost").or_else(|| uri.strip_prefix("https://tauri.localhost"));
+    main && path.is_some_and(|p| LETTER_PAGES.contains(&p))
+}
+
 // The pages that may ask for a card's view (addon_view): her island's, and
 // the desktop's.
 pub(super) fn may_view(label: &str) -> bool {
@@ -211,7 +227,9 @@ pub(super) fn may_send(sent: &mut (u64, u32), now: u64) -> bool {
 // anywhere but a plugin's own page (is_frame_page; main: the island's,
 // which runs their main.js too, the desktop's only views) is not, so one
 // cannot leave its sandbox's rules by going to another address, nor carry
-// what it knows there in the address. Said in her log, once in a while.
+// what it knows there in the address. The island's page may also show a
+// letter in her own letter pages (is_letter_page). Said in her log, once in
+// a while.
 #[cfg(windows)]
 pub fn guard_frames(sh: &Arc<Shared>, window: &WebviewWindow, main: bool) {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2NavigationStartingEventArgs;
@@ -227,7 +245,7 @@ pub fn guard_frames(sh: &Arc<Shared>, window: &WebviewWindow, main: bool) {
                 let mut uri = windows_core::PWSTR::null();
                 args.Uri(&mut uri)?;
                 let uri = webview2_com::take_pwstr(uri);
-                if !is_frame_page(&uri, main) {
+                if !is_letter_page(&uri, main) && !is_frame_page(&uri, main) {
                     args.SetCancel(true)?;
                     let mut last = said.lock().unwrap_or_else(|e| e.into_inner());
                     if last.is_none_or(|t| t.elapsed() > Duration::from_secs(10)) {

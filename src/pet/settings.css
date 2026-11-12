@@ -1487,6 +1487,25 @@
 /* The letter's body as HTML, inside a sandboxed frame as its sender made it.
    The frame's box is rounded on all four corners, so no corner of the letter
    is a right angle; the wrapper is what clips it. */
+/* Over a letter whose pictures from elsewhere are not loaded: why, and
+   showing them (this once, its sender always). */
+#island-settings .m-pics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 10px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--g5);
+  font-size: 12px;
+}
+
+.set-light #island-settings .m-pics {
+  background: rgba(0, 0, 0, 0.05);
+}
+
 #island-settings .m-html-wrap {
   margin: 10px 0 4px;
   border-radius: 12px;

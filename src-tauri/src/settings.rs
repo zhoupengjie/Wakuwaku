@@ -686,6 +686,9 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "mailOffline" => matches!(v.as_str(), Some("90d" | "year" | "all" | "opened")),
         // New mail's codes and links to sign in with on the island (mail/codes.rs).
         "mailCodes" => is_bool,
+        // The senders whose letters show their pictures from elsewhere
+        // (settings-letter.ts): their addresses, in lower case.
+        "mailPictures" => is_addresses(v),
         "mailAgentConf" => mail::agent::is_conf_ok(v),
         // How mail reaches its servers (mail/proxy.rs): its own way, or the General page's.
         "mailProxy" => mail::proxy::is_page_way(v),
@@ -693,6 +696,15 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "netProxy" => crate::proxy::Via::of(v).is_some(),
         _ => false,
     }
+}
+
+// A list of mail addresses as the Mail page keeps them (mailPictures): in
+// lower case, each with an @, no more than an address may be long, and no
+// more than a few thousand of them.
+fn is_addresses(v: &Value) -> bool {
+    v.as_array().is_some_and(|all| {
+        all.len() <= 5000 && all.iter().all(|a| a.as_str().is_some_and(|s| s.len() <= 320 && s.contains('@') && !s.chars().any(|c| c.is_uppercase() || c.is_whitespace() || c.is_control())))
+    })
 }
 
 // A patch from the settings: checked, with the size, the display and her
@@ -1158,6 +1170,19 @@ fn is_address(a: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+
+    // The senders whose letters show their pictures: addresses in lower
+    // case, any of them; nothing else.
+    #[test]
+    fn the_senders_shown_are_addresses() {
+        use super::is_addresses;
+        assert!(is_addresses(&json!([])));
+        assert!(is_addresses(&json!(["enotice@enotice.ieee.org", "张三@例子.中国", "a+b@x.test"])));
+        for bad in [json!("a@b.test"), json!(["A@b.test"]), json!(["no-at"]), json!(["a @b.test"]), json!([1]), json!([format!("{}@b.test", "a".repeat(320))])] {
+            assert!(!is_addresses(&bad), "{bad}");
+        }
+        assert!(!is_addresses(&json!(vec!["a@b.test"; 5001])));
+    }
 
     // An agent's block as agents.ts reads it: what each has, and its own
     // beside that (Codex's async by that name, Claude Code's commands as

@@ -262,10 +262,11 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   function morph(from, to) {
     if (from.nodeType !== to.nodeType || from.nodeName !== to.nodeName) return from.replaceWith(to.cloneNode(true))
     // A letter's frame with the same letter in it (settings-letter.ts
-    // mailBodyHTML) is left as it is: its height and scrolling are
-    // fitFrames', which the markup has not, and would be taken away at every
-    // redraw of the page and set again.
-    if (from.nodeName === 'IFRAME' && from.getAttribute('srcdoc') === to.getAttribute('srcdoc')) return
+    // mailBodyHTML, its data-doc) is left as it is: its height and scrolling
+    // are fitFrames', which the markup has not, and would be taken away at
+    // every redraw of the page and set again. Another letter in it, its
+    // page stays and fitFrames puts the letter in.
+    if (from.nodeName === 'IFRAME' && from.getAttribute('data-doc') && from.getAttribute('data-doc') === to.getAttribute('data-doc')) return
     if (from.nodeType !== Node.ELEMENT_NODE) {
       if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue
       return
@@ -630,7 +631,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   const {
     addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter,
     openMenu, openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft,
-    setProxy, star, step, waySetting, write, writeAbout,
+    setPictures, setProxy, star, step, waySetting, write, writeAbout,
   } = pieces.letter
 
   // --- The Agent page (agents.ts) ---------------------------------------------------------
@@ -1421,6 +1422,13 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       const [agent, how] = handing.dataset.hand.split(':')
       const ref = handing.dataset.account ? handing.dataset : { account: st.reading?.account, uid: st.reading?.uid, folder: st.reading?.folder }
       if (!handing.disabled) hand(ref.account, Number(ref.uid), agent, how, ref.folder || 'inbox')
+      return true
+    }
+    // An open letter's pictures from elsewhere: shown this once, for its
+    // sender always, or not for its sender any more.
+    const pictures = at('[data-pics]')
+    if (pictures) {
+      setPictures(pictures.dataset.pics)
       return true
     }
     const starring = at('[data-star]')

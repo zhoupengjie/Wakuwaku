@@ -34,3 +34,14 @@ interface Window {
   // back what it gives (bridge.ts, desk.ts).
   __wkEval?: (id: string | number, fn: () => unknown) => void
 }
+
+// Her pages' elements are HTML ones: a query by selector gives an HTMLElement
+// (an SVG one, of the few, is said so where it is used). Overloads declared
+// here come before lib.dom's own.
+interface ParentNode {
+  querySelector<E extends Element = HTMLElement>(selectors: string): E | null
+  querySelectorAll<E extends Element = HTMLElement>(selectors: string): NodeListOf<E>
+}
+interface Element {
+  closest<E extends Element = HTMLElement>(selectors: string): E | null
+}

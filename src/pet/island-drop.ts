@@ -8,8 +8,9 @@
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
 import { pet } from './bridge.ts'
+import type { DropCore } from './island.ts'
 
-export function dropPart(core) {
+export function dropPart(core: DropCore) {
   const {
     BODY_H, BODY_W, BREAK_PX, CLIPS, DROP_R, PULL_ROOM, REACH_R, REACH_SHARE, atBottom, body, dropHer,
     dropSheet, gooDrop, gooIsland, gooNeck, her, hidePlate, home, isHome, isNudging, isOn, isSetting, isSide,

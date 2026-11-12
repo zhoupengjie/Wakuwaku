@@ -11,7 +11,45 @@ import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
 
-export function marketPart(core) {
+// What this part takes of the settings' core: the names it reads (and,
+// of its lets, writes); settings.ts's call is checked against them.
+export interface MarketCore {
+  AddonUI: any
+  COLOR: any
+  T: any
+  Widgets: any
+  addonById: any
+  andList: any
+  approveFor: any
+  body: any
+  canDoHTML: any
+  crumbHTML: any
+  draw: any
+  esc: any
+  flow: any
+  freshRows: any
+  gone: any
+  isOpen: any
+  lang: any
+  market: any
+  mkAsk: any
+  netNow: any
+  packById: any
+  partToShow: any
+  pickingZip: any
+  relayout: any
+  sec: any
+  seg: any
+  setHTML: any
+  sheet: any
+  showPart: any
+  snap: any
+  sub: any
+  tab: any
+  toastEl: any
+}
+
+export function marketPart(core: MarketCore) {
   const {
     AddonUI, COLOR, T, Widgets, addonById, andList, body, canDoHTML, crumbHTML, draw, esc, freshRows, market,
     packById, sec, seg, setHTML, sheet, showPart, toastEl,

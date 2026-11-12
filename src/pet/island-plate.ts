@@ -8,8 +8,9 @@
 // island's again.
 import * as Anchor from './anchor.ts'
 import { pet } from './bridge.ts'
+import type { PlateCore } from './island.ts'
 
-export function platePart(core) {
+export function platePart(core: PlateCore) {
   const {
     Anchor, afterSpring, anchor, atBottom, body, home, inTopStrip, isCapsule, isEmbedded, isOn, isRinging,
     isSide, island, sizeOf, stillMotion, tbEdge,
@@ -58,7 +59,7 @@ export function platePart(core) {
 
   // After the island is laid out; resized: from its box and corners then
   // (from, fromRadius) to its new size.
-  function placePlate(resized, from, fromRadius) {
+  function placePlate(resized, from?, fromRadius?) {
     if (!plateWanted()) return hidePlate(PLATE_OUT_MS)
     if (!core.plateSent) {
       if (resized || !plateWait) {

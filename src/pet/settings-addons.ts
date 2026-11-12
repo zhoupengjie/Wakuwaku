@@ -9,7 +9,39 @@
 import * as AddonUI from './addonui.ts'
 import * as Widgets from './widgets.ts'
 
-export function addonsPart(core) {
+// What this part takes of the settings' core: the names it reads (and,
+// of its lets, writes); settings.ts's call is checked against them.
+export interface AddonsCore {
+  AddonUI: any
+  COLOR: any
+  T: any
+  Widgets: any
+  drafts: any
+  draw: any
+  esc: any
+  freshRows: any
+  lang: any
+  loadGallery: any
+  marketItem: any
+  marketItemPage: any
+  marketPage: any
+  nameList: any
+  openPlugin: any
+  part: any
+  partToShow: any
+  placeHTML: any
+  placeOf: any
+  relayout: any
+  sec: any
+  seg: any
+  showPart: any
+  snap: any
+  sub: any
+  sw: any
+  tab: any
+}
+
+export function addonsPart(core: AddonsCore) {
   const {
     AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part, placeHTML, placeOf,
     sec, seg, showPart, sw,

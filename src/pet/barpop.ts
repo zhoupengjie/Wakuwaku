@@ -32,7 +32,7 @@ let closeTimer
 let thumbTimer
 let thumbsSent = ''
 
-const el = (tag, cls, text) => {
+const el = (tag, cls?, text?) => {
   const n = document.createElement(tag)
   if (cls) n.className = cls
   if (text != null) n.textContent = text
@@ -157,14 +157,14 @@ pop.addEventListener('animationend', () => pop.classList.remove('rising'))
 pop.addEventListener('pointerdown', e => {
   if (e.button !== 0 || !shown) return
   const app = shown.app
-  const x = e.target.closest('[data-close]')
+  const x = (e.target as HTMLElement).closest('[data-close]')
   if (x) return invoke('taskbar_window', { id: Number(x.dataset.close), what: 'close' }).catch(() => {})
-  const card = e.target.closest('[data-win]')
+  const card = (e.target as HTMLElement).closest('[data-win]')
   if (card) {
     close()
     return invoke('taskbar_window', { id: Number(card.dataset.win), what: 'front' }).catch(() => {})
   }
-  const act = e.target.closest('[data-act]')?.dataset.act
+  const act = (e.target as HTMLElement).closest('[data-act]')?.dataset.act
   if (!act) return
   close()
   if (act === 'close' || act === 'end') for (const w of app.windows || []) invoke('taskbar_window', { id: Number(w.id), what: act }).catch(() => {})

@@ -7,8 +7,9 @@
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
 import { pet } from './bridge.ts'
+import type { ImeCore } from './island.ts'
 
-export function imePart(core) {
+export function imePart(core: ImeCore) {
   const {
     besideOrOver, capsMark, closePop, closeWidgetPop, el, imeMark, imePop, isSide, showBattery, showNet,
     showPrivacy, showVolume, t, watchPresses,

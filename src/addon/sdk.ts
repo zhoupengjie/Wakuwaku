@@ -93,7 +93,7 @@
     base = new URL(VIEW ? './' : '../', location.href).href
   } catch {}
   const short = file => String(file || '').replace(base, '')
-  function report(err, file, line) {
+  function report(err, file?, line?) {
     const message = err && typeof err === 'object' ? `${err.name || 'Error'}: ${err.message}` : String(err)
     const where = file ? ` (${short(file)}${line ? `:${line}` : ''})` : ''
     tell('error', { line: `${message}${where}`.slice(0, 300) })

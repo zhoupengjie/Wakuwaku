@@ -9,7 +9,38 @@
 import * as AddonUI from './addonui.ts'
 import * as Widgets from './widgets.ts'
 
-export function pluginsPart(core) {
+// What this part takes of the settings' core: the names it reads (and,
+// of its lets, writes); settings.ts's call is checked against them.
+export interface PluginsCore {
+  AddonUI: any
+  COLOR: any
+  SPINS: any
+  SUBS: any
+  T: any
+  Widgets: any
+  addonRow: any
+  drafts: any
+  esc: any
+  lang: any
+  market: any
+  openHardware: any
+  openPlugin: any
+  packsGroup: any
+  placeHTML: any
+  placeOf: any
+  pluginFields: any
+  pluginNote: any
+  render: any
+  row: any
+  sec: any
+  seg: any
+  snap: any
+  sub: any
+  sw: any
+  widgetRows: any
+}
+
+export function pluginsPart(core: PluginsCore) {
   const {
     AddonUI, COLOR, SPINS, SUBS, T, Widgets, addonRow, drafts, esc, market, openHardware, packsGroup,
     placeHTML, placeOf, pluginFields, pluginNote, render, row, sec, seg, sw, widgetRows,
@@ -167,8 +198,8 @@ export function pluginsPart(core) {
   function lhmSetup(port, note) {
     const u = core.snap.lhmSetup
     if (!u || !u.step || u.step === 'off' || u.step === 'looking') return note
-    const line = (text, bad) => `<div class="note lhm-note${bad ? ' bad' : ''}">${text}</div>`
-    const button = (what, label, accent) => `<div class="fr"><span class="fl"></span><span class="grow"></span><button class="pbtn sm${accent ? ' al' : ''}" data-lhm="${what}">${esc(label)}</button></div>`
+    const line = (text, bad?) => `<div class="note lhm-note${bad ? ' bad' : ''}">${text}</div>`
+    const button = (what, label, accent?) => `<div class="fr"><span class="fl"></span><span class="grow"></span><button class="pbtn sm${accent ? ' al' : ''}" data-lhm="${what}">${esc(label)}</button></div>`
     const i = u.install
     const where = i ? i.dir || i.shown : ''
     const code = u.error?.code || ''

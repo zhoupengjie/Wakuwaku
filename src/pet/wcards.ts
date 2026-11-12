@@ -13,7 +13,7 @@ import * as I18n from '../shared/i18n.ts'
 import { render } from '../shared/i18n.ts'
 import * as Widgets from './widgets.ts'
 
-const t = (ctx, key, vars) => I18n.t(ctx.lang, key, vars)
+const t = (ctx, key, vars?) => I18n.t(ctx.lang, key, vars)
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 
 // --- Who it is: its kind, colour and glyph ----------------------------------------

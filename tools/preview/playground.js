@@ -247,6 +247,12 @@
   // --- The frames -------------------------------------------------------------------------
   const screenEl = $('#wk-screen')
   const viewport = $('#wk-viewport')
+  // Her agents' table (agents.js, a module of her pages), for their names.
+  let Agents = null
+  import(new URL('agents.js', window.Fake.PAGES).href)
+    .then(m => (Agents = m.byId ? m : null))
+    .catch(() => {})
+
   const frames = {
     island: { role: 'island', el: $('#wk-home'), win: null, rect: [0, 0, 0, 0] },
     desk: { role: 'desk', el: $('#wk-desk'), win: null, rect: [0, 0, W, H] },
@@ -682,7 +688,7 @@
       toIsland('island:desk-answer', clone(said))
       return { value: null }
     },
-    settings_agent: (from, { agent }) => noteValue(`连接要改本机的 ${frames.island.win?.Agents?.byId(agent)?.name || agent} 设置，试玩里不做`),
+    settings_agent: (from, { agent }) => noteValue(`连接要改本机的 ${(Agents || frames.island.win?.Agents)?.byId(agent)?.name || agent} 设置，试玩里不做`),
     settings_open_site: () => noteValue('打开网页在这里不做'),
     settings_update: () => noteValue('更新在这里不做'),
     settings_wallpaper: () => noteValue('换壁纸要在 Windows 上'),

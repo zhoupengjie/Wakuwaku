@@ -10,7 +10,35 @@ import * as AddonUI from './addonui.ts'
 import { Island } from './pages.ts'
 import { pet } from './bridge.ts'
 
-export function lookPart(core) {
+// What this part takes of the settings' core: the names it reads (and,
+// of its lets, writes); settings.ts's call is checked against them.
+export interface LookCore {
+  AddonUI: any
+  COLOR: any
+  SIZES: any
+  T: any
+  displaysRow: any
+  draw: any
+  esc: any
+  ilookMode: any
+  ilookOpen: any
+  lhmAsking: any
+  onTaskbar: any
+  packTile: any
+  pagePets: any
+  part: any
+  patch: any
+  pickingPaper: any
+  row: any
+  screenRow: any
+  sec: any
+  seg: any
+  snap: any
+  sw: any
+  toMarketRow: any
+}
+
+export function lookPart(core: LookCore) {
   const {
     AddonUI, COLOR, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
   } = core

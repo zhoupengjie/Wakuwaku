@@ -85,7 +85,7 @@ function keys() {
 }
 
 const lang = () => here?.lang || 'zh'
-const t = (key, vars) => I18n.t(lang(), key, vars)
+const t = (key, vars?) => I18n.t(lang(), key, vars)
 const esc = WCards.esc
 const ctx = () => ({ lang: lang(), light: !!here?.light, detailed: here?.detailed !== false, now: Date.now(), all })
 const newId = () => `w${Date.now().toString(36).slice(-6)}${Math.random().toString(36).slice(2, 6)}`
@@ -665,7 +665,7 @@ function move(ev) {
 }
 
 // Over one it may stack onto, held half a second: that one ringed, armed.
-function seek(ev, moving) {
+function seek(ev, moving?) {
   const d = drag
   const over = ev ? [...nodes.values()].find(o => o !== d.n && !isBoard(o) && ev.clientX >= o.x && ev.clientX <= o.x + o.rect.w && ev.clientY >= o.y && ev.clientY <= o.y + o.rect.h) : null
   const ok = over && G.canStack(moving, over.entry) ? over : null
@@ -1191,7 +1191,7 @@ function closeMenu() {
 for (const pop of [menuEl]) {
   pop.addEventListener('mouseover', ev => {
     const why = pop.querySelector('.wmwhy')
-    const off = ev.target.closest('[data-why]')
+    const off = (ev.target as HTMLElement).closest('[data-why]')
     if (!why) return
     why.hidden = !off
     if (off) why.textContent = off.dataset.why
@@ -1205,21 +1205,21 @@ for (const pop of [menuEl]) {
 document.addEventListener(
   'pointerdown',
   ev => {
-    if (menu && !menuEl.contains(ev.target) && !ev.target.closest('.tools button, .bbtns button')) closeMenu()
-    if (lib && !libEl.contains(ev.target) && !ev.target.closest('.bbtns button')) closeLib()
-    if (asking && !ev.target.closest?.('.bask-card')) endAsk(false)
+    if (menu && !menuEl.contains(ev.target) && !(ev.target as HTMLElement).closest('.tools button, .bbtns button')) closeMenu()
+    if (lib && !libEl.contains(ev.target) && !(ev.target as HTMLElement).closest('.bbtns button')) closeLib()
+    if (asking && !(ev.target as HTMLElement).closest?.('.bask-card')) endAsk(false)
   },
   true,
 )
 document.addEventListener('contextmenu', ev => {
-  if (!ev.target.closest('.dw, .wmenu')) {
+  if (!(ev.target as HTMLElement).closest('.dw, .wmenu')) {
     ev.preventDefault()
     closeMenu()
     closeLib()
   }
 })
 menuEl.addEventListener('click', ev => {
-  const b = ev.target.closest('[data-act]')
+  const b = (ev.target as HTMLElement).closest('[data-act]')
   if (!b || b.classList.contains('off') || !menu) return
   const e = find(menu.id)
   const { tile, kind } = menu
@@ -1404,7 +1404,7 @@ document.addEventListener(
 )
 // Ctrl and a press on the bare desktop: the rectangle; without Ctrl, they go.
 document.addEventListener('pointerdown', ev => {
-  if (ev.button !== 0 || ev.target.closest?.('.dw, .wmenu, .bask, input')) return
+  if (ev.button !== 0 || (ev.target as HTMLElement).closest?.('.dw, .wmenu, .bask, input')) return
   if (!ev.ctrlKey) return clearSelection()
   ev.preventDefault()
   startMarquee(ev)
@@ -1488,13 +1488,13 @@ function endAsk(ok) {
   if (!a) return
   asking = null
   askEl.hidden = true
-  if (askEl.contains(document.activeElement)) document.activeElement.blur()
+  if (askEl.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
   keys()
   shapes()
   if (ok) keepLayout(layout.filter(o => o.id !== a.id))
 }
 askEl.addEventListener('click', ev => {
-  const b = ev.target.closest('[data-ask]')
+  const b = (ev.target as HTMLElement).closest('[data-ask]')
   if (b) endAsk(b.dataset.ask === 'yes')
 })
 askEl.addEventListener('contextmenu', ev => ev.preventDefault())
@@ -1556,7 +1556,7 @@ function closeLib() {
 }
 libEl.addEventListener('contextmenu', ev => ev.preventDefault())
 libEl.addEventListener('click', ev => {
-  const row = ev.target.closest('[data-k]')
+  const row = (ev.target as HTMLElement).closest('[data-k]')
   if (!row || !lib) return
   const b = find(lib.id)
   const x = lib.items[Number(row.dataset.k)]
@@ -1646,7 +1646,7 @@ window.__wkEval = (id, fn) => {
 }
 window.addEventListener('error', e => console.log('error:', e.message, e.filename, e.lineno))
 // For the tests' eyes: what is drawn where.
-provide('Desk', {
+const deskFace = {
   state: () => ({ here, layout, spots: Object.fromEntries(spots), icons, paper: !!paper, paper40: !!paper40, shapes: sentShapes }),
   // The plugins' views here (views.js), for the tests' eyes.
   views,
@@ -1698,4 +1698,6 @@ provide('Desk', {
     toast,
     newId,
   },
-})
+}
+export type DeskFace = typeof deskFace
+provide('Desk', deskFace)

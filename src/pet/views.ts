@@ -315,7 +315,7 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
 // none where it cannot so. opts: { ask, send, styleOf, look, changed,
 // log, redrawn: true for a page that draws its cards anew }.
 function boot(opts) {
-  const canMoveBefore = typeof Element.prototype.moveBefore === 'function'
+  const canMoveBefore = typeof ((((((Element.prototype as HTMLElement as HTMLElement as HTMLElement as HTMLElement as HTMLElement as HTMLElement)))))).moveBefore === 'function'
   const holder = document.createElement('div')
   holder.hidden = true
   holder.className = 'wview-park'

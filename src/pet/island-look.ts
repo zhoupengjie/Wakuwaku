@@ -9,8 +9,9 @@
 import * as Mica from './mica.ts'
 import { Settings } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { LookCore } from './island.ts'
 
-export function lookPart(core) {
+export function lookPart(core: LookCore) {
   const {
     DEEP_OP, PEEK_MS, TASKBAR_H, alignApps, barRest, body, clearWhen, clockBox, deskEdge, drawEntries,
     drawWindows, el, endNudge, frontBox, frontIcon, frontName, glide, home, isCapsule, isClear, isFilled,

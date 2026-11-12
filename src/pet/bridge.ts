@@ -35,7 +35,7 @@ function bridge() {
   // One at a time, in order: each call is its own request, and a drop must
   // not overtake the release before it.
   let queue = Promise.resolve()
-  const send = (cmd, args) => {
+  const send = (cmd, args?) => {
     queue = queue.then(() => invoke(cmd, args)).catch(err => console.error(cmd, err))
   }
 
@@ -81,7 +81,7 @@ function bridge() {
     dragEnd: () => send('pet_drag_end'),
     // Her menu; on the volume, the network or the clock of her taskbar
     // (part), the one Windows' own taskbar has there.
-    menu: part => send('pet_menu', { part: part || null }),
+    menu: (part?) => send('pet_menu', { part: part || null }),
     doubleClick: () => send('pet_double_click'),
     // Out of the queue: it answers when the walk is over.
     walk: (dx, ms) => invoke('pet_walk', { dx, ms }).catch(() => false),
@@ -136,7 +136,7 @@ function bridge() {
     onSettingsChanged: on('settings:changed'),
     // The island's window lost the keyboard (a click elsewhere).
     onBlur: on('island:blur'),
-    openSettings: tab => send('settings_open', { tab: tab || null }),
+    openSettings: (tab?) => send('settings_open', { tab: tab || null }),
     settingsClosed: () => send('settings_closed'),
     // To a session's window; true when there was one to go to.
     jump: id => invoke('session_jump', { id: String(id || '') }).catch(() => false),
@@ -277,7 +277,7 @@ function bridge() {
       call: (what, args) => invoke('addon_call', { id: String(args?.id || ''), what: String(what), args: args || {} }),
       // A card's view (views.js): what a widget's view shows ({ page, data,
       // rev }), a message of it for its main.js.
-      view: (what, widget, message) => invoke('addon_view', { what: String(what), widget: String(widget), message: message ?? null }),
+      view: (what, widget, message?) => invoke('addon_view', { what: String(what), widget: String(widget), message: message ?? null }),
       // From the settings: a package looked at, installed, a plugin taken
       // away, a pack taken away (its kind, pet or wallpaper, and id), a
       // .zip picked in Windows' dialog ({ path }, null: closed), one
@@ -324,7 +324,7 @@ function bridge() {
       cpuSensors: action => invoke('settings_cpu_sensors', { action }),
       fetch: reference => invoke('settings_fetch', { reference: String(reference || '') }),
       gallery: (page, sort, query) => invoke('settings_gallery', { page, sort, query }),
-      openSite: (place, account) => invoke('settings_open_site', { place, account: account || null }),
+      openSite: (place, account?) => invoke('settings_open_site', { place, account: account || null }),
       // Her updates: 'check', 'page' (the release's), 'update' (updates.rs).
       update: what => invoke('settings_update', { what }),
       // The Network proxy tried the way given ({ mode, kind, address }): GitHub reached or not (proxy.rs test).

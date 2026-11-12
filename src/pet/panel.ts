@@ -15,6 +15,7 @@
 import { t } from '../shared/i18n.ts'
 import { HerTalk, Island } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { Config } from '../shared/config.ts'
 
 // The other agents a prompt may come from, named on it (Claude Code's: none).
 const FROM = { codex: 'Codex', agy: 'Antigravity', opencode: 'OpenCode', omp: 'omp', zcode: 'ZCode', dsh: 'DeepSeek Harness' }
@@ -28,7 +29,7 @@ const STEP_ARM_MS = 150
 
 const panel = typeof document !== 'undefined' ? document.getElementById('panel') : null
 let lang = 'en'
-let config = {}
+let config: Config = {}
 let asks = []
 // The keys answer what the buttons do: an approval or a plan, theirs too
 // (zcode, dsh), whose own dialog closes as the answer reaches it
@@ -46,7 +47,7 @@ let typed = ''
 let armTimer
 let hasKeyboard = false
 
-const T = (key, vars) => t(lang, key, vars)
+const T = (key, vars?) => t(lang, key, vars)
 
 function el(tag, props, ...children) {
   const node = document.createElement(tag)
@@ -97,7 +98,7 @@ function letGoOfKeyboard() {
 function arm(ms) {
   clearTimeout(armTimer)
   armTimer = setTimeout(() => {
-    for (const b of panel.querySelectorAll('button')) b.disabled = false
+    for (const b of panel.querySelectorAll<HTMLButtonElement>('button')) b.disabled = false
     refreshConfirm()
   }, ms)
 }
@@ -214,9 +215,9 @@ function currentAnswer(q) {
 
 function refreshConfirm() {
   const ask = asks[0]
-  const confirm = panel.querySelector('button[data-action="confirm"]')
+  const confirm = panel.querySelector<HTMLButtonElement>('button[data-action="confirm"]')
   if (!ask || ask.kind !== 'question' || !confirm || armTimer === undefined) return
-  if (!panel.querySelector('button[data-action="dismiss"]')?.disabled) {
+  if (!panel.querySelector<HTMLButtonElement>('button[data-action="dismiss"]')?.disabled) {
     confirm.disabled = currentAnswer(ask.questions[step]) === null
   }
 }
@@ -340,7 +341,7 @@ function holderOf({ role, out, herUp, hidden }) {
 function render(armMs = ARM_MS) {
   if (!panel) return
   const ask = holdsPanel() ? asks[0] : null
-  const hadFocus = document.activeElement?.dataset?.input === 'answer'
+  const hadFocus = (document.activeElement as HTMLElement)?.dataset?.input === 'answer'
   panel.replaceChildren()
   document.body.classList.toggle('asking', !!ask)
 
@@ -388,7 +389,7 @@ function render(armMs = ARM_MS) {
 
   // Typing on: keep the box focused through a redraw.
   if (hadFocus && hasKeyboard) {
-    const box = panel.querySelector('[data-input="answer"]')
+    const box = panel.querySelector<HTMLInputElement>('[data-input="answer"]')
     if (box) {
       box.focus()
       box.setSelectionRange?.(box.value.length, box.value.length)
@@ -398,7 +399,7 @@ function render(armMs = ARM_MS) {
 
 // Typing shows the confirm button for a single-select "other" answer.
 panel?.addEventListener('input', e => {
-  if (e.target?.dataset?.input !== 'answer') return
+  if ((e.target as HTMLElement)?.dataset?.input !== 'answer') return
   const row = panel.querySelector('button[data-action="confirm"]')?.parentElement
   if (row?.hidden && typed.trim()) {
     row.hidden = false
@@ -449,7 +450,7 @@ if (typeof window !== 'undefined' && pet) {
     // island stays shut; the island's own key is the island's alone.
     if (ROLE === 'pet' ? which === 'island' : which !== 'island' && !holdsPanel()) return
     const ask = holdsPanel() ? asks[0] : null
-    const actionBtn = panel?.querySelector(`button[data-action="${which}"]`)
+    const actionBtn = panel?.querySelector<HTMLButtonElement>(`button[data-action="${which}"]`)
     const isArmed = !!panel && !panel.hidden && !!actionBtn && actionBtn.disabled === false
     // Over her head it is in sight whenever it is there.
     const islandOpen = ROLE === 'pet' ? !!panel && !panel.hidden : !!Island?.isOpen?.()

@@ -1298,7 +1298,9 @@
       settle: 700,
       world: F => ({ ...withAddons(F), sessions: [F.session('working')], taskbarLayout: { left: ['her'], center: ['start', 'apps'], right: [{ id: 'wtw', type: 'plugin', of: 'weather', size: 'M', icon: 'weather' }, 'monitor', 'tray', 'keys', 'quick', 'clock'] } }),
       steps: async p => {
-        window.AddonUI?.news.add('tally')
+        // The page's addonui (a module the page imports; on window before).
+        const ui = window.AddonUI || (await import(new URL('addonui.js', window.Fake.PAGES).href))
+        ui.news.add('tally')
         await p.wait(200)
         p.emit('taskbar:edit', { picker: true })
         await p.wait(600)

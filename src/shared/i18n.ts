@@ -3560,7 +3560,7 @@ function detectLang(locale) {
 
 // The words for key in lang, {name} filled from vars; English, then the
 // key itself, when a translation is missing.
-function t(lang, key, vars) {
+function t(lang, key, vars?) {
   const table = STRINGS[lang] || STRINGS.en
   const text = table[key] ?? STRINGS.en[key] ?? key
   return text.replace(/\{(\w+)\}/g, (all, name) => (vars && vars[name] !== undefined ? String(vars[name]) : all))

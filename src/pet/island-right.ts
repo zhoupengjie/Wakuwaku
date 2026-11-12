@@ -8,8 +8,9 @@
 // island's again.
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
+import type { RightCore } from './island.ts'
 
-export function rightPart(core) {
+export function rightPart(core: RightCore) {
   const {
     Widgets, el, home, isDetailed, isPinned, isSide, island, stripHue, stripInk, t,
   } = core
@@ -238,7 +239,7 @@ export function rightPart(core) {
     },
     { passive: false },
   )
-  function showNet(kind, bars) {
+  function showNet(kind, bars?) {
     const level = kind === 'wifi' && Number.isInteger(bars) ? Math.min(Math.max(bars, 1), 4) : 0
     netFront.textContent = level ? WIFI[level - 1] : NET[kind] || NET.other
     netBack.textContent = level ? NET.wifi : ''

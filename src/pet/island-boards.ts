@@ -8,8 +8,9 @@
 import * as DeskGrid from './deskgrid.ts'
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
+import type { BoardsCore } from './island.ts'
 
-export function boardsPart(core) {
+export function boardsPart(core: BoardsCore) {
   const {
     Widgets, closeStackPop, home, keepLayout, offBar, placeWidget, removeEntry, removeMember, t, takeWidgets,
     tbLayout, update,

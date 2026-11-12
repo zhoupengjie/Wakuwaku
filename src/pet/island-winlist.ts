@@ -10,8 +10,9 @@
 import * as Aim from './aim.ts'
 import * as Presses from './presses.ts'
 import { pet } from './bridge.ts'
+import type { WinlistCore } from './island.ts'
 
-export function winlistPart(core) {
+export function winlistPart(core: WinlistCore) {
   const {
     across, along, appOf, appOrder, barRest, body, closePop, crossHi, crossLo, el, hi, home, isExplorer, isOn,
     isSide, island, len, lo, openPop, orderedApps, pop, popReach, t, tbEdge, windowsBox,

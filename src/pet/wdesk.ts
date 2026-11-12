@@ -13,7 +13,7 @@ import * as WCards from './wcards.ts'
 import { esc, spark, ring, kindOf, colorOf, briefOf, titleOf, trendOf } from './wcards.ts'
 import * as Widgets from './widgets.ts'
 
-const t = (ctx, key, vars) => I18n.t(ctx.lang, key, vars)
+const t = (ctx, key, vars?) => I18n.t(ctx.lang, key, vars)
 
 const UP = ['#34d27b', '#0f7b3f']
 const DOWN = ['#ff6b6b', '#c42b3c']

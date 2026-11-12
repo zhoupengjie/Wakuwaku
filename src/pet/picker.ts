@@ -55,10 +55,11 @@ import { pet } from './bridge.ts'
 
 // Only with the island on (island.js made Isle, before this): else none.
 provide('Picker', Isle?.isOn() ? pickerPage() : null)
+export type PickerFace = ReturnType<typeof pickerPage>
 
 function pickerPage() {
   const el = Isle.el
-  const T = (key, vars) => t(Isle.lang, key, vars)
+  const T = (key, vars?) => t(Isle.lang, key, vars)
   const esc = WCards.esc
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
   const clone = v => JSON.parse(JSON.stringify(v))
@@ -1250,7 +1251,7 @@ function pickerPage() {
   }
 
   // Let go: where it goes (or back where it was).
-  function end(ok, x, y) {
+  function end(ok, x?, y?) {
     const d = drag
     if (!d) return
     drag = null
@@ -1491,8 +1492,8 @@ function pickerPage() {
   document.addEventListener(
     'pointerdown',
     e => {
-      if (!menu.hidden && !menu.contains(e.target) && !e.target.closest('[data-pk="menu"]')) menu.hidden = true
-      if (!smenu.hidden && !smenu.contains(e.target) && !e.target.closest('[data-cmore]')) closeSetMenu()
+      if (!menu.hidden && !menu.contains(e.target) && !(e.target as HTMLElement).closest('[data-pk="menu"]')) menu.hidden = true
+      if (!smenu.hidden && !smenu.contains(e.target) && !(e.target as HTMLElement).closest('[data-cmore]')) closeSetMenu()
       if (popFor && !pop.contains(e.target) && !popFor.contains(e.target) && !Isle.barRest.contains(e.target)) closePop()
     },
     true,

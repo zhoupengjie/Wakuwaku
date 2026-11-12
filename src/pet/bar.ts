@@ -43,7 +43,7 @@ const wins = document.getElementById('wins')
 const clock = document.querySelector('.clock')
 let state = { windows: [], look: {}, edge: 'bottom', align: 'center', material: 'clear', lang: 'zh' }
 
-const el = (tag, cls, text) => {
+const el = (tag, cls?, text?) => {
   const n = document.createElement(tag)
   if (cls) n.className = cls
   if (text != null) n.textContent = text
@@ -145,7 +145,7 @@ function drawWindows() {
   const animate = isDock() && buttonsDrawn
   const buttons = list.map(app => {
     const windows = app.windows || []
-    let b = old.get(app.app)
+    let b = (old.get(app.app) as HTMLElement)
     old.delete(app.app)
     if (!b) {
       b = el('div', 'win')
@@ -164,7 +164,7 @@ function drawWindows() {
     b.classList.toggle('flash', windows.some(w => w.flash))
     if (!windows.length) b.title = app.name || ''
     else b.removeAttribute('title')
-    const img = b.querySelector(':scope > img')
+    const img = (((((b.querySelector<HTMLElement>(':scope > img') as HTMLElement as HTMLElement as HTMLElement as HTMLElement as HTMLElement)))))
     if (img.getAttribute('src') !== (app.png || '')) img.src = app.png || ''
     let count = b.querySelector(':scope > .count')
     if (windows.length > 1) {
@@ -378,7 +378,7 @@ function pressApp(node, app, what) {
 // this window never takes the keyboard either.
 let heldAtPress = null
 document.addEventListener('pointerdown', e => {
-  if (e.target.closest('[data-app]')) heldAtPress = invoke('taskbar_held').catch(() => null)
+  if ((e.target as HTMLElement).closest('[data-app]')) heldAtPress = invoke('taskbar_held').catch(() => null)
 })
 function pressAt(e, node) {
   const press = { type: e.type, button: e.button }
@@ -392,18 +392,18 @@ function pressAt(e, node) {
 }
 document.addEventListener('click', e => {
   // A window minimized into the dock: back, to the front (drawMins).
-  const mini = e.target.closest('[data-min]')
+  const mini = (e.target as HTMLElement).closest('[data-min]')
   if (mini) return call('taskbar_window', { id: Number(mini.dataset.min), what: 'front' })
-  const node = e.target.closest('[data-app]')
+  const node = (e.target as HTMLElement).closest('[data-app]')
   if (node) return pressAt(e, node)
   // Her capsule: the prompt shown in her island on the main display (bars.rs bar_asks).
   closePop()
-  if (e.target.closest('#her')) return invoke('bar_asks').catch(() => {})
-  const what = e.target.closest('[data-bar]')?.dataset.bar
+  if ((e.target as HTMLElement).closest('#her')) return invoke('bar_asks').catch(() => {})
+  const what = (e.target as HTMLElement).closest('[data-bar]')?.dataset.bar
   if (what) return invoke('taskbar_open', { what })
 })
 document.addEventListener('auxclick', e => {
-  const node = e.target.closest('[data-app]')
+  const node = (e.target as HTMLElement).closest('[data-app]')
   if (node && e.button === 1) pressAt(e, node)
 })
 // The middle button pressed: no scrolling by the pointer (Chromium's).
@@ -415,7 +415,7 @@ document.addEventListener('mousedown', e => e.button === 1 && e.preventDefault()
 // 跟任务栏保持一致，加上「占着位置」).
 document.addEventListener('contextmenu', e => {
   e.preventDefault()
-  if (!isDock() || e.target.closest('[data-app], #mins, .bin, #her') || clock.contains(e.target)) return
+  if (!isDock() || (e.target as HTMLElement).closest('[data-app], #mins, .bin, #her') || clock.contains(e.target)) return
   invoke('pet_menu', { part: null }).catch(() => {})
 })
 
@@ -428,7 +428,7 @@ let popFor = null
 let popTimer
 // Where the list's window lies (aimPop), in this page's px, while it shows.
 let popAt = null
-const call = (cmd, args) => invoke(cmd, args).catch(() => {})
+const call = (cmd, args?) => invoke(cmd, args).catch(() => {})
 function openPop(node, kind) {
   const b = node.getBoundingClientRect()
   popFor = { app: node.dataset.app, kind }
@@ -464,7 +464,7 @@ wins.addEventListener('mousemove', e => aim.move(e.clientX, e.clientY, performan
 wins.addEventListener('mouseover', e => {
   const at = performance.now()
   aim.move(e.clientX, e.clientY, at)
-  aim.over(e.target.closest('[data-app]')?.dataset.app ?? null, at)
+  aim.over((e.target as HTMLElement).closest('[data-app]')?.dataset.app ?? null, at)
   aimPop()
 })
 wins.addEventListener('mouseenter', () => call('bar_pop_over', { over: true }))
@@ -475,7 +475,7 @@ wins.addEventListener('mouseleave', () => {
 })
 // A right press: its menu; with Shift, its window's own (pressApp).
 wins.addEventListener('contextmenu', e => {
-  const node = e.target.closest('[data-app]')
+  const node = (e.target as HTMLElement).closest('[data-app]')
   if (!node) return
   e.preventDefault()
   clearTimeout(popTimer)
@@ -631,7 +631,7 @@ function sendGlass(g, plate, fade) {
 
 // Its glass changed size, or is about to (to: where it goes, should it be
 // narrower than now).
-function glassMoves(to) {
+function glassMoves(to?) {
   if (!isDock()) return
   const now = boxOf()
   clearTimeout(plateWait)
@@ -771,7 +771,7 @@ const isGlideOn = node => node?.matches?.(GLIDE_ON) && !node.hidden
 strip.addEventListener('mouseenter', e => isGlideOn(e.target) && glideTo(e.target), true)
 strip.addEventListener('mouseleave', e => (e.target === strip || isGlideOn(e.target)) && glideOff(), true)
 strip.addEventListener('pointerdown', e => {
-  if (e.button === 0 && glideOn && e.target.closest(GLIDE_ON) === glideOn) glide.classList.add('down')
+  if (e.button === 0 && glideOn && (e.target as HTMLElement).closest(GLIDE_ON) === glideOn) glide.classList.add('down')
 })
 addEventListener('pointerup', () => glide.classList.remove('down'))
 // Its buttons pressed in and springing back (presses.js pressIn; not a
@@ -891,7 +891,7 @@ function drawMins() {
       if (!first) moveMin(b, true)
     }
     b.title = w.title || app.name || ''
-    const badge = b.querySelector('.badge')
+    const badge = (((((b.querySelector<HTMLElement>('.badge') as HTMLElement as HTMLElement as HTMLElement as HTMLElement as HTMLElement)))))
     if (badge.getAttribute('src') !== (app.png || '')) badge.src = app.png || ''
     after = b
   }
@@ -978,7 +978,7 @@ const binSep = document.getElementById('binsep')
 function drawBin(b) {
   bin.hidden = binSep.hidden = !isDock()
   if (!isDock()) return
-  const img = bin.querySelector('img')
+  const img = (((((bin.querySelector<HTMLElement>('img') as HTMLElement as HTMLElement as HTMLElement as HTMLElement as HTMLElement)))))
   if (b?.png && img.getAttribute('src') !== b.png) img.src = b.png
   img.hidden = !b?.png
   bin.classList.toggle('full', b?.full === true)

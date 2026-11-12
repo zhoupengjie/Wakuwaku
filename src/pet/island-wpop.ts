@@ -10,8 +10,9 @@ import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { Picker, Settings } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { WpopCore } from './island.ts'
 
-export function wpopPart(core) {
+export function wpopPart(core: WpopCore) {
   const {
     Widgets, barRest, closePop, el, entryNodes, fillHer, home, isDetailed, isSide, memberName, needsSettings,
     popCtx, t, tbLayout, update, watchPresses,

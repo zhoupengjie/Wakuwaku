@@ -10,8 +10,9 @@ import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { LayoutCore } from './island.ts'
 
-export function layoutPart(core) {
+export function layoutPart(core: LayoutCore) {
   const {
     CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, barRest, body, clockBox, deskEdge, el,
     face, facesBox, frontBox, growNode, home, isCapsule, isDetailed, isLight, isOn, isSide, isSlim, isSplit,

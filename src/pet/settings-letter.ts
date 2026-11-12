@@ -10,7 +10,71 @@
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
 
-export function letterPart(core) {
+// What this part takes of the settings' core: the names it reads (and,
+// of its lets, writes); settings.ts's call is checked against them.
+export interface LetterCore {
+  AGENTS: any
+  COLOR: any
+  MOST_FILES: any
+  PROXY_KINDS: any
+  T: any
+  Widgets: any
+  accountOf: any
+  agentsHTML: any
+  body: any
+  choicesOf: any
+  confOf: any
+  draft: any
+  draw: any
+  dropSure: any
+  esc: any
+  expanded: any
+  firstAgent: any
+  handButtons: any
+  handNote: any
+  handNoteTimer: any
+  inbox: any
+  inboxHTML: any
+  inboxId: any
+  isLetter: any
+  isReading: any
+  keepDraft: any
+  labelOf: any
+  lang: any
+  layer: any
+  listed: any
+  loginWhy: any
+  mailDate: any
+  mailError: any
+  mailForm: any
+  mailFormHTML: any
+  mailList: any
+  mailNote: any
+  mailSize: any
+  menuPick: any
+  patch: any
+  people: any
+  picking: any
+  providerOf: any
+  proxyTyped: any
+  reading: any
+  redrawMail: any
+  relayout: any
+  row: any
+  sec: any
+  seg: any
+  setConf: any
+  snap: any
+  sw: any
+  tab: any
+  talkHTML: any
+  talkOf: any
+  twoPanes: any
+  where: any
+  writing: any
+}
+
+export function letterPart(core: LetterCore) {
   const {
     AGENTS, COLOR, MOST_FILES, PROXY_KINDS, T, Widgets, accountOf, agentsHTML, body, choicesOf, confOf, draw,
     esc, expanded, firstAgent, handButtons, inbox, inboxHTML, inboxId, isLetter, isReading, keepDraft,
@@ -52,7 +116,7 @@ export function letterPart(core) {
   // under it, words an agent wrote on top, if given), or one passed on
   // (with its attachments). One half written is not thrown away for it:
   // it shows.
-  function write(kind, l, words) {
+  function write(kind, l?, words?) {
     closeMenu()
     if (core.draft && (core.draft.touched || core.draft.files.length)) {
       core.draft.note = T('mail.w.unsent')
@@ -101,7 +165,7 @@ export function letterPart(core) {
   }
 
   // The same about a letter in the list: opened first (for its text).
-  async function writeAbout(kind, account, uid, folder, words) {
+  async function writeAbout(kind, account, uid, folder, words?) {
     if (!(core.reading?.letter && isReading(account, folder, uid))) await openLetter(account, uid, folder)
     if (core.reading?.letter && isReading(account, folder, uid)) write(kind, core.reading.letter, words)
   }
@@ -615,7 +679,7 @@ export function letterPart(core) {
   }
 
   // Why a letter could not be had or handed on, in words.
-  function handError(err, agent) {
+  function handError(err, agent?) {
     const kind = err?.kind || 'other'
     const own = ['noAgent', 'start', 'save', 'noLetter', 'gone', 'busy', 'noTalk', 'noSession', 'empty']
     if (!own.includes(kind)) return mailError(err, accountOf(core.reading?.account))

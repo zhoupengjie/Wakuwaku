@@ -7,8 +7,9 @@
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
 import * as Flow from './flow.ts'
+import type { RingCore } from './island.ts'
 
-export function ringPart(core) {
+export function ringPart(core: RingCore) {
   const {
     ANCHORED, CLIPS, Flow, REACTIONS, animateHer, body, compact, flow, her, herTalks, hintAccent, home, hue,
     ink, isCapsule, isHinting, isHome, isNudging, isOn, isRinging, isSide, island, modeNow, newsDot, nudgeFor,

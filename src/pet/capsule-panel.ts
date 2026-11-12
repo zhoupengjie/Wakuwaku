@@ -23,10 +23,11 @@ import { pet } from './bridge.ts'
 
 // Only with the island and the picker there (both made before this): else none.
 provide('CapsulePanel', Isle && Picker ? capsulePanel() : null)
+export type CapsulePanelFace = ReturnType<typeof capsulePanel>
 
 function capsulePanel() {
   const el = Isle.el
-  const T = (key, vars) => t(Isle.lang, key, vars)
+  const T = (key, vars?) => t(Isle.lang, key, vars)
   const esc = WCards.esc
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
   const GRIP = '<svg viewBox="0 0 10 16" aria-hidden="true"><circle cx="3" cy="3" r="1.3"/><circle cx="7" cy="3" r="1.3"/><circle cx="3" cy="8" r="1.3"/><circle cx="7" cy="8" r="1.3"/><circle cx="3" cy="13" r="1.3"/><circle cx="7" cy="13" r="1.3"/></svg>'
@@ -204,7 +205,7 @@ function capsulePanel() {
   document.addEventListener(
     'pointerdown',
     e => {
-      if (!open || panel.contains(e.target) || Isle.island.contains(e.target) || e.target.closest('.pk, .pk-toasts, .pk-pop, .tbedit, #bar-rest')) return
+      if (!open || panel.contains(e.target) || Isle.island.contains(e.target) || (e.target as HTMLElement).closest('.pk, .pk-toasts, .pk-pop, .tbedit, #bar-rest')) return
       hide()
     },
     true,

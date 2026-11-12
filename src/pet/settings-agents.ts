@@ -9,7 +9,35 @@
 import * as Agents from './agents.ts'
 import { pet } from './bridge.ts'
 
-export function agentsPart(core) {
+// What this part takes of the settings' core: the names it reads (and,
+// of its lets, writes); settings.ts's call is checked against them.
+export interface AgentsCore {
+  Agents: any
+  COLOR: any
+  T: any
+  agentOpen: any
+  connecting: any
+  crashShown: any
+  draw: any
+  esc: any
+  failedHTML: any
+  lang: any
+  nameList: any
+  netNow: any
+  othersOpen: any
+  patch: any
+  pluginOpen: any
+  relayout: any
+  row: any
+  sec: any
+  seg: any
+  snap: any
+  sw: any
+  tab: any
+  toolNames: any
+}
+
+export function agentsPart(core: AgentsCore) {
   const {
     Agents, COLOR, T, draw, esc, nameList, netNow, patch, row, sec, seg, sw,
   } = core
@@ -54,7 +82,7 @@ export function agentsPart(core) {
   // registry: 'npmmirror', picked after the registry pnpm names could not
   // be reached.
   let dshSwitching = ''
-  async function dshSwitch(via, registry) {
+  async function dshSwitch(via, registry?) {
     if (core.connecting) return
     const r = Agents.read(core.snap, 'dsh') || {}
     if (!registry && !Agents.isIn(core.snap, 'dsh')) return (r.via || 'plugin') === via ? undefined : patch({ dshVia: via })

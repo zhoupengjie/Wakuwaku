@@ -12,8 +12,9 @@ import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { WmenuCore } from './island.ts'
 
-export function wmenuPart(core) {
+export function wmenuPart(core: WmenuCore) {
   const {
     Widgets, barRest, closePop, closeStackPop, closeWidgetPop, el, entryNodes, fillHer, hasMonitorPart, home,
     isDetailed, island, isleCtx, keepLayout, memberName, openWidgetSettings, ownName, placedAt, popCtx,

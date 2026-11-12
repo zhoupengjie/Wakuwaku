@@ -65,6 +65,7 @@ import { lookPart } from './island-look.ts'
 import { keysPart } from './island-keys.ts'
 import { ringPart } from './island-ring.ts'
 import { dropPart } from './island-drop.ts'
+import type { Config } from '../shared/config.ts'
 
 
 // Brighter than the pet's colours: these sit on black. On the light
@@ -313,7 +314,7 @@ const stage = document.getElementById('stage')
 
 let lang = 'en'
 let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
-let config = {}
+let config: Config = {}
 // OLED's guard against burn-in (the settings' oledShift): what stays put
 // all day, the taskbar's icons, words and clock and the island, a screen
 // pixel off every 2.5 minutes, round a 5 x 5 square row by row and back
@@ -554,7 +555,7 @@ const shownWidget = () => (isQuiet() && widgets.length ? widgets[widgetAt % widg
 // The clock: how long this turn has run, or how long the finished one took.
 const time = () => Status.time(now)
 
-function el(tag, cls, text) {
+function el(tag, cls?, text?) {
   const node = document.createElement(tag)
   if (cls) node.className = cls
   if (text !== undefined) node.textContent = text
@@ -1273,9 +1274,7 @@ function fadeGround() {
 // the spring before it fades in, and the wait while it moves with it.
 let plateSent = ''
 // In island-plate.js:
-const {
-  DEEP_OP, PLATE_OUT_MS, hidePlate, placePlate, setDeep, setSize, setStow,
-} = platePart({
+const plateCore = {
   Anchor, afterSpring, anchor, atBottom, body, home, inTopStrip, isCapsule, isEmbedded, isOn, isRinging,
   isSide, island, sizeOf, stillMotion, tbEdge,
   get config() { return config },
@@ -1296,7 +1295,11 @@ const {
   get taskWindows() { return taskWindows },
   get view() { return view },
   get plateSent() { return plateSent }, set plateSent(v) { plateSent = v },
-})
+}
+export type PlateCore = typeof plateCore
+const {
+  DEEP_OP, PLATE_OUT_MS, hidePlate, placePlate, setDeep, setSize, setStow,
+} = platePart(plateCore)
 
 // --- Deciding ---------------------------------------------------------------
 
@@ -1324,11 +1327,7 @@ function sizeOf(name) {
 let frontWas = null
 let taskbarBuilt = false
 // In island-right.js:
-const {
-  barRest, batMark, capsMark, clockBox, deskEdge, facesBox, fillBar, frontBox, frontIcon, frontName,
-  growNode, imeMark, keysBox, netMark, onPixels, privBox, quickBox, showBattery, showNet, showPrivacy,
-  showVolume, snapStart, startButton, startPart, taskViewButton, trayBox, volMark, widgetFaces, windowsBox,
-} = rightPart({
+const rightCore = {
   Widgets, el, home, isDetailed, isPinned, isSide, island, stripHue, stripInk, t,
   get editLayout() { return editLayout },
   get fillTaskbar() { return fillTaskbar },
@@ -1336,7 +1335,13 @@ const {
   get monitor() { return monitor },
   get widgetAt() { return widgetAt },
   get widgets() { return widgets },
-})
+}
+export type RightCore = typeof rightCore
+const {
+  barRest, batMark, capsMark, clockBox, deskEdge, facesBox, fillBar, frontBox, frontIcon, frontName,
+  growNode, imeMark, keysBox, netMark, onPixels, privBox, quickBox, showBattery, showNet, showPrivacy,
+  showVolume, snapStart, startButton, startPart, taskViewButton, trayBox, volMark, widgetFaces, windowsBox,
+} = rightPart(rightCore)
 
 // --- The taskbar's layout (taskbarLayout) -------------------------------------------
 // While the layout is being edited: the one being made, not yet kept.
@@ -1356,12 +1361,7 @@ let windowsDrawn = ''
 // The programs' buttons drawn once already: a new one after that grows its line in.
 let buttonsDrawn = false
 // In island-layout.js:
-const {
-  PART_NODES, RUNS_APART, TB_OPTIONAL, TB_PRESETS, alignApps, askPlugins, carousels, drawEntries,
-  entryNodes, fillHer, fillTaskbar, flashSince, hasMonitorPart, herSlot, memberName, midLeft, needsSettings,
-  ownName, placeMid, placeSideSettings, placeSlot, placedAt, popCtx, presetOf, stillMotionNow, tbLayout,
-  tickCarousels, turnCarousel, zones,
-} = layoutPart({
+const layoutCore = {
   CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, barRest, body, clockBox, deskEdge, el,
   face, facesBox, frontBox, growNode, home, isCapsule, isDetailed, isLight, isOn, isSide, isSlim, isSplit,
   isStripLight, island, keysBox, len, lo, onPixels, privBox, quickBox, sheetImage, showFrame, sizeOf,
@@ -1402,7 +1402,14 @@ const {
   get taskbarBuilt() { return taskbarBuilt }, set taskbarBuilt(v) { taskbarBuilt = v },
   get trayDrawn() { return trayDrawn }, set trayDrawn(v) { trayDrawn = v },
   get windowsDrawn() { return windowsDrawn }, set windowsDrawn(v) { windowsDrawn = v },
-})
+}
+export type LayoutCore = typeof layoutCore
+const {
+  PART_NODES, RUNS_APART, TB_OPTIONAL, TB_PRESETS, alignApps, askPlugins, carousels, drawEntries,
+  entryNodes, fillHer, fillTaskbar, flashSince, hasMonitorPart, herSlot, memberName, midLeft, needsSettings,
+  ownName, placeMid, placeSideSettings, placeSlot, placedAt, popCtx, presetOf, stillMotionNow, tbLayout,
+  tickCarousels, turnCarousel, zones,
+} = layoutPart(layoutCore)
 
 // --- The pointer's glide --------------------------------------------------------
 let glideOn = null
@@ -1419,10 +1426,7 @@ let wgPick = null
 let stackFor = null
 let imeOpen = false
 // In island-glide.js:
-const {
-  appOf, appOrder, closePop, drawWindows, fadeWins, glide, glideTo, isExplorer, openPop, orderedApps, pop,
-  popReach, watchPresses,
-} = glidePart({
+const glideCore = {
   alignApps, barRest, body, crossLo, el, entryNodes, flashSince, hi, home, imeMark, isOn, isSide, lo,
   openedUp, placeSlot, t, trayBox, windowsBox,
   get closeImeList() { return closeImeList },
@@ -1454,14 +1458,16 @@ const {
   get popMoving() { return popMoving }, set popMoving(v) { popMoving = v },
   get popShown() { return popShown }, set popShown(v) { popShown = v },
   get windowsDrawn() { return windowsDrawn }, set windowsDrawn(v) { windowsDrawn = v },
-})
+}
+export type GlideCore = typeof glideCore
+const {
+  appOf, appOrder, closePop, drawWindows, fadeWins, glide, glideTo, isExplorer, openPop, orderedApps, pop,
+  popReach, watchPresses,
+} = glidePart(glideCore)
 
 // --- A widget on the taskbar, opened ------------------------------------------------
 // In island-wpop.js:
-const {
-  STACK_CARD_W, closeStackPop, closeWidgetPop, drawStackPop, drawWidgetPop, imePop, keepLayout,
-  openStackPop, openWidgetPop, openWidgetSettings, removeEntry, removeMember, stackPop, wgPop,
-} = wpopPart({
+const wpopCore = {
   Widgets, barRest, closePop, el, entryNodes, fillHer, home, isDetailed, isSide, memberName, needsSettings,
   popCtx, t, tbLayout, update, watchPresses,
   get allWidgets() { return allWidgets },
@@ -1480,16 +1486,19 @@ const {
   get stackFor() { return stackFor }, set stackFor(v) { stackFor = v },
   get wgFor() { return wgFor }, set wgFor(v) { wgFor = v },
   get wgPick() { return wgPick }, set wgPick(v) { wgPick = v },
-})
+}
+export type WpopCore = typeof wpopCore
+const {
+  STACK_CARD_W, closeStackPop, closeWidgetPop, drawStackPop, drawWidgetPop, imePop, keepLayout,
+  openStackPop, openWidgetPop, openWidgetSettings, removeEntry, removeMember, stackPop, wgPop,
+} = wpopPart(wpopCore)
 
 // --- A widget's menu (the spec's §10) -------------------------------------------------
 let menuFor = null
 // The open island's height for its menu (0: none open).
 let menuRoom = 0
 // In island-wmenu.js:
-const {
-  closeMenu, keyFor, offBar, openMenu, placeNow, placeWidget, whereOf, wmenu,
-} = wmenuPart({
+const wmenuCore = {
   Widgets, barRest, closePop, closeStackPop, closeWidgetPop, el, entryNodes, fillHer, hasMonitorPart, home,
   isDetailed, island, isleCtx, keepLayout, memberName, openWidgetSettings, ownName, placedAt, popCtx,
   removeEntry, removeMember, rowSize, setRowSize, showCard, stackPop, t, tbLayout, update, watchPresses,
@@ -1515,14 +1524,15 @@ const {
   get wgFor() { return wgFor },
   get menuFor() { return menuFor }, set menuFor(v) { menuFor = v },
   get menuRoom() { return menuRoom }, set menuRoom(v) { menuRoom = v },
-})
+}
+export type WmenuCore = typeof wmenuCore
+const {
+  closeMenu, keyFor, offBar, openMenu, placeNow, placeWidget, whereOf, wmenu,
+} = wmenuPart(wmenuCore)
 
 // --- Boards on the desktop (§7 工作台) ---------------------------------------------
 // In island-boards.js:
-const {
-  backToIsland, boardName, boardSize, deskBoards, deskOff, deskPlace, keepDesk, keepDeskLayout, putOnDesk,
-  toBoard, toDesk,
-} = boardsPart({
+const boardsCore = {
   Widgets, closeStackPop, home, keepLayout, offBar, placeWidget, removeEntry, removeMember, t, takeWidgets,
   tbLayout, update,
   get allWidgets() { return allWidgets },
@@ -1530,14 +1540,19 @@ const {
   get lang() { return lang },
   get newId() { return newId },
   get stackFor() { return stackFor },
-})
+}
+export type BoardsCore = typeof boardsCore
+const {
+  backToIsland, boardName, boardSize, deskBoards, deskOff, deskPlace, keepDesk, keepDeskLayout, putOnDesk,
+  toBoard, toDesk,
+} = boardsPart(boardsCore)
 
 let popShown = null
 let popMoving = false
 let popMoveTimer
 // --- A program's windows, listed over its button -------------------------------------
 // In island-winlist.js:
-const { besideOrOver, drawPop, pressApp, sendThumbs } = winlistPart({
+const winlistCore = {
   across, along, appOf, appOrder, barRest, body, closePop, crossHi, crossLo, el, hi, home, isExplorer, isOn,
   isSide, island, len, lo, openPop, orderedApps, pop, popReach, t, tbEdge, windowsBox,
   get editLayout() { return editLayout },
@@ -1549,28 +1564,29 @@ const { besideOrOver, drawPop, pressApp, sendThumbs } = winlistPart({
   get popMoving() { return popMoving }, set popMoving(v) { popMoving = v },
   get popShown() { return popShown }, set popShown(v) { popShown = v },
   get popTimer() { return popTimer }, set popTimer(v) { popTimer = v },
-})
+}
+export type WinlistCore = typeof winlistCore
+const { besideOrOver, drawPop, pressApp, sendThumbs } = winlistPart(winlistCore)
 
 // --- The input method on the taskbar -------------------------------------------------
 // In island-ime.js:
-const { closeImeList, openImeList } = imePart({
+const imeCore = {
   besideOrOver, capsMark, closePop, closeWidgetPop, el, imeMark, imePop, isSide, showBattery, showNet,
   showPrivacy, showVolume, t, watchPresses,
   get lang() { return lang },
   get popFor() { return popFor },
   get wgFor() { return wgFor },
   get imeOpen() { return imeOpen }, set imeOpen(v) { imeOpen = v },
-})
+}
+export type ImeCore = typeof imeCore
+const { closeImeList, openImeList } = imePart(imeCore)
 
 // --- The taskbar's look: Mica, light or dark, Windows' accent -------------------------
 // The monitor's scale as taskbar:strip says it (sf); 0 until told.
 let stripScale = 0
 let trayOpen = false
 // In island-look.js:
-const {
-  chevron, drawFront, drawMica, drawTray, flyout, groundOf, inkOf, inkParts, isOut, lookNow, modeNow,
-  openTray, orderedTray, outBox, sendTrayRects, setInk, setPeek, tickClock, trayOrder,
-} = lookPart({
+const lookCore = {
   DEEP_OP, PEEK_MS, TASKBAR_H, alignApps, barRest, body, clearWhen, clockBox, deskEdge, drawEntries,
   drawWindows, el, endNudge, frontBox, frontIcon, frontName, glide, home, isCapsule, isClear, isFilled,
   isLight, isMica, isOn, isSide, isSlim, isStripLight, island, islandViews, placeAnchor, sendSolid, setDeep,
@@ -1597,11 +1613,16 @@ const {
   get trayIcons() { return trayIcons }, set trayIcons(v) { trayIcons = v },
   get trayOpen() { return trayOpen }, set trayOpen(v) { trayOpen = v },
   get trayRectsSent() { return trayRectsSent }, set trayRectsSent(v) { trayRectsSent = v },
-})
+}
+export type LookCore = typeof lookCore
+const {
+  chevron, drawFront, drawMica, drawTray, flyout, groundOf, inkOf, inkParts, isOut, lookNow, modeNow,
+  openTray, orderedTray, outBox, sendTrayRects, setInk, setPeek, tickClock, trayOrder,
+} = lookPart(lookCore)
 
 // --- The keyboard on the taskbar (Win+T, Win+B) ---------------------------------------
 // In island-keys.js:
-keysPart({
+const keysCore = {
   along, appOf, barRest, batMark, body, chevron, clockBox, closeImeList, closePop, closeStackPop,
   closeWidgetPop, el, endEdit, flyout, hi, home, isOn, isOut, isSetting, isSide, lo, netMark, openImeList,
   openMenu, openStackPop, openTray, openWidgetPop, orderedTray, outBox, pop, pressApp, quickBox, t, trayBox,
@@ -1614,7 +1635,9 @@ keysPart({
   get trayIcons() { return trayIcons },
   get trayOpen() { return trayOpen },
   get wgFor() { return wgFor },
-})
+}
+export type KeysCore = typeof keysCore
+keysPart(keysCore)
 
 // --- Editing the layout: the parts dragged about on the strip itself -------------------
 // As KDE edits a panel (the picker of 2026-10-17): each part outlined, the
@@ -1679,7 +1702,7 @@ document.addEventListener(
   e => {
     const pressed = pressedHere
     pressedHere = false
-    const what = !pressed && e.button === 0 && editLayout && editBar.contains(e.target) && e.target.closest('[data-edit]')?.dataset.edit
+    const what = !pressed && e.button === 0 && editLayout && editBar.contains(e.target) && (e.target as HTMLElement).closest('[data-edit]')?.dataset.edit
     if (what) editAct(what)
   },
   true,
@@ -1816,7 +1839,7 @@ barRest.addEventListener(
     if (!editLayout) return
     e.preventDefault()
     e.stopPropagation()
-    if (e.button === 0) Picker?.pressStrip(e, e.target.closest('[data-part]'))
+    if (e.button === 0) Picker?.pressStrip(e, (e.target as HTMLElement).closest('[data-part]'))
   },
   true,
 )
@@ -2021,9 +2044,7 @@ function dismiss() {
 
 // --- The flow light (flow.js) -------------------------------------------------------
 // In island-ring.js:
-const {
-  animateRing, blink, cue, drawNews, placeFlow, placeNews, stopRing, stopStepping, takePending,
-} = ringPart({
+const ringCore = {
   ANCHORED, CLIPS, Flow, REACTIONS, animateHer, body, compact, flow, her, herTalks, hintAccent, home, hue,
   ink, isCapsule, isHinting, isHome, isNudging, isOn, isRinging, isSide, island, modeNow, newsDot, nudgeFor,
   setStow, spins, stillMotionNow, taskHead, update,
@@ -2044,11 +2065,15 @@ const {
   get pending() { return pending }, set pending(v) { pending = v },
   get reactTimer() { return reactTimer }, set reactTimer(v) { reactTimer = v },
   get reacting() { return reacting }, set reacting(v) { reacting = v },
-})
+}
+export type RingCore = typeof ringCore
+const {
+  animateRing, blink, cue, drawNews, placeFlow, placeNews, stopRing, stopStepping, takePending,
+} = ringPart(ringCore)
 
 // --- Pulling her out: the drop --------------------------------------------------
 // In island-drop.js:
-const { absorb, reach } = dropPart({
+const dropCore = {
   BODY_H, BODY_W, BREAK_PX, CLIPS, DROP_R, PULL_ROOM, REACH_R, REACH_SHARE, atBottom, body, dropHer,
   dropSheet, gooDrop, gooIsland, gooNeck, her, hidePlate, home, isHome, isNudging, isOn, isSetting, isSide,
   island, pressNudge, setRoom, setStow, sheetImage, showFrame, tbEdge, update,
@@ -2066,7 +2091,9 @@ const { absorb, reach } = dropPart({
   get pull() { return pull }, set pull(v) { pull = v },
   get pulledAt() { return pulledAt }, set pulledAt(v) { pulledAt = v },
   get retractTimer() { return retractTimer }, set retractTimer(v) { retractTimer = v },
-})
+}
+export type DropCore = typeof dropCore
+const { absorb, reach } = dropPart(dropCore)
 
 // --- On and off ---------------------------------------------------------------
 
@@ -2325,31 +2352,31 @@ for (const target of [island]) {
     }
     // A button of a widget's own in its card (what is playing: previous,
     // play or pause, next; wcards.js actionsHTML): to its plugin.
-    const wa = view === 'expanded' && e.target.closest('[data-wact]')
+    const wa = view === 'expanded' && (e.target as HTMLElement).closest('[data-wact]')
     if (wa) {
       if (!wa.classList.contains('off')) pet.widgets?.act(wa.dataset.widget, wa.dataset.wact)
       return
     }
     // In a card unfolded: nothing more (it is read there).
-    if (view === 'expanded' && e.target.closest('.icard')) return
+    if (view === 'expanded' && (e.target as HTMLElement).closest('.icard')) return
     // The press, if the clocks redrew the session between it and the release.
-    const id = view === 'expanded' && (e.target.closest('[data-jump]')?.dataset.jump || (Date.now() - pressed.at < 1000 && pressed.id))
+    const id = view === 'expanded' && ((e.target as HTMLElement).closest('[data-jump]')?.dataset.jump || (Date.now() - pressed.at < 1000 && pressed.id))
     pressed = { id: '', at: 0 }
     if (id) {
       if (isNudging()) dismiss()
       return jumpTo(id)
     }
-    if (isNudging() && !e.target.closest('[data-widget]')) return pressNudge()
+    if (isNudging() && !(e.target as HTMLElement).closest('[data-widget]')) return pressNudge()
     // Not connected: "don't remind me" puts the hint away; any other
     // press but on a session's or a widget's row opens the settings'
     // welcome (a session listed still goes to its window: the hooks
     // removed while it runs).
-    if (e.target.closest('[data-hint-off]')) return pet.settings.set({ connectHintOff: true })
-    if (isHinting() && !e.target.closest('[data-widget]')) return pet.openSettings('connect')
+    if ((e.target as HTMLElement).closest('[data-hint-off]')) return pet.settings.set({ connectHintOff: true })
+    if (isHinting() && !(e.target as HTMLElement).closest('[data-widget]')) return pet.openSettings('connect')
     // A widget in the open island: the one shown from now on, and its
     // settings open (a press that only lit it felt like none: the user,
     // 2026-10-13).
-    const row = view === 'expanded' && e.target.closest('[data-widget]')
+    const row = view === 'expanded' && (e.target as HTMLElement).closest('[data-widget]')
     if (row) {
       const at = widgets.findIndex(w => w.id === row.dataset.widget)
       const w = at >= 0 ? widgets[at] : allWidgets.find(x => x.id === row.dataset.widget)
@@ -2380,15 +2407,15 @@ for (const target of [island]) {
     { passive: false },
   )
   target.addEventListener('pointerdown', e => {
-    const session = e.button === 0 && view === 'expanded' && e.target.closest('[data-jump]')
+    const session = e.button === 0 && view === 'expanded' && (e.target as HTMLElement).closest('[data-jump]')
     pressed = { id: session ? session.dataset.jump : '', at: Date.now() }
   })
   target.addEventListener('contextmenu', e => {
-    if (e.target.matches('input, textarea')) return
+    if ((e.target as HTMLElement).matches('input, textarea')) return
     e.preventDefault()
     if (wmenu.contains(e.target)) return
     // On a widget's row (or its card) in the open island: its menu.
-    const row = view === 'expanded' && !isSetting() && (e.target.closest('[data-widget]') || e.target.closest('[data-card]'))
+    const row = view === 'expanded' && !isSetting() && ((e.target as HTMLElement).closest('[data-widget]') || (e.target as HTMLElement).closest('[data-card]'))
     const id = row && (row.dataset.widget || row.dataset.card)
     if (id && allWidgets.some(w => w.id === id)) return openMenu({ where: 'isle', widget: id }, row, { x: e.clientX, y: e.clientY })
     pet.menu()
@@ -2433,7 +2460,7 @@ pet.onTaskbarEdit(p => (p?.end ? (endEdit(true), Picker?.closeAll()) : editTaskb
 // picker.js, capsule-panel.js (loaded after this file): what they work
 // with here, read live. Internal to her home's page; settings.js and
 // panel.js use Island.
-provide('Isle', {
+const isle = {
   get config() {
     return config
   },
@@ -2517,7 +2544,9 @@ provide('Isle', {
   island,
   compact,
   expanded,
-})
+}
+export type IsleFace = typeof isle
+provide('Isle', isle)
 // The preview's gallery (tools/preview boot.js freeze): the ring drawn as
 // it is ms into its turning (the step showing then), its steps stopped.
 function ringAt(ms) {
@@ -2528,4 +2557,6 @@ function ringAt(ms) {
   const angle = Flow.stepsOf(r, s.t0 + ms)[0]?.angle ?? Flow.angleAt(r, s.t0 + ms)
   for (const sp of spins) sp.style.transform = `rotate(${angle}deg)`
 }
-provide('Island', { accent: () => look.accent || null, isOn, isOpen: () => isOn() && view !== 'compact' && !body.classList.contains('isl-stowed'), peek: on => setPeek(typeof on === 'boolean' ? on : view === 'compact'), changed: update, reach, absorb, settingsMax, tbPresets: TB_PRESETS, tbPreset: () => presetOf(config.taskbarLayout), tbWithPreset: name => TB_PRESETS[name] && Widgets.withParts(TB_PRESETS[name], tbLayout(config.taskbarLayout)), editTaskbar, whereOf, placeWidget, placeNow, anchor, notched: () => !!screenTop?.notch, ringAt, views: islandViews })
+const islandFace = { accent: () => look.accent || null, isOn, isOpen: () => isOn() && view !== 'compact' && !body.classList.contains('isl-stowed'), peek: on => setPeek(typeof on === 'boolean' ? on : view === 'compact'), changed: update, reach, absorb, settingsMax, tbPresets: TB_PRESETS, tbPreset: () => presetOf(config.taskbarLayout), tbWithPreset: name => TB_PRESETS[name] && Widgets.withParts(TB_PRESETS[name], tbLayout(config.taskbarLayout)), editTaskbar, whereOf, placeWidget, placeNow, anchor, notched: () => !!screenTop?.notch, ringAt, views: islandViews }
+export type IslandFace = typeof islandFace
+provide('Island', islandFace)

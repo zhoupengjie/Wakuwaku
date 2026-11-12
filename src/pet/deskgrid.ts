@@ -307,7 +307,7 @@ function intoBoard(layout, boardId, m, size, cell, newId) {
   return without(layout, itemOf(m), newId).map(e => (e.id === boardId && isBoard(e) ? { ...e, items: [...e.items, tile] } : e))
 }
 // A tile moved in its board, or given another size there.
-function moveInBoard(layout, boardId, index, cell, size) {
+function moveInBoard(layout, boardId, index, cell, size?) {
   return layout.map(e => (e.id === boardId && isBoard(e) && e.items[index] ? { ...e, items: e.items.map((t, i) => (i === index ? { ...t, at: cell, ...(size ? { size } : {}) } : t)) } : e))
 }
 // A tile taken out (dragged off the board, or by its menu): alone on the

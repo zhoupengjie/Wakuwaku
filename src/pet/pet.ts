@@ -12,6 +12,7 @@ import { CELL_W, CELL_H, CLIPS, MOOD_CLIP, REACTIONS, lookCell } from './sprite.
 import { t } from '../shared/i18n.ts'
 import { provide } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { Config } from '../shared/config.ts'
 
 const COLOR = {
   idle: '#9aa4b2',
@@ -41,7 +42,7 @@ const hint = document.getElementById('her-hint') || sprite.parentElement.appendC
 
 let lang = 'en'
 let now = { mood: 'idle', detail: '', project: '', since: null, took: null, others: 0, sessions: 0, list: [] }
-let config = { scale: 0.55, details: true, walk: true, look: true, sound: false, dnd: false }
+let config: Config = { scale: 0.55, details: true, walk: true, look: true, sound: false, dnd: false }
 let spriteUrl = null
 // 2: the 11-row sheet; 1: the older 9-row one, without the look-around rows.
 let spriteVersion = 2
@@ -200,7 +201,7 @@ const isOut = () => !isIsland() && config.out === true && !!spriteUrl
 const isAsking = () => document.body.classList.contains('asking')
 const detailed = () => config.details !== false
 
-function span(cls, text) {
+function span(cls, text?) {
   const node = document.createElement('span')
   node.className = cls
   if (text) node.textContent = text
@@ -449,7 +450,9 @@ function room(atOnce = false) {
   })
 }
 
-provide('HerTalk', { room })
+const herTalk = { room }
+export type HerTalkFace = typeof herTalk
+provide('HerTalk', herTalk)
 
 // The bubble never pushes her out of her window: one line for the status
 // and one for the others, cut short with an ellipsis; something she says

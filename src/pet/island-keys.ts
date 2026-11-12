@@ -8,8 +8,9 @@
 // island's again.
 import { Picker, Settings } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { KeysCore } from './island.ts'
 
-export function keysPart(core) {
+export function keysPart(core: KeysCore) {
   const {
     along, appOf, barRest, batMark, body, chevron, clockBox, closeImeList, closePop, closeStackPop,
     closeWidgetPop, el, endEdit, flyout, hi, home, isOn, isOut, isSetting, isSide, lo, netMark, openImeList,
@@ -100,7 +101,7 @@ export function keysPart(core) {
     if (!keyPart) return
     keyPart = keyAt = keyFrom = null
     keyRing()
-    if (barRest.contains(document.activeElement)) document.activeElement.blur()
+    if (barRest.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
     pet.keyboard(false)
   }
 

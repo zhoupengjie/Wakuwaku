@@ -41,6 +41,7 @@ import { welcomePart } from './settings-welcome.ts'
 // Her own window's page (role=pet) has none: isOpen alone, always false.
 const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
 provide('Settings', ROLE === 'island' ? settingsPage() : { isOpen: () => false })
+export type SettingsFace = ReturnType<typeof settingsPage>
 
 // The settings, on the island's page: made as it starts; what the others see of them.
 function settingsPage() {
@@ -211,7 +212,7 @@ function settingsPage() {
     draftTimer = setTimeout(() => pet.mail.keepDraft(draft ? { ...draft, files: [], busy: false, error: null, note: null } : null), 300)
   }
 
-  const T = (key, vars) => t(lang, key, vars)
+  const T = (key, vars?) => t(lang, key, vars)
   const esc = value =>
     String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
   const svg = name => `<svg class="ic" viewBox="0 0 24 24">${ICON[name]}</svg>`
@@ -808,7 +809,7 @@ function settingsPage() {
     if (!changed) return
     // Left as it is while it has the focus: set again, a word half-made in
     // an input method was lost (results landing while one typed).
-    const again = document.getElementById('s-ref')
+    const again = (document.getElementById('s-ref') as HTMLInputElement)
     if (again && again.value !== typedRef) again.value = typedRef
     const back = which && body.querySelector(which)
     if (back && back !== document.activeElement) {
@@ -952,7 +953,7 @@ function settingsPage() {
     thumbTimers = []
     // Seconds being typed are kept as the box is left (holdTyped); Custom is
     // on next time only for a custom number kept.
-    if (layer.contains(document.activeElement)) document.activeElement.blur()
+    if (layer.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
     holdCustom = false
     pet.settingsClosed()
     Island?.changed()
@@ -1060,7 +1061,7 @@ function settingsPage() {
   // --- Clicks and keys ----------------------------------------------------------------------------
 
   layer.addEventListener('click', e => {
-    const at = selector => e.target.closest(selector)
+    const at = selector => (e.target as HTMLElement).closest(selector)
     // A click anywhere but on it closes the letter menu.
     if (!menuEl.hidden && !at('.mmenu')) closeMenu()
     // The question over the panel (installing a plugin, taking one away):
@@ -1388,7 +1389,7 @@ function settingsPage() {
     if (ilookBg) return ilookSave(ilookFor(), { ...ilookOf(ilookFor()), bg: ilookBg.dataset.ilookBg })
     if (at('[data-ilook-reset]')) return ilookSave(ilookFor(), ilookDefault(ilookFor()))
     // Windows' colour dialog takes the focus: not a click outside.
-    if (e.target.matches('input[type="color"]')) picking = true
+    if ((e.target as HTMLElement).matches('input[type="color"]')) picking = true
     // LibreHardwareMonitor: downloaded, started, its task, its folder (lhm_setup.rs).
     const lhmButton = at('[data-lhm]')
     if (lhmButton && !lhmButton.disabled) {
@@ -1534,7 +1535,7 @@ function settingsPage() {
       return true
     }
     if (at('[data-talk-send]')) {
-      const box = body.querySelector('[data-talk]')
+      const box = body.querySelector<HTMLButtonElement>('[data-talk]')
       if (box && !box.disabled) say(box)
       return true
     }
@@ -1795,7 +1796,7 @@ function settingsPage() {
     return false
   }
 
-  function redrawMail(focus) {
+  function redrawMail(focus?) {
     draw()
     relayout()
     if (focus) requestAnimationFrame(() => body.querySelector(focus)?.focus())
@@ -1944,46 +1945,46 @@ function settingsPage() {
   }
 
   layer.addEventListener('input', e => {
-    if (e.target.dataset.mf && mailForm) mailForm[e.target.dataset.mf] = e.target.value
-    if (e.target.dataset.proxyAt !== undefined) proxyTyped = { key: e.target.dataset.proxyAt, text: e.target.value, bad: false }
-    if (e.target.dataset.w && draft) {
-      draft[e.target.dataset.w] = e.target.value
+    if ((e.target as HTMLElement).dataset.mf && mailForm) mailForm[(e.target as HTMLElement).dataset.mf] = (e.target as HTMLInputElement).value
+    if ((e.target as HTMLElement).dataset.proxyAt !== undefined) proxyTyped = { key: (e.target as HTMLElement).dataset.proxyAt, text: (e.target as HTMLInputElement).value, bad: false }
+    if ((e.target as HTMLElement).dataset.w && draft) {
+      draft[(e.target as HTMLElement).dataset.w] = (e.target as HTMLInputElement).value
       draft.touched = true
       dropSure = false
       keepDraft()
     }
-    if (e.target.dataset.ilook) ilookInput(e.target, false)
-    if (e.target.id === 's-ref') {
-      typedRef = e.target.value
+    if ((e.target as HTMLElement).dataset.ilook) ilookInput(e.target, false)
+    if ((e.target as HTMLElement).id === 's-ref') {
+      typedRef = (e.target as HTMLInputElement).value
       // Not mid-word in an input method: once the word is chosen.
       if (!e.isComposing) searchSoon()
     }
     // The market's words looked for: its list at once.
-    if (e.target.id === 'mk-q') {
-      market.query = e.target.value
+    if ((e.target as HTMLElement).id === 'mk-q') {
+      market.query = (e.target as HTMLInputElement).value
       draw()
     }
-    if (e.target.dataset.field) drafts[e.target.dataset.field] = e.target.value
-    if (e.target.dataset.mon) drafts[`mon:${e.target.dataset.mon}`] = e.target.value
-    if (e.target.dataset.hold) drafts['hold:secs'] = e.target.value
+    if ((e.target as HTMLElement).dataset.field) drafts[(e.target as HTMLElement).dataset.field] = (e.target as HTMLInputElement).value
+    if ((e.target as HTMLElement).dataset.mon) drafts[`mon:${(e.target as HTMLElement).dataset.mon}`] = (e.target as HTMLInputElement).value
+    if ((e.target as HTMLElement).dataset.hold) drafts['hold:secs'] = (e.target as HTMLInputElement).value
   })
 
   // The word an input method has chosen: looked for as if typed.
   layer.addEventListener('compositionend', e => {
-    if (e.target.id !== 's-ref') return
-    typedRef = e.target.value
+    if ((e.target as HTMLElement).id !== 's-ref') return
+    typedRef = (e.target as HTMLInputElement).value
     searchSoon()
   })
 
   // A plugin's setting kept once typed (Enter, or leaving the box); a
   // number that is none goes back to what it was.
   layer.addEventListener('change', e => {
-    if (e.target.matches('[data-w-file]')) return addFiles(e.target)
-    if (e.target.dataset.ilook) return ilookInput(e.target, true)
-    if (e.target.dataset.proxyAt !== undefined) return proxyAddress(e.target.dataset.proxyAt, e.target.value)
-    if (e.target.dataset.mon) return monitorField(e.target.dataset.mon)
-    if (e.target.dataset.hold) return holdTyped(e.target)
-    const key = e.target.dataset.field
+    if ((e.target as HTMLElement).matches('[data-w-file]')) return addFiles(e.target)
+    if ((e.target as HTMLElement).dataset.ilook) return ilookInput(e.target, true)
+    if ((e.target as HTMLElement).dataset.proxyAt !== undefined) return proxyAddress((e.target as HTMLElement).dataset.proxyAt, (e.target as HTMLInputElement).value)
+    if ((e.target as HTMLElement).dataset.mon) return monitorField((e.target as HTMLElement).dataset.mon)
+    if ((e.target as HTMLElement).dataset.hold) return holdTyped(e.target)
+    const key = (e.target as HTMLElement).dataset.field
     if (!key || !(key in drafts)) return
     const value = drafts[key].trim()
     delete drafts[key]
@@ -2033,9 +2034,9 @@ function settingsPage() {
 
   // Custom's box left empty, nothing custom kept: the choice kept shows again.
   layer.addEventListener('focusout', e => {
-    if (!e.target.dataset?.hold) return
+    if (!(e.target as HTMLElement).dataset?.hold) return
     delete drafts['hold:secs']
-    if (e.target.value.trim() || Flow.holdChoice(snap?.settings?.hold) === 'custom') return
+    if ((e.target as HTMLInputElement).value.trim() || Flow.holdChoice(snap?.settings?.hold) === 'custom') return
     holdCustom = false
     draw()
   })
@@ -2119,22 +2120,22 @@ function settingsPage() {
       return close('Esc')
     }
     // A row that is a button (从文件安装…, 获取更多, one of the market's), by the keyboard as a press.
-    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-addon-file], [data-mk-open], [data-mk-item], [data-look-market]')) {
+    if ((e.key === 'Enter' || e.key === ' ') && (e.target as HTMLElement).matches?.('[data-addon-file], [data-mk-open], [data-mk-item], [data-look-market]')) {
       e.preventDefault()
-      return e.target.click()
+      return (e.target as HTMLElement).click()
     }
     // Asked over the panel: its buttons alone (the pages under it stay).
     if (!sheet.hidden) return
-    if (e.target.matches?.('input, textarea')) {
+    if ((e.target as HTMLElement).matches?.('input, textarea')) {
       // Ctrl+Enter sends the letter being written.
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.target.dataset.w) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && (e.target as HTMLElement).dataset.w) {
         e.preventDefault()
         return sendDraft()
       }
-      if (e.key === 'Enter' && e.target.id === 's-ref' && !e.isComposing) layer.querySelector('[data-fetch]')?.click()
-      if (e.key === 'Enter' && (e.target.dataset.field || e.target.dataset.mon || e.target.dataset.hold || e.target.dataset.proxyAt !== undefined)) e.target.blur()
-      if (e.key === 'Enter' && e.target.dataset.mf) layer.querySelector('[data-mail-find]:not([disabled]), [data-mail-save]:not([disabled])')?.click()
-      if (e.key === 'Enter' && e.target.dataset.talk && !e.isComposing) say(e.target)
+      if (e.key === 'Enter' && (e.target as HTMLElement).id === 's-ref' && !e.isComposing) layer.querySelector('[data-fetch]')?.click()
+      if (e.key === 'Enter' && ((e.target as HTMLElement).dataset.field || (e.target as HTMLElement).dataset.mon || (e.target as HTMLElement).dataset.hold || (e.target as HTMLElement).dataset.proxyAt !== undefined)) (e.target as HTMLElement).blur()
+      if (e.key === 'Enter' && (e.target as HTMLElement).dataset.mf) layer.querySelector('[data-mail-find]:not([disabled]), [data-mail-save]:not([disabled])')?.click()
+      if (e.key === 'Enter' && (e.target as HTMLElement).dataset.talk && !e.isComposing) say(e.target)
       return
     }
     // Two panes: the letter above or below in the list.
@@ -2166,7 +2167,7 @@ function settingsPage() {
   // the focus).
   // Locked (the button by ✕), they stay.
   pet.onBlur(() => !snap?.settings?.settingsPin && !picking && !pickingPaper && !pickingZip && !lhmAsks() && (!pet.mac || Date.now() - openedAt > BLUR_GRACE_MS) && close('blur'))
-  layer.addEventListener('cancel', e => e.target.matches?.('[data-w-file]') && (picking = false), true)
+  layer.addEventListener('cancel', e => (e.target as HTMLElement).matches?.('[data-w-file]') && (picking = false), true)
   window.addEventListener('focus', () => setTimeout(() => (picking = false), 1000))
 
   return {

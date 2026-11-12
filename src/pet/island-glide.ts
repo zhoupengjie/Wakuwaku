@@ -9,8 +9,9 @@
 import * as Presses from './presses.ts'
 import { Picker } from './pages.ts'
 import { pet } from './bridge.ts'
+import type { GlideCore } from './island.ts'
 
-export function glidePart(core) {
+export function glidePart(core: GlideCore) {
   const {
     alignApps, barRest, body, crossLo, el, entryNodes, flashSince, hi, home, imeMark, isOn, isSide, lo,
     openedUp, placeSlot, t, trayBox, windowsBox,

@@ -9,14 +9,41 @@
 // settings' again.
 import * as Agents from './agents.ts'
 
-export function mailPart(core) {
+// What this part takes of the settings' core: the names it reads (and,
+// of its lets, writes); settings.ts's call is checked against them.
+export interface MailCore {
+  AGENTS: any
+  AGENT_NAMES: any
+  Agents: any
+  T: any
+  draft: any
+  esc: any
+  expanded: any
+  handNote: any
+  inbox: any
+  lang: any
+  mailDelete: any
+  mailForm: any
+  patch: any
+  proxySetting: any
+  reading: any
+  row: any
+  sec: any
+  seg: any
+  snap: any
+  tab: any
+  waySetting: any
+  writing: any
+}
+
+export function mailPart(core: MailCore) {
   const {
     AGENTS, AGENT_NAMES, Agents, T, esc, expanded, inbox, patch, row, sec, seg,
   } = core
 
   // What went wrong with a mail account, in words: through a proxy, which
   // hop (mail/proxy.rs), and what to try then.
-  function mailError(err, server) {
+  function mailError(err, server?) {
     const kind = err?.kind || 'other'
     const why = loginWhy(err)
     if (why) return T(whyKey(why, server?.host))
@@ -108,7 +135,7 @@ export function mailPart(core) {
   // password made, pasted above; what 2-Step Verification takes (an
   // authenticator app will do); and why Google may not make one.
   function googleStepsHTML(address) {
-    const step = (n, site) =>
+    const step = (n, site?) =>
       `<div class="st"><span class="n">${n}</span><span>${esc(T(`mail.google.step${n}`))}${site ? ` <span class="link" data-site="${site}" data-for="${esc(address)}">${esc(T(`mail.google.open${n}`))}</span>` : ''}</span></div>`
     return `<div class="note">${marked(T('mail.google.why'))}</div><div class="note steps">${step(1, 'google2sv')}${step(2, 'googleAppPasswords')}${step(3)}</div><div class="note">${marked(T('mail.google.how2sv'))}</div><div class="note">${esc(T('mail.google.none'))}</div>`
   }
@@ -268,7 +295,7 @@ export function mailPart(core) {
 
   const unreadOf = a => (a.on && a.status?.state === 'ok' ? a.status.unread || 0 : 0)
 
-  function mailDate(ms, full) {
+  function mailDate(ms, full?) {
     if (!ms) return ''
     const d = new Date(ms)
     const now = new Date()

@@ -9,7 +9,43 @@
 import * as Agents from './agents.ts'
 import { Island } from './pages.ts'
 
-export function welcomePart(core) {
+// What this part takes of the settings' core: the names it reads (and,
+// of its lets, writes); settings.ts's call is checked against them.
+export interface WelcomeCore {
+  Agents: any
+  COLOR: any
+  T: any
+  aboutHTML: any
+  connecting: any
+  esc: any
+  failed: any
+  failedShortcuts: any
+  known: any
+  lang: any
+  nameList: any
+  pageAgents: any
+  pageAlerts: any
+  pageCrash: any
+  pageLook: any
+  pageMail: any
+  pageNet: any
+  pageNow: any
+  pageUpdate: any
+  pageWidgets: any
+  part: any
+  pluginOpen: any
+  recordingShortcut: any
+  row: any
+  sec: any
+  seg: any
+  snap: any
+  sw: any
+  thumb: any
+  welcomeOpen: any
+  winMode: any
+}
+
+export function welcomePart(core: WelcomeCore) {
   const {
     Agents, COLOR, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
     pageMail, pageNet, pageNow, pageUpdate, pageWidgets, part, row, sec, seg, sw, thumb, winMode,

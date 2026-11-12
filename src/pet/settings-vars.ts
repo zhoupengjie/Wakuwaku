@@ -9,6 +9,32 @@
 // like, stay consts in settingsPage.)
 import type * as AddonUI from './addonui.ts'
 import { initial, type SettingsState } from './settings-state.ts'
+import type { Config } from '../shared/config.ts'
+
+// Her settings as the snapshot has them and a patch changes them
+// (settings.rs settings_set): the config's keys, and the Mail page's that
+// mail.rs reads besides (settings.rs is_ok takes them; config.rs does not
+// declare them).
+export type Settings = Config & { mailAgent?: string; mailPanes?: string; mailPictures?: string[] }
+
+// What main sends (settings.rs snapshot): her settings, and the lists the
+// pages go through, each entry the Rust side's JSON, as is all the rest.
+export interface Snapshot {
+  settings: Settings
+  pets: any[]
+  sessions?: any[]
+  packs?: any[]
+  widgets?: any[]
+  plugins?: any[]
+  addons?: any[]
+  addonsBroken?: any[]
+  marketUpdates?: any[]
+  mail?: any[]
+  displays?: any[]
+  asks?: any[]
+  shortcutsFailed?: string[]
+  [field: string]: any
+}
 
 // Taken away once asked again over the panel: a plugin by its id, a pack
 // by its kind too, a pet deleted (del); busy while it goes.
@@ -124,9 +150,9 @@ export type DraftBox = 'to' | 'cc' | 'bcc' | 'subject' | 'text'
 export interface SettingsVars extends SettingsState {
   // --- Open --------------------------------------------------------------------------
   // What main last sent (settings.rs snapshot: the settings, the sessions,
-  // the agents, the plugins...: the Rust side's JSON, any), and the
-  // language it is in.
-  snap: any
+  // the agents, the plugins...), and the language it is in. None until
+  // the first comes as they open: read once they are drawn (draw waits).
+  snap: Snapshot
   lang: string
   // The seconds' clock while open (tick).
   clockTimer: Timer | undefined
@@ -223,7 +249,7 @@ export interface SettingsVars extends SettingsState {
 export function settingsVars(idleFlow: typeof AddonUI.IDLE): SettingsVars {
   return {
     ...initial(),
-    snap: null,
+    snap: null!,
     lang: 'en',
     clockTimer: undefined,
 

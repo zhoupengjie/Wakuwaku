@@ -39,15 +39,11 @@ import { welcomePart } from './settings-welcome.ts'
 import { settingsVars } from './settings-vars.ts'
 import * as State from './settings-state.ts'
 import { TABS, PART_OF } from './settings-state.ts'
-import type { SettingsVars } from './settings-vars.ts'
+import type { Settings, SettingsVars } from './settings-vars.ts'
 import type { SettingsEvent } from './settings-state.ts'
 import type { IslandFace } from './island.ts'
 import type { PickerFace } from './picker.ts'
 import type { Config } from '../shared/config.ts'
-
-// A change to her settings (settings.rs settings_set): the config's keys,
-// and the Mail page's that mail.rs reads besides.
-export type Patch = Partial<Config> & { mailAgent?: string; mailPictures?: string[] }
 
 // Where one is put (island-wmenu.ts placeNow): its place (null: nowhere),
 // a board's name.
@@ -168,7 +164,7 @@ export interface SettingsCore {
   pageNow: () => string
   pagePets: () => string
   part: (id: string, html: string) => string
-  patch: (change: Patch) => void
+  patch: (change: Settings) => void
   placeHTML: (place: Place, key?: string) => string
   placeOf: (item: { plugin?: string; id?: string }, on: boolean) => Place
   // A plugin she runs (plugins.rs view: the snapshot's JSON).

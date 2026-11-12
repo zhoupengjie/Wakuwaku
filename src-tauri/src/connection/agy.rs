@@ -12,7 +12,7 @@
 // does not read, so a path with a space can not be quoted: its 8.3 name is
 // used for one, and with none it is not installed. And a hook that fails is
 // told back in cmd's code page, not UTF-8: agy's turn failed on it (invalid
-// UTF-8). Ours answers at once whatever comes (main.rs agy_hook).
+// UTF-8). Ours answers at once whatever comes (hooks.rs agy_hook).
 
 use super::*;
 

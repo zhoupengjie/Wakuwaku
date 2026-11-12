@@ -159,7 +159,7 @@ pub fn menu(sh: &Shared, over: Over) -> tauri::Result<Menu<Wry>> {
 // A right press on the volume, the network or the clock of her taskbar:
 // the menu Windows' own taskbar has there (SystemTray.dll, read
 // 2026-10-14), its items in its order and words, a native menu as hers on
-// the strip is; each opens what Windows' opens (taskbar.rs open). None for
+// the strip is; each opens what Windows' opens (taskbar/win/flyouts.rs open). None for
 // another part: hers.
 pub fn part_menu(sh: &Shared, part: &str) -> Option<tauri::Result<Menu<Wry>>> {
     let items: &[&str] = match part {
@@ -195,8 +195,8 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
             let room = sh.setting("splitDock").as_str() == Some("room");
             sh.change(json!({ "splitDock": if room { "hide" } else { "room" } }));
         }
-        "out" => crate::set_out(sh, !sh.flag("out")),
-        "corner" => crate::come_home(sh),
+        "out" => crate::shared::set_out(sh, !sh.flag("out")),
+        "corner" => crate::shared::come_home(sh),
         "settings" => crate::island::open_settings(sh, None),
         // The taskbar's parts dragged about, on the strip itself (island.js).
         "editTaskbar" => {
@@ -247,7 +247,7 @@ pub fn on_menu(sh: &Arc<Shared>, id: &str) {
             if let Some(what) = id.strip_prefix("win:") {
                 crate::taskbar::taskbar_open(what.to_string());
             } else if let Some(home) = id.strip_prefix("display:") {
-                crate::set_display(sh, home);
+                crate::shared::set_display(sh, home);
             } else if let Some(pet_id) = id.strip_prefix("pet:") {
                 sh.change(json!({ "pet": pet_id }));
             } else if let Some(name) = id.strip_prefix("size:") {

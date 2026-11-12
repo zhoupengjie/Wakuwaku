@@ -405,7 +405,7 @@ fn is_action(action: &str) -> bool {
     !action.is_empty() && action.len() <= 16 && action.starts_with(|c: char| c.is_ascii_lowercase()) && action.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-// A button of a widget's pressed on a page (main.rs widget_act): queued
+// A button of a widget's pressed on a page (commands/mod.rs widget_act): queued
 // for the plugin the widget belongs to, which takes a turn at once (its
 // job is on another thread, or in a turn: never called from here). False
 // for a widget of no plugin of hers, one not running, or an action that

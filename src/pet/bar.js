@@ -5,7 +5,7 @@
 // appearance session's spec, 2026-10-13), but for a prompt waiting: then her
 // capsule comes at its start, "waiting for your approval · N", a press
 // showing the prompt in her island there. What it shows comes as bar:state
-// (bars.rs refresh); a press asks what the main taskbar's would (taskbar.rs).
+// (bars.rs refresh); a press asks what the main taskbar's would (taskbar/).
 // Split (state.dock: taskbarEdge split, docs/design/specs/dock-topbar.md),
 // the dock on her own display: Start and her strip's programs in a piece of
 // glass in the middle of the foot, its window a band along the foot that
@@ -502,7 +502,7 @@
     listen(
       `tauri://drag-${type}`,
       ({ payload }) => {
-        // Let go of on it: programs and shortcuts to them pinned (taskbar.rs taskbar_pin_files).
+        // Let go of on it: programs and shortcuts to them pinned (taskbar/mod.rs taskbar_pin_files).
         if (type === 'drop' && Array.isArray(payload?.paths) && payload.paths.length && payload.position) {
           const on = document.elementFromPoint(payload.position.x / devicePixelRatio, payload.position.y / devicePixelRatio)
           if (on && strip.contains(on)) call('taskbar_pin_files', { paths: payload.paths.map(String) })
@@ -812,7 +812,7 @@
 
   // Quick settings in the dock (state.keys): the network's way out and the
   // volume, as the main taskbar's button draws them (island.js showNet,
-  // showVolume), from what Windows says (dock:keys, taskbar.rs keys_loop);
+  // showVolume), from what Windows says (dock:keys, taskbar/win/keys.rs keys_loop);
   // a press opens Windows' own (Win+A), the wheel on it the volume.
   const quick = document.querySelector('.quick')
   const [netBack, netFront] = quick.querySelectorAll('.net span')

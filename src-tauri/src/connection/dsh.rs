@@ -292,7 +292,7 @@ fn dsh_files_ok(dir: &Path) -> bool {
 // by default): her rows insert DSH's Claude Code hook bridge
 // (@deepseek-ai/dsh-hooks-claude-code) pointed at a hooks.json in her data
 // folder (dsh-hooks.json), as 0.3.2 wrote them, whose command hooks run
-// this program with DSH_FLAG and the event's name (main.rs dsh_hook). The
+// this program with DSH_FLAG and the event's name (hooks.rs dsh_hook). The
 // bridge needs its packages in each profile from DSH 0.2.1 on
 // (dsh_bridge.rs puts them there, through DSH's own pnpm, and takes those it
 // added away again). It runs each hook as a command through DSH's shell,

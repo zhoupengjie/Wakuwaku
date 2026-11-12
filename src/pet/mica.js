@@ -2,7 +2,7 @@
 // blurred and tinted as Windows' own Mica is. Mica takes the wallpaper, not
 // what is behind the window, and nothing but the wallpaper is behind the
 // taskbar anyway (windows keep out of its strip). So the picture is drawn
-// once, small, whenever it changes (taskbar.rs sends which file and how
+// once, small, whenever it changes (taskbar/ sends which file and how
 // Windows lays it on the display), and shown as it is: nothing is worked out
 // again as the strip draws.
 ;(function (root) {
@@ -265,14 +265,14 @@
   // island go by Windows' mode.
   const stripInkLight = ({ light, clear, filled, backdrop }) => (clear && !filled && backdrop != null ? backdrop : !!light)
 
-  // Windows' accent as its own taskbar draws with it (taskbar.rs accent):
+  // Windows' accent as its own taskbar draws with it (taskbar/ accent):
   // its darker shade where the words are dark, its lighter where they are
   // light; null while not known. island.js sets it twice: --win-accent by
   // Windows' mode (the settings, what opens from the strip), --strip-accent
   // by the strip's words (stripInkLight), for what is drawn on the strip.
   const accentShade = (accent, light) => (accent ? (light ? accent.dark : accent.light) || null : null)
 
-  // The Mica in box (the strip's own size): set to a picture (taskbar.rs's
+  // The Mica in box (the strip's own size): set to a picture (taskbar/'s
   // paper), the strip's size and Windows' mode, drawn anew only when one
   // changes, the new faded in over the old; cleared.
   function mount(box) {

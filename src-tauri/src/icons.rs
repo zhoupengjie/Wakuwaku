@@ -1,6 +1,6 @@
 // The desktop's icons out from under her strip. Along the top, the left or
 // the right her strip is an app bar of hers, and the work area is set
-// without a word to the other windows (taskbar.rs set_work_area: told, Explorer
+// without a word to the other windows (taskbar/win/work.rs set_work_area: told, Explorer
 // set it back at once): so Explorer's desktop never heard of it, and laid its
 // icons on the whole screen still, the Recycle Bin under her portrait, seen
 // through a clear strip and not to be clicked (the user, 2026-10-13; since
@@ -477,7 +477,7 @@ mod imp {
         }
 
         // The desktop told the work area changed, it alone (told to every
-        // window, Explorer's taskbar set it back: taskbar.rs set_work_area).
+        // window, Explorer's taskbar set it back: taskbar/win/work.rs set_work_area).
         pub fn tell(&self, to: isize) -> bool {
             let mut done = 0usize;
             // SAFETY: a message with no pointers, waited for a second at most.

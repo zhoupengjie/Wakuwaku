@@ -128,7 +128,7 @@ pub fn tools_here() -> Vec<&'static str> {
 // Agent page has its own, agents.js).
 pub const ALL: [Agent; 8] = [Agent::Claude, Agent::Codex, Agent::Agy, Agent::Opencode, Agent::Omp, Agent::Zcode, Agent::Dsh, Agent::Reasonix];
 
-// Its place in ALL: what is kept for each of them goes by it (main.rs seen).
+// Its place in ALL: what is kept for each of them goes by it (shared.rs seen).
 pub fn slot(agent: Agent) -> usize {
     ALL.iter().position(|&a| a == agent).expect("every agent is in ALL")
 }

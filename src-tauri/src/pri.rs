@@ -1,7 +1,7 @@
 // Files a Windows resource index (a .pri) holds within itself, by their
 // names: Windows' own pictures that are in no file of their own, as the
 // Task View button's (Settings' Taskview_Light.svg and Taskview_Dark.svg,
-// in Windows.UI.SettingsAppThreshold.pri: taskbar.rs task_view_icons).
+// in Windows.UI.SettingsAppThreshold.pri: taskbar/mod.rs task_view_icons).
 //
 // Read as the format is laid out (after chausner/PriTools' PriFormat,
 // Apache-2.0): a table of sections; a schema section names each resource

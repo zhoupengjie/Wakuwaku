@@ -17,7 +17,7 @@
 //            AskUserQuestion: Claude Code's, and DeepSeek Harness's through
 //            her plugin; the others' questions only make her wait,
 //            "detail.asksQuestion")
-//   stats    counted in Today (main.rs count_today: every agent's turns and
+//   stats    counted in Today (shared.rs count_today: every agent's turns and
 //            time), and its tokens (tokens.rs: Claude Code, Codex, Antigravity,
 //            omp, DeepSeek Harness, Reasonix)
 //   mail     can read a letter for the Mail page (mail/agent.rs: claude,

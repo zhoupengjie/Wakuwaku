@@ -57,7 +57,7 @@ fn is_id_list(list: &[u8]) -> bool {
     false
 }
 
-// A pin's key, as the taskbar's buttons have theirs (taskbar.rs
+// A pin's key, as the taskbar's buttons have theirs (taskbar/
 // send_windows): an app by its id, a program by its file, the case aside.
 pub fn key_of(pin: &Value) -> String {
     match pin["id"].as_str().filter(|s| !s.is_empty()) {

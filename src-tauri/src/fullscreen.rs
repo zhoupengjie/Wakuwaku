@@ -13,7 +13,7 @@ use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 // Asked to look now: a window came to the front, or the one in front was
-// sized (the taskbar's hooks, taskbar.rs). When it was first asked, until
+// sized (the taskbar's hooks, taskbar/). When it was first asked, until
 // looked at: however many asks come meanwhile, one look.
 static ASKED: Mutex<Option<Instant>> = Mutex::new(None);
 static WAKE: Condvar = Condvar::new();

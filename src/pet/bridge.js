@@ -106,7 +106,7 @@
     onOverFull: on('island:over-full'),
     // A maximized window on her display, at the top of the screen ({ on }, island.rs look_over_max).
     onOverMax: on('island:over-max'),
-    // An app full screen on her display, or none now ({ on }, main.rs
+    // An app full screen on her display, or none now ({ on }, shared.rs
     // look_fullscreen): no flow light's ring while one is (island.js).
     onFullScreen: on('pet:full-screen'),
     // At the top of the screen, a window under her closed island ({ on },
@@ -137,7 +137,7 @@
     // A button on a widget's card (what is playing: previous, play or
     // pause, next), to the plugin it belongs to (plugins.rs act).
     widgets: { act: (id, action) => invoke('widget_act', { id: String(id || ''), action: String(action || '') }).catch(() => false) },
-    // The taskbar (taskbar.rs): what its own buttons open (start, search,
+    // The taskbar (taskbar/): what its own buttons open (start, search,
     // tasks, widgets, desktop, quick, notifications), a press on a tray icon
     // (leftDown, leftUp, rightDown, rightUp, double, move, in, out; in order,
     // so a press never overtakes the one before), where the page drew the
@@ -186,7 +186,7 @@
       // A program's button: launch (it, or another window of it), admin (run
       // as administrator), pin, unpin.
       app: (path, what, id) => invoke('taskbar_app', { path: String(path), what: String(what), id: id ? String(id) : null }).catch(() => false),
-      // Programs (or shortcuts to them) dropped on the taskbar: pinned (taskbar.rs).
+      // Programs (or shortcuts to them) dropped on the taskbar: pinned (taskbar/).
       pinFiles: paths => invoke('taskbar_pin_files', { paths: paths.map(String) }).catch(() => 0),
       // Room for windows' live pictures in the page: [[window, x, y, w, h]], or none.
       thumbs: items => send('taskbar_thumbs', { items }),

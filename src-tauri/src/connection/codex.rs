@@ -3,7 +3,7 @@
 // Codex runs hooks only as commands, through the session's shell (on Windows
 // `pwsh -NoProfile -Command`, about 0.3 s to start): this program with
 // CODEX_FLAG, which hands the event to her port and prints her answer to a
-// prompt (main.rs). So few hooks make Codex wait: the session starting and
+// prompt (hooks.rs). So few hooks make Codex wait: the session starting and
 // ending, a prompt, the turn ending (Codex runs no Stop or Interrupt hook in
 // the background: none ran in 0.162.1, a slow SessionEnd keeping it up). The
 // turn starting and each tool call come from hooks run in the background

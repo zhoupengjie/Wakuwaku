@@ -207,7 +207,7 @@
 
   const makeWorld = () => ({
     lang: 'zh',
-    // Windows' mode and accent colour (taskbar.rs look).
+    // Windows' mode and accent colour (taskbar/ look).
     mode: 'dark',
     accent: { base: '#0078d4', light: '#4cc2ff', dark: '#0067c0' },
     // Her home (taskbar, island), the strip's edge and material.
@@ -249,7 +249,7 @@
     paper: { file: 'gpt-cloud-terrace.png', slideshow: false, folder: null, position: 'fill', every: 0, shuffle: false },
     taskbarLayout: null,
     deskLayout: [],
-    // The taskbar's programs, tray icons and keyboard (taskbar.rs).
+    // The taskbar's programs, tray icons and keyboard (taskbar/).
     windows: [],
     tray: [],
     keys: {},
@@ -364,7 +364,7 @@
   const ISLAND_POS = ['left', 'center', 'right']
   const IDLE = { id: '', project: '', agent: 'claude', jump: false, mood: 'idle', detail: null, since: null, took: null, name: '', step: null, stepSince: null, todo: null, files: 0, reply: '', error: null }
 
-  // pet:update, as main.rs payload makes it.
+  // pet:update, as shared.rs payload makes it.
   function payload() {
     const list = world.sessions
     const top = list[0] || IDLE
@@ -477,7 +477,7 @@
     }
   }
 
-  // The desktop's picture as taskbar.rs sends it for the strip's Mica: the
+  // The desktop's picture as taskbar/ sends it for the strip's Mica: the
   // display from the strip's top-left.
   function stripPaper() {
     const [w, h] = world.screen

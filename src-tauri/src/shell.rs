@@ -646,7 +646,7 @@ mod tests {
     }
 
     // On a desktop with Explorer: its taskbar's process found, and how long
-    // it has run, as taskbar.rs waits on it (zhoupengjie/Wakuwaku#85).
+    // it has run, as taskbar/ waits on it (zhoupengjie/Wakuwaku#85).
     // Seen with --nocapture.
     #[test]
     fn this_desktops_explorer_has_run_so_long() {

@@ -6,7 +6,7 @@
 //           capsule inside the taskbar itself (islandEmbed, embed.rs), this
 //           window only for what opens from it
 //   taskbar a strip along the bottom in place of Windows' own, which is put
-//           away while it is up, its tray taken over (taskbar.rs); what
+//           away while it is up, its tray taken over (taskbar/); what
 //           opens grows up from it, into room kept above it (appbar.rs)
 // Both stay up while she is out, and do the talking.
 //
@@ -102,7 +102,7 @@ pub struct Island {
     bar: Option<(i32, i32, i32, i32)>,
     bar_for: Option<((i32, i32, i32, i32), i32, &'static str, Edge, bool)>,
     // The strip is a bar of ours Windows knows (appbar.rs), not one laid over
-    // the room Windows' own taskbar keeps (taskbar.rs explorer_room).
+    // the room Windows' own taskbar keeps (taskbar/win/hold.rs explorer_room).
     bar_own: bool,
     // The button held on her (a pull, or carrying her out): the window keeps the pointer.
     holding: bool,
@@ -339,7 +339,7 @@ fn alive(win: &WebviewWindow) -> bool {
 // The taskbar is up whatever hides her (out of sight, do not disturb): it is
 // the person's taskbar; only an app full screen hides it, as Windows' own.
 pub fn is_shown(sh: &Shared) -> bool {
-    // Nor while another copy of her holds the taskbar (taskbar.rs waiting).
+    // Nor while another copy of her holds the taskbar (taskbar/win/hold.rs waiting).
     let up = if sh.home() == "taskbar" { !sh.is_fullscreen() && !taskbar::waiting() } else { sh.is_visible() };
     let isl = sh.island.lock().unwrap();
     // Inside Windows' taskbar (embed.rs) with no room for the capsule: hidden
@@ -431,7 +431,7 @@ fn chosen(sh: &Shared, screens: &crate::screen::Screens) -> Option<Area> {
     screens.by_key(key.as_str().filter(|k| !k.is_empty())?)
 }
 
-// Her display's scale: the chosen one's, else the primary's (taskbar.rs
+// Her display's scale: the chosen one's, else the primary's (taskbar/
 // draws its icons at it). Not where the window is: asked on the taskbar's
 // threads, which the window's own state is not read on.
 pub fn scale(sh: &Shared) -> f64 {
@@ -548,7 +548,7 @@ fn fit(sh: &Shared) -> Option<((i32, i32), (i32, i32))> {
 }
 
 // The side its window is at the top of the screen (the centre on the
-// taskbar), for the page (main.rs payload islandAt).
+// taskbar), for the page (shared.rs payload islandAt).
 pub fn side(sh: &Shared) -> Side {
     sh.island.lock().unwrap().at
 }
@@ -666,7 +666,7 @@ pub fn in_use(sh: &Shared) -> bool {
     used(&sh.island.lock().unwrap())
 }
 
-// For the pages (main.rs payload): whether her capsule is inside Windows'
+// For the pages (shared.rs payload): whether her capsule is inside Windows'
 // taskbar, where its middle lies in the island's window then (physical px
 // from its left), and the room it has there (physical px; 0 none).
 pub fn embedding(sh: &Shared) -> (bool, Option<i32>, i32) {
@@ -680,7 +680,7 @@ pub fn embedding(sh: &Shared) -> (bool, Option<i32>, i32) {
 // taskbar on the others and the dock made or taken away (bars.rs sync), the
 // page's zoom its scale's; an app full screen there looked for at once. The
 // graphics card her pages are drawn on stays the old display's until she is
-// next started (main.rs browser_args).
+// next started (webview.rs browser_args).
 pub fn home_display_changed(sh: &Shared) {
     place(sh);
     sh.log(&format!("island: her home on {:?} (homeDisplay {})", display(sh), sh.setting("homeDisplay")));
@@ -790,7 +790,7 @@ fn sync_bar(sh: &Shared, keep: bool) {
 // its window: giving the strip back would move every window), given back
 // otherwise. Asked again only when the display, the height, the home or the
 // edge change. It comes with Windows' own put away first and goes with it
-// given back (taskbar.rs).
+// given back (taskbar/).
 fn sync_bar_now(sh: &Shared, keep: bool) {
     let home = sh.home();
     let edge = match home {
@@ -798,7 +798,7 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
         _ => None,
     };
     // Windows' own keeps its room along the foot for a strip there to lie
-    // over, or for the dock kept in it (split); none else (taskbar.rs set_edge).
+    // over, or for the dock kept in it (split); none else (taskbar/win/hold.rs set_edge).
     let room = edge.is_some_and(|(e, _)| e == Edge::Bottom) || dock_keeps_room(sh);
     let want = match (keep, edge) {
         (true, Some((edge, h))) => area(sh).map(|a| (a, edge, (h * a.sf).round() as i32)),
@@ -852,7 +852,7 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
             }
         }
         // Windows' own keeps its room along the bottom for a bottom strip,
-        // and none for another edge, but for the dock kept in it (taskbar.rs set_edge).
+        // and none for another edge, but for the dock kept in it (taskbar/win/hold.rs set_edge).
         taskbar::set_edge(edge, room);
         // Another copy of her holds it: nothing taken (it waits).
         if !taskbar::take(sh, strip) {
@@ -887,7 +887,7 @@ fn sync_bar_now(sh: &Shared, keep: bool) {
         sh.log("island: Windows would not take the bar");
         return;
     }
-    // Asked of Explorer itself, not by the taskbar's window of ours (taskbar.rs claim).
+    // Asked of Explorer itself, not by the taskbar's window of ours (taskbar/win/tray.rs claim).
     let granted = taskbar::claim(|| appbar::place(hwnd, area.mon, edge, height));
     {
         let mut isl = sh.island.lock().unwrap();
@@ -930,8 +930,8 @@ pub fn take_strip_again(sh: &Shared) {
 }
 
 // Explorer set the work area as though the strip were not there
-// (taskbar.rs keep_work): its place told again (ABM_QUERYPOS, ABM_SETPOS,
-// to Explorer itself: taskbar.rs claim), as an app bar is to do when
+// (taskbar/win/work.rs keep_work): its place told again (ABM_QUERYPOS, ABM_SETPOS,
+// to Explorer itself: taskbar/win/tray.rs claim), as an app bar is to do when
 // Explorer says the bars moved (ABN_POSCHANGED, which her home's window, a
 // webview's, does not hear). Explorer had the bar registered but left it
 // out of every work area it worked out: its place, asked by the taskbar's
@@ -1117,8 +1117,8 @@ fn create(sh: &Arc<Shared>) {
         let built = WebviewWindowBuilder::new(&sh.app, "island", WebviewUrl::App("pet/index.html?role=island".into()))
             .title("wakuwaku island")
             .inner_size(size.0 as f64 / sf, size.1 as f64 / sf)
-            .additional_browser_args(crate::browser_args(&sh))
-            .data_directory(crate::webview_dir(&sh))
+            .additional_browser_args(crate::webview::browser_args(&sh))
+            .data_directory(crate::webview::webview_dir(&sh))
             .transparent(true)
             .decorations(false)
             .resizable(false)
@@ -1263,9 +1263,11 @@ pub fn look_under(sh: &Arc<Shared>) {
     // Kept as it was while it is not up, or nobody is about. Never along
     // the foot of the screen (#105): over Windows' taskbar, or on the work
     // area's foot, no window's top lies under the closed island.
+    // The settings read before the island's lock: never two of Shared's at once.
+    let asked = sh.home() == "island" && sh.flag("islandHideUnder");
     let (rect, wanted) = {
         let isl = sh.island.lock().unwrap();
-        let wanted = sh.home() == "island" && sh.flag("islandHideUnder") && !isl.bottom && isl.strip.is_none();
+        let wanted = asked && !isl.bottom && isl.strip.is_none();
         if wanted && (!isl.shown || sh.is_quiet()) {
             return;
         }
@@ -1361,7 +1363,7 @@ fn call_look(isl: &mut Island, cursor: (i32, i32), passive: bool, now: std::time
 }
 
 // Whether its page has said it is ready (for /health): never while no
-// window is made for it (another copy holding the taskbar, taskbar.rs).
+// window is made for it (another copy holding the taskbar, taskbar/).
 pub fn is_ready(sh: &Shared) -> bool {
     sh.island.lock().unwrap().ready
 }
@@ -1740,7 +1742,7 @@ pub fn hover(sh: &Shared, is_over: bool) {
     // The pointer come to her home: the monitor reads what its widget's card
     // shows now, not at its next turn (widgets.rs Watching::looking).
     if came {
-        crate::wake_monitor();
+        crate::loops::wake_monitor();
     }
     // The home opens up to say what happened while hovered, so it counts
     // as seen once the pointer leaves.
@@ -1986,7 +1988,7 @@ pub fn end_hold(sh: &Shared) {
 }
 
 // Take her in from where she is (her middle on the screen, physical); the
-// window stays up for it until she is in (main.rs absorb).
+// window stays up for it until she is in (shared.rs absorb).
 pub fn absorb(sh: &Arc<Shared>, point: (i32, i32)) {
     let sf = {
         let mut isl = sh.island.lock().unwrap();
@@ -2019,7 +2021,7 @@ pub fn open_settings(sh: &Arc<Shared>, tab: Option<&str>) {
     // Mail's agents looked for again while they are open; the monitor's
     // sensors read whole for their list.
     crate::mail::agent::watch(sh);
-    crate::wake_monitor();
+    crate::loops::wake_monitor();
     sh.redraw();
     if ready {
         let _ = sh.app.emit_to("island", "island:settings", json!({ "tab": tab.unwrap_or("") }));
@@ -2104,7 +2106,7 @@ pub fn raise(sh: &Arc<Shared>) {
     if hwnd == 0 || !shown || !(sh.home() == "taskbar" || over) || !TOPMOST.load(Ordering::SeqCst) || crate::embed::is_parented() {
         return;
     }
-    let own = sh.own.lock().unwrap().clone();
+    let own = sh.own_windows();
     let Some((class, on_top, _)) = crate::tasks::cover(hwnd, &own) else { return };
     let mine = crate::tasks::is_topmost(hwnd);
     crate::tasks::raise_top(hwnd);
@@ -2143,7 +2145,7 @@ pub fn uncover(sh: &Shared) {
     if hwnd == 0 || !TOPMOST.load(Ordering::SeqCst) || crate::embed::is_parented() {
         return;
     }
-    let own = sh.own.lock().unwrap().clone();
+    let own = sh.own_windows();
     let taskbar = crate::tasks::cover(hwnd, &own).filter(|(class, on_top, r)| matches!(class.as_str(), "Shell_TrayWnd" | "Shell_SecondaryTrayWnd") || (*on_top && if low { r.1 >= band - 2 } else { r.3 <= band + 2 }));
     let Some((class, _, _)) = taskbar else {
         UNDER_TASKBAR.store(false, Ordering::SeqCst);
@@ -2173,7 +2175,7 @@ static TOPMOST: AtomicBool = AtomicBool::new(true);
 static WATCHING_TOP: AtomicBool = AtomicBool::new(false);
 
 pub fn keep_on_top(sh: &Arc<Shared>) {
-    let open = sh.island.lock().unwrap().settings_open;
+    let open = sh.settings_open();
     let (locked, top) = (sh.flag("settingsPin"), sh.flag("settingsTop"));
     let topmost = !(open && locked && !top);
     if TOPMOST.swap(topmost, Ordering::SeqCst) != topmost {
@@ -2191,10 +2193,10 @@ pub fn keep_on_top(sh: &Arc<Shared>) {
     }
     let sh = sh.clone();
     std::thread::spawn(move || loop {
-        let watched = || sh.island.lock().unwrap().settings_open && sh.flag("settingsPin") && sh.flag("settingsTop");
+        let watched = || sh.settings_open() && sh.flag("settingsPin") && sh.flag("settingsTop");
         while watched() {
             let hwnd = hwnd(&sh);
-            let own = sh.own.lock().unwrap().clone();
+            let own = sh.own_windows();
             if hwnd != 0 && crate::tasks::covered(hwnd, &own) {
                 crate::tasks::raise_top(hwnd);
             }

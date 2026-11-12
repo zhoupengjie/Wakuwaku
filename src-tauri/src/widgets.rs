@@ -1101,7 +1101,7 @@ pub struct Power {
 }
 
 // The battery for the taskbar's quick settings, beside the network and the
-// volume as Windows' own shows it there on a laptop (taskbar.rs keys_loop,
+// volume as Windows' own shows it there on a laptop (taskbar/win/keys.rs keys_loop,
 // island.js showBattery), with whether Windows shows its percentage beside
 // it; null without a battery (a desktop), and none is shown.
 pub fn battery_state() -> Value {
@@ -1179,7 +1179,7 @@ pub fn reading_now() -> Value {
 // (lhm.rs), by the source chosen ("monitorSource"; none chosen, decided as
 // it reads, hw::Source::in_effect); whether nobody is at the keyboard, and
 // whether the settings are open (their list of sensors then read whole)
-// (its thread says, main.rs).
+// (its thread says, loops.rs).
 pub struct Watching {
     pub cpu: bool,
     pub memory: bool,

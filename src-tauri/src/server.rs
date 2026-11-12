@@ -5,12 +5,12 @@
 //   POST /hook         a Claude Code hook event; answers {} as soon as it is read, then
 //                      takes it (take, one after another in the order they came), or
 //                      for a prompt answers with the person's answer
-//                      ?agent=codex: a Codex one, handed on by this program (main.rs codex_hook)
+//                      ?agent=codex: a Codex one, handed on by this program (hooks.rs codex_hook)
 //                      ?agent=agy, ?agent=zcode, ?agent=reasonix: the same for
-//                      Antigravity's, ZCode's and Reasonix's (main.rs agy_hook)
+//                      Antigravity's, ZCode's and Reasonix's (hooks.rs agy_hook)
 //                      ?agent=dsh: a DeepSeek Harness one, from her plugin inside DSH
 //                      (integrations/dsh/wakuwaku.js, events_dsh.rs), or handed on by
-//                      this program for its old hook bridge (main.rs dsh_hook)
+//                      this program for its old hook bridge (hooks.rs dsh_hook)
 //                      ?agent=opencode: an OpenCode event, from her plugin in it (events_tests.rs opencode)
 //                      ?agent=omp: an oh-my-pi one, from her extension inside omp
 //                      (integrations/omp/wakuwaku.ts, events_tests.rs omp)
@@ -60,7 +60,7 @@ const HOOKS_WAITING: usize = 256;
 
 // Which agent's hook the request comes from (?agent=codex, ?agent=agy,
 // ?agent=zcode, ?agent=dsh, ?agent=reasonix: handed on by this program,
-// main.rs; ?agent=opencode: her plugin in OpenCode; ?agent=omp: her
+// hooks.rs; ?agent=opencode: her plugin in OpenCode; ?agent=omp: her
 // extension in omp); none for Claude Code's.
 fn agent_of(url: &str) -> Option<&'static str> {
     let (_, query) = url.split_once('?')?;
@@ -89,7 +89,7 @@ fn quit_of(url: &str) -> (crate::data::Quit, &'static str) {
 
 // Whether an agent's events bring the processes their session runs in:
 // Codex's, Antigravity's, ZCode's and Reasonix's hook commands look them up
-// (main.rs).
+// (hooks.rs).
 // Claude Code's come from its own process, omp's from her extension inside
 // omp.exe, OpenCode's from her plugin in its service and DeepSeek Harness's
 // from her plugin in its Host (or, the old way, a hook in its sandbox):
@@ -297,7 +297,7 @@ fn take(sh: &Shared, hook: Hook) {
     let Hook { agent, mut event, is_prompt, caller, req } = hook;
     // A prompt held for the person's answer on her (below): known before
     // its message, which for DSH's says where it is answered. Out of sight
-    // (her taskbar on another display counts: main.rs asks_seen), it is the
+    // (her taskbar on another display counts: shared.rs asks_seen), it is the
     // terminal's at once.
     let holds = is_prompt && sh.asks_seen();
     let dsh_home = crate::connection::dsh_home();
@@ -450,7 +450,7 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool, hooks: &SyncSender
             }
             // A prompt, which she may hold for the person's answer (take).
             // Reasonix's is not one to answer yet: its hook hands it on and
-            // is gone (main.rs reasonix_hook), so she only waits with it
+            // is gone (hooks.rs reasonix_hook), so she only waits with it
             // (zhoupengjie/Wakuwaku#60, phase 1); nor is one of DSH's her
             // plugin cannot take an answer to.
             let is_prompt = event["hook_event_name"] == "PermissionRequest" && !answers_none(agent, &event);
@@ -499,7 +499,7 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool, hooks: &SyncSender
         },
         // Started again while she runs: she comes back into sight.
         ("POST", "/come-home") => {
-            crate::come_home(sh);
+            crate::shared::come_home(sh);
             reply(req, 200, json!({ "ok": true }))
         }
         // A new version she started says it is up (updates.rs).
@@ -513,7 +513,7 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool, hooks: &SyncSender
         },
         ("GET", "/health") => {
             // Her pages up (each told pet_ready), and whether this copy waits
-            // for another holding the taskbar (taskbar.rs: no island made
+            // for another holding the taskbar (taskbar/: no island made
             // meanwhile): what a test waits on after starting a copy, not
             // the port nor a line of the log. One killed or quit a second
             // after it started has no page yet, as one that never gets them
@@ -547,7 +547,7 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool, hooks: &SyncSender
         ("POST", "/hw") => {
             let ok = read_json(&mut req).is_some_and(|body| crate::sensors::accept(&sh.dir, &body));
             // The switch's line follows the helper while the settings watch.
-            if ok && sh.island.lock().unwrap().settings_open {
+            if ok && sh.settings_open() {
                 sh.push_settings();
             }
             reply(req, if ok { 200 } else { 403 }, json!({ "ok": ok }))

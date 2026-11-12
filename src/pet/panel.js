@@ -324,7 +324,7 @@
     ? (new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet')
     : 'island'
   let settingsOpen = false
-  // Her window up on the desktop (main.rs payload herUp).
+  // Her window up on the desktop (shared.rs payload herUp).
   let herUp = false
   const holdsPanel = () => holderOf({ role: ROLE, out: config.out === true, herUp, hidden: typeof document !== 'undefined' && document.hidden })
 

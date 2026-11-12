@@ -185,7 +185,7 @@ mod win {
                 }
                 // Only while the settings are open: closed, the keys are back
                 // whatever their page last said.
-                if PAUSED.load(Ordering::SeqCst) && sh.island.lock().unwrap().settings_open {
+                if PAUSED.load(Ordering::SeqCst) && sh.settings_open() {
                     return None;
                 }
                 // Yield hotkeys when shortcuts disabled, DND on, or an app is fullscreen

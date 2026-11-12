@@ -1,7 +1,7 @@
 // DeepSeek Harness's events, from her own plugin inside DSH
 // (integrations/dsh/wakuwaku.js, connection/dsh.rs), or, from a DSH still running
 // its Claude Code hook bridge's rows, handed on by this program with
-// connection::DSH_FLAG (main.rs dsh_hook): agent-core reads them (dsh.rs
+// connection::DSH_FLAG (hooks.rs dsh_hook): agent-core reads them (dsh.rs
 // to_event: its tools by Claude Code's names, the turn's last words and the
 // session's name from DSH's folder when they did not come, a subagent's as
 // its session's), events.rs tells them in her words. Its approvals and

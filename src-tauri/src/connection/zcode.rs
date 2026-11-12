@@ -8,7 +8,7 @@
 // (events_tests.rs zcode). A hook is a command for a shell or, ours, a program and
 // its arguments (process: no shell, no quoting); none over HTTP. So this
 // program with ZCODE_FLAG and the event's name hands each to her port
-// (main.rs zcode_hook), and prints her answer to a PermissionRequest in
+// (hooks.rs zcode_hook), and prints her answer to a PermissionRequest in
 // Claude Code's words. ZCode shows its own dialog at the same time and
 // takes the first answer: hers, or the person's there (which ends our hook).
 // The others answer at once; ZCode waits on each (no background for a

@@ -15,7 +15,7 @@
 //
 // Its clicks: through it but where a widget is. The page says where they
 // are (desk_shapes: rounded rects, and an open menu); the pointer's own
-// loop (main.rs) asks poll() where the pointer is, and the window takes the
+// loop (loops.rs) asks poll() where the pointer is, and the window takes the
 // mouse while it is on one, lets it through elsewhere; held during a press
 // (desk_hold), so a drag keeps it anywhere. With Ctrl held, its bare desktop
 // too (off Explorer's icons), for widgets to be picked with a rectangle.
@@ -239,7 +239,7 @@ fn look_read() -> (bool, Value) {
     (light, accent.map_or(Value::Null, |a| json!({ "base": a.base, "light": a.light, "dark": a.dark })))
 }
 
-// The widgets' words, to the pages (with the island's, main.rs redraw_widgets):
+// The widgets' words, to the pages (with the island's, shared.rs redraw_widgets):
 // not to one whose display's desktop nobody sees (a window maximized or full
 // screen over it: the design session, 2026-10-16), which is told them once
 // it is seen again (catch_up).
@@ -278,7 +278,7 @@ pub fn catch_up(sh: &Shared) {
     let stale: Vec<Mon> = DESKS.lock().unwrap().iter().filter(|d| d.ready && d.stale).map(|d| d.mon).collect();
     if stale.iter().any(|&mon| seen_now(sh, mon)) {
         push_widgets(sh);
-        crate::wake_monitor();
+        crate::loops::wake_monitor();
     } else {
         views(sh);
     }
@@ -379,7 +379,7 @@ fn seen_now(sh: &Shared, mon: Mon) -> bool {
         }
     }
     count(&LOOKS);
-    let own = sh.own.lock().unwrap().clone();
+    let own = sh.own_windows();
     let shown = imp::desktop_shown(&own);
     let full = crate::fullscreen::covering(&own).flatten();
     let mons: Vec<Mon> = DESKS.lock().unwrap().iter().map(|d| d.mon).collect();
@@ -407,8 +407,8 @@ fn create(sh: &Arc<Shared>, label: String, area: Area) {
         let built = WebviewWindowBuilder::new(&sh.app, &label, WebviewUrl::App("pet/desk.html".into()))
             .title("wakuwaku desk")
             .inner_size(rect.2 as f64 / area.sf, rect.3 as f64 / area.sf)
-            .additional_browser_args(crate::browser_args(&sh))
-            .data_directory(crate::webview_dir(&sh))
+            .additional_browser_args(crate::webview::browser_args(&sh))
+            .data_directory(crate::webview::webview_dir(&sh))
             .transparent(true)
             .decorations(false)
             .resizable(false)
@@ -623,7 +623,7 @@ pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
     // (WebView2 in this process has the focus, DEVELOPMENT.md's Win keys;
     // seen again here, 2026-10-17), so Ctrl is looked for at its own pace
     // over a desktop with widgets.
-    let keys_ours = under.is_some() && seen && !ctrl_over && sh.own.lock().unwrap().contains(&crate::focus::foreground());
+    let keys_ours = under.is_some() && seen && !ctrl_over && sh.is_own(crate::focus::foreground());
     pace(under.is_some(), seen, false, near, in_strip, ctrl_over || keys_ours).unwrap_or(IDLE_MS)
 }
 
@@ -667,7 +667,7 @@ fn keep_icons(label: &str, icons: Vec<[f64; 4]>) {
 
 // --- What it does, counted --------------------------------------------------------------------
 // Each minute while there are desktop windows and the debug log is on
-// (main.rs ticker): the pointer's looks, the words pushed and sent, the
+// (loops.rs ticker): the pointer's looks, the words pushed and sent, the
 // events to the pages, what the pages asked, the windows put back in their
 // place, the looks at whether a desktop is covered, the desk thread's
 // messages; and, with WAKUWAKU_DESK_TRACE=1, every message the main thread
@@ -723,7 +723,7 @@ pub fn minute(sh: &Shared) {
     let take = |c: &AtomicU64| c.swap(0, Ordering::Relaxed);
     let counts = [take(&POLLS), take(&PUSHES), take(&SENT), take(&EMITS), take(&COMMANDS), take(&PLACED), take(&LOOKS), take(&THREAD_MSGS)];
     let traced = TRACE.lock().unwrap().as_mut().map(std::mem::take);
-    if !any() || !sh.is_logging {
+    if !any() || !sh.is_logging() {
         return;
     }
     let [polls, pushes, sent, emits, commands, placed, looks, thread] = counts;
@@ -1263,7 +1263,7 @@ pub fn short_key(id: &str) -> String {
     format!("d{:012x}", h & 0xFFFF_FFFF_FFFF)
 }
 
-// Windows' calls declared as the other modules declare them (taskbar.rs,
+// Windows' calls declared as the other modules declare them (taskbar/,
 // backplate.rs, fullscreen.rs: the same shapes, or Rust warns).
 #[cfg(windows)]
 mod imp {
@@ -1880,7 +1880,7 @@ mod imp {
     }
 
     // Ctrl's keys going down and up anywhere: the pointer's look woken at
-    // once (main.rs wake_pointer), not at its pace, so a press right after
+    // once (loops.rs wake_pointer), not at its pace, so a press right after
     // Ctrl reaches the desktop's page (poll). A low-level keyboard hook
     // (WH_KEYBOARD_LL) on a thread of its own that does nothing else:
     // Windows hands it every key on the machine and waits for its answer,
@@ -1925,7 +1925,7 @@ mod imp {
                 if held != was {
                     CTRL_HELD.store(held, std::sync::atomic::Ordering::Relaxed);
                     CTRL_AT.store(k.time, std::sync::atomic::Ordering::Relaxed);
-                    crate::wake_pointer();
+                    crate::loops::wake_pointer();
                 }
             }
         }

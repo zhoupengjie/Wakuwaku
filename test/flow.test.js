@@ -118,7 +118,7 @@ test('which hold choice is on: until seen, a quick one, or Custom for any other 
   // Custom picked, its box open before anything is typed: on, whatever is kept.
   assert.equal(Flow.holdChoice(8, true), 'custom')
   assert.equal(Flow.holdChoice('seen', true), 'custom')
-  // No whole number is until seen, as main reads it (main.rs hold).
+  // No whole number is until seen, as main reads it (shared.rs hold).
   for (const odd of [undefined, null, 'x', '8', 7.5, -8]) assert.equal(Flow.holdChoice(odd), 'seen', String(odd))
   assert.equal(Flow.HOLD_MIN, 3)
   assert.equal(Flow.HOLD_MAX, 600)

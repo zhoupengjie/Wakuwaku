@@ -110,7 +110,7 @@ impl Edge {
     }
 
     // The work area's sides other than this edge's (and the bottom, the
-    // room Windows' own keeps: taskbar.rs band_left) held in from the
+    // room Windows' own keeps: taskbar/ band_left) held in from the
     // display by as much as the strip is thick: a strip of hers along that
     // edge before, which Explorer, counting app bars again, kept (from the
     // right to the left, her taskbar on the main display alone, the right's
@@ -271,7 +271,7 @@ mod imp {
     }
 
     // The work area of the display a rect lies on set to it, quietly, as
-    // the main strip's is (taskbar.rs set_work_area: told to every window,
+    // the main strip's is (taskbar/win/work.rs set_work_area: told to every window,
     // Explorer set it back at once).
     pub fn set_work(r: (i32, i32, i32, i32)) -> bool {
         let mut rect = Rect { left: r.0, top: r.1, right: r.0 + r.2, bottom: r.1 + r.3 };

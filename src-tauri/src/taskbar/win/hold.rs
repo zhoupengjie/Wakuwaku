@@ -49,7 +49,7 @@ pub fn is_up() -> bool {
 }
 
 // Quitting with the handover: Windows' taskbar shown again under hers on
-// purpose (island.rs handoff_out), so neither the timer nor its show
+// purpose (island/ handoff_out), so neither the timer nor its show
 // event puts it away again in the second before it is given back (it
 // was: the foot of the screen bare for that second).
 pub(super) static HANDING_BACK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -118,7 +118,7 @@ pub(super) fn other_holder() -> Option<(u32, Option<u64>)> {
 }
 
 // Waiting for another copy to let the taskbar go, or for Explorer to
-// settle (wait_for_explorer): this one's window stays hidden (island.rs
+// settle (wait_for_explorer): this one's window stays hidden (island/
 // is_shown) and takes nothing.
 pub fn waiting() -> bool {
     WAITING.load(Ordering::SeqCst)
@@ -360,7 +360,7 @@ mod explorer_tests {
     }
 }
 
-// Before this one's window shows for the taskbar (island.rs): should
+// Before this one's window shows for the taskbar (island/): should
 // another copy hold it, this one waits.
 // Nor while Explorer is still starting (explorer_unready): it waits too.
 pub fn look_for_other(sh: &Shared) {
@@ -786,7 +786,7 @@ mod tug_tests {
 
 // Windows' taskbar on a display as it is on screen now, across the
 // display (physical px), as a PNG data URL: laid over it by her page
-// before it is put away (island.rs handoff_cover). None while it does
+// before it is put away (island/ handoff_cover). None while it does
 // not show there (auto-hidden, put away), or should the screen not read.
 pub fn strip_picture(mon: (i32, i32, i32, i32)) -> Option<String> {
     let (x, y, w, h) = shell::shown_room(mon)?;

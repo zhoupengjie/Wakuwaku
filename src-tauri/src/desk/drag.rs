@@ -5,7 +5,7 @@ use super::*;
 // 2026-10-17): a card, a widget off the strip or a combo dragged over the
 // desktop. Her home's page says where the pointer is, in its own px
 // (desk_drag_preview, as it moves; desk_drop, let go of there): that is the
-// screen's (her home's window's corner and scale, island.rs origin), the
+// screen's (her home's window's corner and scale, island/ origin), the
 // display under it, and that display's desktop page's px; told to that
 // page alone (desk:drag-preview, desk:drop: desk-drop.ts shows where it
 // would land and puts it there), as it came but for x and y (item and size,

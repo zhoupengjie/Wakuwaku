@@ -1,7 +1,7 @@
 // Her window: transparent, frameless, always on top, her whole self on the
 // desktop. Where it sits and how big it is, the mouse (click-through, her
 // eyes, dragging and being carried) and her walks. Up when she is out of
-// her home (out); at home, her home's window has her (island.rs).
+// her home (out); at home, her home's window has her (island/).
 //
 // Everything here is in physical pixels; the page gets logical (CSS) ones.
 //
@@ -441,7 +441,7 @@ pub fn set_panel(sh: &Shared, measured: Option<(f64, f64)>) {
     let _ = sh.app.emit_to("pet", "pet:shift", (shift as f64 / sf).round());
 }
 
-// Minimized by another program (island.rs MINIMIZED, Claude's computer use):
+// Minimized by another program (island/ MINIMIZED, Claude's computer use):
 // left so till it is given back, not put back on screen from (-32000, -32000)
 // at its size, minimized still, nor that place remembered.
 #[cfg(windows)]

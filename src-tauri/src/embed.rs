@@ -2,11 +2,11 @@
 // user, 2026-11-07: 做嵌入模式, as TrafficMonitor does it, at both ends, and
 // one window, not two). Her island set to the taskbar (islandEdge taskbar)
 // along the bottom or the top of her display: the island's own window
-// (island.rs) is made a child of Explorer's taskbar window (Shell_TrayWnd,
+// (island/) is made a child of Explorer's taskbar window (Shell_TrayWnd,
 // or a second display's Shell_SecondaryTrayWnd) with SetParent, as
 // TrafficMonitor's is, while nothing is open in it. A child is clipped to
 // its parent, so of the window (760 x 688, the closed island at its foot,
-// island.rs ISLAND_BOTTOM) only the closed capsule shows, in the strip, on
+// island/ ISLAND_BOTTOM) only the closed capsule shows, in the strip, on
 // the taskbar's own ground, in the free stretch at one end of it: at the
 // right, just left of the tray's icons (TrafficMonitor's place); at the
 // left, at the strip's start (left of Start, where Start is there). As the
@@ -44,7 +44,7 @@
 // display, the work area stopping at it (shell.rs shown_bar): along a side,
 // hiding itself, or put away, the window is taken out and the island lies
 // over the work area's edge as it does with the embedding turned off
-// (island.rs fit). Looked at every second (the programs' buttons come and
+// (island/ fit). Looked at every second (the programs' buttons come and
 // go), and at once as the settings or the capsule's size change (look_soon).
 // Explorer started again takes its taskbar's children with it, hers among
 // them: the island's window gone, she starts herself again (updates.rs
@@ -308,7 +308,7 @@ mod imp {
 
     #[derive(Default)]
     struct Embed {
-        // The island's window (island.rs hwnd) as last seen here, and the
+        // The island's window (island/ hwnd) as last seen here, and the
         // taskbar window it is in now (0: none, out on its own).
         hwnd: isize,
         tray: isize,
@@ -481,7 +481,7 @@ mod imp {
     }
 
     // Whether the island's window is a child of the taskbar now: laid by
-    // lay_child then (island.rs lay), and never raised (island.rs raise, uncover).
+    // lay_child then (island/ lay), and never raised (island/ raise, uncover).
     pub fn is_parented() -> bool {
         EMBED.lock().unwrap().parented
     }
@@ -575,7 +575,7 @@ mod imp {
     }
 
     // The island's window into the taskbar, or out of it, as it is used
-    // (island.rs parenting): in while the island is closed and nobody is
+    // (island/ parenting): in while the island is closed and nobody is
     // on it, out as the pointer comes or anything opens. Cheap when
     // nothing changes; called from the island's every look at the pointer.
     pub fn apply(sh: &Shared) {
@@ -782,12 +782,12 @@ mod imp {
     }
 
     // Out of the taskbar, and the island laid as it is with no capsule in
-    // the taskbar (island.rs fit). Laid over the taskbar instead (the island
-    // set to Windows' taskbar, the embedding off: island.rs over_wanted),
+    // the taskbar (island/ fit). Laid over the taskbar instead (the island
+    // set to Windows' taskbar, the embedding off: island/ over_wanted),
     // owned by the taskbar's window (`owner`; 0: nobody's), as it is out of
     // the taskbar with the embedding on (release): Windows keeps it over
     // the taskbar however Explorer raises it. Not owned, the taskbar pressed
-    // came over it and hid it till island.rs uncover's next look found it
+    // came over it and hid it till island/ uncover's next look found it
     // under it, up to 2 s (the user, 2026-11-08: 切换到叠在任务栏上后，点一下
     // 任务栏，灵动岛会被藏在后面几秒钟). An owner destroyed takes its owned
     // windows with it, so Explorer started again takes the island's window
@@ -795,7 +795,7 @@ mod imp {
     fn detach(sh: &Arc<Shared>, why: &str, owner: isize) {
         let parenting = island::parenting(sh);
         // Read before EMBED is taken: the island's lock is never taken
-        // inside it (island.rs where_ takes EMBED's after its own).
+        // inside it (island/ where_ takes EMBED's after its own).
         let island_hwnd = island::hwnd(sh);
         let (was, hwnd, parented, owned) = {
             let mut e = EMBED.lock().unwrap();

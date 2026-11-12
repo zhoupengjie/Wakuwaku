@@ -11,13 +11,13 @@
 //   shared.rs      what every part shares (Shared): the settings, her moods, the windows'
 //                  states, the prompts, the widgets, each behind its lock; the log; the quit
 //   commands/      what the pages call: her window's and both pages' (pet.rs), the island's
-//                  (island.rs), the rest (mod.rs); others' in their own modules
+//                  (island/), the rest (mod.rs); others' in their own modules
 //   hooks.rs       her exe run as an agent's hook: the event handed to her port
 //   loops.rs       her threads that look every so often: the pointer, the widgets, the
 //                  monitor, full screen, the ticker
 //   webview.rs     what WebView2 is started with, and where it keeps its files
 //   pet.rs         her window: size, place, eyes, drags, being carried, walks
-//   island.rs      her home's window (island, taskbar), and the settings
+//   island/      her home's window (island, taskbar), and the settings
 //   appbar.rs      the taskbar's strip, kept from other windows
 //   taskbar/       the taskbar's side of Windows: its own put away (shell.rs),
 //                  the tray taken over (systray/), the windows' buttons (tasks.rs),

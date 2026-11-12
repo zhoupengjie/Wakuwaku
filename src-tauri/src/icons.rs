@@ -714,7 +714,7 @@ pub fn strip_taken(data: &Path, strip: (i32, i32, i32, i32), edge: &str, log: im
 }
 
 // The places before her strip goes along the top, the left or the right,
-// before anything of it moves them (island.rs sync_bar_now, before Windows'
+// before anything of it moves them (island/ sync_bar_now, before Windows'
 // own is put away, her app bar asked for, the work area set: each of those
 // may have the desktop lay them anew, and read after it the places kept
 // were already those for the strip, given back a strip's width off; the test

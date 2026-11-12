@@ -549,7 +549,7 @@ fn is_hold(v: &Value) -> bool {
 
 // Where her island sits at the top of the screen (zhoupengjie/Wakuwaku#59):
 // a top corner, or the top centre (the default). Kept here; placing the
-// window by it is island.rs's (fit, side_changed), and the page lays the
+// window by it is island/'s (fit, side_changed), and the page lays the
 // island out at the side it is told (anchor.ts, pet:update islandAt).
 fn is_island_pos(v: &Value) -> bool {
     matches!(v.as_str(), Some("left" | "center" | "right"))
@@ -558,7 +558,7 @@ fn is_island_pos(v: &Value) -> bool {
 // Where her island is (zhoupengjie/Wakuwaku#105): at the top of the screen
 // (the default), or in Windows' own taskbar, along whichever edge that is,
 // left as it is (its capsule inside it, embed.rs; "bottom" until 2026-11-07,
-// data.rs adopt_island_edge). Placing the window by it is island.rs's (fit)
+// data.rs adopt_island_edge). Placing the window by it is island/'s (fit)
 // too, and the page lays the island out along the edge of the screen it is
 // told (anchor.ts, pet:update islandEdge).
 fn is_island_edge(v: &Value) -> bool {
@@ -611,7 +611,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "islandEdge" => is_island_edge(v),
         // In the taskbar, the capsule inside it, taking its end (embed.rs), or laid over it.
         "islandEmbed" => is_bool,
-        // At the top of the screen, up out of the way of a window under it (island.rs look_under).
+        // At the top of the screen, up out of the way of a window under it (island/ look_under).
         "islandHideUnder" => is_bool,
         "taskbarMaterial" => matches!(v.as_str(), Some("mica" | "black" | "clear")),
         "taskbarClearWhen" => matches!(v.as_str(), Some("mica" | "solid" | "always")),

@@ -6,7 +6,7 @@ use super::*;
 use crate::lock::Lock;
 
 pub(super) static WORK_BOTTOM: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
-// The screen's edge the strip is along (island.rs, taskbarEdge), and the
+// The screen's edge the strip is along (island/, taskbarEdge), and the
 // one the work area was last made whole for (strip_moved), with whether
 // Windows' own kept its room along the foot then (split, the dock in it).
 pub(super) static EDGE: Lock<Edge> = Lock::new("taskbar::win::work::EDGE", Edge::Bottom);
@@ -343,7 +343,7 @@ pub(super) fn keep_work(eager: bool) {
             let reaches = strip.is_some_and(|s| edge.reaches(xywh, s));
             let (how, why) = if reaches { ("reaches into", "") } else { ("stops short of", ", where she set it for one before") };
             // Explorer left her bar out: its place told again first
-            // (island.rs reclaim_bar), Explorer then counting it, the work
+            // (island/ reclaim_bar), Explorer then counting it, the work
             // area set by Explorer itself; set here too, should it not.
             let told = if reaches { sh().and_then(|sh| crate::island::reclaim_bar(&sh)) } else { None };
             let counted = match (told, strip) {

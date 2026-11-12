@@ -220,7 +220,7 @@ impl Config {
     }
 
     // Her home as her windows have it: the island, or the taskbar, which
-    // the top bar and the dock are too (display split: island.rs is_split).
+    // the top bar and the dock are too (display split: island/ is_split).
     pub fn home(&self) -> &'static str {
         match self.display.as_deref() {
             Some("taskbar" | "split") => "taskbar",
@@ -251,7 +251,7 @@ keys! {
     ISLAND_POS island_pos: Text = "islandPos" => "center",
     // Where it is: top (the top of the screen, as ever), or taskbar, in
     // Windows' own taskbar along whichever edge that is, which stays as
-    // it is (island.rs fit, zhoupengjie/Wakuwaku#105).
+    // it is (island/ fit, zhoupengjie/Wakuwaku#105).
     ISLAND_EDGE island_edge: Text = "islandEdge" => "top",
     // In the taskbar, her capsule inside it, taking one end of it
     // (embed.rs), unless turned off: laid over it then.
@@ -279,7 +279,7 @@ keys! {
     // The screen's edge it is along: bottom (Windows' own place), top,
     // left or right (side bars: an upright capsule, icons alone).
     TASKBAR_EDGE taskbar_edge: Text = "taskbarEdge" => "bottom",
-    // The top bar and the dock (display split, island.rs is_split): the
+    // The top bar and the dock (display split, island/ is_split): the
     // top bar 32 px or 48, the dock out of the way of a window touching
     // it or kept in the room Windows' own keeps, quick settings and the
     // clock in the top bar or the dock.
@@ -393,7 +393,7 @@ mod tests {
             "islandPos": "center",
             // Where it is: top (the top of the screen, as ever), or taskbar, in
             // Windows' own taskbar along whichever edge that is, which stays as
-            // it is (island.rs fit, zhoupengjie/Wakuwaku#105).
+            // it is (island/ fit, zhoupengjie/Wakuwaku#105).
             "islandEdge": "top",
             // In the taskbar, her capsule inside it, taking one end of it
             // (embed.rs), unless turned off: laid over it then.
@@ -421,7 +421,7 @@ mod tests {
             // The screen's edge it is along: bottom (Windows' own place), top,
             // left or right (side bars: an upright capsule, icons alone).
             "taskbarEdge": "bottom",
-            // The top bar and the dock (display split, island.rs is_split): the
+            // The top bar and the dock (display split, island/ is_split): the
             // top bar 32 px or 48, the dock out of the way of a window touching
             // it or kept in the room Windows' own keeps, quick settings and the
             // clock in the top bar or the dock.

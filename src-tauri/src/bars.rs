@@ -11,7 +11,7 @@
 // (shell.rs rehide), and their work areas whole (keep_work).
 // Not while her home is the island, nor while her taskbar is not up; an
 // app full screen on a display hides that display's alone.
-// Split (island.rs is_split, docs/design/specs/dock-topbar.md): one on her
+// Split (island/ is_split, docs/design/specs/dock-topbar.md): one on her
 // display too, the dock: Start and the programs at the foot of the screen,
 // her strip the top bar. A window of its own (dock-1, ...) as her island's
 // is: a band along the whole foot as high as Windows' room there, never
@@ -112,7 +112,7 @@ const DOCK_H: f64 = 48.0;
 const DOCK_GLASS: f64 = 44.0;
 const DOCK_GAP: f64 = 2.0;
 // The pointer this close to the foot of the screen (logical), this long, no
-// button held meanwhile, calls it up (as her island at the top: island.rs
+// button held meanwhile, calls it up (as her island at the top: island/
 // call_look, but sooner: the user, 2026-11-02); off it (and this much
 // beside or above it, or the foot of the screen) this long, it goes.
 const DOCK_EDGE_PX: f64 = 2.0;
@@ -122,7 +122,7 @@ const DOCK_LEAVE_MS: u128 = 600;
 
 static BARS: Lock<Vec<Bar>> = Lock::new("bars::BARS", Vec::new());
 
-// The strips' pages and their list's as the main taskbar's (island.rs
+// The strips' pages and their list's as the main taskbar's (island/
 // fit_zoom): zoomed so that Windows' text size is taken out of their scale,
 // each laid out at 48 of its px as thick as Windows' (zhoupengjie/Wakuwaku#90).
 // The text size as her island's page has it; each once its page is up.
@@ -177,7 +177,7 @@ pub fn sync(sh: &Arc<Shared>) {
     let up = taskbar::is_up();
     let all = wanted(sh) && up;
     let home = island::display(sh);
-    // Split, the others' along the bottom (island.rs bars_edge).
+    // Split, the others' along the bottom (island/ bars_edge).
     let edge = island::bars_edge(sh);
     let areas = sh.screens().areas;
     // (display, the dock?): a strip on each of the others; split, the dock on hers.
@@ -300,7 +300,7 @@ fn close(sh: &Shared, g: Gone) {
 // (Explorer, as app bars come and go); a quarter of a second at Windows'
 // word that the work area changed (eager: taskbar/win/work.rs keep_work), Explorer's
 // taskbar showing itself having set it to the whole display. Its app bar's
-// place told again first, as hers (island.rs reclaim_bar): Explorer then
+// place told again first, as hers (island/ reclaim_bar): Explorer then
 // counts it, and sets the work area itself.
 pub fn keep_work(sh: &Shared, eager: bool) {
     let now = Instant::now();
@@ -696,7 +696,7 @@ pub fn dock_glass(app: tauri::AppHandle, window: WebviewWindow, glass: (f64, f64
 
 // One look at the pointer (poll; physical) for the dock: on its glass, its
 // window takes it, elsewhere along the band it goes through (as her
-// island's: island.rs, pointer.rs; her taskbar's look already comes every
+// island's: island/, pointer.rs; her taskbar's look already comes every
 // 30 ms); out of the way, whether it is to be now, called up or let go as
 // stow_look says. Returns ms until the next look: sooner near the foot.
 pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
@@ -929,7 +929,7 @@ fn waiting(views: &Value) -> Value {
 }
 
 // Her capsule there pressed: the prompt shown in her island on the main
-// display, as a press on hers (island.rs show_asks).
+// display, as a press on hers (island/ show_asks).
 #[tauri::command]
 pub fn bar_asks(app: tauri::AppHandle) {
     let sh = crate::shared(&app);

@@ -4,7 +4,7 @@
 // message loop the tray's window needs, with a hidden window of its own that
 // hears:
 //   - Explorer started again (TaskbarCreated, from a new taskbar window):
-//     its taskbar put away again, the strip taken again (island.rs), the
+//     its taskbar put away again, the strip taken again (island/), the
 //     tray put first again and programs asked for their icons, once the new
 //     Explorer has settled (zhoupengjie/Wakuwaku#85: until then hers is set
 //     behind its tray; nor is the taskbar taken from an Explorer still
@@ -20,7 +20,7 @@
 //     Mica (taskbar:wallpaper); Windows' mode and accent colour, for the
 //     strip to be as Windows' own taskbar is (taskbar:look)
 // Taken when the home takes its strip, given back when it gives the strip
-// back (island.rs sync_bar) and on quitting. A killed process cannot give
+// back (island/ sync_bar) and on quitting. A killed process cannot give
 // the taskbar back: shell.rs's guard does.
 //
 // Learnt in examples/taskbar_spike.rs (2026-10-10), where each of these was

@@ -369,7 +369,7 @@ mod imp {
     // area stopping at it): its window (Shell_TrayWnd, or a second
     // display's Shell_SecondaryTrayWnd), its strip (physical, the display's
     // whole length) and the edge it is along, for her capsule to go into
-    // it (embed.rs) and her island to lie over it (island.rs fit); none
+    // it (embed.rs) and her island to lie over it (island/ fit); none
     // while none shows along any edge (hidden, slid away).
     pub fn shown_bar(mon: (i32, i32, i32, i32)) -> Option<(isize, (i32, i32, i32, i32), Edge)> {
         let (left, top, right, bottom) = (mon.0, mon.1, mon.0 + mon.2, mon.1 + mon.3);

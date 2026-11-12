@@ -301,9 +301,9 @@ impl Shared {
         self.by_fullscreen.store(true, Ordering::SeqCst);
     }
 
-    // Her home: 'island' or 'taskbar' (island.rs).
+    // Her home: 'island' or 'taskbar' (island/).
     // Her home as her windows have it: the island, or the taskbar, which the
-    // top bar and the dock are too (display split: island.rs is_split).
+    // top bar and the dock are too (display split: island/ is_split).
     pub fn home(&self) -> &'static str {
         self.config().home()
     }
@@ -697,7 +697,7 @@ impl Shared {
         if touches_monitor {
             crate::loops::wake_monitor();
         }
-        // A window under her island looked for at once (island.rs look_under).
+        // A window under her island looked for at once (island/ look_under).
         if touches_stow {
             fullscreen::ask();
         }

@@ -512,7 +512,7 @@ pub fn set(sh: &Shared, plate: Option<Plate>, fade_ms: u32) {
     crate::island::with_shown(sh, |under, shown| imp::wish(plate, under, fade_ms.min(1000), shown));
 }
 
-// Gone at once with her island's window (island.rs show_or_hide), and back
+// Gone at once with her island's window (island/ show_or_hide), and back
 // with it (again).
 pub fn hide() {
     imp::set(ISLAND, None, 0, 0);

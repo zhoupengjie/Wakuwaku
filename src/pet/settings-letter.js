@@ -113,13 +113,14 @@ window.SettingsParts.letter = function (core) {
   // The letter being written: back (it stays), discard, send; from
   // (where there are several accounts), to, cc and bcc (when asked for),
   // the subject, the text; the files, each with ×, and more.
-  function writeHTML() {
+  function writeHTML(note = '') {
     const d = core.draft
     const all = core.snap.mail || []
     const off = d.busy ? 'disabled' : ''
+    const two = twoPanes()
     // Back: to the letter answered, or the inbox; beside the list (two
     // panes), put aside.
-    const back = twoPanes() ? 'mail.w.aside' : d.reply || d.forward ? (core.reading?.letter ? 'mail.w.backLetter' : 'mail.inbox') : 'mail.inbox'
+    const back = two ? 'mail.w.aside' : d.reply || d.forward ? (core.reading?.letter ? 'mail.w.backLetter' : 'mail.inbox') : 'mail.inbox'
     const bar = `<div class="mail-bar"><span class="link" data-w-back>‹ ${esc(T(back))}</span><span class="grow"></span>
       <button class="pbtn sm" data-w-drop ${off}>${esc(T(core.dropSure ? 'mail.w.dropSure' : 'mail.w.drop'))}</button>
       <button class="pbtn sm al" data-w-send title="${esc(T('mail.w.ctrlEnter'))}" ${off}>${esc(T(d.busy ? 'mail.w.sending' : 'mail.w.send'))}</button></div>`
@@ -138,7 +139,7 @@ window.SettingsParts.letter = function (core) {
       .map(f => `<span class="chip">📎 ${esc(f.name || '?')} · ${mailSize(f.size || 0)}<button class="unfile" data-w-unfile="${f.key}" title="${esc(T('mail.w.unfile'))}" ${off}>×</button></span>`)
       .join('')
     const notes = [d.note ? `<div class="note">${esc(d.note)}</div>` : '', d.error ? `<div class="note err">${esc(d.error)}</div>` : ''].join('')
-    return `${bar}${sec(T(`mail.w.kind.${d.kind || 'new'}`))}<div class="grp mail-write">${notes}
+    const inner = `${sec(T(`mail.w.kind.${d.kind || 'new'}`))}<div class="grp mail-write">${notes}
       ${from}
       ${box('to', T('mail.to'), ccLink)}
       ${d.showCc ? box('cc', T('mail.cc')) + box('bcc', T('mail.w.bcc')) : ''}
@@ -146,6 +147,7 @@ window.SettingsParts.letter = function (core) {
       <textarea class="in ta" data-w="text" rows="10" spellcheck="false" ${off}>${esc(d.text)}</textarea>
       <div class="w-files">${files}<button class="pbtn sm" data-w-attach ${off}>📎 ${esc(T('mail.w.attach'))}</button><input type="file" multiple hidden data-w-file></div>
     </div>`
+    return two ? `${bar}<div class="pane-r-body">${note}${inner}</div>` : `${bar}${inner}`
   }
 
   // Files picked, read for the letter; no more than it may take.
@@ -234,31 +236,139 @@ window.SettingsParts.letter = function (core) {
     noteFor({ text: T(`mail.w.sent.${got.kept || 'server'}`), bad: got.kept === 'failed' })
   }
 
+  // Whose letter: the sender's face at its head, as a mail program has one.
+  // Drawn of her own, with no network look (a picture fetched from outside
+  // is read without telling its sender it was opened): the first letter of
+  // the name, on the colour of the address, the same address always the
+  // same one.
+  function avatarHTML(l) {
+    const from = (l.from || [])[0] || {}
+    const name = String(from.name || from.address || '').trim()
+    const first = Array.from(name)[0] || '?'
+    let hash = 0
+    for (const ch of String(from.address || name)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+    return `<span class="av" style="--av-h:${hash % 360}" aria-hidden="true">${esc(first.toLocaleUpperCase())}</span>`
+  }
+
   // A letter open: back to the inbox, its star and the hand-off, who, when,
-  // its attachments, the talk about it, the text.
-  function readingHTML() {
+  // its attachments, the talk about it, the text or HTML.
+  function readingHTML(note = '') {
     const r = core.reading
     const l = r.letter
     const talk = l ? talkOf(l.key) || r.talk : null
     // Beside the list (two panes) there is no inbox to go back to.
-    const back = twoPanes() ? '' : `<span class="link" data-mail-back>‹ ${esc(T('mail.inbox'))}</span>`
+    const two = twoPanes()
+    const back = two ? '' : `<span class="link" data-mail-back>‹ ${esc(T('mail.inbox'))}</span>`
     const bar = `<div class="mail-bar">${back}<span class="grow"></span>${l ? handButtons(l, talk) : ''}</div>`
-    const note = core.handNote && !twoPanes() ? `<div class="note${core.handNote.bad ? ' err' : ''}">${esc(core.handNote.text)}</div>` : ''
-    if (r.busy) return `${bar}<div class="grp"><div class="note">${esc(T('mail.opening'))}</div></div>`
-    if (r.error) return `${bar}<div class="grp"><div class="note err">${esc(handError(r.error))}</div></div>`
+    const hand = core.handNote && !two ? `<div class="note${core.handNote.bad ? ' err' : ''}">${esc(core.handNote.text)}</div>` : ''
+    // Two panes: the bar stays, the letter (and the note about its hand-off)
+    // scrolls under it. One pane: the whole page scrolls, as it did.
+    const wrap = inner => (two ? `${bar}<div class="pane-r-body">${note}${inner}</div>` : `${bar}${hand}${inner}`)
+    if (r.busy) return wrap(`<div class="grp"><div class="note">${esc(T('mail.opening'))}</div></div>`)
+    if (r.error) return wrap(`<div class="grp"><div class="note err">${esc(handError(r.error))}</div></div>`)
     const files = l.attachments.length ? `<div class="m-files">${l.attachments.map(f => `<span class="chip">📎 ${esc(f.name || '?')} · ${mailSize(f.size)}</span>`).join('')}</div>` : ''
     // Whose (several accounts), and one's own, from Sent.
     const address = accountOf(l.account)?.address || ''
     const inSent = l.folder === 'sent' ? T('mail.inSent', { address }) : ''
     const whose = inSent || (core.snap.mail || []).length > 1 ? `<div class="d">${esc(inSent || T('mail.in', { address }))}</div>` : ''
-    return `${bar}${note}<div class="grp mail-read" ${where(l)}>
+    return wrap(`<div class="grp mail-read" ${where(l)}>
       <div class="m-subj">${esc(l.subject || T('mail.noSubject'))}</div>
-      <div class="d">${esc(people(l.from))} · ${esc(mailDate(l.date, true))}</div>
+      <div class="from">${avatarHTML(l)}<div class="grow"><div class="who">${esc(people(l.from))}</div><div class="d">${esc(mailDate(l.date, true))}</div></div></div>
       ${l.to.length ? `<div class="d">${esc(T('mail.to'))}: ${esc(people(l.to))}</div>` : ''}
       ${l.cc.length ? `<div class="d">${esc(T('mail.cc'))}: ${esc(people(l.cc))}</div>` : ''}
       ${whose}${files}${talk ? talkHTML(talk, l) : ''}
-      <div class="m-text">${esc(l.text)}</div>${l.cut ? `<div class="d">${esc(T('mail.cut'))}</div>` : ''}
-    </div>`
+      ${mailBodyHTML(l)}
+    </div>`)
+  }
+
+  // The letter's body: as it was written (its styles, its cards, its
+  // pictures), in a frame that cannot run anything, or the plain text when
+  // there is no HTML. The frame is sandboxed: no scripts, no forms, nothing
+  // of hers in it. Its pictures are the letter's own (the sender's server),
+  // so they are read as they come. The text it was written with is not put
+  // under it: a letter shows as its sender made it (the user, 2026-10-20).
+  function mailBodyHTML(l) {
+    const html = String(l.html || '')
+    if (!html.trim()) {
+      return `<div class="m-text">${esc(l.text)}</div>${l.cut ? `<div class="d">${esc(T('mail.cut'))}</div>` : ''}`
+    }
+    const light = document.body.classList.contains('set-light')
+    const fg = light ? '#1b1b1b' : '#f5f5f7'
+    const link = light ? '#005fb8' : '#5e9eff'
+    const doc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src http: https: data: cid:; style-src 'unsafe-inline'; font-src data:"><style>
+      html,body{width:100%;max-width:100%;margin:0;padding:0;overflow-x:hidden;background:transparent;color:${fg};color-scheme:${light ? 'light' : 'dark'};font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:13px;line-height:1.5}
+      *,*::before,*::after{box-sizing:border-box;max-width:100%!important;min-width:0!important}
+      img,video,svg,canvas,iframe{height:auto!important}
+      td,th,div,p,span,a,li{overflow-wrap:anywhere}
+      a{color:${link}}
+    </style></head><body>${html}</body></html>`
+    return `<div class="m-html-wrap"><iframe class="m-html" sandbox="allow-same-origin" referrerpolicy="no-referrer" scrolling="no" title="${esc(l.subject || T('mail.noSubject'))}" srcdoc="${esc(doc)}"></iframe></div>`
+  }
+
+  // The frame as tall as the letter in it: the page measures it (the frame
+  // is of her own origin and runs nothing) and gives it the height. Measured
+  // again as its pictures arrive and its fonts settle — the first measure is
+  // of a letter whose pictures are not there yet, and a letter 3,000px tall
+  // was left showing its first 160 (the user's letter, 2026-10-20).
+  function fitFrames() {
+    for (const frame of body.querySelectorAll('iframe.m-html')) {
+      const fitWidth = doc => {
+        const w = doc.documentElement.clientWidth
+        if (!w) return
+        for (const el of doc.body.querySelectorAll('table,img,div')) {
+          if (el.getBoundingClientRect().width <= w + 1) continue
+          el.style.setProperty('max-width', '100%', 'important')
+          el.style.setProperty(el.tagName === 'IMG' ? 'height' : 'width', el.tagName === 'IMG' ? 'auto' : '100%', 'important')
+        }
+      }
+      const fit = () => {
+        if (!frame.isConnected) return
+        try {
+          const doc = frame.contentDocument
+          if (!doc || !doc.body) return
+          fitWidth(doc)
+          const rawH = Math.max(120, doc.body.scrollHeight + 8)
+          const h = Math.min(32000, rawH)
+          if (rawH > 32000) {
+            frame.scrolling = 'yes'
+            doc.documentElement.style.overflowY = 'auto'
+          }
+          if (frame.style.height !== `${h}px`) frame.style.height = `${h}px`
+        } catch (e) {
+          // The frame's document is not to be read (it is of another origin,
+          // or it is not ready): the height it has is left as it is.
+        }
+      }
+      const watch = () => {
+        fit()
+        try {
+          const doc = frame.contentDocument
+          if (!doc || frame._fitDoc === doc) return
+          frame._fitDoc = doc
+          doc.addEventListener('load', fit, true)
+          doc.addEventListener('error', fit, true)
+          doc.addEventListener('click', e => {
+            const a = e.target.closest?.('a[href]')
+            if (!a) return
+            const href = a.getAttribute('href') || ''
+            if (href.startsWith('#') && href.length > 1) {
+              const target = doc.getElementById(href.slice(1))
+              if (target) target.scrollIntoView({ block: 'nearest' })
+            }
+            e.preventDefault()
+          })
+          doc.fonts?.ready?.then(fit).catch(() => {})
+        } catch (e) {}
+      }
+      frame._fit = watch
+      if (!frame._fitHooked) {
+        frame._fitHooked = true
+        frame.addEventListener('load', () => frame._fit?.())
+      }
+      watch()
+      for (const t of frame._fitTimers || []) clearTimeout(t)
+      frame._fitTimers = [250, 900, 2200, 5000, 10000, 20000].map(ms => setTimeout(() => frame.isConnected && frame._fit?.(), ms))
+    }
   }
 
   // Mail: each account with its switch and setting one up; the inbox
@@ -272,8 +382,9 @@ window.SettingsParts.letter = function (core) {
       if (id && inbox.for !== `${id}|${inbox.filter}` && !inbox.busy) setTimeout(() => loadInbox(false))
       const left = id ? inboxHTML(id) : `<div class="note">${esc(T('mail.noBox'))}</div>`
       const note = core.handNote ? `<div class="note${core.handNote.bad ? ' err' : ''}">${esc(core.handNote.text)}</div>` : ''
-      const right = core.writing && core.draft ? writeHTML() : core.reading ? readingHTML() : `${accountsHTML()}${id ? agentsHTML() : ''}`
-      return `<div class="panes"><div class="pane-l">${left}</div><div class="pane-r">${note}${right}</div></div>`
+      const body = inner => `<div class="pane-r-body">${note}${inner}</div>`
+      const right = core.writing && core.draft ? writeHTML(note) : core.reading ? readingHTML(note) : body(`${accountsHTML()}${id ? agentsHTML() : ''}`)
+      return `<div class="panes"><div class="pane-l">${left}</div><div class="pane-r">${right}</div></div>`
     }
     if (core.writing && core.draft) return writeHTML()
     if (core.reading) return readingHTML()
@@ -641,5 +752,5 @@ window.SettingsParts.letter = function (core) {
   })
   body.addEventListener('scroll', closeMenu)
 
-  return { addFiles, closeMenu, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu, openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setProxy, star, step, waySetting, write, writeAbout }
+  return { addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu, openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setProxy, star, step, waySetting, write, writeAbout }
 }

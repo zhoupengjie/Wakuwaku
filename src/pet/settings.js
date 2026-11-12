@@ -645,7 +645,7 @@
   let menuPick = null
   // In settings-letter.js:
   const {
-    addFiles, closeMenu, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu,
+    addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu,
     openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setProxy,
     star, step, waySetting, write, writeAbout,
   } = window.SettingsParts.letter({
@@ -797,6 +797,7 @@
       back.setSelectionRange(caret, caret)
     }
     startThumbs()
+    fitFrames()
     fillCards()
   }
 

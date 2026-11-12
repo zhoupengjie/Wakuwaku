@@ -30,6 +30,7 @@
     "src/pet/bar.ts",
     "src/pet/barpop.ts",
     "src/pet/bridge.ts",
+    "src/pet/capsule-panel.ts",
     "src/pet/capsule.ts",
     "src/pet/desk-drop.ts",
     "src/pet/desk.ts",

@@ -603,8 +603,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // In settings-market.ts:
   pieces.market = marketPart(core)
   const {
-    approveGo, drawSheet, fillCards, flowStep, installFromFile, installGo, loadMarket, marketInstall,
-    marketItem, marketItemPage, marketPage, toast, uninstallGo, updateAll,
+    approveGo, cancelAsked, drawSheet, fillCards, installFromFile, installGo, loadMarket,
+    marketInstall, marketItem, marketItemPage, marketPage, toast, uninstallGo, updateAll,
   } = pieces.market
 
   // --- The Plugins page, and the monitor's sensors -------------------------------------
@@ -844,6 +844,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     go({ type: 'close' })
     st.gone = null
     st.mkAsk = null
+    st.approveFor = null
     setRecording(null)
     if (st.flow.step === 'ask' || st.flow.step === 'refused') st.flow = AddonUI.IDLE
     freshRows.clear()
@@ -982,12 +983,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         drawSheet()
         return what === 'mkgo' ? marketInstall(asked?.id, true) : updateAll(true)
       }
-      if (what === 'cancel' && !(st.gone?.busy || st.flow.step === 'installing')) {
-        st.gone = null
-        st.mkAsk = null
-        st.approveFor = null
-        flowStep({ type: 'cancel' })
-      }
+      if (what === 'cancel') cancelAsked()
       return
     }
     if (at('[data-lock]')) return patch(st.snap.settings.settingsPin ? { settingsPin: false, settingsTop: false } : { settingsPin: true })
@@ -2007,15 +2003,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     if (e.key === 'Escape') {
       e.preventDefault()
       if (!menuEl.hidden) return closeMenu()
-      // The question over the panel first: 取消 (not while it works).
-      if (!sheet.hidden) {
-        if (!(st.gone?.busy || st.flow.step === 'installing')) {
-          st.gone = null
-          st.mkAsk = null
-          flowStep({ type: 'cancel' })
-        }
-        return
-      }
+      // The question over the panel first: 取消, as its button (not while it
+      // works). It left new permissions asked (approveFor) up, till 2026-11.
+      if (!sheet.hidden) return cancelAsked()
       return close('Esc')
     }
     // A row that is a button (从文件安装…, 获取更多, one of the market's), by the keyboard as a press.

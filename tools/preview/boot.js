@@ -99,6 +99,12 @@
       const node = needed(sel)
       node.dispatchEvent(new MouseEvent('contextmenu', { ...at(node, dx, dy), bubbles: true, cancelable: true, button: 2, view: window }))
     },
+    // A key pressed (Esc, Enter): its keydown where the keyboard is, as the
+    // page's listeners hear it.
+    key(key) {
+      const node = document.activeElement || document.body
+      node.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+    },
     // The settings' controls side by side (the controls scene): taken from
     // the General page as drawn (a switch on and off, a segmented control,
     // a button), an accent one as its newer-version button is, a box as a

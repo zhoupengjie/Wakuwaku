@@ -986,6 +986,23 @@
       p.click('#island-settings [data-approve="note-pad"]')
       await p.wait(400)
     }),
+    // Put away as any question over the panel: Esc is its 取消, and the
+    // settings closed and opened again ask nothing.
+    addonShot('settings-plugins-addon-approval-esc', '要更多权限，按 Esc 取消', async p => {
+      await openPluginsPage(p)
+      p.click('#island-settings [data-approve="note-pad"]')
+      await p.wait(400)
+      p.key('Escape')
+      await p.wait(400)
+    }),
+    addonShot('settings-plugins-addon-approval-reopen', '要更多权限，关掉设置再打开', async p => {
+      await openPluginsPage(p)
+      p.click('#island-settings [data-approve="note-pad"]')
+      await p.wait(400)
+      p.click('#island-settings .x[data-close]')
+      await p.wait(400)
+      await openPluginsPage(p)
+    }),
     addonShot('settings-plugins-uninstall-confirm', '卸载先问一句', async p => {
       await openPluginsPage(p)
       p.click('#island-settings [data-addon="tally"]')

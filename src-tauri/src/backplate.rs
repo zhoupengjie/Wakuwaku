@@ -59,9 +59,10 @@ pub fn on_screen((ox, oy): (i32, i32), sf: f64, (x, y, w, h): (f64, f64, f64, f6
 
 #[cfg(windows)]
 mod imp {
+    use crate::lock::Lock;
     use std::ffi::c_void;
     use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::OnceLock;
     use std::time::Instant;
 
     use super::{Plate, ISLAND, PLATES};
@@ -193,7 +194,7 @@ mod imp {
     }
 
     // Each plate's: what is wished of it, its window once made.
-    static WANT: Mutex<[Option<Want>; PLATES]> = Mutex::new([None; PLATES]);
+    static WANT: Lock<[Option<Want>; PLATES]> = Lock::new("backplate::WANT", [None; PLATES]);
     static HWND: [AtomicIsize; PLATES] = [AtomicIsize::new(0), AtomicIsize::new(0)];
     static STARTED: OnceLock<()> = OnceLock::new();
 
@@ -207,7 +208,7 @@ mod imp {
     }
 
     const NOT_SHOWN: Shown = Shown { plate: None, alpha: 0.0, fade: None, tint: None };
-    static SHOWN: Mutex<[Shown; PLATES]> = Mutex::new([NOT_SHOWN; PLATES]);
+    static SHOWN: Lock<[Shown; PLATES]> = Lock::new("backplate::SHOWN", [NOT_SHOWN; PLATES]);
 
     // Which plate a window of theirs is.
     fn which(hwnd: Hwnd) -> Option<usize> {
@@ -282,7 +283,7 @@ mod imp {
     }
 
     // The page's last wish, kept while the island's window is hidden.
-    static LAST: Mutex<Option<(Plate, isize)>> = Mutex::new(None);
+    static LAST: Lock<Option<(Plate, isize)>> = Lock::new("backplate::LAST", None);
 
     // The page's wish (kept: shown again with the window).
     pub fn wish(plate: Option<Plate>, under: isize, fade_ms: u32, shown: bool) {
@@ -511,7 +512,7 @@ pub fn set(sh: &Shared, plate: Option<Plate>, fade_ms: u32) {
     crate::island::with_shown(sh, |under, shown| imp::wish(plate, under, fade_ms.min(1000), shown));
 }
 
-// Gone at once with her island's window (island.rs show_or_hide), and back
+// Gone at once with her island's window (island/ show_or_hide), and back
 // with it (again).
 pub fn hide() {
     imp::set(ISLAND, None, 0, 0);

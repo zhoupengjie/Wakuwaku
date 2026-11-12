@@ -23,15 +23,14 @@ use serde_json::{json, Value};
 use super::imap::{Fail, Hop};
 pub use crate::proxy::{Kind, Proxy, Via};
 use crate::Shared;
-use crate::config;
 
 // The way set on the Mail page: the General page's Network proxy (netProxy,
 // Windows' unless set) while it follows that ("follow", and unset: since
 // zhoupengjie/Wakuwaku#68; one set before keeps its way), else its own.
 pub fn setting(sh: &Shared) -> Via {
-    let page = sh.setting(config::MAIL_PROXY);
+    let page = sh.config().mail_proxy.clone();
     if follows(&page) {
-        return Via::of(&sh.setting(config::NET_PROXY)).unwrap_or_default();
+        return Via::of(&sh.config().net_proxy).unwrap_or_default();
     }
     Via::of(&page).unwrap_or_default()
 }
@@ -350,6 +349,7 @@ impl ureq::unversioned::transport::Transport for Tunnel {
 
 #[cfg(test)]
 mod tests {
+    use crate::lock::Lock;
     use super::*;
     use crate::mail::imap::Session;
     use crate::mail::smtp::Smtp;
@@ -596,7 +596,7 @@ mod tests {
     // The little of an IMAP server an IDLE needs: its greeting (IDLE among
     // what it can do), IDLE and DONE, LOGOUT; the IDLEs counted.
     static IDLES: AtomicUsize = AtomicUsize::new(0);
-    static IDLE_TAG: Mutex<String> = Mutex::new(String::new());
+    static IDLE_TAG: Lock<String> = Lock::new("mail::proxy::IDLE_TAG", String::new());
 
     fn imap() -> u16 {
         server("* OK [CAPABILITY IMAP4rev1 IDLE] ready\r\n", |line| {

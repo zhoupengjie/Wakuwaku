@@ -1,5 +1,5 @@
 // Clicks through a transparent window, except on what it draws, for both
-// windows (pet.rs, island.rs).
+// windows (pet.rs, island/).
 //
 // A window that lets clicks through hears no mouse moves (Electron could
 // forward them; Tauri cannot). So while the pointer is near, look() hands

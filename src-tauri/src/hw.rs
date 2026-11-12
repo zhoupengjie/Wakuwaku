@@ -53,11 +53,11 @@
 // Off Windows its parsers are the tests' alone.
 #![cfg_attr(not(windows), allow(dead_code))]
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
 
 use serde_json::{json, Value};
 
 use crate::lhm::Kind;
+use crate::lock::Lock;
 
 // The setting with the built-in source's picks (in "monitor").
 pub const PICKS: &str = "builtinSensors";
@@ -302,7 +302,7 @@ fn reading_text(r: &Reading) -> String {
 }
 
 // The settings' view (view()), kept by the monitor's thread.
-static VIEW: Mutex<Value> = Mutex::new(Value::Null);
+static VIEW: Lock<Value> = Lock::new("hw::VIEW", Value::Null);
 static CHANGED: AtomicBool = AtomicBool::new(false);
 
 // { source: "builtin", hardware: [{ id, class, name, about, health }],
@@ -332,8 +332,8 @@ fn publish(view: Value) {
 // handed to her on /hw, sensors::accept). Kept with when they came, so a
 // helper that stopped does not leave its last numbers on the island
 // (joined_now drops them once stale).
-pub static JOINED: Mutex<Vec<Reading>> = Mutex::new(Vec::new());
-static JOINED_AT: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+pub static JOINED: Lock<Vec<Reading>> = Lock::new("hw::JOINED", Vec::new());
+static JOINED_AT: Lock<Option<std::time::Instant>> = Lock::new("hw::JOINED_AT", None);
 // After this long with nothing new, the joined readings are let go (the
 // monitor reads every 10 s at most while quiet, the helper posts every 2 s).
 const JOINED_FRESH: std::time::Duration = std::time::Duration::from_secs(8);

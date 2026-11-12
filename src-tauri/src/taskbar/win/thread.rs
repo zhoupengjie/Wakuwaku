@@ -4,7 +4,27 @@
 // (on_created).
 use super::*;
 
+pub(super) static OURS: AtomicIsize = AtomicIsize::new(0);
+// Explorer's taskbar window: a new one means Explorer started again.
+pub(super) static EXPLORER: AtomicIsize = AtomicIsize::new(0);
+pub(super) static CREATED_MSG: AtomicU32 = AtomicU32::new(0);
+pub(super) static TICKS: AtomicU32 = AtomicU32::new(0);
+// From this tick, the icons only Explorer's tray holds are looked for
+// again (systray/ scan_held): some seconds after each asking, else
+// every half minute.
+pub(super) static HELD_AT: AtomicU32 = AtomicU32::new(0);
+pub(super) static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
+thread_local! {
+    // Whether this is the taskbar's thread (run): what is its alone is
+    // touched only here (a debug build asserts it: work.rs with_work).
+    pub(super) static ON_HOST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    // The windows over a display (fills_display), each with that display,
+    // as last seen moving (on_event, here): gone with the thread.
+    static OVER: std::cell::RefCell<Vec<(isize, isize)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
 pub(super) fn run(strip: (i32, i32, i32, i32), ready: std::sync::mpsc::Sender<isize>) {
+    ON_HOST.set(true);
     // SAFETY: our own class and window, on this thread, which runs its loop.
     unsafe {
         let instance = GetModuleHandleW(std::ptr::null());
@@ -96,19 +116,25 @@ pub(super) fn run(strip: (i32, i32, i32, i32), ready: std::sync::mpsc::Sender<is
         KillTimer(hwnd, TICK);
         KillTimer(hwnd, SETTLE);
         KillTimer(hwnd, WORK_STILL);
-        LOOKS_LEFT.store(0, Ordering::SeqCst);
         log(&format!("tray handed back; it was handed {}", systray::seen()));
         systray::stop();
-        thumbs(Vec::new());
-        dock_thumbs(Vec::new(), None);
-        dock_badges(Vec::new());
+        drop_thumbs();
+        // The dock's pictures and their icons hidden by the main thread,
+        // whose windows they are; not waited for: quitting, the main
+        // thread is waiting for this one to end (hold.rs stop_within), and
+        // each call waited on it till it gave up, two seconds.
+        if let Some(sh) = sh() {
+            let _ = sh.app.run_on_main_thread(|| {
+                dock_thumbs(Vec::new(), None);
+                dock_badges(Vec::new());
+            });
+        }
         let host = THUMB_HOST.swap(0, Ordering::SeqCst);
         if host != 0 {
             DestroyWindow(host as Hwnd);
         }
         DestroyWindow(hwnd);
         OURS.store(0, Ordering::SeqCst);
-        *PNGS.lock().unwrap() = None;
     }
 }
 
@@ -147,14 +173,16 @@ pub(super) extern "system" fn on_event(_hook: isize, event: u32, hwnd: Hwnd, obj
         let h = hwnd as isize;
         // SAFETY: a plain query; a gone window gives the nearest display.
         let now = fills_display(h).then(|| unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) } as isize);
-        let mut over = OVER.lock().unwrap();
-        let was = over.iter().find(|(w, _)| *w == h).map(|(_, m)| *m);
-        if now == was {
+        let same = OVER.with_borrow_mut(|over| {
+            let was = over.iter().find(|(w, _)| *w == h).map(|(_, m)| *m);
+            if now != was {
+                over.retain(|(w, _)| *w != h);
+                over.extend(now.map(|m| (h, m)));
+            }
+            now == was
+        });
+        if same {
             return;
-        }
-        over.retain(|(w, _)| *w != h);
-        if let Some(m) = now {
-            over.push((h, m));
         }
     }
     if event == EVENT_SYSTEM_FOREGROUND {
@@ -168,38 +196,23 @@ pub(super) extern "system" fn on_event(_hook: isize, event: u32, hwnd: Hwnd, obj
 
 // The shell hook: a window flashing for attention (until it is in
 // front), one activated.
+// Each told to the buttons' thread (buttons.rs Note), whose they are.
 pub(super) fn on_shell(what: usize, hwnd: isize) {
     match what {
-        HSHELL_FLASH => {
-            let mut flashing = FLASHING.lock().unwrap();
-            if !flashing.contains(&hwnd) {
-                flashing.push(hwnd);
-            }
-        }
-        HSHELL_WINDOWACTIVATED | HSHELL_RUDEAPPACTIVATED => FLASHING.lock().unwrap().retain(|h| *h != hwnd),
-        // A title or an icon changed. The buttons are made again now
-        // only for a window with a button whose title is another, or
-        // for one just titled that is about to have one; the rest (a
-        // title the same, an icon alone, a window with no button) wait
-        // for the next look, which asks that window's icon again.
+        HSHELL_FLASH => tell(Note::Flash(hwnd)),
+        HSHELL_WINDOWACTIVATED | HSHELL_RUDEAPPACTIVATED => tell(Note::Activated(hwnd)),
+        // A title or an icon changed: the buttons' thread says whether
+        // that makes the buttons again now (buttons.rs take_note).
         HSHELL_REDRAW => {
             // Never ours (no button; and asking our own window's title
-            // from here would wait on the main thread).
-            if tasks::is_ours(hwnd) {
-                return;
-            }
-            REDRAWN.lock().unwrap().push(hwnd);
-            let shown = TITLES.lock().unwrap().as_ref().and_then(|t| t.get(&hwnd).cloned());
-            match shown {
-                Some(title) if title == tasks::title(hwnd) => return,
-                None if !tasks::is_task_window(hwnd) => return,
-                _ => {}
+            // would wait on the main thread).
+            if !tasks::is_ours(hwnd) {
+                tell(Note::Redrawn(hwnd));
             }
         }
-        HSHELL_WINDOWCREATED | HSHELL_WINDOWDESTROYED => {}
-        _ => return,
+        HSHELL_WINDOWCREATED | HSHELL_WINDOWDESTROYED => wake_tasks(),
+        _ => {}
     }
-    wake_tasks();
 }
 
 pub(super) fn tick() {
@@ -311,7 +324,10 @@ pub(super) extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lpara
         }
         WM_DISPLAYCHANGE => displays_changed(wparam, lparam),
         WM_TRAY_CHANGED => send_icons(),
-        WM_PAPER => send_look(),
+        WM_RESEND_TRAY => resend_tray(),
+        WM_THUMBS => thumbs_asked(),
+        WM_THUMBS_GROUND => thumbs_ground_here(wparam != 0),
+        WM_STRIP_MOVED => strip_moved_here(),
         WM_SETTINGCHANGE if wparam == SPI_SETWORKAREA as usize => {
             work_after_still(hwnd);
             settle(hwnd);

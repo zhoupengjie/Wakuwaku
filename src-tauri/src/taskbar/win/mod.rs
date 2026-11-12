@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -26,6 +26,7 @@ use tauri::{Emitter, Manager};
 use crate::appbar::Edge;
 use crate::systray::{self, Press};
 use crate::{jump, shell, tasks, wallpaper, Shared};
+use crate::lock::Lock;
 
 type Hwnd = *mut c_void;
 
@@ -224,17 +225,24 @@ const DWM_TNP_VISIBLE: u32 = 0x8;
 
 const WM_TIMER: u32 = 0x0113;
 // Explorer's taskbar seen shown (the hook), lParam its window; the tray's
-// icons changed (systray.rs); the thread asked to end.
+// icons changed (systray/); the thread asked to end.
 const WM_TASKBAR_SHOWN: u32 = 0x8001;
 const WM_TRAY_CHANGED: u32 = 0x8002;
 const WM_STOP: u32 = 0x8003;
-// The strip moved: the desktop's picture under it looked at again (so
-// too when a setting or Windows' colours change). The picture changed
-// by her own settings: looked at until it is in place (settle).
-const WM_PAPER: u32 = 0x8004;
+// A new page wants the tray's icons whole (tray.rs resend): its pictures are this thread's.
+const WM_RESEND_TRAY: u32 = 0x8007;
+// The strip moved (work.rs strip_moved): the work area made for it here,
+// the tray's window moved, the desktop's picture under it looked at
+// again. The picture changed by her own settings: looked at until it is
+// in place (settle).
+const WM_STRIP_MOVED: u32 = 0x8004;
 const WM_PAPER_SET: u32 = 0x8005;
 // Debug only (/debug/hang): this thread held still for wparam seconds.
 const WM_HOLD_STILL: u32 = 0x8012;
+// The lists' live pictures asked for (thumbs.rs thumbs: the last ask
+// laid), and their window's ground (wparam: light), both this thread's.
+const WM_THUMBS: u32 = 0x8013;
+const WM_THUMBS_GROUND: u32 = 0x8014;
 // The timers on the window: the half second's tick, the looks after
 // Windows' word (settle), and the work area looked at once Explorer
 // has been still a moment (WORK_STILL_MS: keep_work).
@@ -296,112 +304,19 @@ const DI_NORMAL: u32 = 3;
 // The ticks (half seconds) to wait before asking programs for their icons.
 const SETTLE_TICKS: u32 = 3;
 
-struct Host {
-    hwnd: isize,
-    thread: JoinHandle<()>,
-}
-
-static HOST: Mutex<Option<Host>> = Mutex::new(None);
-static SH: Mutex<Option<Arc<Shared>>> = Mutex::new(None);
-static OURS: AtomicIsize = AtomicIsize::new(0);
-// Explorer's taskbar window: a new one means Explorer started again.
-static EXPLORER: AtomicIsize = AtomicIsize::new(0);
-static CREATED_MSG: AtomicU32 = AtomicU32::new(0);
-static TICKS: AtomicU32 = AtomicU32::new(0);
-static WORK_BOTTOM: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
-// The screen's edge the strip is along (island.rs, taskbarEdge), and the
-// one the work area was last made whole for (strip_moved), with whether
-// Windows' own kept its room along the foot then (split, the dock in it).
-static EDGE: Mutex<Edge> = Mutex::new(Edge::Bottom);
-static WORK_EDGE: Mutex<Option<(Edge, bool)>> = Mutex::new(None);
-// The strip as granted (physical); since when (tick) the work area has
-// reached into it, and when it was last taken again for that.
-static STRIP: Mutex<Option<(i32, i32, i32, i32)>> = Mutex::new(None);
-// The work area's side on the strip's edge as she last set it (tick,
-// strip_moved): left there as the strip moves, it follows the strip
-// (appbar.rs work_fix). Whether the strip as told lies off its display's
-// edge (the display changed), said once.
-static WORK_SIDE: Mutex<Option<(Edge, i32)>> = Mutex::new(None);
-static STRIP_OFF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static LOST_SINCE: AtomicU32 = AtomicU32::new(0);
-static LAST_TAKEN: AtomicU32 = AtomicU32::new(0);
-// Asking programs for their icons: from this tick (0: asked), the last
-// time, and how many times right after one.
-static ASK_AT: AtomicU32 = AtomicU32::new(0);
-static LAST_ASK: AtomicU32 = AtomicU32::new(0);
-static QUICK_ASKS: AtomicU32 = AtomicU32::new(0);
-// From this tick, the icons only Explorer's tray holds are looked for
-// again (systray.rs scan_held): some seconds after each asking, else
-// every half minute.
-static HELD_AT: AtomicU32 = AtomicU32::new(0);
-// Each icon drawn: (key, its handle) to its PNG; the list sent last.
-static PNGS: Mutex<Option<HashMap<u64, (isize, String)>>> = Mutex::new(None);
-static SENT: Mutex<Value> = Mutex::new(Value::Null);
-// Which picture (its handle) the page has for each icon: sent again
-// only when it is another one (send_icons).
-static PNG_SENT: Mutex<Option<HashMap<u64, isize>>> = Mutex::new(None);
-// The buttons: their thread, woken when windows change; their order (as
-// they came); the windows flashing; each window's icon drawn (its
-// handle, its PNG); the sessions in each window; the list sent last.
-static TASKS: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
-static WAKE: (Mutex<bool>, std::sync::Condvar) = (Mutex::new(false), std::sync::Condvar::new());
-static TASKS_STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static ORDER: Mutex<Vec<isize>> = Mutex::new(Vec::new());
-static FLASHING: Mutex<Vec<isize>> = Mutex::new(Vec::new());
-static WIN_PNGS: Mutex<Option<HashMap<isize, (isize, String)>>> = Mutex::new(None);
-static MARKS: Mutex<Option<HashMap<isize, Vec<Value>>>> = Mutex::new(None);
-// Each session's window as found (mark_sessions): its handle and
-// process, and when; looked for again only when gone or after a while.
-// Sessions without one, when they were last looked for.
-static SESSION_WINDOWS: Mutex<Option<HashMap<String, (isize, u32, Instant)>>> = Mutex::new(None);
-static SESSION_LOOKED: Mutex<Option<HashMap<String, Instant>>> = Mutex::new(None);
-// Per window, kept while it has a button (send_windows): the app it
-// says it is (never changes), its icon's handle and when it was asked
-// (asked again when the shell says the window was redrawn, else every
-// ten seconds), and its title as shown (on_shell: a redraw with the
-// same title wakes nothing).
-static APP_IDS: Mutex<Option<HashMap<isize, Option<String>>>> = Mutex::new(None);
-static ICONS: Mutex<Option<HashMap<isize, (isize, Instant)>>> = Mutex::new(None);
-static TITLES: Mutex<Option<HashMap<isize, String>>> = Mutex::new(None);
-static REDRAWN: Mutex<Vec<isize>> = Mutex::new(Vec::new());
-static SENT_WINDOWS: Mutex<Value> = Mutex::new(Value::Null);
-// Each program's name (tasks::app_name), and its file's icon drawn, by its path.
-static APP_NAMES: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
-static FILE_PNGS: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
-// The live pictures shown (window, thumbnail), over the windows listed above a button.
-static THUMBS: Mutex<Vec<(isize, isize)>> = Mutex::new(Vec::new());
-static THUMB_HOST: AtomicIsize = AtomicIsize::new(0);
-// The same for the windows minimized into the dock (split, bars.rs
-// show_mins): a window of their own, there as long as the dock is up.
-static DOCK_THUMBS: Mutex<Vec<(isize, isize)>> = Mutex::new(Vec::new());
-static DOCK_HOST: AtomicIsize = AtomicIsize::new(0);
-static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
-// The keyboard's thread, and what it sent last.
-static KEYS: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
-// The IME's mark and the volume read at the next look, not the next
-// second: the input method was just switched from our button.
-static KEYS_NOW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-// The keys' thread woken from its nap (keys_loop): asked to stop, the
-// IME button pressed, the quiet over.
-static KEYS_WAKE: (Mutex<bool>, std::sync::Condvar) = (Mutex::new(false), std::sync::Condvar::new());
-static SENT_KEYS: Mutex<Value> = Mutex::new(Value::Null);
-// Windows' own record of the tray icons it keeps out (windows_kept), read once.
-static KEPT: Mutex<Option<Vec<Kept>>> = Mutex::new(None);
-// The desktop's picture under the strip and Windows' look, as
-// sent last (send_look), whether they are being looked at, and whether
-// asked again meanwhile; the looks left after Windows' word (settle).
-static PAPER: Mutex<Value> = Mutex::new(Value::Null);
-static LOOK: Mutex<Value> = Mutex::new(Value::Null);
-static LOOK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static LOOK_AGAIN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static LOOKS_LEFT: AtomicU32 = AtomicU32::new(0);
-// The live pictures' window's ground (COLORREF), as set last (thumbs_ground).
-static THUMBS_GROUND: AtomicU32 = AtomicU32::new(0x001E_1C1C);
-// Windows' Start menu open, as told to the page last (start_seen).
-static START_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-// The windows over a display (fills_display), each with that display, as
-// last seen moving (on_event).
-static OVER: Mutex<Vec<(isize, isize)>> = Mutex::new(Vec::new());
+// The state each part keeps is in its own file, beside the code that
+// keeps it; named here for the others (each file has `use super::*`).
+use buttons::{TASKS_STOP, SENT_WINDOWS};
+use flyouts::START_OPEN;
+use keys::SENT_KEYS;
+use look::{PAPER, LOOK};
+use thread::{OURS, TICKS};
+use thumbs::THUMB_HOST;
+use tray::{ASK_AT, LAST_ASK, SENT};
+use work::PLACE;
+// Her Shared, for the threads here: only ever cloned out (sh()), so taken
+// inside any lock and nothing inside it.
+static SH: Lock<Option<Arc<Shared>>> = Lock::ranked("taskbar::win::SH", crate::lock::LEAF, None);
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()

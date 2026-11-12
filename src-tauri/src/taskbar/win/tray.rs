@@ -1,33 +1,57 @@
-// The tray taken over (systray.rs): its icons drawn into PNGs and sent to
+// The tray taken over (systray/): its icons drawn into PNGs and sent to
 // the page (taskbar:tray), what Windows keeps out on its taskbar, a press on
 // one handed to its program, programs asked again for their icons (claim,
 // ask_soon).
 use super::*;
 
+// Asking programs for their icons: from this tick (0: asked), the last
+// time, and how many times right after one.
+pub(super) static ASK_AT: AtomicU32 = AtomicU32::new(0);
+pub(super) static LAST_ASK: AtomicU32 = AtomicU32::new(0);
+pub(super) static QUICK_ASKS: AtomicU32 = AtomicU32::new(0);
+// The list sent last (a new page is sent it whole: resend).
+pub(super) static SENT: Lock<Value> = Lock::new("taskbar::win::tray::SENT", Value::Null);
+
+// The icons' pictures, the taskbar's thread's alone (send_icons runs there,
+// on WM_TRAY_CHANGED; a new page's resend asks it, WM_RESEND_TRAY), gone
+// with it: each icon drawn, (key, its handle) to its PNG; which picture
+// (its handle) the page has for each, sent again only when it is another.
+#[derive(Default)]
+struct Pictures {
+    pngs: HashMap<u64, (isize, String)>,
+    sent: HashMap<u64, isize>,
+}
+
+thread_local! {
+    static PICTURES: std::cell::RefCell<Pictures> = std::cell::RefCell::new(Pictures::default());
+}
+// Windows' own record of the tray icons it keeps out (windows_kept), read once.
+pub(super) static KEPT: Lock<Option<Vec<Kept>>> = Lock::new("taskbar::win::tray::KEPT", None);
+
 // The tray's icons and the buttons as last sent, for a page that has just come up.
 pub fn resend(sh: &Shared) {
-    let sent = SENT.lock().unwrap().clone();
-    if !sent.is_null() {
-        // The whole list, pictures and all: the page is new and keeps none.
-        *PNG_SENT.lock().unwrap() = None;
-        let _ = sh.app.emit_to("island", "taskbar:tray", sent);
+    // The tray's by its thread, whose its pictures are.
+    let ours = OURS.load(Ordering::SeqCst);
+    if ours != 0 {
+        // SAFETY: the thread's own window; a posted message, no pointers.
+        unsafe { PostMessageW(ours as Hwnd, WM_RESEND_TRAY, 0, 0) };
     }
     let windows = SENT_WINDOWS.lock().unwrap().clone();
     if !windows.is_null() {
         let _ = sh.app.emit_to("island", "taskbar:windows", crate::bars::for_main(sh, &windows));
     }
     let keys = SENT_KEYS.lock().unwrap().clone();
-    if !keys.is_null() {
+    if let Some(keys) = keys.filter(|k| !k.is_null()) {
         send_ime_icons(sh, true);
-        let _ = sh.app.emit_to("island", "taskbar:keys", keys);
+        let _ = sh.app.emit_to("island", "taskbar:keys", &*keys);
     }
     let paper = PAPER.lock().unwrap().clone();
-    if !paper.is_null() {
-        let _ = sh.app.emit_to("island", "taskbar:wallpaper", paper);
+    if let Some(paper) = paper {
+        let _ = sh.app.emit_to("island", "taskbar:wallpaper", &*paper);
     }
     let look = LOOK.lock().unwrap().clone();
-    if !look.is_null() {
-        let _ = sh.app.emit_to("island", "taskbar:look", look);
+    if let Some(look) = look {
+        let _ = sh.app.emit_to("island", "taskbar:look", &*look);
     }
 }
 
@@ -63,7 +87,7 @@ pub fn press(sh: &Shared, key: u64, press: &str, home_hwnd: isize) -> bool {
 }
 
 // An app bar's place asked of Explorer itself, ours set aside for it
-// (systray.rs explorer_first): its own (island.rs, bars.rs) never
+// (systray/ explorer_first): its own (island/, bars.rs) never
 // reached it by ours. The programs asked for their icons soon after,
 // should one have spoken to Explorer's alone meanwhile.
 pub fn claim<R>(f: impl FnOnce() -> R) -> R {
@@ -155,6 +179,17 @@ mod kept_tests {
 }
 
 // The icons as the page draws them: each drawn once per handle, and sent
+// The whole list, pictures and all, to a page just come up (resend): it
+// keeps none yet. On the taskbar's thread.
+pub(super) fn resend_tray() {
+    let Some(sh) = sh() else { return };
+    let sent = SENT.lock().unwrap().clone();
+    if !sent.is_null() {
+        PICTURES.with(|p| p.borrow_mut().sent.clear());
+        let _ = sh.app.emit_to("island", "taskbar:tray", sent);
+    }
+}
+
 // to the page once per handle too (the page keeps them, island.ts
 // onTray): a tip changing (Task Manager's every second) sends the tips,
 // not every picture again.
@@ -167,13 +202,12 @@ pub(super) fn send_icons() {
     let shown = systray::shown();
     let kept = windows_kept();
     let (whole, light): (Vec<Value>, Vec<Value>) = {
-        let mut pngs = PNGS.lock().unwrap();
-        let pngs = pngs.get_or_insert_with(HashMap::new);
+        // This thread's own (no lock); drawing takes none of hers.
+        let mut pictures = PICTURES.with(|p| std::mem::take(&mut *p.borrow_mut()));
+        let Pictures { pngs, sent } = &mut pictures;
         pngs.retain(|k, _| shown.iter().any(|s| s.key == *k));
-        let mut sent = PNG_SENT.lock().unwrap();
-        let sent = sent.get_or_insert_with(HashMap::new);
         sent.retain(|k, _| shown.iter().any(|s| s.key == *k));
-        shown
+        let made = shown
             .iter()
             .map(|s| {
                 // One only Explorer's tray holds: Windows' own picture of it.
@@ -202,7 +236,9 @@ pub(super) fn send_icons() {
                 sent.insert(s.key, s.icon);
                 (item, lite)
             })
-            .unzip()
+            .unzip();
+        PICTURES.with(|p| *p.borrow_mut() = pictures);
+        made
     };
     *SENT.lock().unwrap() = Value::Array(whole);
     let _ = sh.app.emit_to("island", "taskbar:tray", Value::Array(light));

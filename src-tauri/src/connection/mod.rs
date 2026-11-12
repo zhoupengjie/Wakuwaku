@@ -9,7 +9,6 @@
 // file.rs, their versions in versions.rs; here, what is of them all.
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use agent_core::event::Agent;

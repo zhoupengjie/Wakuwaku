@@ -1,6 +1,6 @@
 // Resource packs (docs/PLUGINS.md, Packs; docs/design/specs/plugins.md §0
 // to §3): a pet, or wallpapers, pictures and words alone, no code; nothing
-// of one runs and nothing is asked. Installed as a plugin is (addons.rs
+// of one runs and nothing is asked. Installed as a plugin is (addons/
 // open_package and put_in: the same zip, checked the same way, from a file
 // or from the market), into her pets beside the others (<data>/pets/<id>/,
 // found as any pet is: data.rs pets) or into <data>/wallpapers/<id>/, a
@@ -34,7 +34,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
 use std::time::SystemTime;
 
 use serde_json::{json, Value};
@@ -42,7 +41,7 @@ use tauri::Manager;
 
 use crate::addons::{self, refused, FromMarket, Kind, Manifest, Package, Perms, Refused, Words};
 use crate::{now_ms, shared, zip, Shared};
-use crate::config;
+use crate::lock::Lock;
 
 // Her mark in a pack's folder.
 const MARK: &str = "pack.json";
@@ -73,7 +72,7 @@ fn is_picture(path: &str) -> bool {
     !path.contains('/') && !PREVIEWS.contains(&path) && PICTURES.contains(&addons::ext_of(path).as_str())
 }
 
-// A pack's files, as addons.rs open_package reads a package (after its
+// A pack's files, as addons/ open_package reads a package (after its
 // manifest and the programs): its kind's types alone, pictures and words;
 // a pet's sheet and pet.json at its top, pet.json a JSON object; a
 // wallpaper pack's pictures at its top, one at least.
@@ -184,7 +183,7 @@ fn mark_of(folder: &Path, kind: Kind) -> Option<Pack> {
 // The packs here, pets first, each kind by id: as last found, until a
 // kind's folder changes (one put in or taken away moves its time) or she
 // writes one (PUT), as data.rs keeps her pets.
-static FOUND: Mutex<Option<(PathBuf, u64, Vec<Option<SystemTime>>, Vec<Pack>)>> = Mutex::new(None);
+static FOUND: Lock<Option<(PathBuf, u64, Vec<Option<SystemTime>>, Vec<Pack>)>> = Lock::new("packs::FOUND", None);
 static PUT: AtomicU64 = AtomicU64::new(0);
 
 pub fn list(dir: &Path) -> Vec<Pack> {
@@ -244,7 +243,7 @@ fn in_use(paper: &Value, folder: &Path) -> bool {
 // update shows), whether it is in use (her pet; the slideshow's folder).
 pub fn view(sh: &Shared, packs: &[Pack], paper: &Value) -> Value {
     let lang = sh.lang();
-    let pet = sh.setting(config::PET);
+    let pet = sh.config().pet.clone();
     Value::Array(
         packs
             .iter()
@@ -304,7 +303,7 @@ fn mark_json(m: &Manifest, source: &str, sha256: &str, size: u64, pictures: u64,
 
 // A pack checked, its folder put in whole with her mark (an update: the
 // one there replaced, the person's choice kept), its preview beside;
-// her pets looked for anew. Its summary, as addons.rs put_in's.
+// her pets looked for anew. Its summary, as addons/ put_in's.
 pub fn put_in(sh: &Shared, pkg: Package, source: &'static str, from: &str, file: &str) -> Result<Value, Refused> {
     let id = pkg.manifest.id.clone();
     addons::with_id_lock(&id, || put_in_held(sh, pkg, source, from, file))
@@ -475,7 +474,7 @@ fn uninstall_held(sh: &Shared, kind: Kind, id: &str) -> Result<(), String> {
     if pack.is_none() && !plain_pet {
         return Err(format!("{id}: no {} pack of that name here", kind.name()));
     }
-    if kind == Kind::Pet && sh.setting(config::PET) == id {
+    if kind == Kind::Pet && sh.config().pet == id {
         let next = match fallback_pet(&crate::data::pets(&sh.dir), id) {
             Some(next) => next,
             // The default one written anew in its place: never the default one itself.

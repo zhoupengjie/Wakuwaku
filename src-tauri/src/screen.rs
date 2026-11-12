@@ -18,7 +18,7 @@ pub struct Screens {
     pub areas: Vec<Area>,
     pub primary: Option<Area>,
     // Each display's device name as Windows gives it (\\.\DISPLAY1; none on
-    // some systems) and its key (desk.rs key_for: its monitor's device, the
+    // some systems) and its key (desk/ key_for: its monitor's device, the
     // same through replugging and renumbering), which the setting
     // homeDisplay names her display by (zhoupengjie/Wakuwaku#104).
     pub names: Vec<((i32, i32, i32, i32), Option<String>, String)>,
@@ -31,10 +31,10 @@ fn area(m: &Monitor) -> Area {
 }
 
 pub fn read(app: &AppHandle) -> Screens {
-    let monitors = app.available_monitors().unwrap_or_default();
+    let monitors = crate::main_wait::monitors(app);
     Screens {
         areas: monitors.iter().map(area).collect(),
-        primary: app.primary_monitor().ok().flatten().map(|m| area(&m)),
+        primary: crate::main_wait::primary_monitor(app).map(|m| area(&m)),
         names: monitors
             .iter()
             .map(|m| {
@@ -105,7 +105,7 @@ impl Screens {
 // another scale she never saw the pointer over her and could not be clicked
 // (2026-10-14). Elsewhere the two agree.
 pub fn cursor(sh: &crate::Shared, sf: f64) -> Option<(i32, i32)> {
-    let c = sh.app.cursor_position().ok()?;
+    let c = crate::main_wait::cursor(&sh.app)?;
     #[cfg(target_os = "macos")]
     let (x, y) = {
         let primary = sh.screens().primary.map_or(1.0, |a| a.sf);

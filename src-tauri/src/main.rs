@@ -11,16 +11,16 @@
 //   shared.rs      what every part shares (Shared): the settings, her moods, the windows'
 //                  states, the prompts, the widgets, each behind its lock; the log; the quit
 //   commands/      what the pages call: her window's and both pages' (pet.rs), the island's
-//                  (island.rs), the rest (mod.rs); others' in their own modules
+//                  (island/), the rest (mod.rs); others' in their own modules
 //   hooks.rs       her exe run as an agent's hook: the event handed to her port
 //   loops.rs       her threads that look every so often: the pointer, the widgets, the
 //                  monitor, full screen, the ticker
 //   webview.rs     what WebView2 is started with, and where it keeps its files
 //   pet.rs         her window: size, place, eyes, drags, being carried, walks
-//   island.rs      her home's window (island, taskbar), and the settings
+//   island/      her home's window (island, taskbar), and the settings
 //   appbar.rs      the taskbar's strip, kept from other windows
 //   taskbar/       the taskbar's side of Windows: its own put away (shell.rs),
-//                  the tray taken over (systray.rs), the windows' buttons (tasks.rs),
+//                  the tray taken over (systray/), the windows' buttons (tasks.rs),
 //                  the volume (audio.rs); its parts on Windows in taskbar/win/
 //   settings.rs    what the settings show and change
 //   pointer.rs     click-through, for both windows; screen.rs the work areas
@@ -42,7 +42,7 @@
 //   starts.rs      what starts her (the hooks, at login, by hand), whether it may, and who did
 //   widgets.rs     plugins in the island: widgets from scripts, and the built-in ones
 //   plugins.rs     the plugins she runs for you (weather, stocks, timers, CI, dev servers)
-//   addons.rs      third-party plugins: installed from a zip, run in sandboxed frames of
+//   addons/      third-party plugins: installed from a zip, run in sandboxed frames of
 //                  the island's page (src/pet/addons.ts), their views in the cards
 //                  (src/pet/views.ts), served by wakuplugin://
 //   zip.rs         zips read and unpacked (LHM's download, a plugin's package)
@@ -89,6 +89,7 @@ mod jump;
 mod lhm;
 mod lhm_setup;
 mod lock;
+mod main_wait;
 mod logon;
 mod loops;
 mod mail;
@@ -409,7 +410,7 @@ fn main() {
             market::market,
         ])
         // Third-party plugins' files, for their sandboxed frames in the
-        // island's page and their views in the cards (addons.rs serve):
+        // island's page and their views in the cards (addons/ serve):
         // http://wakuplugin.localhost/<id>/… on Windows. Off the main
         // thread: a file read from the disk.
         .register_asynchronous_uri_scheme_protocol(addons::SCHEME, |ctx, request, responder| {
@@ -418,6 +419,8 @@ fn main() {
         })
         .on_menu_event(|app, event| tray::on_menu(&shared(app), event.id().as_ref()))
         .setup(move |app| {
+            // The thread Tauri answers its getters on (main_wait.rs).
+            main_wait::here();
             // On macOS she is an accessory, as a menu-bar app is: no Dock icon,
             // and the menu bar is never hers, even while her settings are open.
             #[cfg(target_os = "macos")]
@@ -453,7 +456,7 @@ fn main() {
             let sh = Shared::new(app.handle().clone(), dir, port, settings, hub, today);
             app.manage(sh.clone());
             // Her requests to the web the way the General page says (proxy.rs).
-            proxy::set_web(&sh.setting(config::NET_PROXY));
+            proxy::set_web(&sh.config().net_proxy);
             sh.log(&format!("up on port {}, data in {}", sh.port, sh.dir.display()));
             // The third-party plugins here, before anything checks a setting naming one.
             addons::start(&sh);
@@ -470,7 +473,7 @@ fn main() {
             pet::create(&sh)?;
             // Windows' own taskbar's pinned programs, once: hers seeded from
             // them, those she kept before after them (pins.rs).
-            if !sh.flag(config::TASKBAR_PINS_IMPORTED) {
+            if !sh.config().taskbar_pins_imported {
                 let first = sh.clone();
                 std::thread::spawn(move || pins::take_from_windows(&first));
             }
@@ -493,7 +496,7 @@ fn main() {
             shortcuts::start(&sh);
             // The mail accounts that are on, watched from the start.
             mail::sync(&sh);
-            // The desktop's widgets (desk.rs).
+            // The desktop's widgets (desk/).
             desk::sync(&sh);
             // Her updates looked for (a downloaded exe only).
             updates::start(&sh);
@@ -554,7 +557,7 @@ fn main() {
             if sh.keeps_login() {
                 let dsh = sh.clone();
                 spawn_named("dsh at start", move || {
-                    for line in connection::dsh_at_start(dsh.port, &dsh.setting(config::DSH_VIA)) {
+                    for line in connection::dsh_at_start(dsh.port, &dsh.config().dsh_via) {
                         dsh.log(&line);
                     }
                 });
@@ -564,7 +567,7 @@ fn main() {
             // connected was too much for one who keeps her as a pet only,
             // with no way to stop it (the user, 2026-10-13); nor once "not
             // now" was said (connectHintOff, the welcome's or the island's).
-            if !connection::look_connected(port) && !sh.flag(config::ONBOARDED) && !sh.flag(config::WELCOME_OPENED) && !sh.flag(config::CONNECT_HINT_OFF) {
+            if !connection::look_connected(port) && !sh.config().onboarded && !sh.config().welcome_opened && !sh.config().connect_hint_off {
                 sh.change(json!({ "welcomeOpened": true }));
                 island::open_settings(&sh, Some("connect"));
             }

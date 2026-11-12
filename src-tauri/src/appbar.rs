@@ -291,7 +291,7 @@ mod imp {
     const ABE_BOTTOM: u32 = 3;
     // What Windows sends a bar about changes, as the message's wParam (the top
     // bar does not listen: it asks again whenever the screens change, see
-    // island.rs). For ABN_FULLSCREENAPP, lParam is 1 when a full-screen
+    // island/). For ABN_FULLSCREENAPP, lParam is 1 when a full-screen
     // window opens on the bar's display and 0 when the last one goes.
     pub const CALLBACK: u32 = 0x8000 + 0x57;
     #[allow(dead_code)]

@@ -13,12 +13,12 @@
 // zhoupengjie/Wakuwaku#68): Windows' (the default), one typed in, or none;
 // mail follows it unless its page or an account says otherwise.
 
-use std::sync::Mutex;
 use std::time::Duration;
 
 use serde_json::{json, Value};
 use ureq::config::ConfigBuilder;
 use ureq::typestate::AgentScope;
+use crate::lock::Lock;
 
 // How a proxy is spoken to: HTTP's CONNECT, or SOCKS5.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -228,7 +228,7 @@ pub fn web_system_view() -> Value {
 // PowerShell, which ran the plugins before, went Windows' way.
 
 // netProxy as last set (set_web: as she starts, and when it is changed).
-static WEB: Mutex<Via> = Mutex::new(Via::System);
+static WEB: Lock<Via> = Lock::new("proxy::WEB", Via::System);
 
 pub fn set_web(v: &Value) {
     *WEB.lock().unwrap() = Via::of(v).unwrap_or_default();
@@ -302,7 +302,7 @@ impl Way {
     // this computer or the network at home and connects to exactly what is
     // left — the same lookup ureq uses, so a name that answered one address
     // to the pre-check cannot answer an inside one to the connection
-    // (addons.rs resolves_inside). Through a proxy the proxy resolves, so the
+    // (addons/ resolves_inside). Through a proxy the proxy resolves, so the
     // resolver is not consulted there (the pre-check is all, its residual
     // risk in docs/PLUGINS.md).
     pub fn guarded_agent(&self, timeout: Duration, tweak: impl FnOnce(ConfigBuilder<AgentScope>) -> ConfigBuilder<AgentScope>) -> Option<ureq::Agent> {
@@ -603,7 +603,7 @@ mod tests {
 
     // A plugin's fetch straight to the web (guarded_agent): a name or an
     // address of this computer is not connected to at all, whatever the
-    // pre-check said (addons.rs resolves_inside), as the same agent
+    // pre-check said (addons/ resolves_inside), as the same agent
     // unguarded would.
     #[test]
     fn a_guarded_agent_never_connects_inside() {

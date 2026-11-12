@@ -27,7 +27,7 @@ pub struct Keys {
 }
 
 // The clear taskbar (taskbar/win/buttons.rs fills_display): a window maximized on its
-// display; her island at the top of the screen (island.rs look_over_max):
+// display; her island at the top of the screen (island/ look_over_max):
 // one on its display; and (look_under) one under it.
 pub use imp::{maximized, maximized_on, reaches_into};
 
@@ -508,7 +508,7 @@ mod imp {
     // (physical x, y, w, h) where it is seen: DWM's frame, without the
     // borders Windows draws round it for sizing that cannot be seen (some
     // 7 px a side), else its rect. Her island at the top of the screen
-    // goes up out of its way (island.rs look_under). The cheap questions
+    // goes up out of its way (island/ look_under). The cheap questions
     // first: each of a few hundred windows is asked, every 1.5 s. Front to
     // back, so the desktop's window lifted over them ("show the desktop")
     // is met first: what lies under it is not seen.

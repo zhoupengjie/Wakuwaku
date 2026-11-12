@@ -69,13 +69,14 @@
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::{zip, Shared};
+use crate::lock::Lock;
 
 const LATEST: &str = "https://api.github.com/repos/LibreHardwareMonitor/LibreHardwareMonitor/releases/latest";
 const DOWNLOADS: &str = "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases/download/";
@@ -555,7 +556,7 @@ struct State {
     pushed: Option<Instant>,
 }
 
-static STATE: Mutex<Option<State>> = Mutex::new(None);
+static STATE: Lock<Option<State>> = Lock::new("lhm_setup::STATE", None);
 
 fn with<T>(f: impl FnOnce(&mut State) -> T) -> T {
     let mut s = STATE.lock().unwrap();
@@ -568,7 +569,7 @@ pub fn tools(sh: &Shared) -> PathBuf {
 }
 
 fn port(sh: &Shared) -> u16 {
-    crate::lhm::Conf::from(&sh.setting(crate::config::MONITOR)).port
+    crate::lhm::Conf::from(&sh.config().monitor).port
 }
 
 // What the settings show of it: the step offered (looking, till it was
@@ -616,7 +617,7 @@ pub fn view(sh: &Shared, status: &str, shown: bool) -> Value {
         "startup": seen.starts_at_logon(),
         "taskOther": seen.task.as_ref().filter(|_| !seen.starts_at_logon()).map(|t| t.to_string_lossy().into_owned()),
         "pawnio": seen.pawnio,
-        "startupWanted": sh.setting(crate::config::MONITOR)["lhmStartup"] != false,
+        "startupWanted": sh.config().monitor["lhmStartup"] != false,
         "job": job.map(|j| json!({ "stage": j.stage, "got": j.got, "total": j.total, "version": j.version, "asset": j.asset })),
         "error": error,
     })
@@ -691,7 +692,7 @@ pub fn act(sh: &Arc<Shared>, what: &str) {
         "usePort" => {
             let other = with(|s| s.seen.install.as_ref().and_then(|i| i.web.port));
             if let Some(port) = other {
-                let mut monitor = sh.setting(crate::config::MONITOR);
+                let mut monitor = sh.config().monitor.clone();
                 if !monitor.is_object() {
                     monitor = json!({});
                 }
@@ -752,7 +753,7 @@ fn owner(sh: &Shared) -> isize {
     #[cfg(windows)]
     {
         use tauri::Manager;
-        sh.app.get_webview_window("island").and_then(|w| w.hwnd().ok()).map(|h| h.0 as isize).unwrap_or(0)
+        sh.app.get_webview_window("island").and_then(|w| crate::main_wait::hwnd(&w)).unwrap_or(0)
     }
     #[cfg(not(windows))]
     {
@@ -885,7 +886,7 @@ fn get(sh: &Arc<Shared>) -> Result<(), Value> {
     }
     sh.log(&format!("lhm: {} downloaded, its SHA-256 as GitHub gives it ({got})", asset.name));
     let user = crate::logon::user_sid().ok_or_else(|| error("task", "no SID"))?;
-    let startup = sh.setting(crate::config::MONITOR)["lhmStartup"] != false;
+    let startup = sh.config().monitor["lhmStartup"] != false;
     let asked = ask_admin(sh, &AdminAsk::Install { zip: part.clone(), sha256: got, port: port(sh), user, startup }, "install");
     let _ = std::fs::remove_file(&part);
     asked?;

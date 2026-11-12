@@ -2,17 +2,17 @@
 // setup): the pointer's, the widgets', the monitor's, full screen's and the
 // ticker's; and the waits of the pointer's and the monitor's, woken before
 // their time (wake_pointer, wake_monitor).
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
 use crate::{bars, desk, fullscreen, hw, island, lhm, mail, now_ms, pet, plugins, power, screen, settings, spawn_named, tokens, widgets, Shared};
-use crate::config;
+use crate::lock::Lock;
 
 // The monitor's thread woken from its wait (setup): its settings changed
 // (Shared::change), the quiet began or ended (Shared::check_quiet).
-static MONITOR_WAKE: (Mutex<bool>, std::sync::Condvar) = (Mutex::new(false), std::sync::Condvar::new());
+static MONITOR_WAKE: (Lock<bool>, std::sync::Condvar) = (Lock::new("loops::MONITOR_WAKE", false), std::sync::Condvar::new());
 
 pub(crate) fn wake_monitor() {
     let (woken, cv) = &MONITOR_WAKE;
@@ -21,7 +21,7 @@ pub(crate) fn wake_monitor() {
 }
 
 // The pointer's loop woken from its wait (setup): Ctrl pressed or let go
-// (desk.rs, its keyboard hook), so the desktop takes or lets go of the
+// (desk/, its keyboard hook), so the desktop takes or lets go of the
 // mouse at once. Called from that hook: no more than an unpark.
 static POINTER_LOOP: std::sync::OnceLock<std::thread::Thread> = std::sync::OnceLock::new();
 
@@ -33,7 +33,7 @@ pub(crate) fn wake_pointer() {
 
 // The mouse: click-through, her eyes, drags; for both windows.
 // Quiet (nobody touching it), looked at once a second. Woken
-// before its time by wake_pointer (desk.rs: Ctrl pressed or let go).
+// before its time by wake_pointer (desk/: Ctrl pressed or let go).
 pub fn pointer(sh: &Arc<Shared>) {
     let pointer = sh.clone();
     spawn_named("pointer", move || loop {
@@ -48,7 +48,7 @@ pub fn pointer(sh: &Arc<Shared>) {
             (c, c)
         };
         // Quiet or not first: woken by a key after a quiet while (Ctrl,
-        // desk.rs), the looks are someone's at once, not a turn later.
+        // desk/), the looks are someone's at once, not a turn later.
         let quiet = pointer.check_quiet();
         let wait = match at {
             (Some(her), Some(home)) => pet::poll(&pointer, her).min(island::poll(&pointer, home)).min(desk::poll(&pointer, home)).min(bars::poll(&pointer, home)),
@@ -121,7 +121,7 @@ pub fn monitor(sh: &Arc<Shared>) {
         let mut watching_listed = false;
         let mut was = (false, Value::Null, false, false);
         loop {
-            let setting = json!([monitored.setting(config::MONITOR), monitored.setting(config::MONITOR_SOURCE)]);
+            let setting = json!([monitored.config().monitor.clone(), monitored.config().monitor_source.clone()]);
             let mut watching = widgets::Watching::from(&setting[0], &setting[1]);
             // On in the island, or put on the taskbar (its widget there).
             let (on, quiet) = (monitored.is_widget_wanted("monitor"), monitored.is_quiet());
@@ -143,8 +143,8 @@ pub fn monitor(sh: &Arc<Shared>) {
                 // the taskbar), no display shows it (a window maximized or
                 // full screen over it) and the open island is not being
                 // looked at (its overview lists it): not read, kept as
-                // it was, looked at again at its pace (desk.rs seen).
-                let unseen = on && !monitored.is_in_island("monitor") && !(monitored.home() == "taskbar" && settings::is_on_taskbar(&monitored.setting(config::TASKBAR_LAYOUT), "monitor")) && !desk::seen(&monitored, "monitor") && !island::is_over(&monitored);
+                // it was, looked at again at its pace (desk/ seen).
+                let unseen = on && !monitored.is_in_island("monitor") && !(monitored.home() == "taskbar" && settings::is_on_taskbar(&monitored.config().taskbar_layout, "monitor")) && !desk::seen(&monitored, "monitor") && !island::is_over(&monitored);
                 let words = if unseen {
                     None
                 } else if on {
@@ -175,7 +175,7 @@ pub fn monitor(sh: &Arc<Shared>) {
             let wait = if on { next.saturating_duration_since(std::time::Instant::now()) } else { Duration::from_secs(3600) };
             let (woken, cv) = &MONITOR_WAKE;
             let guard = woken.lock().unwrap();
-            let (mut guard, _) = cv.wait_timeout_while(guard, wait, |w| !*w).unwrap();
+            let (mut guard, _) = guard.wait_timeout_while(cv, wait, |w| !*w).unwrap();
             *guard = false;
         }
     });
@@ -229,7 +229,7 @@ pub fn ticker(sh: &Arc<Shared>) {
                     ticker.push_asks();
                 }
             }
-            // The desktop's widgets' counts, each minute (desk.rs minute).
+            // The desktop's widgets' counts, each minute (desk/ minute).
             if n % 120 == 0 {
                 desk::minute(&ticker);
             }

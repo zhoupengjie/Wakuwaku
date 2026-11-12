@@ -241,9 +241,10 @@ fn said(act: Act) -> String {
 
 #[cfg(windows)]
 mod imp {
+    use crate::lock::Lock;
     use std::ffi::c_void;
     use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU16, AtomicU32, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc};
     use std::thread::JoinHandle;
     use std::time::{Duration, Instant};
 
@@ -376,15 +377,18 @@ mod imp {
     static HOOK: AtomicIsize = AtomicIsize::new(0);
     static HOOK_THREAD: AtomicU32 = AtomicU32::new(0);
     static WORK_THREAD: AtomicU32 = AtomicU32::new(0);
-    static THREADS: Mutex<Option<(JoinHandle<()>, JoinHandle<()>)>> = Mutex::new(None);
+    static THREADS: Lock<Option<(JoinHandle<()>, JoinHandle<()>)>> = Lock::new("winkeys::THREADS", None);
     // Our keys held down after their press was taken (decide), on the hook's thread alone.
     static HELD: AtomicU16 = AtomicU16::new(0);
     // A late key told already (one is enough until the hook is in again).
     static LATE_TOLD: AtomicBool = AtomicBool::new(false);
-    static SH: Mutex<Option<Arc<Shared>>> = Mutex::new(None);
+    // Only ever cloned out (log), so taken inside any lock, nothing inside it.
+    static SH: Lock<Option<Arc<Shared>>> = Lock::ranked("winkeys::SH", crate::lock::LEAF, None);
 
     fn log(line: &str) {
-        if let Some(sh) = SH.lock().unwrap().clone() {
+        // Cloned out first: an if let's condition would hold SH over the log's own locks.
+        let sh = SH.lock().unwrap().clone();
+        if let Some(sh) = sh {
             sh.log(&format!("winkeys: {line}"));
         }
     }
@@ -598,11 +602,12 @@ mod imp {
 
     // Her taskbar holds the strip: the keys hers (taskbar/win/hold.rs take).
     pub fn start(sh: &Arc<Shared>) {
+        // Hers before THREADS is taken (the same Shared all along).
+        *SH.lock().unwrap() = Some(sh.clone());
         let mut threads = THREADS.lock().unwrap();
         if threads.is_some() {
             return;
         }
-        *SH.lock().unwrap() = Some(sh.clone());
         let (work_tx, work_rx) = std::sync::mpsc::channel();
         let work_sh = sh.clone();
         let work = crate::spawn_named("taskbar keys work", move || work_loop(work_sh, work_tx));
@@ -675,7 +680,7 @@ mod imp {
     // The program in that place on her strip, as its button shows it now.
     fn app(sh: &Arc<Shared>, key: &str, slot: usize, how: How) {
         let all = crate::bars::for_main(sh, &crate::taskbar::windows_now());
-        let order: Vec<String> = sh.setting(crate::config::TASKBAR_ORDER).as_array().map(|o| o.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()).unwrap_or_default();
+        let order: Vec<String> = sh.config().taskbar_order.clone();
         let apps = ordered(&all, &order);
         let Some(app) = apps.get(slot) else {
             log(&format!("{key}: no program in that place ({} on her strip)", apps.len()));

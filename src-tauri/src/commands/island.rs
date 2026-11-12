@@ -7,7 +7,6 @@ use tauri::{AppHandle, WebviewWindow};
 
 use super::is_island;
 use crate::{backplate, island, pet, shared};
-use crate::config;
 
 #[tauri::command]
 pub async fn island_holding(app: AppHandle, is_holding: bool) {
@@ -23,7 +22,7 @@ pub async fn island_editing(app: AppHandle, on: bool, rects: Vec<[f64; 4]>, page
 
 // The island's page has something open in it (hovered open, a prompt, the
 // settings, opened by itself), or nothing now: inside Windows' taskbar its
-// window goes back in once nothing is (island.rs set_opened).
+// window goes back in once nothing is (island/ set_opened).
 #[tauri::command]
 pub async fn island_opened(app: AppHandle, window: WebviewWindow, on: bool) {
     if window.label() == "island" {
@@ -45,7 +44,7 @@ pub async fn island_seat(app: AppHandle, x: f64) {
 }
 
 // Something opened up from her taskbar's strip (the island, a list, a
-// flyout): its window over any other that came over it (island.rs raise,
+// flyout): its window over any other that came over it (island/ raise,
 // zhoupengjie/Wakuwaku#55).
 #[tauri::command]
 pub async fn island_raise(app: AppHandle, window: WebviewWindow) {
@@ -56,7 +55,7 @@ pub async fn island_raise(app: AppHandle, window: WebviewWindow) {
 
 // Her island at the top of the screen: up out of the way of the window
 // under it or not, and its closed size (logical px), for the look for a
-// window under it and the pointer calling it down (island.rs set_stow).
+// window under it and the pointer calling it down (island/ set_stow).
 #[tauri::command]
 pub async fn island_stow(app: AppHandle, window: WebviewWindow, stowed: bool, width: f64, height: f64) {
     if is_island(&window) {
@@ -91,7 +90,7 @@ pub async fn island_plate(app: AppHandle, rect: Option<Value>, fade: u32) {
 pub async fn island_release(app: AppHandle, offset: Value) {
     let sh = shared(&app);
     sh.log(&format!("island: release {offset}"));
-    if !sh.flag(config::OUT) {
+    if !sh.config().out {
         pet::carry(&sh, &offset);
     }
 }

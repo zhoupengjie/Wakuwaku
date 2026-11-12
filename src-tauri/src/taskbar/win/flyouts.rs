@@ -3,6 +3,10 @@
 // volume, Start opened and seen, the desktop shown, and the Recycle Bin for
 // the dock.
 use super::*;
+use crate::lock::Lock;
+
+// Windows' Start menu open, as told to the page last (start_seen).
+pub(super) static START_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 // Windows' own Start (or search, the notifications, the quick settings)
 // in front: closed first, as a press on Windows' taskbar closes it. Ours
@@ -40,8 +44,7 @@ pub fn open(what: &str) -> bool {
     // letters; its mark read again at once (keys_loop).
     if what == "ime" {
         let done = tasks::toggle_native();
-        KEYS_NOW.store(true, Ordering::SeqCst);
-        wake_keys();
+        keys_now_asked();
         return done;
     }
     // A press on what shows the microphone, camera or location in use:
@@ -136,8 +139,7 @@ pub fn volume(steps: i32) -> bool {
     let sent = unsafe { SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<Input>() as i32) } == inputs.len() as u32;
     std::thread::spawn(|| {
         std::thread::sleep(Duration::from_millis(80));
-        KEYS_NOW.store(true, Ordering::SeqCst);
-        wake_keys();
+        keys_now_asked();
     });
     sent
 }
@@ -213,7 +215,7 @@ pub fn recycle_bin() -> Value {
     const SIID_RECYCLER: i32 = 31;
     const SIID_RECYCLERFULL: i32 = 32;
     const SHGSI_ICON: u32 = 0x100;
-    static BIN_PNGS: Mutex<[Option<String>; 2]> = Mutex::new([None, None]);
+    static BIN_PNGS: Lock<[Option<String>; 2]> = Lock::new("taskbar::win::flyouts::BIN_PNGS", [None, None]);
     let mut info = BinInfo { size: std::mem::size_of::<BinInfo>() as u32, bytes: 0, items: 0 };
     // SAFETY: our own struct, of the size it says; null: every drive's bin.
     let full = unsafe { SHQueryRecycleBinW(std::ptr::null(), &mut info) } == 0 && info.items > 0;

@@ -35,6 +35,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
+use crate::lock::Lock;
 
 pub const HOOKS_PACKAGE: &str = "@deepseek-ai/dsh-hooks-claude-code";
 pub const PROTOCOL_PACKAGE: &str = "@deepseek-ai/dsh-hook-protocol";
@@ -79,7 +80,7 @@ pub fn runtime_in(app: &Path) -> Option<Runtime> {
 // for it several times a second while open.
 pub fn bundled(app: &Path) -> bool {
     type Known = Option<(PathBuf, Option<std::time::SystemTime>, bool)>;
-    static KNOWN: std::sync::Mutex<Known> = std::sync::Mutex::new(None);
+    static KNOWN: Lock<Known> = Lock::new("dsh_bridge::KNOWN", None);
     let asar = app.join("resources").join("app.asar");
     let stamp = fs::metadata(&asar).and_then(|m| m.modified()).ok();
     let mut known = KNOWN.lock().unwrap_or_else(|e| e.into_inner());

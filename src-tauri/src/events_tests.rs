@@ -8,7 +8,9 @@
 // replay.rs): agent-core keeps when each session last asked in one table for
 // the whole program (reasonix.rs ASKED), each ask dropping those 30 s older
 // than its own time, so a test asking at the time now would drop what one at
-// a fixture's time had just asked, if they ran side by side.
+// a fixture's time had just asked, if they ran side by side. A plain Mutex,
+// not a lock.rs Lock: held through the whole test, while the code it tests
+// takes her locks.
 pub(crate) fn reasonix_asks_held() -> std::sync::MutexGuard<'static, ()> {
     static HELD: std::sync::Mutex<()> = std::sync::Mutex::new(());
     HELD.lock().unwrap_or_else(|e| e.into_inner())

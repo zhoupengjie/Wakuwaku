@@ -41,11 +41,11 @@
 #![cfg_attr(not(windows), allow(dead_code))]
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
 
 use serde_json::{json, Value};
 
 use crate::lhm::Kind;
+use crate::lock::Lock;
 
 // Her exe with this is the elevated helper (main.rs): `SENSORS_FLAG <port>
 // <dataDir>`.
@@ -331,7 +331,7 @@ pub fn helper_args(port: u16, data: &std::path::Path) -> String {
 static LAST_POST: AtomicU64 = AtomicU64::new(0);
 static SETTING_UP: AtomicU64 = AtomicU64::new(0);
 // The CPU's temperature and power as last read, for the switch's line.
-static READING: Mutex<(Option<f64>, Option<f64>)> = Mutex::new((None, None));
+static READING: Lock<(Option<f64>, Option<f64>)> = Lock::new("sensors::READING", (None, None));
 
 const ANSWERING_MS: u64 = 8_000;
 const SETTING_UP_MS: u64 = 120_000;
@@ -453,7 +453,7 @@ fn state_name(installed: bool, task: bool, answering: bool, setting_up: bool, ha
 // PawnIO present, and her task registered: both looked at afresh at most
 // every few seconds (the task's check talks to the Task Scheduler over COM).
 fn cached_state(data: &std::path::Path) -> (bool, bool) {
-    static CACHE: Mutex<Option<(std::time::Instant, bool, bool)>> = Mutex::new(None);
+    static CACHE: Lock<Option<(std::time::Instant, bool, bool)>> = Lock::new("sensors::CACHE", None);
     let mut cache = CACHE.lock().unwrap();
     if let Some((at, installed, task)) = *cache {
         if at.elapsed() < std::time::Duration::from_secs(3) {

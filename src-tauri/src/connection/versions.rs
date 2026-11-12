@@ -11,6 +11,7 @@
 // minute.
 
 use super::*;
+use crate::lock::Lock;
 
 // Its version as its file says it ("0.2.0-rc.2", "2.1.296"): the
 // FileVersion text's first word (Windows' own add a build's name), four
@@ -80,7 +81,7 @@ pub(super) fn package_version(file: &Path) -> Option<String> {
 }
 
 pub fn versions() -> Value {
-    static KNOWN: Mutex<Option<(Instant, Value)>> = Mutex::new(None);
+    static KNOWN: Lock<Option<(Instant, Value)>> = Lock::new("connection::versions::KNOWN", None);
     let mut known = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
     if let Some((_, v)) = known.as_ref().filter(|(at, _)| at.elapsed() < Duration::from_secs(60)) {
         return v.clone();

@@ -37,7 +37,7 @@
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
@@ -45,7 +45,7 @@ use sha2::{Digest, Sha256};
 
 use crate::proxy::{Answer, Miss};
 use crate::Shared;
-use crate::config;
+use crate::lock::Lock;
 
 const GITHUB_LATEST: &str = "https://api.github.com/repos/zhoupengjie/Wakuwaku/releases/latest";
 const GITHUB_REPO: &str = "https://github.com/zhoupengjie/Wakuwaku/";
@@ -135,16 +135,16 @@ struct State {
     total: u64,
 }
 
-static STATE: Mutex<State> = Mutex::new(State { checked_at: 0, next_at: 0, checking: false, latest: None, error: None, stage: None, from: None, got: 0, total: 0 });
+static STATE: Lock<State> = Lock::new("updates::STATE", State { checked_at: 0, next_at: 0, checking: false, latest: None, error: None, stage: None, from: None, got: 0, total: 0 });
 // Started by an update, after this pid, and whether that one heard her
 // say she was up: said in the log once she is up.
-static AFTER: Mutex<Option<(u32, Result<(), String>)>> = Mutex::new(None);
+static AFTER: Lock<Option<(u32, Result<(), String>)>> = Lock::new("updates::AFTER", None);
 // The word of a new one she started (POST /after-update): its pid and version.
-static HEARD: Mutex<Option<(u32, String)>> = Mutex::new(None);
+static HEARD: Lock<Option<(u32, String)>> = Lock::new("updates::HEARD", None);
 // An update that did not last, its version: told on the island once.
-static BLOCKED: Mutex<Option<String>> = Mutex::new(None);
+static BLOCKED: Lock<Option<String>> = Lock::new("updates::BLOCKED", None);
 // Her name taken back as she started (take_name_back): said in the log once she is up.
-static NAMED_BACK: Mutex<Option<String>> = Mutex::new(None);
+static NAMED_BACK: Lock<Option<String>> = Lock::new("updates::NAMED_BACK", None);
 
 pub fn current() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -190,7 +190,7 @@ pub(crate) fn in_china() -> bool {
 
 // Gitee first: as set (updateFrom), or by itself in China.
 pub(crate) fn gitee_first(sh: &Shared) -> bool {
-    match sh.setting(config::UPDATE_FROM).as_str() {
+    match sh.config().update_from.as_deref() {
         Some("gitee") => true,
         Some("github") => false,
         _ => in_china(),
@@ -457,7 +457,7 @@ fn tell(sh: &Arc<Shared>) {
         return;
     }
     let Some(r) = STATE.lock().unwrap().latest.clone().filter(|r| newer(&r.version, current())) else { return };
-    if sh.setting(config::UPDATE_TOLD).as_str() == Some(r.version.as_str()) {
+    if sh.config().update_told.as_deref() == Some(r.version.as_str()) {
         return;
     }
     let words = crate::i18n::t(lang, "update.out").replace("{version}", &r.version);
@@ -510,7 +510,7 @@ pub fn start(sh: &Arc<Shared>) {
         std::thread::sleep(Duration::from_secs(20));
         loop {
             let due = crate::now_ms() >= STATE.lock().unwrap().next_at;
-            if due && sh.setting(config::AUTO_UPDATE_CHECK) != false {
+            if due && sh.config().auto_update_check {
                 check_now(&sh);
             } else {
                 tell(&sh);

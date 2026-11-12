@@ -9,6 +9,10 @@
 //                        as the list prints it), then watched for 3 s
 //
 // Icons are not drawn here: each says the size it was taken at.
+// Its locks are lock.rs Locks.
+#[path = "../src/lock.rs"]
+#[allow(dead_code)]
+mod lock;
 #[path = "../src/inputs.rs"]
 mod inputs;
 

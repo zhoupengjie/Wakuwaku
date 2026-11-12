@@ -16,7 +16,7 @@
 // A plugin got from it: its zip downloaded beside the plugins
 // (.download-<id>.zip), its size and SHA-256 those the index gives, its
 // manifest's id, version and kind the item's, then put in as one from a
-// file is (addons.rs put_in), recorded as the market's (reviewed), the
+// file is (addons/ put_in), recorded as the market's (reviewed), the
 // permissions it asks for granted. Each step told to the island's page as
 // it goes (market:progress { id, got, total, stage }). A pack (a pet,
 // wallpapers) the same way, put where its kind goes (packs.rs).
@@ -37,7 +37,7 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
@@ -47,7 +47,7 @@ use tauri::{AppHandle, Emitter};
 use crate::addons::{self, Kind, Perms, Words};
 use crate::proxy::Miss;
 use crate::{now_ms, shared, Shared};
-use crate::config;
+use crate::lock::Lock;
 
 const GITHUB: &str = "https://github.com/zhoupengjie/wakuwaku-plugins/releases/download/market/";
 const GITEE: &str = "https://gitee.com/zhoupengjie/wakuwaku-plugins/releases/download/market/";
@@ -311,11 +311,13 @@ struct State {
     next_look: u64,
 }
 
-static STATE: LazyLock<Mutex<State>> = LazyLock::new(|| Mutex::new(State::default()));
+static STATE: LazyLock<Lock<State>> = LazyLock::new(|| Lock::new("market::STATE", State::default()));
 // One read of the index at a time: one asked meanwhile takes what it got.
-static READING: Mutex<()> = Mutex::new(());
+// Held over the read (the network, then STATE and the settings): an outer
+// lock (lock.rs), on the market's own threads.
+static READING: Lock<()> = Lock::ranked("market::READING", crate::lock::OUTER, ());
 // Each download under way, and whether it was called off.
-static JOBS: LazyLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static JOBS: LazyLock<Lock<HashMap<String, Arc<AtomicBool>>>> = LazyLock::new(|| Lock::new("market::JOBS", HashMap::new()));
 
 // A download or update of this id called off, if one is under way (its loop
 // checks the flag): so an uninstall of it does not race a market job
@@ -326,7 +328,7 @@ pub fn cancel(id: &str) {
     }
 }
 
-fn state() -> std::sync::MutexGuard<'static, State> {
+fn state() -> crate::lock::Guard<'static, State> {
     STATE.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -455,10 +457,10 @@ pub fn updates_of(installed: &[addons::FromMarket], items: &[Item]) -> Vec<Updat
 }
 
 fn auto_update(sh: &Shared) -> bool {
-    sh.setting(config::PLUGIN_AUTO_UPDATE) != false
+    sh.config().plugin_auto_update
 }
 
-// What of the market's is here: its plugins (addons.rs) and its packs (packs.rs).
+// What of the market's is here: its plugins (addons/) and its packs (packs.rs).
 fn installed(sh: &Shared) -> Vec<addons::FromMarket> {
     let mut all = addons::from_market(sh.lang());
     all.extend(crate::packs::from_market(&sh.dir, sh.lang()));
@@ -657,11 +659,11 @@ pub fn fetch_zip(bases: &[Base], item: &Item, to: &Path, cancel: &AtomicBool, te
     Err(failed)
 }
 
-// One from the market, by its id: downloaded, checked, put in (addons.rs
+// One from the market, by its id: downloaded, checked, put in (addons/
 // put_in, as the market's; a pack where its kind goes); the page told each
 // step. Ok(what went in, as a file's install says it) or Err { code,
 // detail }: notFound, busy, download, size, digest, mismatch, refused
-// (with addons.rs's Refused), write, cancelled.
+// (with addons/'s Refused), write, cancelled.
 pub fn install(sh: &Arc<Shared>, id: &str) -> Result<Value, Value> {
     if item(id).is_none() {
         index(sh, false);
@@ -693,7 +695,7 @@ fn get(sh: &Arc<Shared>, item: &Item, cancel: &AtomicBool) -> Result<Value, Valu
     let to = sh.dir.join("plugins").join(format!(".download-{id}.zip"));
     let _ = std::fs::create_dir_all(sh.dir.join("plugins"));
     tell(sh, id, 0, item.size, "download", Value::Null);
-    let told = Mutex::new(Instant::now());
+    let told = Lock::new("market::download told", Instant::now());
     let step = |got: u64| {
         let mut at = told.lock().unwrap_or_else(|e| e.into_inner());
         if at.elapsed() >= TELL_EVERY || got == item.size {
@@ -959,7 +961,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let to = dir.join(".download-rain-alert.zip");
         let no = AtomicBool::new(false);
-        let steps = Mutex::new(0u64);
+        let steps = std::sync::Mutex::new(0u64);
         let step = |got: u64| *steps.lock().unwrap() = got;
         // As a test's bases, so allowed: the first gives other bytes, the second hers.
         let test = Some("http://127.0.0.1:");

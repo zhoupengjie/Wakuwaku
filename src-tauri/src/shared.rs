@@ -10,7 +10,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Map, Value};
@@ -42,7 +42,9 @@ pub struct Shared {
     pub app: AppHandle,
     pub dir: PathBuf,
     pub port: u16,
-    pub settings: Lock<Map<String, Value>>,
+    // Her settings: a snapshot (config.rs Config), handed out by config()
+    // and made anew on each change.
+    pub settings: Lock<Arc<config::Config>>,
     pub pet: Lock<state::Pet>,
     pub win: Lock<pet::Win>,
     pub island: Lock<island::Island>,
@@ -95,7 +97,7 @@ impl Shared {
             is_logging,
             dir,
             port,
-            settings: Lock::new("settings", settings),
+            settings: Lock::new("settings", Arc::new(config::Config::from_map(settings))),
             pet: Lock::new("pet", state::Pet::default()),
             win: Lock::new("win", pet::Win::default()),
             island: Lock::new("island", island::Island::default()),
@@ -126,23 +128,30 @@ impl Shared {
         sh
     }
 
-    // A setting as it is (config.rs: each key declared once, a constant
-    // there, never a string here): Null while unset.
-    pub fn setting(&self, key: impl config::Key) -> Value {
-        self.settings.lock().unwrap().get(key.name()).cloned().unwrap_or(Value::Null)
+    // Her settings as they are now: a snapshot (config.rs Config, a field
+    // each key, read as its kind reads it), the lock let go as it is handed
+    // out. Read it once for several keys: they are then of one moment.
+    pub fn config(&self) -> Arc<config::Config> {
+        self.settings.lock().unwrap().clone()
     }
 
-    // A switch: on only when it is true.
-    pub fn flag(&self, key: config::Flag) -> bool {
-        config::is_on(&self.setting(key))
+    // The settings file's object changed by f and written, and a snapshot
+    // made of it, all under the lock (two at once each keep the other's).
+    // Nothing is told of it: change is the one that redraws.
+    pub fn keep_settings(&self, f: impl FnOnce(&mut Map<String, Value>)) {
+        let mut now = self.settings.lock().unwrap();
+        let mut map = now.map().clone();
+        f(&mut map);
+        data::save(&self.dir, &map);
+        *now = Arc::new(config::Config::from_map(map));
     }
 
     pub fn lang(&self) -> &'static str {
-        i18n::lang(self.setting(config::LANG).as_str().unwrap_or("auto"))
+        i18n::lang(self.config().lang.as_deref().unwrap_or("auto"))
     }
 
     pub fn hold(&self) -> state::Hold {
-        match self.setting(config::HOLD).as_u64() {
+        match self.config().hold {
             Some(secs) => state::Hold::Secs(secs),
             None => state::Hold::Seen,
         }
@@ -154,7 +163,7 @@ impl Shared {
     pub fn idle_hide_ms(&self) -> u64 {
         static TEST: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
         let test = *TEST.get_or_init(|| std::env::var("WAKUWAKU_IDLE_HIDE_MS").ok().and_then(|s| s.parse().ok()));
-        test.unwrap_or_else(|| self.setting(config::IDLE_HIDE_MIN).as_u64().unwrap_or(state::IDLE_HIDE_MIN) * 60 * 1000)
+        test.unwrap_or_else(|| self.config().idle_hide_min.unwrap_or(state::IDLE_HIDE_MIN) * 60 * 1000)
     }
 
     pub fn screens(&self) -> screen::Screens {
@@ -196,13 +205,12 @@ impl Shared {
     // apply_visibility); it had them even while her capsule on another
     // display showed (the test session, 2026-10-13).
     pub fn asks_seen(&self) -> bool {
-        self.is_visible() || (!self.hidden.load(Ordering::SeqCst) && !self.flag(config::DND) && self.is_fullscreen() && bars::any_shown())
+        self.is_visible() || (!self.hidden.load(Ordering::SeqCst) && !self.config().dnd && self.is_fullscreen() && bars::any_shown())
     }
 
     pub fn is_visible(&self) -> bool {
-        !self.hidden.load(Ordering::SeqCst)
-            && !self.flag(config::DND)
-            && !(self.flag(config::HIDE_IN_FULLSCREEN) && self.by_fullscreen.load(Ordering::SeqCst))
+        let config = self.config();
+        !self.hidden.load(Ordering::SeqCst) && !config.dnd && !(config.hide_in_fullscreen && self.by_fullscreen.load(Ordering::SeqCst))
     }
 
     // Nobody at the keyboard or mouse for a while: she holds still, the
@@ -249,7 +257,7 @@ impl Shared {
     // come (a list's, the dock's) and Chromium setting a hidden page's lower.
     // Off this thread (the pointer's): it looks through every process.
     fn keep_brisk(&self, quiet: bool) {
-        static AT: Mutex<(Option<bool>, Option<Instant>)> = Mutex::new((None, None));
+        static AT: Lock<(Option<bool>, Option<Instant>)> = Lock::new("shared::AT", (None, None));
         let want = !quiet && !self.is_fullscreen();
         let changed = {
             let mut at = AT.lock().unwrap();
@@ -293,14 +301,11 @@ impl Shared {
         self.by_fullscreen.store(true, Ordering::SeqCst);
     }
 
-    // Her home: 'island' or 'taskbar' (island.rs).
+    // Her home: 'island' or 'taskbar' (island/).
     // Her home as her windows have it: the island, or the taskbar, which the
-    // top bar and the dock are too (display split: island.rs is_split).
+    // top bar and the dock are too (display split: island/ is_split).
     pub fn home(&self) -> &'static str {
-        match self.setting(config::DISPLAY).as_str() {
-            Some("taskbar" | "split") => "taskbar",
-            _ => "island",
-        }
+        self.config().home()
     }
 
     // Whether she keeps start at login to where she is (logon.rs):
@@ -333,8 +338,7 @@ impl Shared {
     // would show it (her page, not ready for a good while yet).
     pub fn own_window(&self, _win: &WebviewWindow) {
         #[cfg(windows)]
-        if let Ok(hwnd) = _win.hwnd() {
-            let hwnd = hwnd.0 as isize;
+        if let Some(hwnd) = crate::main_wait::hwnd(&_win) {
             self.own.lock().unwrap().push(hwnd);
             let _ = _win.run_on_main_thread(move || frameless::keep(hwnd));
         }
@@ -353,7 +357,9 @@ impl Shared {
         // into each other (2026-10-11, the quit's steps). The file is kept
         // open (it was opened and closed for every line); opened again
         // should a write fail (the file taken away).
-        static LOG: Mutex<Option<std::fs::File>> = Mutex::new(None);
+        // Taken inside other locks (a line is said from anywhere), nothing
+        // inside it: ranked so (lock.rs).
+        static LOG: Lock<Option<std::fs::File>> = Lock::ranked("shared::LOG", crate::lock::LEAF, None);
         let mut log = LOG.lock().unwrap_or_else(|e| e.into_inner());
         let written = log.as_mut().is_some_and(|f| f.write_all(whole.as_bytes()).is_ok());
         if !written {
@@ -370,15 +376,15 @@ impl Shared {
             let pet = self.pet.lock().unwrap();
             (pet.get(now_ms()), pet.second(), pet.list())
         };
-        let settings = self.settings.lock().unwrap().clone();
-        let id = settings.get("pet").and_then(Value::as_str).unwrap_or("");
+        let config = self.config();
+        let id = config.pet.as_str().unwrap_or("");
         let found = data::pets(&self.dir);
         let sprite = found.iter().find(|p| p.id == id);
         let (temp, settings_open) = {
             let isl = self.island.lock().unwrap();
             (isl.temp, isl.settings_open)
         };
-        now["config"] = Value::Object(settings);
+        now["config"] = Value::Object(config.map().clone());
         now["lang"] = json!(self.lang());
         now["sprite"] = sprite.map_or(Value::Null, |p| json!(p.url()));
         now["spriteVersion"] = json!(sprite.map_or(2, |p| p.version));
@@ -454,7 +460,7 @@ impl Shared {
         self.to_pages("pet:update", self.payload());
         tray::refresh(self);
         self.push_settings();
-        // The desktop's widgets (desk.rs), their words.
+        // The desktop's widgets (desk/), their words.
         desk::push_widgets(self);
     }
 
@@ -550,7 +556,7 @@ impl Shared {
         if let Some(react) = out.react {
             self.to_pages("pet:react", react);
         }
-        if !self.flag(config::DND) {
+        if !self.config().dnd {
             for (mood, project) in out.alerts {
                 self.alert(&mood, &project);
             }
@@ -560,25 +566,23 @@ impl Shared {
 
     // --- Widgets ----------------------------------------------------------------------
 
-    fn list_setting(&self, key: config::Setting) -> Vec<String> {
-        self.setting(key).as_array().into_iter().flatten().filter_map(|v| v.as_str().map(str::to_string)).collect()
-    }
-
     pub fn is_widget_on(&self, id: &str) -> bool {
-        !self.list_setting(config::WIDGETS_OFF).iter().any(|o| o == id)
+        !self.config().widgets_off.iter().any(|o| o == id)
     }
 
     // In the closed island: on, and not put on the desktop, nor on the
     // taskbar while that is her home (a widget in one place, settings.rs
     // is_placed_out).
     pub fn is_in_island(&self, id: &str) -> bool {
-        self.is_widget_on(id) && !settings::is_placed_out(&self.setting(config::DESK_LAYOUT), &self.setting(config::TASKBAR_LAYOUT), self.home() == "taskbar", id)
+        let config = self.config();
+        self.is_widget_on(id) && !settings::is_placed_out(&config.desk_layout, &config.taskbar_layout, config.home() == "taskbar", id)
     }
 
     // On in the island, put on the taskbar (taskbarLayout) while she is the
     // taskbar, or on the desktop (deskLayout): a built-in one is worked out then.
     pub fn is_widget_wanted(&self, id: &str) -> bool {
-        self.is_widget_on(id) || (self.home() == "taskbar" && settings::is_on_taskbar(&self.setting(config::TASKBAR_LAYOUT), id)) || (cfg!(windows) && settings::is_on_desk(&self.setting(config::DESK_LAYOUT), id))
+        let config = self.config();
+        self.is_widget_on(id) || (config.home() == "taskbar" && settings::is_on_taskbar(&config.taskbar_layout, id)) || (cfg!(windows) && settings::is_on_desk(&config.desk_layout, id))
     }
 
     // The widgets with something to say, each saying whether it is on.
@@ -588,8 +592,8 @@ impl Shared {
 
     // Every widget, in the person's order, on or off.
     pub fn widgets_view(&self) -> Value {
-        let (off, order) = (self.list_setting(config::WIDGETS_OFF), self.list_setting(config::WIDGET_ORDER));
-        self.widgets.lock().unwrap().view(now_ms(), &off, &order, &|id: &str| plugins::owner_of(id))
+        let config = self.config();
+        self.widgets.lock().unwrap().view(now_ms(), &config.widgets_off, &config.widget_order, &|id: &str| plugins::owner_of(id))
     }
 
     // A widget from a script: there it is, and it may open the island for
@@ -628,7 +632,7 @@ impl Shared {
     // `open` names ({ tab, … }: a letter on the Mail page) instead of the
     // settings as they were.
     pub fn nudge_widget_to(&self, id: &str, words: &str, open: Value) {
-        if !self.is_visible() || self.setting(config::WIDGET_NUDGE) == false || !self.is_widget_on(id) || self.pet.lock().unwrap().wants_you() {
+        if !self.is_visible() || !self.config().widget_nudge || !self.is_widget_on(id) || self.pet.lock().unwrap().wants_you() {
             return;
         }
         let Some((label, value, private)) = self.widgets.lock().unwrap().label_of(id) else { return };
@@ -657,7 +661,7 @@ impl Shared {
             "error" => "error",
             _ => "done",
         };
-        if self.setting(config::NOTIFY).get(group).and_then(Value::as_bool) != Some(true) {
+        if self.config().notify.get(group).and_then(Value::as_bool) != Some(true) {
             return;
         }
         let lang = self.lang();
@@ -689,15 +693,11 @@ impl Shared {
         let touches_monitor = touches(&[config::MONITOR.name(), config::MONITOR_SOURCE.name(), config::WIDGETS_OFF.name()]);
         let touches_stow = touches(&[config::ISLAND_HIDE_UNDER.name()]);
         let touches_shortcuts = touches(&[config::SHORTCUTS_ENABLED.name(), config::SHORTCUT_APPROVE.name(), config::SHORTCUT_DENY.name(), config::SHORTCUT_ISLAND.name(), config::DND.name()]);
-        {
-            let mut settings = self.settings.lock().unwrap();
-            settings.extend(patch);
-            data::save(&self.dir, &settings);
-        }
+        self.keep_settings(|settings| settings.extend(patch));
         if touches_monitor {
             crate::loops::wake_monitor();
         }
-        // A window under her island looked for at once (island.rs look_under).
+        // A window under her island looked for at once (island/ look_under).
         if touches_stow {
             fullscreen::ask();
         }
@@ -711,7 +711,7 @@ impl Shared {
         }
         // Her taskbar on the other displays: its material, its buttons' alignment, her language (bars.rs).
         bars::refresh(self);
-        // The desktop's widgets: made or gone as the layout says, told the rest (desk.rs).
+        // The desktop's widgets: made or gone as the layout says, told the rest (desk/).
         desk::sync(self);
         if touches_top {
             island::keep_on_top(self);
@@ -730,7 +730,7 @@ impl Shared {
     // (hideInFullscreen off) still plays no flow light's ring over it
     // (island.ts), told so as it changes (pet:full-screen).
     pub fn look_fullscreen(self: &Arc<Self>, asked: Option<Instant>) {
-        static CHANGED: Mutex<Option<Instant>> = Mutex::new(None);
+        static CHANGED: Lock<Option<Instant>> = Lock::new("shared::CHANGED", None);
         let watching = fullscreen::AVAILABLE;
         let own = self.own_windows();
         let cover = if watching { fullscreen::covering(&own) } else { Some(None) };
@@ -855,7 +855,7 @@ impl Shared {
     // hers still has it (a click elsewhere already moved it on).
     pub fn set_keyboard(&self, window: &WebviewWindow, on: bool) {
         #[cfg(windows)]
-        let mine = window.hwnd().map(|h| h.0 as isize).unwrap_or(0);
+        let mine = crate::main_wait::hwnd(&window).unwrap_or(0);
         #[cfg(not(windows))]
         let mine = 0isize;
         if on {
@@ -887,10 +887,11 @@ impl Shared {
 
 // A new home: the island, the taskbar, or the top bar and the dock (she goes into it).
 pub fn set_display(sh: &Arc<Shared>, display: &str) {
-    if sh.setting(config::DISPLAY).as_str() == Some(display) && !sh.flag(config::OUT) {
+    let config = sh.config();
+    if config.display.as_deref() == Some(display) && !config.out {
         return;
     }
-    if sh.flag(config::OUT) {
+    if config.out {
         pet::hide_now(sh);
     }
     sh.change(json!({ "display": display, "out": false }));
@@ -898,7 +899,7 @@ pub fn set_display(sh: &Arc<Shared>, display: &str) {
 
 // Out on the desktop where she was last left, or back home, from the menu.
 pub fn set_out(sh: &Arc<Shared>, out: bool) {
-    if sh.flag(config::OUT) == out {
+    if sh.config().out == out {
         return;
     }
     if out {
@@ -924,7 +925,7 @@ pub fn absorb(sh: &Arc<Shared>, point: (i32, i32)) {
 // Started again while running, or "back to the corner": find her.
 pub fn come_home(sh: &Arc<Shared>) {
     sh.hidden.store(false, Ordering::SeqCst);
-    if sh.flag(config::OUT) {
+    if sh.config().out {
         pet::come_home(sh);
     }
     sh.apply_visibility();

@@ -39,12 +39,13 @@
 use std::collections::HashMap;
 use std::net::{Shutdown, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
+use crate::lock::Lock;
 use crate::{i18n, now_ms, settings, shared, Shared};
 
 pub mod agent;
@@ -61,7 +62,6 @@ mod threads;
 
 use imap::Fail;
 use proxy::Via;
-use crate::config;
 
 // How long a connection may take, how long the server may be quiet while it
 // pushes (then the push is asked for again), how often one that cannot push
@@ -200,7 +200,7 @@ fn name_of(v: &Value) -> String {
 }
 
 fn accounts(sh: &Shared) -> Vec<Account> {
-    let all = sh.setting(config::MAIL);
+    let all = sh.config().mail.clone();
     let page = proxy::setting(sh);
     all.as_array()
         .into_iter()
@@ -277,17 +277,30 @@ fn account(sh: &Shared, id: &str) -> Option<Account> {
 
 // --- Keeping an account's mail (sync.rs) ------------------------------------------------------------
 
-#[derive(Default)]
 struct Watch {
     stop: AtomicBool,
     // Asked to look again at once (a letter was sent: its Sent folder).
     kick: AtomicBool,
     // The connection's socket, shut down to stop at once.
-    socket: Mutex<Option<TcpStream>>,
+    socket: Lock<Option<TcpStream>>,
     // The proxy it went through (its address), if any.
-    via: Mutex<Option<String>>,
+    via: Lock<Option<String>>,
     // connecting | ok | error, the unread count, what went wrong.
-    status: Mutex<Value>,
+    status: Lock<Value>,
+}
+
+// Its three locks are taken inside the runner's (sh.mail) and alone,
+// with nothing inside them.
+impl Default for Watch {
+    fn default() -> Self {
+        Watch {
+            stop: AtomicBool::new(false),
+            kick: AtomicBool::new(false),
+            socket: Lock::ranked("mail::Watch::socket", crate::lock::LEAF, None),
+            via: Lock::ranked("mail::Watch::via", crate::lock::LEAF, None),
+            status: Lock::ranked("mail::Watch::status", crate::lock::LEAF, Value::Null),
+        }
+    }
 }
 
 impl Watch {
@@ -488,7 +501,9 @@ pub fn view(sh: &Shared) -> Value {
 // The accounts are read, changed and written back by one command at a time:
 // two saves at once (the sign-in between taking seconds) would each write
 // back the list as it was before the other.
-static EDITING: Mutex<()> = Mutex::new(());
+// Held around the whole edit (sh.change and all it sets going): an outer
+// lock (lock.rs), taken first, by the async commands alone.
+static EDITING: Lock<()> = Lock::ranked("mail::EDITING", crate::lock::OUTER, ());
 
 // An id no account has: the time, a count and the process, mixed.
 fn new_id(all: &[Account]) -> String {

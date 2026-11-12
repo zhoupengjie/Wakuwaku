@@ -93,7 +93,7 @@ fn agent_row(sh: &Shared, agent: Agent) -> AgentRow {
         Agent::Omp => Own::Omp { more: connection::omp_files().len().saturating_sub(1) },
         Agent::Reasonix => Own::Reasonix { line: connection::reasonix_line().map(|major| format!("{major}.x")) },
         Agent::Dsh => {
-            let Value::Object(mut view) = connection::dsh_view(sh.port, &sh.setting(config::DSH_VIA), seen_at(sh, agent)) else { unreachable!("dsh_view is an object") };
+            let Value::Object(mut view) = connection::dsh_view(sh.port, &sh.config().dsh_via, seen_at(sh, agent)) else { unreachable!("dsh_view is an object") };
             hooks = view.remove("hooks").and_then(|h| h.as_str().map(String::from));
             view.insert("listShown".into(), json!(connection::shown_path(&connection::dsh_plugin_file())));
             view.insert("hooksShown".into(), json!(connection::shown_path(&connection::dsh_hooks_file())));
@@ -155,10 +155,10 @@ pub fn snapshot(sh: &Shared) -> Value {
     // The monitor's source in effect: the one chosen, else LHM while it answers.
     let lhm = crate::lhm::view();
     let lhm_status = lhm["status"].as_str().unwrap_or("").to_string();
-    let monitor_source = crate::hw::Source::of(&sh.setting(config::MONITOR), &sh.setting(config::MONITOR_SOURCE), lhm_status == "found");
+    let monitor_source = crate::hw::Source::of(&sh.config().monitor, &sh.config().monitor_source, lhm_status == "found");
     let lhm_shown = monitor_source == crate::hw::Source::Lhm && sh.settings_open();
     json!({
-        "settings": Value::Object(sh.settings.lock().unwrap().clone()),
+        "settings": Value::Object(sh.config().map().clone()),
         "lang": sh.lang(),
         "pets": pets,
         "now": now,
@@ -207,7 +207,7 @@ pub fn snapshot(sh: &Shared) -> Value {
         "lhmSetup": crate::lhm_setup::view(sh, &lhm_status, lhm_shown),
         // The plugins she runs, and where waku is for the terminal.
         "plugins": plugins::view(sh),
-        // The third-party ones installed (addons.rs view), and the folders
+        // The third-party ones installed (addons/ view), and the folders
         // there whose manifest will not do, each with why.
         "addons": crate::addons::view(sh),
         "addonsBroken": crate::addons::broken_view(),
@@ -295,7 +295,7 @@ fn is_name(n: &str) -> bool {
 }
 
 // A widget by its id, or a plugin she runs: hers, or a third-party one
-// installed (its folder there, its manifest good or not: addons.rs is_known).
+// installed (its folder there, its manifest good or not: addons/ is_known).
 fn is_source_of(kind: &str, of: &str) -> bool {
     match kind {
         "widget" => crate::widgets::is_id(of),
@@ -342,7 +342,7 @@ pub fn is_on_taskbar(layout: &Value, widget: &str) -> bool {
 // to 8 as the taskbar's groups have them, or { id, type: "board", name,
 // items, folded, d, at } a board (its name 16 characters at most, its tiles
 // is_board_tiles); size s, m or l; d the display it
-// is on (desk.rs key_of: a-z 0-9), at where it stood on each display it has
+// is on (desk/ key_of: a-z 0-9), at where it stood on each display it has
 // been on, 8 at most, { key: [column, row] }. Each id once, each widget or
 // plugin once.
 fn is_desk_entry(v: &Value) -> bool {
@@ -549,7 +549,7 @@ fn is_hold(v: &Value) -> bool {
 
 // Where her island sits at the top of the screen (zhoupengjie/Wakuwaku#59):
 // a top corner, or the top centre (the default). Kept here; placing the
-// window by it is island.rs's (fit, side_changed), and the page lays the
+// window by it is island/'s (fit, side_changed), and the page lays the
 // island out at the side it is told (anchor.ts, pet:update islandAt).
 fn is_island_pos(v: &Value) -> bool {
     matches!(v.as_str(), Some("left" | "center" | "right"))
@@ -558,14 +558,12 @@ fn is_island_pos(v: &Value) -> bool {
 // Where her island is (zhoupengjie/Wakuwaku#105): at the top of the screen
 // (the default), or in Windows' own taskbar, along whichever edge that is,
 // left as it is (its capsule inside it, embed.rs; "bottom" until 2026-11-07,
-// data.rs adopt_island_edge). Placing the window by it is island.rs's (fit)
+// data.rs adopt_island_edge). Placing the window by it is island/'s (fit)
 // too, and the page lays the island out along the edge of the screen it is
 // told (anchor.ts, pet:update islandEdge).
 fn is_island_edge(v: &Value) -> bool {
     matches!(v.as_str(), Some("top" | "taskbar"))
 }
-
-const SHORTCUT_KEYS: [config::Setting; 3] = [config::SHORTCUT_APPROVE, config::SHORTCUT_DENY, config::SHORTCUT_ISLAND];
 
 fn is_shortcut_spec(sh: &Shared, key: &str, s: &str) -> bool {
     if s.is_empty() {
@@ -574,13 +572,15 @@ fn is_shortcut_spec(sh: &Shared, key: &str, s: &str) -> bool {
     if crate::shortcuts::parse_shortcut(s).is_none() {
         return false;
     }
-    let all: Vec<String> = SHORTCUT_KEYS
+    let config = sh.config();
+    let shortcuts = [(config::SHORTCUT_APPROVE, &config.shortcut_approve), (config::SHORTCUT_DENY, &config.shortcut_deny), (config::SHORTCUT_ISLAND, &config.shortcut_island)];
+    let all: Vec<String> = shortcuts
         .iter()
-        .map(|&k| {
+        .map(|(k, now)| {
             if k.name() == key {
                 s.to_string()
             } else {
-                sh.setting(k).as_str().unwrap_or("").to_string()
+                now.as_deref().unwrap_or("").to_string()
             }
         })
         .collect();
@@ -611,7 +611,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "islandEdge" => is_island_edge(v),
         // In the taskbar, the capsule inside it, taking its end (embed.rs), or laid over it.
         "islandEmbed" => is_bool,
-        // At the top of the screen, up out of the way of a window under it (island.rs look_under).
+        // At the top of the screen, up out of the way of a window under it (island/ look_under).
         "islandHideUnder" => is_bool,
         "taskbarMaterial" => matches!(v.as_str(), Some("mica" | "black" | "clear")),
         "taskbarClearWhen" => matches!(v.as_str(), Some("mica" | "solid" | "always")),
@@ -627,12 +627,12 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "splitKeys" => matches!(v.as_str(), Some("top" | "dock")),
         "taskbarDisplays" => matches!(v.as_str(), Some("main" | "all")),
         // The display her home is on (#104): a display's key (screen.rs,
-        // desk.rs key_for), kept while that display is unplugged so she goes
+        // desk/ key_for), kept while that display is unplugged so she goes
         // back to it; "" for Windows' main display.
         "homeDisplay" => v.as_str().is_some_and(|k| k.len() <= 64 && !k.chars().any(char::is_control)),
         // The taskbar's parts in three runs (island-layout.ts tbLayout), each once.
         "taskbarLayout" => v.is_null() || is_taskbar_layout(v),
-        // The desktop's widgets (desk.rs, deskgrid.ts).
+        // The desktop's widgets (desk/, deskgrid.ts).
         "deskLayout" => is_desk_layout(v),
         // Boards kept as combos, to be put up again from the picker's 组合.
         "boardSets" => is_board_sets(v),
@@ -753,7 +753,7 @@ pub fn apply_patch(sh: &Arc<Shared>, patch: &Value) -> Value {
     }
     // The web another way: taken at the next request.
     if net_way {
-        crate::proxy::set_web(&sh.setting(config::NET_PROXY));
+        crate::proxy::set_web(&sh.config().net_proxy);
     }
     // Her home on another display (#104): everything of hers there now.
     if home_display {
@@ -966,7 +966,7 @@ pub async fn settings_agent(app: AppHandle, agent: String, action: String) -> Va
 
 // The way DSH is followed, as chosen or as the rows have it (connection/dsh.rs dsh_way).
 fn dsh_way(sh: &Shared) -> &'static str {
-    connection::dsh_rows_status(sh.port, &sh.setting(config::DSH_VIA)).0
+    connection::dsh_rows_status(sh.port, &sh.config().dsh_via).0
 }
 
 // The CPU temperature/power helper (sensors.rs, #18 part B). She is not
@@ -1011,7 +1011,7 @@ pub async fn settings_fetch(app: AppHandle, reference: String) -> Value {
     let lang = sh.lang();
     match got {
         Ok(Ok(pet)) => {
-            let current = sh.setting(config::PET);
+            let current = sh.config().pet.clone();
             let found = data::pets(&sh.dir);
             let has_current = found.iter().any(|p| Some(p.id.as_str()) == current.as_str());
             if !has_current || found.len() == 1 {

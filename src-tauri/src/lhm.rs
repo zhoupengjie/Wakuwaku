@@ -34,10 +34,10 @@
 // and the root has LHM's Version. A value is taken from RawValue as a
 // number, else from its words, else from Value's.
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
+use crate::lock::Lock;
 
 pub const PORT: u16 = 8085;
 const TIMEOUT: Duration = Duration::from_millis(300);
@@ -356,7 +356,7 @@ impl Status {
 }
 
 // What the settings show (lhm::view): kept by the monitor's thread.
-static VIEW: Mutex<Value> = Mutex::new(Value::Null);
+static VIEW: Lock<Value> = Lock::new("lhm::VIEW", Value::Null);
 static CHANGED: AtomicBool = AtomicBool::new(false);
 
 // { status, version, port, sensors: [{ id, name, hardware, hardwareId,

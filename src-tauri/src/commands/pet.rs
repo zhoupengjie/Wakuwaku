@@ -57,6 +57,7 @@ pub async fn pet_menu(app: AppHandle, window: WebviewWindow, part: Option<String
         // front, which these cannot (they never take focus): for the menu, it may.
         let was_open = sh.settings_open() && is_island(&window);
         let _ = window.set_focusable(true);
+        crate::main_wait::check("popup_menu");
         let _ = window.popup_menu(&menu);
         if !was_open {
             let _ = window.set_focusable(false);

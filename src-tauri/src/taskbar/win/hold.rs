@@ -6,6 +6,18 @@
 // that will not stop showing it (the tug, #69); its picture for the
 // handover (strip_picture).
 use super::*;
+use crate::lock::Lock;
+
+pub(super) struct Host {
+    pub(super) hwnd: isize,
+    pub(super) thread: JoinHandle<()>,
+}
+
+pub(super) static HOST: Lock<Option<Host>> = Lock::new("taskbar::win::hold::HOST", None);
+// The buttons' thread (buttons.rs tasks_loop).
+pub(super) static TASKS: Lock<Option<JoinHandle<()>>> = Lock::new("taskbar::win::hold::TASKS", None);
+// The keyboard's thread (keys.rs keys_loop).
+pub(super) static KEYS: Lock<Option<JoinHandle<()>>> = Lock::new("taskbar::win::hold::KEYS", None);
 
 // The edge her strip is along: Windows' own taskbar keeps its room along
 // the bottom for a bottom strip to lie over, and hides itself (keeping
@@ -16,14 +28,14 @@ pub fn set_edge(edge: Edge, room: bool) {
     // Back to the bottom from another edge: the desktop's icons where
     // they are, before Windows' taskbar takes its room back and the
     // desktop moves them (icons.rs hold).
-    if edge == Edge::Bottom && *EDGE.lock().unwrap() != Edge::Bottom && is_up() {
+    if edge == Edge::Bottom && edge_now() != Edge::Bottom && is_up() {
         if let Some(sh) = sh() {
             for line in crate::icons::hold_within(&sh.dir, Duration::from_secs(2)) {
                 sh.log(&line);
             }
         }
     }
-    let was = std::mem::replace(&mut *EDGE.lock().unwrap(), edge);
+    let was = std::mem::replace(&mut PLACE.lock().unwrap().edge, edge);
     let kept = shell::kept_room();
     shell::keep_room(room);
     if (was != edge || kept != room) && is_up() {
@@ -37,7 +49,7 @@ pub fn is_up() -> bool {
 }
 
 // Quitting with the handover: Windows' taskbar shown again under hers on
-// purpose (island.rs handoff_out), so neither the timer nor its show
+// purpose (island/ handoff_out), so neither the timer nor its show
 // event puts it away again in the second before it is given back (it
 // was: the foot of the screen bare for that second).
 pub(super) static HANDING_BACK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -106,7 +118,7 @@ pub(super) fn other_holder() -> Option<(u32, Option<u64>)> {
 }
 
 // Waiting for another copy to let the taskbar go, or for Explorer to
-// settle (wait_for_explorer): this one's window stays hidden (island.rs
+// settle (wait_for_explorer): this one's window stays hidden (island/
 // is_shown) and takes nothing.
 pub fn waiting() -> bool {
     WAITING.load(Ordering::SeqCst)
@@ -234,7 +246,7 @@ impl Restarts {
     }
 }
 
-pub(super) static RESTARTS: Mutex<Restarts> = Mutex::new(Restarts::new());
+pub(super) static RESTARTS: Lock<Restarts> = Lock::new("taskbar::win::hold::RESTARTS", Restarts::new());
 // Explorer's taskbar's process as last seen while hers is up (0: none yet).
 pub(super) static EXPLORER_PID: AtomicU32 = AtomicU32::new(0);
 
@@ -250,7 +262,9 @@ pub(super) fn explorer_check() -> bool {
     let up = explorer_up(pid).map_or_else(|| "gone".to_string(), |d| format!("up {:.1} s", d.as_secs_f64()));
     systray::set_aside(true);
     log(&format!("Explorer started again (pid {pid}, {up}): ours set behind its tray until it has run {} s (zhoupengjie/Wakuwaku#85)", EXPLORER_SETTLE.as_secs()));
-    if let Some(away) = RESTARTS.lock().unwrap().seen(Instant::now()) {
+    // Read first: an if let's condition holds its lock through the block.
+    let away = RESTARTS.lock().unwrap().seen(Instant::now());
+    if let Some(away) = away {
         step_away(away);
     }
     true
@@ -346,7 +360,7 @@ mod explorer_tests {
     }
 }
 
-// Before this one's window shows for the taskbar (island.rs): should
+// Before this one's window shows for the taskbar (island/): should
 // another copy hold it, this one waits.
 // Nor while Explorer is still starting (explorer_unready): it waits too.
 pub fn look_for_other(sh: &Shared) {
@@ -417,18 +431,18 @@ pub fn take(sh: &Shared, strip: (i32, i32, i32, i32)) -> bool {
     TASKS_STOP.store(false, Ordering::SeqCst);
     let sh = crate::shared(&sh.app);
     let (keys_sh, input_sh) = (sh.clone(), sh.clone());
-    *TASKS.lock().unwrap() = Some(crate::spawn_named("taskbar buttons", move || tasks_loop(sh)));
+    // Its way in first: what the taskbar's thread sees from now on reaches it.
+    let notes = notes();
+    *TASKS.lock().unwrap() = Some(crate::spawn_named("taskbar buttons", move || tasks_loop(sh, notes)));
     // Which input method is in front, told by Windows' input switcher
     // (inputs.rs): its mark read again at once when it changes.
     crate::inputs::set_size(icon_px(&keys_sh));
-    let changed = || {
-        KEYS_NOW.store(true, Ordering::SeqCst);
-        wake_keys();
-    };
-    crate::inputs::start(png_of, Box::new(changed), Box::new(move |line: &str| input_sh.log(&format!("taskbar: {line}"))));
+    // Its way in made before: an input method switched at once is not missed.
+    let asks = asks();
+    crate::inputs::start(png_of, Box::new(keys_now_asked), Box::new(move |line: &str| input_sh.log(&format!("taskbar: {line}"))));
     // Win+1…9, Win+T, Win+B hers, not Windows' put away (winkeys.rs).
     crate::winkeys::start(&keys_sh);
-    *KEYS.lock().unwrap() = Some(crate::spawn_named("taskbar keys", move || keys_loop(keys_sh)));
+    *KEYS.lock().unwrap() = Some(crate::spawn_named("taskbar keys", move || keys_loop(keys_sh, asks)));
     true
 }
 
@@ -455,14 +469,24 @@ pub fn give_back(sh: &Shared) {
     // Windows' own keys first: its taskbar has them again (winkeys.rs).
     crate::winkeys::stop();
     TASKS_STOP.store(true, Ordering::SeqCst);
-    if let Some(thread) = TASKS.lock().unwrap().take() {
+    // Each thread taken out of its lock first: as an if let's condition
+    // the lock was held through the block, over the two seconds' wait for
+    // the thread (and the log's and TASKS_DOING's locks inside it).
+    let tasks = TASKS.lock().unwrap().take();
+    if let Some(thread) = tasks {
         wake_tasks();
+        // Nothing more told it: its wait ends (and its own state goes with it).
+        no_more_notes();
         if !stop_within("the buttons' thread", thread) {
-            log(&format!("giving back: the buttons' thread was {}", *TASKS_DOING.lock().unwrap()));
+            let doing = *TASKS_DOING.lock().unwrap();
+            log(&format!("giving back: the buttons' thread was {doing}"));
         }
     }
-    if let Some(thread) = KEYS.lock().unwrap().take() {
-        wake_keys();
+    // Its way in dropped: its wait ends at once (and what it sent last
+    // stays, as it did, for a page come up after).
+    no_more_asks();
+    let keys = KEYS.lock().unwrap().take();
+    if let Some(thread) = keys {
         stop_within("the keys' thread", thread);
     }
     if let Some(thread) = crate::inputs::stop() {
@@ -480,7 +504,7 @@ pub fn give_back(sh: &Shared) {
         sh.log(&format!("taskbar: Windows' given back: {}", shell::restore(&file)));
     }
     // Explorer's the taskbar again, shown: every window told so
-    // (systray.rs handed_back), then whose the shell's windows are now.
+    // (systray/ handed_back), then whose the shell's windows are now.
     if had_host {
         let told = systray::handed_back();
         sh.log(&format!("taskbar: {}; {}", if told { "every window told Explorer's is the taskbar again" } else { "the tray's window still there: no window told" }, shell::lone_win().said()));
@@ -497,18 +521,13 @@ pub fn give_back(sh: &Shared) {
             }
         });
     }
-    *WORK_EDGE.lock().unwrap() = None;
-    *WORK_SIDE.lock().unwrap() = None;
+    // What the work area was made for went with the taskbar's thread.
     *SENT.lock().unwrap() = Value::Null;
     *SENT_WINDOWS.lock().unwrap() = Value::Null;
-    *PAPER.lock().unwrap() = Value::Null;
-    *LOOK.lock().unwrap() = Value::Null;
+    // The look's thread forgets what it sent (its own to forget).
+    forget_look();
     START_OPEN.store(false, Ordering::SeqCst);
-    *STRIP.lock().unwrap() = None;
-    ORDER.lock().unwrap().clear();
-    FLASHING.lock().unwrap().clear();
-    *WIN_PNGS.lock().unwrap() = None;
-    *MARKS.lock().unwrap() = None;
+    PLACE.lock().unwrap().strip = None;
 }
 
 // Windows' taskbar shown again as fast as she puts it away: another
@@ -585,7 +604,7 @@ impl Tug {
     }
 }
 
-pub(super) static TUG: Mutex<Tug> = Mutex::new(Tug::new());
+pub(super) static TUG: Lock<Tug> = Lock::new("taskbar::win::hold::TUG", Tug::new());
 
 // Said once for each time her guard shows Windows' taskbar for a hang.
 static LEFT_FOR_HANG: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -766,7 +785,7 @@ mod tug_tests {
 
 // Windows' taskbar on a display as it is on screen now, across the
 // display (physical px), as a PNG data URL: laid over it by her page
-// before it is put away (island.rs handoff_cover). None while it does
+// before it is put away (island/ handoff_cover). None while it does
 // not show there (auto-hidden, put away), or should the screen not read.
 pub fn strip_picture(mon: (i32, i32, i32, i32)) -> Option<String> {
     let (x, y, w, h) = shell::shown_room(mon)?;

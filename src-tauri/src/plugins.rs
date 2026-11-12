@@ -53,13 +53,13 @@ pub mod web;
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar};
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
 use crate::Shared;
-use crate::config;
+use crate::lock::Lock;
 
 // --- What a plugin is ------------------------------------------------------------------
 
@@ -234,7 +234,7 @@ fn param_ok(p: &Param, v: &Value) -> bool {
 
 // A "plugins" setting: only the plugins here, each with "on" and its own
 // parameters, text without control characters, numbers as text; and the
-// third-party ones installed, each by its manifest (addons.rs is_conf_ok).
+// third-party ones installed, each by its manifest (addons/ is_conf_ok).
 pub fn is_ok(v: &Value) -> bool {
     v.as_object().is_some_and(|all| all.iter().all(|(id, conf)| {
         if plugin(id).is_none() {
@@ -314,7 +314,7 @@ fn key_of(p: &Plugin, conf: &Value, lang: &'static str) -> Value {
 }
 
 // Which plugin a widget comes from, by the ids they give them: one of
-// hers, or a third-party one installed (addons.rs owner_of).
+// hers, or a third-party one installed (addons/ owner_of).
 pub fn owner_of(widget: &str) -> Option<String> {
     built_in_owner(widget).map(str::to_string).or_else(|| crate::addons::owner_of(widget))
 }
@@ -375,12 +375,13 @@ impl Runner {
 
 // Taken while a widget of theirs is posted and while sync stops one, so a
 // turn ending after its plugin stopped never shows what it found. Taken
-// before any of Shared's locks, and never while one is held.
-static POSTING: Mutex<()> = Mutex::new(());
-static WAKE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+// before any of Shared's locks, and never while one is held: an outer lock
+// (lock.rs), on the plugins' and the widgets' threads.
+static POSTING: Lock<()> = Lock::ranked("plugins::POSTING", crate::lock::OUTER, ());
+static WAKE: (Lock<bool>, Condvar) = (Lock::new("plugins::WAKE", false), Condvar::new());
 // The plugins that asked for a turn at once (poke), taken up by the thread
 // that keeps their turns.
-static POKED: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+static POKED: Lock<Vec<&'static str>> = Lock::new("plugins::POKED", Vec::new());
 
 // The turns looked at again now: a plugin changed, someone back, her back in sight.
 pub fn wake() {
@@ -426,8 +427,8 @@ fn wait_for(d: Option<Duration>) {
     let (woken, cv) = &WAKE;
     let guard = woken.lock().unwrap_or_else(|e| e.into_inner());
     let mut guard = match d {
-        Some(d) => cv.wait_timeout_while(guard, d, |w| !*w).map(|(g, _)| g).unwrap_or_else(|e| e.into_inner().0),
-        None => cv.wait_while(guard, |w| !*w).unwrap_or_else(|e| e.into_inner()),
+        Some(d) => guard.wait_timeout_while(cv, d, |w| !*w).map(|(g, _)| g).unwrap_or_else(|e| e.into_inner().0),
+        None => guard.wait_while(cv, |w| !*w).unwrap_or_else(|e| e.into_inner()),
     };
     *guard = false;
 }
@@ -565,7 +566,7 @@ fn clean_up(folder: &Path) -> Vec<String> {
 // Each running as its switch says: started, stopped, started again with new
 // settings (what it showed goes with the old one). True when any changed.
 pub fn sync(sh: &Shared) -> bool {
-    let conf = sh.setting(config::PLUGINS);
+    let conf = sh.config().plugins.clone();
     let lang = sh.lang();
     let (mut changed, mut stale, mut start, mut woken) = (false, Vec::new(), false, false);
     let clean;
@@ -604,7 +605,7 @@ pub fn sync(sh: &Shared) -> bool {
     }
     drop(posting);
     // The third-party ones as their switches say too: the island's page
-    // told which to run (addons.rs).
+    // told which to run (addons/).
     changed |= crate::addons::sync(sh);
     if clean {
         let gone = clean_up(&sh.dir.join("plugins"));
@@ -626,7 +627,7 @@ pub fn sync(sh: &Shared) -> bool {
 //   state  off | needs (a parameter) | running
 //   said   what went wrong in its last turn, if anything
 pub fn view(sh: &Shared) -> Value {
-    let conf = sh.setting(config::PLUGINS);
+    let conf = sh.config().plugins.clone();
     let lang = sh.lang();
     let r = sh.plugins.lock().unwrap();
     Value::Array(

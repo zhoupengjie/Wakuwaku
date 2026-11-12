@@ -9,13 +9,14 @@
 // video full screen on the second display hid her taskbar on the main one
 // (the user, 2026-10-13); Windows' own steps aside only on its own display.
 
-use std::sync::{Condvar, Mutex};
+use std::sync::{Condvar};
 use std::time::{Duration, Instant};
+use crate::lock::Lock;
 
 // Asked to look now: a window came to the front, or the one in front was
 // sized (the taskbar's hooks, taskbar/). When it was first asked, until
 // looked at: however many asks come meanwhile, one look.
-static ASKED: Mutex<Option<Instant>> = Mutex::new(None);
+static ASKED: Lock<Option<Instant>> = Lock::new("fullscreen::ASKED", None);
 static WAKE: Condvar = Condvar::new();
 
 pub fn ask() {
@@ -29,7 +30,7 @@ pub fn ask() {
 // Until asked, or the time is up: when it was asked (None: the time).
 pub fn wait(most: Duration) -> Option<Instant> {
     let asked = ASKED.lock().unwrap();
-    let (mut asked, _) = WAKE.wait_timeout_while(asked, most, |a| a.is_none()).unwrap();
+    let (mut asked, _) = asked.wait_timeout_while(&WAKE, most, |a| a.is_none()).unwrap();
     asked.take()
 }
 

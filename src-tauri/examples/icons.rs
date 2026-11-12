@@ -19,6 +19,10 @@
 //   icons back <l> <t> <r> <b> <dir>
 //                               as given back: the work area set quietly,
 //                               then icons::given_back
+// Its locks are lock.rs Locks.
+#[path = "../src/lock.rs"]
+#[allow(dead_code)]
+mod lock;
 #[path = "../src/icons.rs"]
 mod icons;
 

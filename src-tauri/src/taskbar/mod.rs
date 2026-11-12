@@ -1,10 +1,10 @@
 // The taskbar home's side of Windows (display 'taskbar'): Windows' own
 // taskbar put away while hers is up (shell.rs), and the tray's icons taken
-// over from Explorer (systray.rs). On a thread of their own, which runs the
+// over from Explorer (systray/). On a thread of their own, which runs the
 // message loop the tray's window needs, with a hidden window of its own that
 // hears:
 //   - Explorer started again (TaskbarCreated, from a new taskbar window):
-//     its taskbar put away again, the strip taken again (island.rs), the
+//     its taskbar put away again, the strip taken again (island/), the
 //     tray put first again and programs asked for their icons, once the new
 //     Explorer has settled (zhoupengjie/Wakuwaku#85: until then hers is set
 //     behind its tray; nor is the taskbar taken from an Explorer still
@@ -20,7 +20,7 @@
 //     Mica (taskbar:wallpaper); Windows' mode and accent colour, for the
 //     strip to be as Windows' own taskbar is (taskbar:look)
 // Taken when the home takes its strip, given back when it gives the strip
-// back (island.rs sync_bar) and on quitting. A killed process cannot give
+// back (island/ sync_bar) and on quitting. A killed process cannot give
 // the taskbar back: shell.rs's guard does.
 //
 // Learnt in examples/taskbar_spike.rs (2026-10-10), where each of these was
@@ -33,7 +33,6 @@ use crate::Shared;
 mod win;
 #[cfg(windows)]
 use win as imp;
-use crate::config;
 
 #[cfg(not(windows))]
 mod imp {
@@ -239,7 +238,7 @@ mod tests {
 pub fn recover(sh: &Shared) {
     if crate::shell::recover(&sh.dir.join("taskbar.json")) {
         // Every window told, as the run killed holding it never did
-        // (systray.rs handed_back), and whose the shell's windows are now.
+        // (systray/ handed_back), and whose the shell's windows are now.
         crate::systray::handed_back();
         sh.log(&format!("taskbar: Windows' taskbar was left put away: given back, every window told; {}", crate::shell::lone_win().said()));
     }
@@ -452,7 +451,7 @@ pub async fn taskbar_pin_files(app: tauri::AppHandle, paths: Vec<String>) -> usi
             }
         };
         let (target, id) = (pin["path"].as_str().unwrap_or(""), pin["id"].as_str().filter(|s| !s.is_empty()));
-        let kept = sh.setting(config::TASKBAR_PINNED);
+        let kept = sh.config().taskbar_pinned.clone();
         let there = kept.as_array().into_iter().flatten().any(|p| match (id, p["id"].as_str()) {
             (Some(id), Some(theirs)) => theirs.eq_ignore_ascii_case(id),
             (None, None) => p["path"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(target)),
@@ -470,7 +469,7 @@ pub async fn taskbar_pin_files(app: tauri::AppHandle, paths: Vec<String>) -> usi
 }
 
 // A tray icon kept out on the taskbar or folded away (dragged there), by
-// its name (systray.rs Shown), in the settings (trayPinned); Windows' own
+// its name (systray/ Shown), in the settings (trayPinned); Windows' own
 // choice until the person makes one. And the tray's order as dragged
 // (trayOrder, names), the two in one change.
 #[tauri::command]
@@ -478,7 +477,7 @@ pub fn taskbar_tray_pin(app: tauri::AppHandle, name: String, pinned: Option<bool
     let sh = crate::shared(&app);
     let mut change = serde_json::Map::new();
     if let Some(pinned) = pinned {
-        let mut kept = sh.setting(config::TRAY_PINNED).as_object().cloned().unwrap_or_default();
+        let mut kept = sh.config().tray_pinned.as_object().cloned().unwrap_or_default();
         kept.insert(name, serde_json::json!(pinned));
         change.insert("trayPinned".into(), serde_json::Value::Object(kept));
     }

@@ -11,7 +11,7 @@
 // (shell.rs rehide), and their work areas whole (keep_work).
 // Not while her home is the island, nor while her taskbar is not up; an
 // app full screen on a display hides that display's alone.
-// Split (island.rs is_split, docs/design/specs/dock-topbar.md): one on her
+// Split (island/ is_split, docs/design/specs/dock-topbar.md): one on her
 // display too, the dock: Start and the programs at the foot of the screen,
 // her strip the top bar. A window of its own (dock-1, ...) as her island's
 // is: a band along the whole foot as high as Windows' room there, never
@@ -26,7 +26,7 @@
 // at a time, its page came a frame late each time and shook (the user,
 // 2026-11-04: "not as smooth as the island").
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
@@ -35,6 +35,7 @@ use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, Webvie
 use crate::appbar::{self, Edge};
 use crate::{island, screen::Area, taskbar, Shared};
 use crate::config;
+use crate::lock::Lock;
 
 type Mon = (i32, i32, i32, i32);
 
@@ -111,7 +112,7 @@ const DOCK_H: f64 = 48.0;
 const DOCK_GLASS: f64 = 44.0;
 const DOCK_GAP: f64 = 2.0;
 // The pointer this close to the foot of the screen (logical), this long, no
-// button held meanwhile, calls it up (as her island at the top: island.rs
+// button held meanwhile, calls it up (as her island at the top: island/
 // call_look, but sooner: the user, 2026-11-02); off it (and this much
 // beside or above it, or the foot of the screen) this long, it goes.
 const DOCK_EDGE_PX: f64 = 2.0;
@@ -119,13 +120,13 @@ const DOCK_EDGE_MS: u128 = 150;
 const DOCK_BAND: f64 = 12.0;
 const DOCK_LEAVE_MS: u128 = 600;
 
-static BARS: Mutex<Vec<Bar>> = Mutex::new(Vec::new());
+static BARS: Lock<Vec<Bar>> = Lock::new("bars::BARS", Vec::new());
 
-// The strips' pages and their list's as the main taskbar's (island.rs
+// The strips' pages and their list's as the main taskbar's (island/
 // fit_zoom): zoomed so that Windows' text size is taken out of their scale,
 // each laid out at 48 of its px as thick as Windows' (zhoupengjie/Wakuwaku#90).
 // The text size as her island's page has it; each once its page is up.
-static POP_ZOOM: Mutex<f64> = Mutex::new(1.0);
+static POP_ZOOM: Lock<f64> = Lock::new("bars::POP_ZOOM", 1.0);
 
 pub fn fit_zoom(sh: &Shared) {
     let want = 1.0 / island::text_size(sh);
@@ -159,11 +160,11 @@ pub fn fit_zoom(sh: &Shared) {
 }
 static NEXT: AtomicU32 = AtomicU32::new(1);
 // The displays without a strip of hers whose work area was last made whole, and when (keep_work).
-static BARE_AT: Mutex<Vec<(Mon, Instant)>> = Mutex::new(Vec::new());
+static BARE_AT: Lock<Vec<(Mon, Instant)>> = Lock::new("bars::BARE_AT", Vec::new());
 
 // Her taskbar wanted on every display: her home the taskbar, and set so.
 pub fn wanted(sh: &Shared) -> bool {
-    sh.home() == "taskbar" && sh.setting(config::TASKBAR_DISPLAYS).as_str() == Some("all")
+    sh.home() == "taskbar" && sh.config().taskbar_displays.as_deref() == Some("all")
 }
 
 fn window(sh: &Shared, label: &str) -> Option<WebviewWindow> {
@@ -176,7 +177,7 @@ pub fn sync(sh: &Arc<Shared>) {
     let up = taskbar::is_up();
     let all = wanted(sh) && up;
     let home = island::display(sh);
-    // Split, the others' along the bottom (island.rs bars_edge).
+    // Split, the others' along the bottom (island/ bars_edge).
     let edge = island::bars_edge(sh);
     let areas = sh.screens().areas;
     // (display, the dock?): a strip on each of the others; split, the dock on hers.
@@ -299,7 +300,7 @@ fn close(sh: &Shared, g: Gone) {
 // (Explorer, as app bars come and go); a quarter of a second at Windows'
 // word that the work area changed (eager: taskbar/win/work.rs keep_work), Explorer's
 // taskbar showing itself having set it to the whole display. Its app bar's
-// place told again first, as hers (island.rs reclaim_bar): Explorer then
+// place told again first, as hers (island/ reclaim_bar): Explorer then
 // counts it, and sets the work area itself.
 pub fn keep_work(sh: &Shared, eager: bool) {
     let now = Instant::now();
@@ -416,6 +417,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
         let thick = (island::TASKBAR_H * area.sf).round() as i32;
         // The dock: the band along the foot, its glass in its middle (dock_glass).
         let strip = if dock { dock_band(area.mon, area.sf) } else { edge.strip(area.mon, thick) };
+        crate::main_wait::check("building a window");
         let built = WebviewWindowBuilder::new(&sh.app, &label, WebviewUrl::App("pet/bar.html".into()))
             .title("wakuwaku bar")
             .inner_size(strip.2 as f64 / area.sf, strip.3 as f64 / area.sf)
@@ -439,7 +441,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
             Err(err) => return sh.log(&format!("bars: {label} not made: {err}")),
         };
         #[cfg(windows)]
-        let hwnd = win.hwnd().map(|h| h.0 as isize).unwrap_or(0);
+        let hwnd = crate::main_wait::hwnd(&win).unwrap_or(0);
         #[cfg(not(windows))]
         let hwnd = 0;
         crate::tasks::no_transitions(hwnd);
@@ -481,8 +483,8 @@ fn create(sh: &Arc<Shared>, label: String, area: Area, edge: Edge, dock: bool) {
             return;
         }
         let _ = win.show();
-        let laid = match (win.outer_position(), win.outer_size()) {
-            (Ok(p), Ok(s)) => format!("({}, {}, {}, {})", p.x, p.y, s.width, s.height),
+        let laid = match (crate::main_wait::outer_position(&win), crate::main_wait::outer_size(&win)) {
+            (Some(p), Some(s)) => format!("({}, {}, {}, {})", p.x, p.y, s.width, s.height),
             _ => "?".into(),
         };
         sh.log(&format!("bars: {label} on {:?} at {}%, strip {granted:?} along the {edge:?}, window {laid}", area.mon, (area.sf * 100.0).round()));
@@ -694,7 +696,7 @@ pub fn dock_glass(app: tauri::AppHandle, window: WebviewWindow, glass: (f64, f64
 
 // One look at the pointer (poll; physical) for the dock: on its glass, its
 // window takes it, elsewhere along the band it goes through (as her
-// island's: island.rs, pointer.rs; her taskbar's look already comes every
+// island's: island/, pointer.rs; her taskbar's look already comes every
 // 30 ms); out of the way, whether it is to be now, called up or let go as
 // stow_look says. Returns ms until the next look: sooner near the foot.
 pub fn poll(sh: &Shared, cursor: (i32, i32)) -> u64 {
@@ -927,7 +929,7 @@ fn waiting(views: &Value) -> Value {
 }
 
 // Her capsule there pressed: the prompt shown in her island on the main
-// display, as a press on hers (island.rs show_asks).
+// display, as a press on hers (island/ show_asks).
 #[tauri::command]
 pub fn bar_asks(app: tauri::AppHandle) {
     let sh = crate::shared(&app);
@@ -1010,7 +1012,7 @@ fn page_scale(dpr: Option<f64>, sf: f64) -> f64 {
     crate::island::valid_scale(dpr).unwrap_or(sf)
 }
 
-static OPEN: Mutex<Option<Pop>> = Mutex::new(None);
+static OPEN: Lock<Option<Pop>> = Lock::new("bars::OPEN", None);
 static POP_MADE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static POP_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -1072,6 +1074,7 @@ pub fn bar_pop_over(app: tauri::AppHandle, window: WebviewWindow, over: bool) {
 fn make_pop(sh: &Arc<Shared>) {
     let sh = sh.clone();
     std::thread::spawn(move || {
+        crate::main_wait::check("building a window");
         let built = WebviewWindowBuilder::new(&sh.app, POP, WebviewUrl::App("pet/barpop.html".into()))
             .title("wakuwaku bar list")
             .inner_size(420.0, 300.0)
@@ -1093,7 +1096,7 @@ fn make_pop(sh: &Arc<Shared>) {
         match built {
             Ok(win) => {
                 #[cfg(windows)]
-                crate::tasks::no_transitions(win.hwnd().map(|h| h.0 as isize).unwrap_or(0));
+                crate::tasks::no_transitions(crate::main_wait::hwnd(&win).unwrap_or(0));
                 sh.own_window(&win);
                 // Zoomed before its page lays out the first list (fit_zoom).
                 let want = 1.0 / island::text_size(&sh);
@@ -1210,12 +1213,9 @@ fn hide_pop(sh: &Shared) {
 // it goes, as Windows' own; on the strip, its page has the press.
 pub fn pressed(sh: &Shared, (x, y): (i32, i32)) {
     let inside = |r: Mon| x >= r.0 && y >= r.1 && x < r.0 + r.2 && y < r.1 + r.3;
-    let away = {
-        let open = OPEN.lock().unwrap();
-        let Some(p) = open.as_ref() else { return };
-        let strip = against(&p.bar);
-        !p.rect.is_some_and(inside) && !strip.is_some_and(inside)
-    };
+    // Read out of OPEN before BARS is looked at (against): one lock at a time.
+    let Some((bar, rect)) = OPEN.lock().unwrap().as_ref().map(|p| (p.bar.clone(), p.rect)) else { return };
+    let away = !rect.is_some_and(inside) && !against(&bar).is_some_and(inside);
     if away {
         hide_pop(sh);
     }
@@ -1295,11 +1295,11 @@ pub fn refresh(sh: &Shared) {
     let spread = spread();
     let edge = island::bars_edge(sh);
     let asks = waiting(&sh.asks.lock().unwrap().views());
-    let pet = sh.setting(config::PET);
+    let pet = sh.config().pet.clone();
     let sprite = crate::data::pets(&sh.dir).into_iter().find(|p| Some(p.id.as_str()) == pet.as_str());
     // The dock's: the buttons of her strip, in its order (as Win+digit counts
     // them, winkeys.rs ordered); whether a window of them flashes.
-    let order: Vec<String> = sh.setting(config::TASKBAR_ORDER).as_array().map(|o| o.iter().filter_map(|k| k.as_str().map(str::to_string)).collect()).unwrap_or_default();
+    let order: Vec<String> = sh.config().taskbar_order.clone();
     let docked = Value::Array(crate::winkeys::ordered(&for_main(sh, &all), &order));
     let flashing = docked.as_array().into_iter().flatten().flat_map(|a| a["windows"].as_array().into_iter().flatten()).any(|w| w["flash"] == true);
     for b in BARS.lock().unwrap().iter_mut().filter(|b| b.dock) {
@@ -1310,7 +1310,7 @@ pub fn refresh(sh: &Shared) {
     // Windows has it (transparency effects on: backplate.rs available); else
     // its page draws the desktop's picture.
     let light = look["mode"].as_str() == Some("light");
-    let acrylic = (sh.setting(config::TASKBAR_MATERIAL).as_str() != Some("black") && crate::backplate::available()).then_some(!light);
+    let acrylic = (sh.config().taskbar_material.as_deref() != Some("black") && crate::backplate::available()).then_some(!light);
     let docks: Vec<(String, bool)> = BARS
         .lock()
         .unwrap()
@@ -1341,15 +1341,15 @@ pub fn refresh(sh: &Shared) {
             // Its Recycle Bin, as last looked at (look_at_bin).
             "bin": if dock { bins.get(&label).cloned().unwrap_or(Value::Null) } else { Value::Null },
             // Split: quick settings and the clock in the dock, or in the top bar (splitKeys).
-            "keys": dock && sh.setting(config::SPLIT_KEYS).as_str() == Some("dock"),
+            "keys": dock && sh.config().split_keys.as_deref() == Some("dock"),
             "keysNow": if dock { taskbar::keys_now() } else { Value::Null },
             "edge": edge.word(),
-            "align": sh.setting(config::TASKBAR_ALIGN),
-            "material": sh.setting(config::TASKBAR_MATERIAL),
-            "clearWhen": sh.setting(config::TASKBAR_CLEAR_WHEN),
+            "align": sh.config().taskbar_align.clone(),
+            "material": sh.config().raw(config::TASKBAR_MATERIAL).clone(),
+            "clearWhen": sh.config().taskbar_clear_when.clone(),
             "filled": fills(&all, mon),
             "look": look,
-            "islandLook": sh.setting(config::ISLAND_LOOK),
+            "islandLook": sh.config().island_look.clone(),
             "lang": sh.lang(),
             "sf": sf,
             "windows": if dock { docked.clone() } else { buttons_for(&all, mon, false, spread) },

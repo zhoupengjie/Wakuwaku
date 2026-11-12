@@ -14,7 +14,7 @@
 //     guard), as a killed process cannot give it back itself
 //   - her next start, if both were gone (recover)
 // Whoever gives it back then tells every window that Explorer's is the
-// taskbar again (systray.rs handed_back), as Explorer does when its taskbar
+// taskbar again (systray/ handed_back), as Explorer does when its taskbar
 // comes up: hers, which was the first Shell_TrayWnd, is gone.
 // Explorer shows it again now and then (a restart, the Start menu): the host
 // puts it away again (rehide) when it sees it (visible(), and the message
@@ -184,7 +184,7 @@ mod imp {
     }
 
     // The main display's taskbar, Explorer's, or 0 while Explorer is not up.
-    // Not one of the same class of ours (systray.rs), which programs are to
+    // Not one of the same class of ours (systray/), which programs are to
     // find first, whichever of her processes made it: a guard of one copy
     // once took another copy's for Explorer's and showed it, and two copies
     // handed each other the tray's messages (2026-10-10).
@@ -369,7 +369,7 @@ mod imp {
     // area stopping at it): its window (Shell_TrayWnd, or a second
     // display's Shell_SecondaryTrayWnd), its strip (physical, the display's
     // whole length) and the edge it is along, for her capsule to go into
-    // it (embed.rs) and her island to lie over it (island.rs fit); none
+    // it (embed.rs) and her island to lie over it (island/ fit); none
     // while none shows along any edge (hidden, slid away).
     pub fn shown_bar(mon: (i32, i32, i32, i32)) -> Option<(isize, (i32, i32, i32, i32), Edge)> {
         let (left, top, right, bottom) = (mon.0, mon.1, mon.0 + mon.2, mon.1 + mon.3);

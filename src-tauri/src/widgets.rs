@@ -35,12 +35,13 @@
 //   tokens   today's tokens, Claude Code's, Codex's, Antigravity's, omp's, DSH's and Reasonix's (tokens.rs)
 //
 // Hers too, never expiring and never a script's: each mail account's
-// (mail.rs, "inbox-<id>"). And a third-party plugin's (addons.rs, "<id>"
+// (mail.rs, "inbox-<id>"). And a third-party plugin's (addons/, "<id>"
 // and "<id>_<sub>"), checked as a script's, kept while it runs.
 use std::collections::HashMap;
 use std::path::Path;
 
 use serde_json::{json, Value};
+use crate::lock::Lock;
 
 pub const ICONS: [&str; 26] = [
     "cpu", "weather", "note", "calendar", "bell", "stock", "today", "clock", "mail", "music", "code", "star", "dot", "chart", "battery", "timer", "flag", "server",
@@ -66,10 +67,10 @@ pub struct Widget {
     until: Option<u64>,
     at: u64,
     private: bool,
-    // A third-party plugin's (addons.rs): kept while it runs, gone as it
+    // A third-party plugin's (addons/): kept while it runs, gone as it
     // stops; and what it gave for its own view (tier 2), with its revision
     // (the pages see the number alone, and ask for the view as it changes:
-    // addons.rs addon_view), none for one whose plugin has no view.html.
+    // addons/ addon_view), none for one whose plugin has no view.html.
     addon: bool,
     view: Value,
     view_rev: Option<u64>,
@@ -305,7 +306,7 @@ impl Widgets {
         Ok(Put { id: id.into(), nudge })
     }
 
-    // A third-party plugin's widget (addons.rs; its id `<plugin>` or
+    // A third-party plugin's widget (addons/; its id `<plugin>` or
     // `<plugin>_<sub>`), checked as a script's is, its label the plugin's
     // name when none is given. No time to live: it stays while the plugin
     // runs, and goes as it stops (remove_addons). What it gives for its own
@@ -493,7 +494,7 @@ impl Widgets {
                         "color": w.color,
                         "builtIn": is_built_in(&w.id),
                         // builtIn, mail (hers, a mail account's), addon (a
-                        // third-party plugin's: addons.rs), or script.
+                        // third-party plugin's: addons/), or script.
                         "from": if is_built_in(&w.id) { "builtIn" } else if w.addon { "addon" } else if w.until.is_none() { "mail" } else { "script" },
                         "plugin": of,
                         "on": !off.contains(&w.id),
@@ -1135,7 +1136,7 @@ pub fn rate(bytes_per_sec: f64) -> String {
     if n < 10.0 { format!("{n:.1}{unit}") } else { format!("{n:.0}{unit}") }
 }
 
-// The machine as a plugin reads it (addons.rs, waku.hardware), when it asks
+// The machine as a plugin reads it (addons/, waku.hardware), when it asks
 // and on no thread of its own: the CPU's share of time busy and the
 // network's pace since the asking before (GetSystemTimes and the adapters'
 // counters, as the monitor reads them where Windows' own count is not to be
@@ -1150,7 +1151,7 @@ pub fn reading_now() -> Value {
         bytes: Option<(u64, u64)>,
         net: sys::Net,
     }
-    static LAST: std::sync::Mutex<Option<Last>> = std::sync::Mutex::new(None);
+    static LAST: Lock<Option<Last>> = Lock::new("widgets::LAST", None);
     let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
     // (times, bytes, whether the adapters counted changed, when).
     let take = |net: &mut sys::Net| {
@@ -1645,7 +1646,7 @@ mod tests {
         assert!(scripted(w.view(3_000, &[], &[], &|_| None)).as_array().unwrap().is_empty());
     }
 
-    // A third-party plugin's widget (addons.rs): checked as a script's, its
+    // A third-party plugin's widget (addons/): checked as a script's, its
     // name for a label none is given, no time to live, its own and no
     // script's; gone with it. Its plugin's own picture for an icon goes as
     // iconUrl, only while it gives none of hers.

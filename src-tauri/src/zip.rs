@@ -1,5 +1,5 @@
 // Zips read and unpacked: LibreHardwareMonitor's download (lhm_setup.rs)
-// and a plugin's package (addons.rs). Stored and deflated entries, each
+// and a plugin's package (addons/). Stored and deflated entries, each
 // checked by its size and CRC; every name checked, no path out of the
 // folder; no ZIP64 (neither is past a few hundred MB), no encryption, names
 // in UTF-8 or ASCII. Moved here from lhm_setup.rs when plugins came.
@@ -182,7 +182,7 @@ pub fn extract(b: &[u8], dir: &Path) -> Result<usize, String> {
 pub mod tests {
     // A zip as Windows' and .NET's makers write one: stored and deflated
     // entries, folders, a UTF-8 name (for the tests here, lhm_setup.rs's
-    // and addons.rs's).
+    // and addons/'s).
     pub fn zip_of(files: &[(&str, &[u8], bool)]) -> Vec<u8> {
         use flate2::write::DeflateEncoder;
         use std::io::Write;

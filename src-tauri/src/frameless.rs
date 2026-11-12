@@ -32,7 +32,7 @@
 // all of the window. And should one be drawn all the same, the surface is
 // wiped (wipe: drawn anew, erased, the page above it left alone), as the
 // window is given back after it was minimized, is activated or let go, and
-// as Windows moves it (island.rs keep_on_screen).
+// as Windows moves it (island/ keep_on_screen).
 //
 // Nor are they in Alt+Tab: tao gives every window WS_EX_APPWINDOW and keeps a
 // window off the taskbar by taking its button away (ITaskbarList DeleteTab),
@@ -44,6 +44,7 @@
 // (WS_EX_LAYERED), or the taskbar's XAML takes every pointer meant for it:
 // kept so the same way (keep_layered), as tao writes its style back.
 use std::ffi::c_void;
+use crate::lock::Lock;
 
 type Hwnd = *mut c_void;
 type Subclass = unsafe extern "system" fn(Hwnd, u32, usize, isize, usize, usize) -> isize;
@@ -156,10 +157,10 @@ fn as_tool_window(style_ex: u32) -> u32 {
 }
 
 // Windows of hers minimized now, for their surface to be wiped once given back.
-static MINIMIZED: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec::new());
+static MINIMIZED: Lock<Vec<isize>> = Lock::new("frameless::MINIMIZED", Vec::new());
 // Windows of hers kept layered (embed.rs): the bit put back as tao writes
 // its own extended style.
-static LAYERED: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec::new());
+static LAYERED: Lock<Vec<isize>> = Lock::new("frameless::LAYERED", Vec::new());
 
 fn kept_layered(hwnd: isize) -> bool {
     LAYERED.lock().unwrap_or_else(|e| e.into_inner()).contains(&hwnd)
@@ -235,7 +236,7 @@ pub fn wipe(hwnd: isize) {
     unsafe { RedrawWindow(hwnd as Hwnd, std::ptr::null(), 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ERASENOW | RDW_NOCHILDREN) };
 }
 
-// Whether a window of hers is minimized: island.rs and pet.rs leave it so,
+// Whether a window of hers is minimized: island/ and pet.rs leave it so,
 // never laying it again till it is given back.
 pub fn minimized(hwnd: isize) -> bool {
     // SAFETY: a plain call about a window; a stale handle answers no.
@@ -253,7 +254,7 @@ struct Rect {
 
 // Where a window of hers is and how big (physical: x, y, w, h), asked of
 // Windows directly, on any thread (no wait on the main thread, as a window
-// getter's): island.rs lay sizes it down before it moves it. None for a
+// getter's): island/ lay sizes it down before it moves it. None for a
 // window gone.
 pub fn rect(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
     let mut r = Rect::default();

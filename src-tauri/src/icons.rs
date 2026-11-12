@@ -32,6 +32,7 @@ use std::path::{Path, PathBuf};
 
 #[cfg(windows)]
 use serde_json::{json, Value};
+use crate::lock::Lock;
 
 // The file her icons' places are kept in, in her data folder.
 pub fn file(data: &Path) -> PathBuf {
@@ -384,7 +385,7 @@ mod imp {
         // (the test VM, its left display at 175 %: 130 x 147 against 93 x
         // 125, from 23 px left of where the view says the item is). Empty
         // when the list cannot be read (another kind of desktop, Explorer
-        // busy): the places and the spacing then (desk.rs icons).
+        // busy): the places and the spacing then (desk/ icons).
         pub fn bounds(&self) -> Vec<Rect> {
             const LVM_GETITEMCOUNT: u32 = 0x1004;
             const LVM_GETITEMRECT: u32 = 0x100E;
@@ -515,7 +516,7 @@ pub use imp::{describe, desktop, with_com, Item, Point, Rect};
 
 // One at a time, and each but a moment: quitting waits on it (hold, given_back).
 #[cfg(windows)]
-static BUSY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+static BUSY: Lock<()> = Lock::new("icons::BUSY", ());
 
 // Bumped as the strip is given back (hold, given_back): a later look at the
 // icons for a strip taken before is not taken any more.
@@ -713,7 +714,7 @@ pub fn strip_taken(data: &Path, strip: (i32, i32, i32, i32), edge: &str, log: im
 }
 
 // The places before her strip goes along the top, the left or the right,
-// before anything of it moves them (island.rs sync_bar_now, before Windows'
+// before anything of it moves them (island/ sync_bar_now, before Windows'
 // own is put away, her app bar asked for, the work area set: each of those
 // may have the desktop lay them anew, and read after it the places kept
 // were already those for the strip, given back a strip's width off; the test

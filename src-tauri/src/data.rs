@@ -7,6 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
+use crate::lock::Lock;
 
 // The source tree she was built in (build.rs); none in a release asset,
 // which carries no path of the machine that built it.
@@ -95,7 +96,7 @@ pub fn from_source() -> bool {
 // own while she runs is told here (updates.rs: an update's old exe taking
 // its name back, or kept as <name>.old.exe), for what starts her or names
 // her (her Run value, the hooks, her guard, her next update).
-static EXE: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+static EXE: Lock<Option<PathBuf>> = Lock::new("data::EXE", None);
 
 pub fn exe() -> std::io::Result<PathBuf> {
     match EXE.lock().unwrap_or_else(|e| e.into_inner()).clone() {
@@ -286,7 +287,7 @@ pub fn pet_dirs(dir: &Path) -> Vec<PathBuf> {
 // or taken away changes its folder's time), or she puts one in herself
 // (forget_pets). Asked for on every redraw: the folders were read through
 // each time.
-static PETS: std::sync::Mutex<Option<(u64, Vec<Option<std::time::SystemTime>>, Vec<PetInfo>)>> = std::sync::Mutex::new(None);
+static PETS: Lock<Option<(u64, Vec<Option<std::time::SystemTime>>, Vec<PetInfo>)>> = Lock::new("data::PETS", None);
 static PETS_PUT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 // A pet put in by her (fetch.rs put_pet): what was found is looked for anew.

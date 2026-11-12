@@ -33,10 +33,10 @@ pub const CODEX_CHAIN: &str = "wakuwaku_chain";
 
 #[cfg(windows)]
 mod imp {
+    use crate::lock::Lock;
     use std::collections::HashMap;
     use std::ffi::c_void;
     use std::path::{Path, PathBuf};
-    use std::sync::Mutex;
 
     use super::Chain;
 
@@ -585,7 +585,7 @@ mod imp {
     // (zhoupengjie/Wakuwaku#100). So hers (none, in a release build) are put
     // back as they were.
     fn console_window(pid: u32) -> Option<isize> {
-        static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+        static ONE_AT_A_TIME: Lock<()> = Lock::new("jump::ONE_AT_A_TIME", ());
         let _one = ONE_AT_A_TIME.lock().unwrap();
         // SAFETY: attached only for these few calls, and let go of again;
         // the standard handles put back are the ones she had.
@@ -701,7 +701,7 @@ mod imp {
     // The desktop app's own id for a Claude Code session it runs (local_…),
     // remembered once found.
     pub fn desktop_session(cli_session: &str) -> Option<String> {
-        static KNOWN: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+        static KNOWN: Lock<Option<HashMap<String, String>>> = Lock::new("jump::KNOWN", None);
         if cli_session.is_empty() {
             return None;
         }

@@ -35,10 +35,10 @@
 
 #[cfg(windows)]
 mod imp {
+    use crate::lock::Lock;
     use std::collections::HashMap;
     use std::ffi::c_void;
     use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
-    use std::sync::Mutex;
     use std::thread::JoinHandle;
 
     use serde_json::{json, Value};
@@ -240,22 +240,22 @@ mod imp {
 
     // The switcher's thread, its id (for the messages to it), the layout in
     // front as last told (keys_loop), the icons' size (physical px).
-    static THREAD: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
+    static THREAD: Lock<Option<JoinHandle<()>>> = Lock::new("inputs::THREAD", None);
     static THREAD_ID: AtomicU32 = AtomicU32::new(0);
     static LAYOUT: AtomicU32 = AtomicU32::new(0);
     static SIZE: AtomicI32 = AtomicI32::new(16);
     // What the page is told (now()), and the icons drawn for it: by key (an
     // input method's id, or "mode:" and a hash of the mode's picture), each
     // with whether it was sent.
-    static NOW: Mutex<Value> = Mutex::new(Value::Null);
-    static PNGS: Mutex<Option<HashMap<String, (String, bool)>>> = Mutex::new(None);
+    static NOW: Lock<Value> = Lock::new("inputs::NOW", Value::Null);
+    static PNGS: Lock<Option<HashMap<String, (String, bool)>>> = Lock::new("inputs::PNGS", None);
     // The input methods to pick from, as last read (methods()), and when.
-    static METHODS: Mutex<Option<(Vec<Method>, std::time::Instant)>> = Mutex::new(None);
+    static METHODS: Lock<Option<(Vec<Method>, std::time::Instant)>> = Lock::new("inputs::METHODS", None);
     // Asked to stop before its thread had given out its id (stop).
     static STOPPING: AtomicBool = AtomicBool::new(false);
     // How an icon is drawn into a PNG (taskbar/win/tray.rs png_of).
     type Draw = fn(isize, i32) -> Option<String>;
-    static DRAW: Mutex<Option<Draw>> = Mutex::new(None);
+    static DRAW: Lock<Option<Draw>> = Lock::new("inputs::DRAW", None);
 
     // One of the input methods to pick from, as Windows' language list has
     // it (Control Panel\International\User Profile): its id there
@@ -683,12 +683,13 @@ mod imp {
     }
 
     // An icon kept for the page under its key; drawn once.
+    // Drawn with PNGS let go (drawing takes DRAW): one lock at a time.
     fn keep_png(key: &str, make: impl FnOnce() -> Option<String>) -> Option<String> {
-        let mut pngs = PNGS.lock().unwrap();
-        let pngs = pngs.get_or_insert_with(HashMap::new);
-        if !pngs.contains_key(key) {
-            pngs.insert(key.to_string(), (make()?, false));
+        if PNGS.lock().unwrap().as_ref().is_some_and(|p| p.contains_key(key)) {
+            return Some(key.to_string());
         }
+        let png = make()?;
+        PNGS.lock().unwrap().get_or_insert_with(HashMap::new).entry(key.to_string()).or_insert((png, false));
         Some(key.to_string())
     }
 
@@ -820,8 +821,9 @@ mod imp {
     // Started with the taskbar's keys (taskbar/win/hold.rs take): told when the
     // input method in front changed; its log lines.
     pub fn start(draw: Draw, changed: Box<dyn Fn() + Send>, log: Box<dyn Fn(&str) + Send>) {
-        let mut thread = THREAD.lock().unwrap();
-        if thread.is_some() {
+        // One lock at a time: whether it runs, then what it draws with,
+        // then the thread (started by the taskbar's take alone).
+        if THREAD.lock().unwrap().is_some() {
             return;
         }
         *DRAW.lock().unwrap() = Some(draw);
@@ -830,7 +832,10 @@ mod imp {
         if let Some(pngs) = PNGS.lock().unwrap().as_mut() {
             pngs.values_mut().for_each(|v| v.1 = false);
         }
-        *thread = Some(std::thread::Builder::new().name("taskbar input".into()).spawn(move || run(changed, log)).expect("a thread"));
+        let mut thread = THREAD.lock().unwrap();
+        if thread.is_none() {
+            *thread = Some(std::thread::Builder::new().name("taskbar input".into()).spawn(move || run(changed, log)).expect("a thread"));
+        }
     }
 
     // Asked to stop (taskbar/win/hold.rs give_back): its thread, to be waited for.

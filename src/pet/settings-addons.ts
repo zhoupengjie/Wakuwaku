@@ -1,46 +1,20 @@
 // Other people's plugins (addons.rs view; addonui.ts) and packs (packs.rs):
 // each one's row and its own page with what it may do, and the pages under
 // the Plugins page (SUBS).
-// Made by settings.ts in the section's place as the page starts
-// (addonsPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are; what the settings
-// remember is core.st (settings-vars.ts), read and written as st.<name>;
-// what it hands back is the settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (addonsPart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as AddonUI from './addonui.ts'
 import * as Widgets from './widgets.ts'
-import type { SettingsVars } from './settings-vars.ts'
+import type { SettingsCore } from './settings.ts'
 
-// What this part takes of the settings' core: the names it reads;
-// settings.ts's call is checked against them.
-export interface AddonsCore {
-  st: SettingsVars
-  AddonUI: any
-  COLOR: any
-  T: any
-  Widgets: any
-  drafts: any
-  draw: any
-  esc: any
-  freshRows: any
-  loadGallery: any
-  marketItem: any
-  marketItemPage: any
-  marketPage: any
-  nameList: any
-  part: any
-  placeHTML: any
-  placeOf: any
-  relayout: any
-  sec: any
-  seg: any
-  showPart: any
-  sw: any
-}
-
-export function addonsPart(core: AddonsCore) {
+export function addonsPart(core: SettingsCore) {
   const {
-    st, AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part, placeHTML, placeOf,
-    sec, seg, showPart, sw,
+    st, pieces, AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part,
+    placeHTML, placeOf, sec, seg, showPart, sw,
   } = core
 
   const addonsNow = () => (st.snap?.addons || []).filter(a => a.kind === 'plugin')
@@ -113,8 +87,8 @@ export function addonsPart(core: AddonsCore) {
   const SUBS = {
     addon: s => addonById(s.id) && addonPage(addonById(s.id)),
     pack: s => packById(s.kind, s.id) && packPage(packById(s.kind, s.id)),
-    market: () => core.marketPage(),
-    mkItem: s => core.marketItem(s.id) && core.marketItemPage(core.marketItem(s.id)),
+    market: () => pieces.market.marketPage(),
+    mkItem: s => pieces.market.marketItem(s.id) && pieces.market.marketItemPage(pieces.market.marketItem(s.id)),
   }
   function crumbHTML(path) {
     const last = path.length - 1

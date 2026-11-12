@@ -1,51 +1,23 @@
 // The welcome at the top of General: the agents found on this computer, how
 // each is connected, connecting them all at once; the displays' rows, the
 // shortcuts that failed; and which page draws which tab (PAGES).
-// Made by settings.ts in the section's place as the page starts
-// (welcomePart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are; what the settings
-// remember is core.st (settings-vars.ts), read and written as st.<name>;
-// what it hands back is the settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (welcomePart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as Agents from './agents.ts'
-import type { IslandFace } from './island.ts'
-import type { SettingsVars } from './settings-vars.ts'
+import type { SettingsCore } from './settings.ts'
 
-// What this part takes of the settings' core: the names it reads;
-// settings.ts's call is checked against them.
-export interface WelcomeCore {
-  st: SettingsVars
-  Agents: any
-  COLOR: any
-  Island: IslandFace
-  T: any
-  aboutHTML: any
-  esc: any
-  failed: any
-  known: any
-  nameList: any
-  pageAgents: any
-  pageAlerts: any
-  pageCrash: any
-  pageLook: any
-  pageMail: any
-  pageNet: any
-  pageNow: any
-  pageUpdate: any
-  pageWidgets: any
-  part: any
-  row: any
-  sec: any
-  seg: any
-  sw: any
-  thumb: any
-  winMode: any
-}
-
-export function welcomePart(core: WelcomeCore) {
+export function welcomePart(core: SettingsCore) {
   const {
-    st, Agents, COLOR, Island, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
-    pageMail, pageNet, pageNow, pageUpdate, pageWidgets, part, row, sec, seg, sw, thumb, winMode,
+    st, pieces, Agents, COLOR, Island, T, esc, nameList, pageAlerts, pageNow, part, row, sec, seg, sw, thumb,
   } = core
+  const { pageLook, winMode } = pieces.look
+  const { pageWidgets } = pieces.plugins
+  const { pageMail, pageNet } = pieces.letter
+  const { aboutHTML, failed, known, pageAgents, pageCrash, pageUpdate } = pieces.agents
 
   const anyIn = () => Agents.TABLE.some(a => Agents.isIn(st.snap, a.id))
   const welcomeFolded = () => st.snap.settings.connectHintOff === true && !st.welcomeOpen && !anyIn()

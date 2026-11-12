@@ -2,74 +2,26 @@
 // read; the Mail page drawn, with its accounts and the codes come by mail;
 // the Network page (the proxy, how she reaches the web, its test); and the
 // menus a letter and a button open.
-// Made by settings.ts in the section's place as the page starts
-// (letterPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are; what the settings
-// remember is core.st (settings-vars.ts), read and written as st.<name>;
-// what it hands back is the settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (letterPart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
-import type { SettingsVars } from './settings-vars.ts'
+import type { SettingsCore } from './settings.ts'
 
-// What this part takes of the settings' core: the names it reads;
-// settings.ts's call is checked against them.
-export interface LetterCore {
-  st: SettingsVars
-  AGENTS: any
-  COLOR: any
-  MOST_FILES: any
-  PROXY_KINDS: any
-  T: any
-  Widgets: any
-  accountOf: any
-  agentsHTML: any
-  body: any
-  choicesOf: any
-  confOf: any
-  draw: any
-  esc: any
-  expanded: any
-  firstAgent: any
-  handButtons: any
-  inbox: any
-  inboxHTML: any
-  inboxId: any
-  isLetter: any
-  isReading: any
-  keepDraft: any
-  labelOf: any
-  layer: any
-  listed: any
-  loginWhy: any
-  mailDate: any
-  mailError: any
-  mailFormHTML: any
-  mailList: any
-  mailNote: any
-  mailSize: any
-  patch: any
-  people: any
-  providerOf: any
-  redrawMail: any
-  relayout: any
-  row: any
-  sec: any
-  seg: any
-  setConf: any
-  sw: any
-  talkHTML: any
-  talkOf: any
-  twoPanes: any
-  where: any
-}
-
-export function letterPart(core: LetterCore) {
+export function letterPart(core: SettingsCore) {
   const {
-    st, AGENTS, COLOR, MOST_FILES, PROXY_KINDS, T, Widgets, accountOf, agentsHTML, body, choicesOf, confOf, draw,
-    esc, expanded, firstAgent, handButtons, inbox, inboxHTML, inboxId, isLetter, isReading, keepDraft,
-    labelOf, layer, listed, loginWhy, mailDate, mailError, mailFormHTML, mailList, mailNote, mailSize, patch,
-    people, providerOf, redrawMail, row, sec, seg, setConf, sw, talkHTML, talkOf, twoPanes, where,
+    st, pieces, AGENTS, COLOR, MOST_FILES, T, Widgets, body, draw, esc, expanded, inbox, keepDraft, layer,
+    patch, redrawMail, row, sec, seg, sw,
   } = core
+  const {
+    PROXY_KINDS, accountOf, agentsHTML, choicesOf, confOf, firstAgent, handButtons, inboxHTML, inboxId,
+    isLetter, isReading, labelOf, listed, loginWhy, mailDate, mailError, mailFormHTML, mailList, mailNote,
+    mailSize, people, providerOf, setConf, talkHTML, talkOf, twoPanes, where,
+  } = pieces.mail
 
   const personLine = p => (p.name ? `${/[,;"<>]/.test(p.name) ? `"${p.name.replace(/"/g, '')}"` : p.name} <${p.address}>` : p.address)
   const peopleLine = list => list.map(personLine).join(', ')
@@ -369,7 +321,7 @@ export function letterPart(core: LetterCore) {
   // of a letter whose pictures are not there yet, and a letter 3,000px tall
   // was left showing its first 160 (the user's letter, 2026-10-20).
   function fitFrames() {
-    for (const frame of body.querySelectorAll('iframe.m-html')) {
+    for (const frame of body.querySelectorAll<any>('iframe.m-html')) {
       const fitWidth = doc => {
         const w = doc.documentElement.clientWidth
         if (!w) return
@@ -801,8 +753,8 @@ export function letterPart(core: LetterCore) {
   }
 
   layer.addEventListener('contextmenu', e => {
-    const letter = st.tab === 'mail' && e.target.closest('[data-letter]')
-    if (!letter || e.target.closest('.talk')) return
+    const letter = st.tab === 'mail' && (e.target as HTMLElement).closest('[data-letter]')
+    if (!letter || (e.target as HTMLElement).closest('.talk')) return
     // Ours, not the island's menu.
     e.preventDefault()
     e.stopPropagation()

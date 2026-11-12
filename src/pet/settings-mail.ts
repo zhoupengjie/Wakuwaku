@@ -2,36 +2,18 @@
 // does (the address and password, the servers found or typed, its proxy),
 // and the inbox: letters by thread, who they are from, their talks with the
 // agents.
-// Made by settings.ts in the section's place as the page starts
-// (mailPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are; what the settings
-// remember is core.st (settings-vars.ts), read and written as st.<name>;
-// what it hands back is the settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (mailPart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as Agents from './agents.ts'
-import type { SettingsVars } from './settings-vars.ts'
+import type { SettingsCore } from './settings.ts'
 
-// What this part takes of the settings' core: the names it reads;
-// settings.ts's call is checked against them.
-export interface MailCore {
-  st: SettingsVars
-  AGENTS: any
-  AGENT_NAMES: any
-  Agents: any
-  T: any
-  esc: any
-  expanded: any
-  inbox: any
-  patch: any
-  proxySetting: any
-  row: any
-  sec: any
-  seg: any
-  waySetting: any
-}
-
-export function mailPart(core: MailCore) {
+export function mailPart(core: SettingsCore) {
   const {
-    st, AGENTS, AGENT_NAMES, Agents, T, esc, expanded, inbox, patch, row, sec, seg,
+    st, pieces, AGENTS, AGENT_NAMES, Agents, T, esc, expanded, inbox, patch, row, sec, seg,
   } = core
 
   // What went wrong with a mail account, in words: through a proxy, which
@@ -73,7 +55,7 @@ export function mailPart(core: MailCore) {
   // Whether an account reaches its servers with no proxy on the way: its
   // own setting, else the Mail page's (Windows' proxy, while there is one).
   function straight(own) {
-    const mode = own?.mode || core.proxySetting().mode
+    const mode = own?.mode || pieces.letter.proxySetting().mode
     return mode === 'none' || (mode === 'system' && !st.snap.mailSystemProxy)
   }
 
@@ -164,7 +146,7 @@ export function mailPart(core: MailCore) {
     ['socks5', 'SOCKS5'],
   ]
   const PROXY_MODES = () => [
-    ['', T('mail.proxy.page', { what: T(`mail.proxy.${core.waySetting('mailProxy').mode}Long`) })],
+    ['', T('mail.proxy.page', { what: T(`mail.proxy.${pieces.letter.waySetting('mailProxy').mode}Long`) })],
     ['system', T('mail.proxy.systemLong')],
     ['manual', T('mail.proxy.manualLong')],
     ['none', T('mail.proxy.noneLong')],

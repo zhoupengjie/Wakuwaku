@@ -1,50 +1,24 @@
 // The plugin market (market.rs; addonui.ts the words and steps): its list,
 // an item's page, installing and updating, taken away, permissions allowed,
 // installing from a file; a word at the panel's foot (toast).
-// Made by settings.ts in the section's place as the page starts
-// (marketPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are; what the settings
-// remember is core.st (settings-vars.ts), read and written as st.<name>;
-// what it hands back is the settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (marketPart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as AddonUI from './addonui.ts'
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
-import type { SettingsVars } from './settings-vars.ts'
+import type { SettingsCore } from './settings.ts'
 
-// What this part takes of the settings' core: the names it reads;
-// settings.ts's call is checked against them.
-export interface MarketCore {
-  st: SettingsVars
-  AddonUI: any
-  COLOR: any
-  T: any
-  Widgets: any
-  addonById: any
-  andList: any
-  body: any
-  canDoHTML: any
-  crumbHTML: any
-  draw: any
-  esc: any
-  freshRows: any
-  market: any
-  netNow: any
-  packById: any
-  relayout: any
-  sec: any
-  seg: any
-  setHTML: any
-  sheet: any
-  showPart: any
-  toastEl: any
-}
-
-export function marketPart(core: MarketCore) {
+export function marketPart(core: SettingsCore) {
   const {
-    st, AddonUI, COLOR, T, Widgets, addonById, andList, body, canDoHTML, crumbHTML, draw, esc, freshRows, market,
-    packById, sec, seg, setHTML, sheet, showPart, toastEl,
+    st, pieces, AddonUI, COLOR, T, Widgets, body, draw, esc, freshRows, market, sec, seg, setHTML, sheet,
+    showPart, toastEl,
   } = core
+  const { addonById, andList, canDoHTML, crumbHTML, packById } = pieces.addons
 
   // One of the index's, by its id; the version of it here (null: none).
   const marketItem = id => (market.items || []).find(i => i.id === id) || null
@@ -92,7 +66,7 @@ export function marketPart(core: MarketCore) {
   }
   function marketTrouble(t) {
     if (t.closed) return `<div class="grp mk-closed"><div class="mk-closed-t">${esc(t.text)}</div><div class="d">${esc(t.note)}</div></div>`
-    const way = t.proxy ? `<div class="r"><div class="grow d">${esc(T('s.net.now', { what: core.netNow() }))}</div><span class="link" data-mk-net>${esc(T('s.netProxy'))} ›</span></div>` : ''
+    const way = t.proxy ? `<div class="r"><div class="grow d">${esc(T('s.net.now', { what: pieces.letter.netNow() }))}</div><span class="link" data-mk-net>${esc(T('s.netProxy'))} ›</span></div>` : ''
     return `<div class="grp"><div class="r"><div class="grow"><div class="d bad mk-bad">${esc(t.text)}</div>${t.note ? `<div class="d">${esc(t.note)}</div>` : ''}</div><button class="pbtn sm" data-mk-retry${market.loading ? ' disabled' : ''}>${esc(T('mk.retry'))}</button></div>${way}</div>`
   }
   function marketRow(item) {
@@ -146,7 +120,7 @@ export function marketPart(core: MarketCore) {
     return deskCards
   }
   function fillCards() {
-    const hosts = [...body.querySelectorAll('[data-mk-cards]')]
+    const hosts = [...body.querySelectorAll<any>('[data-mk-cards]')]
     if (!hosts.length) return
     if (!WDesk) return void loadDeskCards().then(() => st.isOpen && fillCards())
     const light = document.body.classList.contains('set-light')

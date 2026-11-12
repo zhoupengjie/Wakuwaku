@@ -37,8 +37,82 @@ import { letterPart } from './settings-letter.ts'
 import { agentsPart } from './settings-agents.ts'
 import { welcomePart } from './settings-welcome.ts'
 import { settingsVars } from './settings-vars.ts'
+import type { SettingsVars } from './settings-vars.ts'
 import type { IslandFace } from './island.ts'
 import type { PickerFace } from './picker.ts'
+
+// The settings' parts as each is made (settingsPage, in its section's
+// place): what each hands back, reached by a part made before it
+// (pieces.<name>), or by one made before a later one, once the settings
+// are up.
+export interface SettingsParts {
+  look: ReturnType<typeof lookPart>
+  addons: ReturnType<typeof addonsPart>
+  market: ReturnType<typeof marketPart>
+  plugins: ReturnType<typeof pluginsPart>
+  mail: ReturnType<typeof mailPart>
+  letter: ReturnType<typeof letterPart>
+  agents: ReturnType<typeof agentsPart>
+  welcome: ReturnType<typeof welcomePart>
+}
+
+// What every part (settings-*.ts) is given as it is made (core, in
+// settingsPage): what the settings remember (st), the parts made so far
+// (pieces), and the settings' own constants and functions a part uses.
+// Spelled out here, as settingsPage's own are out of reach of a type; tsc
+// checks the core against it, and each part's use of it.
+export interface SettingsCore {
+  st: SettingsVars
+  pieces: SettingsParts
+  AGENTS: { [k: string]: string }
+  AGENT_NAMES: { [k: string]: string }
+  AddonUI: typeof AddonUI
+  Agents: typeof Agents
+  COLOR: Record<string, string>
+  Island: IslandFace | null
+  MOST_FILES: number
+  SIZES: (string | number)[][]
+  SPINS: number[]
+  T: (key: any, vars?: any) => any
+  Widgets: typeof Widgets
+  body: HTMLElement
+  drafts: Record<string, any>
+  draw: (reset?: boolean) => void
+  esc: (value: any) => string
+  expanded: Set<unknown>
+  freshRows: Set<unknown>
+  inbox: any
+  keepDraft: () => void
+  layer: HTMLElement
+  loadGallery: (more: any) => Promise<void>
+  market: any
+  nameList: (lang: any, names: any, kind?: string) => any
+  onTaskbar: (s: any) => boolean
+  openHardware: Set<unknown>
+  pageAlerts: () => string
+  pageNow: () => string
+  pagePets: () => string
+  part: (id: any, html: any) => string
+  patch: (change: any) => void
+  placeHTML: (place: any, key?: string) => string
+  placeOf: (item: any, on: any) => { at: string; name?: any }
+  pluginFields: (p: any) => string
+  pluginNote: (p: any, mine: any, placed: any) => { text: any; bad?: boolean }
+  redrawMail: (focus?: any) => void
+  relayout: () => number
+  render: (lang: any, text: any) => any
+  row: (title: any, note: any, control: any) => string
+  sec: (text: any) => string
+  seg: (key: any, options: any, current: any) => string
+  setHTML: (el: any, html: any) => boolean
+  sheet: HTMLElement
+  showPart: () => void
+  sw: (key: any, on: any, extra?: string) => string
+  thumb: (px: any, url: any, version: any, clip?: string) => string
+  toMarketRow: (kind: any, title: any, note: any) => string
+  toastEl: HTMLElement
+  widgetRows: () => any[]
+}
 
 export type SettingsFace = ReturnType<typeof settingsPage>
 
@@ -383,17 +457,28 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       <div class="links"><span class="link" data-site="site">${esc(T('settings.browse'))} ›</span></div>`
   }
 
+  // --- The parts' core ----------------------------------------------------------------
+  // What every part (settings-*.ts) is given as it is made below, each in
+  // its section's place: what the settings remember (st), the parts made so
+  // far (pieces: each one's functions as it hands them back, a later
+  // part's reached once the settings are up), and the settings' own
+  // constants and functions a part uses.
+  const pieces = {} as SettingsParts
+  const core: SettingsCore = {
+    st, pieces, AGENTS, AGENT_NAMES, AddonUI, Agents, COLOR, Island, MOST_FILES, SIZES, SPINS, T, Widgets,
+    body, drafts, draw, esc, expanded, freshRows, inbox, keepDraft, layer, loadGallery, market, nameList,
+    onTaskbar, openHardware, pageAlerts, pageNow, pagePets, part, patch, placeHTML, placeOf, pluginFields,
+    pluginNote, redrawMail, relayout, render, row, sec, seg, setHTML, sheet, showPart, sw, thumb, toMarketRow,
+    toastEl, widgetRows,
+  }
+
   // --- Her island's look (island-look.ts drawIslandLook) ---------------------------------
   // In settings-look.ts:
+  pieces.look = lookPart(core)
   const {
     ACCENT_PICKER, ilookDefault, ilookFor, ilookInput, ilookOf, ilookPresets, ilookSave, lhmAsks, pageLook,
     paperDo, winMode,
-  } = lookPart({
-    st, AddonUI, COLOR, Island, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
-    get displaysRow() { return displaysRow },
-    get packTile() { return packTile },
-    get screenRow() { return screenRow },
-  })
+  } = pieces.look
 
   function pageAlerts() {
     const s = st.snap.settings
@@ -481,7 +566,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // Where one is put (island-wmenu.ts placeNow): its place in a quiet word, or,
   // put nowhere, 添加小工具… (the picker, as her menu opens it, on its card:
   // key, picker.ts fromMenu focus).
-  const placeOf = (item, on) => Island?.placeNow?.(item, on) || { at: on ? 'isle' : null }
+  function placeOf(item, on) {
+    return Island?.placeNow?.(item, on) || { at: on ? 'isle' : null }
+  }
   function placeHTML(place, key = '') {
     if (!place.at) return `<button class="pbtn sm" data-padd="${esc(key)}">${esc(T('pl.add'))}</button>`
     const where = esc(T(`pl.at.${place.at}`, { name: place.name || '' }))
@@ -505,63 +592,45 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
 
   // --- Other people's plugins (addons.rs view; addonui.ts) ---------------------------------
   // In settings-addons.ts:
+  pieces.addons = addonsPart(core)
   const {
     SUBS, addonById, addonField, addonRow, addonsNow, andList, backSub, canDoHTML, crumbHTML, openSub,
     packById, packTile, packsGroup, toLook,
-  } = addonsPart({
-    st, AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part, placeHTML, placeOf,
-    sec, seg, showPart, sw,
-    get marketItem() { return marketItem },
-    get marketItemPage() { return marketItemPage },
-    get marketPage() { return marketPage },
-    get relayout() { return relayout },
-  })
+  } = pieces.addons
 
   // --- The market (market.rs; addonui.ts) ------------------------------------------------
   // In settings-market.ts:
+  pieces.market = marketPart(core)
   const {
     approveGo, drawSheet, fillCards, flowStep, installFromFile, installGo, loadMarket, marketInstall,
     marketItem, marketItemPage, marketPage, toast, uninstallGo, updateAll,
-  } = marketPart({
-    st, AddonUI, COLOR, T, Widgets, addonById, andList, body, canDoHTML, crumbHTML, draw, esc, freshRows, market,
-    packById, sec, seg, setHTML, sheet, showPart, toastEl,
-    get netNow() { return netNow },
-    get relayout() { return relayout },
-  })
+  } = pieces.market
 
   // --- The Plugins page, and the monitor's sensors -------------------------------------
   // In settings-plugins.ts:
-  const { pageWidgets, picksKey } = pluginsPart({
-    st, AddonUI, COLOR, SPINS, SUBS, T, Widgets, addonRow, drafts, esc, market, openHardware, packsGroup,
-    placeHTML, placeOf, pluginFields, pluginNote, render, row, sec, seg, sw, widgetRows,
-  })
+  pieces.plugins = pluginsPart(core)
+  const {
+    pageWidgets, picksKey,
+  } = pieces.plugins
 
   // --- Mail accounts and the inbox -----------------------------------------------------
   // In settings-mail.ts:
+  pieces.mail = mailPart(core)
   const {
     APP_PASSWORD, AUTHS, PROXY_KINDS, PROXY_MODES, SECURITIES, WIDE_W, accountOf, agentChoices, agentsHTML,
     boxName, choicesOf, confOf, firstAgent, formProxy, handButtons, inboxHTML, inboxId, isLetter, isReading,
     labelOf, listed, loginWhy, mailDate, mailError, mailFix, mailFormHTML, mailList, mailNote, mailSaid,
     mailSize, outFields, people, providerOf, proxyFields, setConf, talkHTML, talkOf, twoPanes, where,
-  } = mailPart({
-    st, AGENTS, AGENT_NAMES, Agents, T, esc, expanded, inbox, patch, row, sec, seg,
-    get proxySetting() { return proxySetting },
-    get waySetting() { return waySetting },
-  })
+  } = pieces.mail
 
   // --- Writing a letter ----------------------------------------------------------------------
   // In settings-letter.ts:
+  pieces.letter = letterPart(core)
   const {
-    addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu,
-    openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setProxy,
-    star, step, waySetting, write, writeAbout,
-  } = letterPart({
-    st, AGENTS, COLOR, MOST_FILES, PROXY_KINDS, T, Widgets, accountOf, agentsHTML, body, choicesOf, confOf, draw,
-    esc, expanded, firstAgent, handButtons, inbox, inboxHTML, inboxId, isLetter, isReading, keepDraft,
-    labelOf, layer, listed, loginWhy, mailDate, mailError, mailFormHTML, mailList, mailNote, mailSize, patch,
-    people, providerOf, redrawMail, row, sec, seg, setConf, sw, talkHTML, talkOf, twoPanes, where,
-    get relayout() { return relayout },
-  })
+    addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter,
+    openMenu, openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft,
+    setProxy, star, step, waySetting, write, writeAbout,
+  } = pieces.letter
 
   // --- The Agent page (agents.ts) ---------------------------------------------------------
   // One row for each agent found on this computer: a dot for how it stands
@@ -580,14 +649,10 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // those not found folded under "Other supported tools", each with where
   // to get it.
   // In settings-agents.ts:
+  pieces.agents = agentsPart(core)
   const {
     aboutHTML, agentDo, connectAll, dshSwitch, failed, known, pageAgents, pageCrash, pageUpdate, sessionOpen,
-  } = agentsPart({
-    st, Agents, COLOR, T, draw, esc, nameList, netNow, patch, row, sec, seg, sw,
-    get failedHTML() { return failedHTML },
-    get relayout() { return relayout },
-    get toolNames() { return toolNames },
-  })
+  } = pieces.agents
 
   // --- The welcome: the agents connected, at the top of General -----------------------
   // While nothing is connected (and until one sends its first event, before
@@ -603,12 +668,10 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // 不用提醒) and nothing connected: the welcome folded to one row at the
   // page's top; opened again by its 去连接, or by asking for connecting.
   // In settings-welcome.ts:
+  pieces.welcome = welcomePart(core)
   const {
     PAGES, cardShows, displaysRow, failedHTML, screenRow, toolNames, toolsHere,
-  } = welcomePart({
-    st, Agents, COLOR, Island, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
-    pageMail, pageNet, pageNow, pageUpdate, pageWidgets, part, row, sec, seg, sw, thumb, winMode,
-  })
+  } = pieces.welcome
 
   // --- Drawing --------------------------------------------------------------------------------
 
@@ -704,7 +767,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   }
 
   // After the content changed height: measure once it is laid out.
-  const relayout = () => requestAnimationFrame(() => Island?.changed())
+  function relayout() {
+    return requestAnimationFrame(() => Island?.changed())
+  }
 
   // --- Open and close ----------------------------------------------------------------------------
 

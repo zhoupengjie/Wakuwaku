@@ -1,48 +1,22 @@
 // The Plugins page: the built-in ones, those she runs and other people's,
 // where each is placed; and the monitor's settings folded out under it (its
 // sensors: Windows' own, the CPU helper, or LibreHardwareMonitor).
-// Made by settings.ts in the section's place as the page starts
-// (pluginsPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are; what the settings
-// remember is core.st (settings-vars.ts), read and written as st.<name>;
-// what it hands back is the settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (pluginsPart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as AddonUI from './addonui.ts'
 import * as Widgets from './widgets.ts'
-import type { SettingsVars } from './settings-vars.ts'
+import type { SettingsCore } from './settings.ts'
 
-// What this part takes of the settings' core: the names it reads;
-// settings.ts's call is checked against them.
-export interface PluginsCore {
-  st: SettingsVars
-  AddonUI: any
-  COLOR: any
-  SPINS: any
-  SUBS: any
-  T: any
-  Widgets: any
-  addonRow: any
-  drafts: any
-  esc: any
-  market: any
-  openHardware: any
-  packsGroup: any
-  placeHTML: any
-  placeOf: any
-  pluginFields: any
-  pluginNote: any
-  render: any
-  row: any
-  sec: any
-  seg: any
-  sw: any
-  widgetRows: any
-}
-
-export function pluginsPart(core: PluginsCore) {
+export function pluginsPart(core: SettingsCore) {
   const {
-    st, AddonUI, COLOR, SPINS, SUBS, T, Widgets, addonRow, drafts, esc, market, openHardware, packsGroup,
-    placeHTML, placeOf, pluginFields, pluginNote, render, row, sec, seg, sw, widgetRows,
+    st, pieces, AddonUI, COLOR, SPINS, T, Widgets, drafts, esc, market, openHardware, placeHTML, placeOf,
+    pluginFields, pluginNote, render, row, sec, seg, sw, widgetRows,
   } = core
+  const { SUBS, addonRow, packsGroup } = pieces.addons
 
   // The monitor's settings, folded out under it: pinned or not, how often it
   // reads (1 to 10 seconds), where its sensors come from (monitorSource:

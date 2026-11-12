@@ -1,35 +1,15 @@
 // The Agent page (agents.ts says what each agent is and can do): each one's
 // row and what opens under it, connecting, repairing, removing; and the
 // General page's update, crash reports and about.
-// Made by settings.ts in the section's place as the page starts
-// (agentsPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are; what the settings
-// remember is core.st (settings-vars.ts), read and written as st.<name>;
-// what it hands back is the settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (agentsPart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as Agents from './agents.ts'
 import { pet } from './bridge.ts'
-import type { SettingsVars } from './settings-vars.ts'
-
-// What this part takes of the settings' core: the names it reads;
-// settings.ts's call is checked against them.
-export interface AgentsCore {
-  st: SettingsVars
-  Agents: any
-  COLOR: any
-  T: any
-  draw: any
-  esc: any
-  failedHTML: any
-  nameList: any
-  netNow: any
-  patch: any
-  relayout: any
-  row: any
-  sec: any
-  seg: any
-  sw: any
-  toolNames: any
-}
+import type { SettingsCore } from './settings.ts'
 
 // Why one could not be written: the error, its kind, and the folder it was
 // for, or DeepSeek Harness's way it was switching to.
@@ -40,10 +20,11 @@ interface Failure {
   via?: string
 }
 
-export function agentsPart(core: AgentsCore) {
+export function agentsPart(core: SettingsCore) {
   const {
-    st, Agents, COLOR, T, draw, esc, nameList, netNow, patch, row, sec, seg, sw,
+    st, pieces, Agents, COLOR, T, draw, esc, nameList, patch, row, sec, seg, sw,
   } = core
+  const { netNow } = pieces.letter
 
   // Why each could not be written: { error, kind, folder } (locked, invalid, path, other).
   const failed: Record<string, Failure> = {}
@@ -87,7 +68,7 @@ export function agentsPart(core: AgentsCore) {
   let dshSwitching = ''
   async function dshSwitch(via, registry?) {
     if (st.connecting) return
-    const r = Agents.read(st.snap, 'dsh') || {}
+    const r: any = Agents.read(st.snap, 'dsh') || {}
     if (!registry && !Agents.isIn(st.snap, 'dsh')) return (r.via || 'plugin') === via ? undefined : patch({ dshVia: via })
     if (!registry && r.way === via && r.status === 'ok') return
     st.connecting = 'dsh'
@@ -195,7 +176,7 @@ export function agentsPart(core: AgentsCore) {
   // DSH and her plugin (connection/dsh.rs dsh_view): loaded, when and in which
   // profile; an older one loaded; DSH to be restarted; DSH to start.
   function dshNote(state) {
-    const r = Agents.read(st.snap, 'dsh') || {}
+    const r: any = Agents.read(st.snap, 'dsh') || {}
     const load = r.load || {}
     // The hook bridge: an event of it since DSH started, the first still to
     // come, or DSH not running.
@@ -257,7 +238,7 @@ export function agentsPart(core: AgentsCore) {
   // Connect; being switched to: that one), and in grey what it means
   // (dshSwitch switches).
   function dshWay() {
-    const r = Agents.read(st.snap, 'dsh') || {}
+    const r: any = Agents.read(st.snap, 'dsh') || {}
     const way = dshSwitching || (Agents.isIn(st.snap, 'dsh') ? r.way : r.via || 'plugin')
     const options = [
       ['plugin', T('ag.dsh.viaPlugin')],
@@ -288,7 +269,7 @@ export function agentsPart(core: AgentsCore) {
           : `<button class="pbtn sm al" data-agent="${id}:install" ${st.connecting ? 'disabled' : ''}>${busy ? `<span class="spin"></span>${esc(T('wc.busy'))}` : esc(T(state === 'failed' ? 'wc.toolRetry' : 'ag.do.install'))}</button>`
     // A version she does not connect to: no file of hers to show.
     const top = id === 'claude' ? claudeWays() : id === 'dsh' ? `${dshWay()}${agentFiles(id)}` : `${field('ag.via', esc(viaOf(id)))}${state === 'unsupported' ? '' : agentFiles(id)}`
-    return `<div class="ag-det">${agentSteps(id, state)}${failed[id] ? core.failedHTML(id) : ''}${top}
+    return `<div class="ag-det">${agentSteps(id, state)}${failed[id] ? pieces.welcome.failedHTML(id) : ''}${top}
         <div class="ag-what">${esc(T(Agents.whatOf(st.snap, id)))}</div>
         <div class="ag-caps">${caps}</div>
         ${agentNotes(id, state)}
@@ -302,7 +283,7 @@ export function agentsPart(core: AgentsCore) {
     const left = Agents.toConnect(st.snap, known())
     // Hidden with none left; its tooltip names whom it connects.
     const all = left.length
-      ? `<button class="pbtn sm al" data-ag-all title="${esc(T('ag.connectAllTip', { list: core.toolNames(left, 'and') }))}" ${st.connecting || connectingAll ? 'disabled' : ''}>${connectingAll ? `<span class="spin"></span>${esc(T('wc.busy'))}` : esc(T('ag.connectAll', { n: left.length }))}</button>`
+      ? `<button class="pbtn sm al" data-ag-all title="${esc(T('ag.connectAllTip', { list: pieces.welcome.toolNames(left, 'and') }))}" ${st.connecting || connectingAll ? 'disabled' : ''}>${connectingAll ? `<span class="spin"></span>${esc(T('wc.busy'))}` : esc(T('ag.connectAll', { n: left.length }))}</button>`
       : ''
     const rows = here.length ? here.map(agentRow).join('') : `<div class="note">${esc(T('ag.noneHere'))}</div>`
     // What the icons are, once.

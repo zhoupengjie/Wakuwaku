@@ -1,44 +1,20 @@
 // The Look page: her home (island, taskbar, the top bar and dock), her
 // island's look by Windows' mode (presets, or its colour and parts), Windows'
 // own mode and accent, and the desktop's picture.
-// Made by settings.ts in the section's place as the page starts
-// (lookPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are; what the settings
-// remember is core.st (settings-vars.ts), read and written as st.<name>;
-// what it hands back is the settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (lookPart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as AddonUI from './addonui.ts'
 import { pet } from './bridge.ts'
-import type { IslandFace } from './island.ts'
-import type { SettingsVars } from './settings-vars.ts'
+import type { SettingsCore } from './settings.ts'
 
-// What this part takes of the settings' core: the names it reads;
-// settings.ts's call is checked against them.
-export interface LookCore {
-  st: SettingsVars
-  AddonUI: any
-  COLOR: any
-  Island: IslandFace
-  SIZES: any
-  T: any
-  displaysRow: any
-  draw: any
-  esc: any
-  onTaskbar: any
-  packTile: any
-  pagePets: any
-  part: any
-  patch: any
-  row: any
-  screenRow: any
-  sec: any
-  seg: any
-  sw: any
-  toMarketRow: any
-}
-
-export function lookPart(core: LookCore) {
+export function lookPart(core: SettingsCore) {
   const {
-    st, AddonUI, COLOR, Island, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
+    st, pieces, AddonUI, COLOR, Island, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg,
+    sw, toMarketRow,
   } = core
 
   // By Windows' mode: a preset, or its parts one by one, over Windows' own
@@ -336,8 +312,8 @@ export function lookPart(core: LookCore) {
         <div class="mode${s.display === 'taskbar' ? ' on' : ''}" data-mode="taskbar"><div class="pv"><s></s></div><div class="l"><span class="rd"></span>${esc(T('s.displayTaskbar'))}</div></div>
         <div class="mode${s.display === 'split' ? ' on' : ''}" data-mode="split"><div class="pv"><u></u><b></b></div><div class="l"><span class="rd"></span>${esc(T('s.displaySplit'))}</div></div>
       </div>
-      ${onTaskbar(s) ? `<div class="grp"><div class="note">${esc(T(s.display === 'split' ? 's.splitNote' : 's.taskbarNote'))}</div></div><div class="grp">${s.display === 'split' ? splitRows() : row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${core.screenRow()}${core.displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${s.display === 'split' || ['left', 'right'].includes(s.taskbarEdge) ? row(esc(T('s.taskbarButtons')), esc(T(s.display === 'split' ? 's.taskbarButtonsDock' : 's.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
-      ${part('place', '')}<div class="grp">${onTaskbar(s) ? '' : core.screenRow()}${islandPosRow()}${onTaskbar(s) ? '' : islandEdgeRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${onTaskbar(s) || pet.mac || s.islandEdge === 'taskbar' ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${onTaskbar(s) ? '' : ilookRow()}</div>
+      ${onTaskbar(s) ? `<div class="grp"><div class="note">${esc(T(s.display === 'split' ? 's.splitNote' : 's.taskbarNote'))}</div></div><div class="grp">${s.display === 'split' ? splitRows() : row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${pieces.welcome.screenRow()}${pieces.welcome.displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${s.display === 'split' || ['left', 'right'].includes(s.taskbarEdge) ? row(esc(T('s.taskbarButtons')), esc(T(s.display === 'split' ? 's.taskbarButtonsDock' : 's.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
+      ${part('place', '')}<div class="grp">${onTaskbar(s) ? '' : pieces.welcome.screenRow()}${islandPosRow()}${onTaskbar(s) ? '' : islandEdgeRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${onTaskbar(s) || pet.mac || s.islandEdge === 'taskbar' ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${onTaskbar(s) ? '' : ilookRow()}</div>
       ${pageWindows()}
       ${sec(T('s.her'))}<div class="grp">
         ${row(esc(T('menu.size')), '', seg('scale', SIZES.map(([name, scale]) => [scale, T(`menu.${name}`)]), s.scale))}
@@ -425,7 +401,7 @@ export function lookPart(core: LookCore) {
       .filter(p => p.kind === 'wallpaper')
       .map(p => {
         const end = p.inUse ? `<span class="d in-use">${esc(T('packs.inUse'))}</span>` : `<button class="pbtn sm" data-paper="pack" data-pack-id="${esc(p.id)}" ${paperBusy ? 'disabled' : ''}>${esc(T('packs.use'))}</button>`
-        return `<div class="r pk-row">${core.packTile(p)}<div class="grow"><div class="ellip">${esc(p.name)}</div><div class="d ellip">${esc(AddonUI.wallLine(p, T))}</div></div>${end}</div>`
+        return `<div class="r pk-row">${pieces.addons.packTile(p)}<div class="grow"><div class="ellip">${esc(p.name)}</div><div class="d ellip">${esc(AddonUI.wallLine(p, T))}</div></div>${end}</div>`
       })
       .join('')
     return `${part('paper', '')}${sec(T('s.wallpaper'))}<div class="grp">

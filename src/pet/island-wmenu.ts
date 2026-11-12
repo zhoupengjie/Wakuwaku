@@ -334,7 +334,7 @@ export function wmenuPart(core: IslandCore) {
   // whereIs says (the strip, the desktop, a board by its name, her capsule
   // while it is on, or nowhere: null), a plugin's widgets standing on the
   // desktop by themselves counted as it.
-  function placeNow(item: WidgetItem, on: boolean) {
+  function placeNow(item: WidgetItem, on: boolean | undefined) {
     const keys = [keyFor(item), ...(item.plugin ? st.allWidgets.filter(w => w.plugin === item.plugin).map(w => `widget:${w.id}`) : [])]
     const p = Placing.whereIs({ keys, on, taskbar: home() === 'taskbar' ? tbLayout() : null, desk: st.config.deskLayout, home: home() })
     return p.board ? { at: 'board', name: pieces.boards.boardName(p.board) } : { at: p.at }

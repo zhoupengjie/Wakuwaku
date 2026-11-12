@@ -51,6 +51,17 @@ export interface AddonField {
   hint?: string
 }
 
+// A mail account (mail.rs, the setting mail): its id, address and
+// incoming server read by name, the rest of its JSON (the outgoing one,
+// its proxy, on, its status) as it comes.
+export interface MailAccount {
+  id: string
+  address: string
+  host: string
+  port: number
+  [field: string]: any
+}
+
 // What main sends (settings.rs snapshot): her settings, and the lists the
 // pages go through, each entry the Rust side's JSON, as is all the rest.
 export interface Snapshot {
@@ -63,7 +74,7 @@ export interface Snapshot {
   addons?: Addon[]
   addonsBroken?: any[]
   marketUpdates?: any[]
-  mail?: any[]
+  mail?: MailAccount[]
   displays?: any[]
   asks?: any[]
   shortcutsFailed?: string[]
@@ -140,12 +151,35 @@ export interface LetterAt {
   uid: number
 }
 
-// The letter open: busy while it is read, then the letter and its talk
-// (letters.rs, agent.rs: loose JSON), or what went wrong.
+// A letter as letters.rs gives it: its JSON, many fields, each read where
+// it is drawn.
+export type Letter = any
+// A conversation (threads.rs): its key, whose, its letters, who wrote
+// (oneself: me), the letter a click opens; the rest as it comes.
+export interface Thread {
+  key: string
+  account: string
+  letters: Letter[]
+  people: { name?: string; me?: boolean }[]
+  open?: { folder: string; uid: number } | null
+  [field: string]: any
+}
+// A talk with an agent about a letter (agent.rs): with whom, how it goes
+// (running, failed, done), what went wrong, what was said in turns (who:
+// start, me, tool, agent).
+export interface Talk {
+  agent: string
+  state: string
+  error?: string
+  turns: { who: string; text: string }[]
+}
+
+// The letter open: busy while it is read, then the letter and its talk,
+// or what went wrong (mail.rs: its JSON).
 export interface Reading extends LetterAt {
   busy?: boolean
-  letter?: any
-  talk?: any
+  letter?: Letter
+  talk?: Talk | null
   error?: any
 }
 

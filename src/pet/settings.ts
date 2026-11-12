@@ -39,7 +39,7 @@ import { welcomePart } from './settings-welcome.ts'
 import { settingsVars } from './settings-vars.ts'
 import * as State from './settings-state.ts'
 import { TABS, PART_OF } from './settings-state.ts'
-import type { Addon, Plugin, Settings, SettingsVars } from './settings-vars.ts'
+import type { Addon, Plugin, Settings, SettingsVars, Thread } from './settings-vars.ts'
 import type { Widget } from './widgets.ts'
 import type { SettingsEvent } from './settings-state.ts'
 import type { IslandFace } from './island.ts'
@@ -68,7 +68,7 @@ export interface Inbox {
   id: string
   for: string
   filter: string
-  threads: any[]
+  threads: Thread[]
   total: number
   letters: number
   count: number

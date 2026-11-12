@@ -10,6 +10,12 @@
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 
+// Where the keyboard is on the strip: the programs' buttons, the tray, or
+// what opened over them (a program's list, the folded tray icons); and
+// the one it is on, by its key (and its place).
+type KeyPart = 'apps' | 'tray' | 'pop' | 'fly'
+type KeyAt = { id: string; i?: number }
+
 export function keysPart(core: IslandCore) {
   const {
     st, pieces, later, along, body, el, endEdit, hi, home, isOn, isSetting, isSide, lo, t,
@@ -43,15 +49,15 @@ export function keysPart(core: IslandCore) {
   // over them), the one it is on (by its key, and its place), the part and
   // the one it came from into what opened, and when the settings were
   // closed for it.
-  let keyPart = null
-  let keyAt = null
-  let keyFrom = null
+  let keyPart: KeyPart | null = null
+  let keyAt: KeyAt | null = null
+  let keyFrom: { part: KeyPart | null; at: KeyAt | null } | null = null
   let keyedAt = 0
   // Win pressed on the strip: the keyboard given back while it is held
   // (winkeys.rs pause), the ring kept for a Win+T or Win+B after it.
   let keyPaused = false
-  const keyId = node => node.dataset.app ?? node.dataset.tray ?? node.dataset.win ?? node.dataset.act ?? (node === chevron ? '^' : '')
-  function keyNodes(part) {
+  const keyId = (node: HTMLElement) => node.dataset.app ?? node.dataset.tray ?? node.dataset.win ?? node.dataset.act ?? (node === chevron ? '^' : '')
+  function keyNodes(part: KeyPart | null) {
     if (part === 'apps') return [...windowsBox.querySelectorAll('[data-app]')]
     if (part === 'tray') return [...(chevron.hidden ? [] : [chevron]), ...outBox.querySelectorAll('[data-tray]')]
     if (part === 'pop') return pop.hidden ? [] : [...pop.querySelectorAll('[data-win], [data-act]')]
@@ -88,7 +94,7 @@ export function keysPart(core: IslandCore) {
   // Drawn anew (the windows changed, a tray icon came or went): the ring found again.
   new MutationObserver(() => keyPart && keyRing()).observe(barRest, { childList: true, subtree: true })
 
-  function keyStep(by) {
+  function keyStep(by: number) {
     const nodes = keyNodes(keyPart)
     if (!nodes.length) return
     const at = Math.max(0, nodes.findIndex(n => keyId(n) === keyAt?.id))
@@ -97,7 +103,7 @@ export function keysPart(core: IslandCore) {
   }
 
   // Into what a press opened over a button, its first.
-  function keyInto(part) {
+  function keyInto(part: KeyPart) {
     keyFrom = { part: keyPart, at: keyAt }
     keyPart = part
     keyAt = null
@@ -119,7 +125,7 @@ export function keysPart(core: IslandCore) {
   // folded ones). A program's button pressed at once (pressApp), not by a
   // click: the pointer's waits for the keys held (taskbar_held), and its
   // list would not be open yet to go into.
-  function keyPress(node) {
+  function keyPress(node: HTMLElement) {
     if (keyPart === 'apps') {
       const app = appOf(node.dataset.app)
       if (app) pressApp(app, 'press')
@@ -145,7 +151,7 @@ export function keysPart(core: IslandCore) {
 
   // Shift+F10, the menu key: as a right press (a program's menu, the keyboard
   // in it; a tray icon's program's own).
-  function keyMenu(node) {
+  function keyMenu(node: HTMLElement) {
     if (keyPart === 'apps') {
       const app = appOf(node.dataset.app)
       if (app) pressApp(app, 'menu')
@@ -250,11 +256,11 @@ export function keysPart(core: IslandCore) {
   // is let go, for it may be a drag instead: an icon dragged onto ^ or into
   // the folded ones is folded away, one dragged onto the taskbar kept out,
   // either put where it is let go among the others there.
-  const trayKey = e => (e.target as HTMLElement).closest('[data-tray]')?.dataset.tray
-  let trayOver = null
+  const trayKey = (e: MouseEvent) => (e.target as HTMLElement).closest('[data-tray]')?.dataset.tray
+  let trayOver: string | null = null
   let trayMovedAt = 0
   // A left press on an icon not yet let go: { key, name, x, y, ghost }.
-  let trayPress = null
+  let trayPress: { key: string; name: string; x: number; y: number; ghost: HTMLImageElement | null } | null = null
   trayBox.addEventListener('pointerdown', e => {
     if (e.button === 0 && trayKey(e)) {
       try {
@@ -272,7 +278,8 @@ export function keysPart(core: IslandCore) {
       trayPress = null
       return pet.taskbar.tray(key, 'double')
     }
-    trayPress = { key, name: (e.target as HTMLElement).closest('[data-tray]').dataset.name, x: e.clientX, y: e.clientY, ghost: null }
+    // On an icon (trayKey found it), which has its name.
+    trayPress = { key, name: (e.target as HTMLElement).closest('[data-tray]')!.dataset.name!, x: e.clientX, y: e.clientY, ghost: null }
   })
   trayBox.addEventListener('mouseup', e => {
     const key = trayKey(e)
@@ -315,7 +322,7 @@ export function keysPart(core: IslandCore) {
   // Where a dragged icon would land at (x, y): kept out (anywhere on the
   // taskbar) or folded (the folded ones, ^), and the icon there it goes
   // beside (none: last); null, nowhere.
-  function dropAt(x, y, name) {
+  function dropAt(x: number, y: number, name: string) {
     const over = document.elementFromPoint(x, y)
     if (!over) return null
     const out = !(flyout.contains(over) || chevron.contains(over))
@@ -333,11 +340,11 @@ export function keysPart(core: IslandCore) {
   }
 
   // While dragging: a bar on the side of the icon it would land beside.
-  let dropMarked = null
-  function markDrop(drop) {
+  let dropMarked: HTMLElement | null = null
+  function markDrop(drop: { after: boolean; slot: HTMLElement | null } | null) {
     if (dropMarked) dropMarked.classList.remove('drop-before', 'drop-after')
     dropMarked = drop?.slot || null
-    if (dropMarked) dropMarked.classList.add(drop.after ? 'drop-after' : 'drop-before')
+    if (dropMarked) dropMarked.classList.add(drop!.after ? 'drop-after' : 'drop-before')
   }
   window.addEventListener('mousemove', e => {
     if (!trayPress) return
@@ -379,11 +386,12 @@ export function keysPart(core: IslandCore) {
     if (what && what !== 'settings') pet.taskbar.open(what)
     if (what === 'ime' && st.imeOpen) closeImeList()
     // A widget put there: its card, or closed again; a carousel's, the one
-    // it shows; a stack: its others opened over it, or closed again.
+    // it shows; a stack: its others opened over it, or closed again. A
+    // widget's node has its entry's id (island-layout.ts entryNode).
     const widget = (e.target as HTMLElement).closest('.tw-widget, .tw-plugin, .tw-carousel')
-    if (widget) st.wgFor === widget.dataset.entry ? closeWidgetPop() : openWidgetPop(widget.dataset.entry)
+    if (widget) st.wgFor === widget.dataset.entry ? closeWidgetPop() : openWidgetPop(widget.dataset.entry!)
     const stack = (e.target as HTMLElement).closest('.tw-stack')
-    if (stack) st.stackFor === stack.dataset.entry ? closeStackPop() : openStackPop(stack.dataset.entry)
+    if (stack) st.stackFor === stack.dataset.entry ? closeStackPop() : openStackPop(stack.dataset.entry!)
   })
   // A right press: a tray icon's program has it; on the input method, the
   // input methods to pick from; on a widget put there, its card; on the
@@ -398,14 +406,15 @@ export function keysPart(core: IslandCore) {
     if (widget) return openMenu({ where: 'bar', entry: widget.dataset.entry }, widget)
     if ((e.target as HTMLElement).closest('[data-bar="ime"]')) return st.imeOpen ? closeImeList() : openImeList()
     const mark = quickBox.contains(e.target as Node) ? quickMarkAt(e.clientX, e.clientY) : null
-    pet.menu(mark === volMark ? 'volume' : mark === netMark ? 'network' : clockBox.contains(e.target as Node) ? 'clock' : null)
+    // None: her own menu (null is none to pet.menu too, which says undefined).
+    pet.menu(mark === volMark ? 'volume' : mark === netMark ? 'network' : clockBox.contains(e.target as Node) ? 'clock' : null as unknown as undefined)
   })
   // Which of the quick settings' marks a press on its button is for: the
   // nearest along the strip, each having the button's height (its width
   // along a side), as Windows' own do. The battery's menu stays hers.
-  function quickMarkAt(x, y) {
+  function quickMarkAt(x: number, y: number) {
     const a = along(x, y)
-    let nearest = null
+    let nearest: HTMLElement | null = null
     let gap = Infinity
     for (const mark of [netMark, volMark, batMark]) {
       if (mark.hidden) continue

@@ -41,6 +41,7 @@
     "src/pet/island-boards.ts",
     "src/pet/island-glide.ts",
     "src/pet/island-ime.ts",
+    "src/pet/island-keys.ts",
     "src/pet/island-layout.ts",
     "src/pet/island-look.ts",
     "src/pet/island-plate.ts",

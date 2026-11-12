@@ -11,6 +11,19 @@ import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 
+// The battery as taskbar:keys says it (widgets.rs battery_state): its
+// level, plugged in, charging, the energy saver on, critically low, the
+// seconds left, and its percentage shown beside it.
+export interface Battery {
+  percent: number
+  plugged?: boolean
+  charging?: boolean
+  saver?: boolean
+  critical?: boolean
+  left?: number | null
+  shown?: boolean
+}
+
 export function rightPart(core: IslandCore) {
   const {
     st, pieces, Widgets, el, home, isDetailed, isPinned, isSide, island, stripHue, stripInk, t,
@@ -85,7 +98,7 @@ export function rightPart(core: IslandCore) {
     const far = at + pane + gap
     const end = far + pane
     const r = Math.max(0.5, 0.8 * dpr).toFixed(2)
-    const rect = (x, y) => `<rect x="${x}" y="${y}" width="${pane}" height="${pane}" rx="${r}"/>`
+    const rect = (x: number, y: number) => `<rect x="${x}" y="${y}" width="${pane}" height="${pane}" rx="${r}"/>`
     startButton.innerHTML = `<svg viewBox="0 0 ${box} ${box}" style="width:${box / dpr}px;height:${box / dpr}px"><defs><linearGradient id="start-blue" gradientUnits="userSpaceOnUse" x1="${at}" y1="${at}" x2="${end}" y2="${end}"><stop class="s0" offset="0"/><stop class="s1" offset="1"/></linearGradient></defs><g fill="url(#start-blue)">${rect(at, at)}${rect(far, at)}${rect(at, far)}${rect(far, far)}</g></svg>`
   }
   // Moved by its layout (position: relative), not by a transform: a moved
@@ -99,12 +112,12 @@ export function rightPart(core: IslandCore) {
     mark.style.left = '0px'
     mark.style.top = '0px'
     const r = mark.getBoundingClientRect()
-    const off = v => (Math.round(v * dpr) - v * dpr) / dpr
+    const off = (v: number) => (Math.round(v * dpr) - v * dpr) / dpr
     mark.style.left = `${off(r.left).toFixed(3)}px`
     mark.style.top = `${off(r.top).toFixed(3)}px`
   }
   // A length that starts and ends on the screen's own pixels.
-  const onPixels = v => Math.round(v * (devicePixelRatio || 1)) / (devicePixelRatio || 1)
+  const onPixels = (v: number) => Math.round(v * (devicePixelRatio || 1)) / (devicePixelRatio || 1)
   drawStartMark()
   window.addEventListener('resize', () => {
     drawStartMark()
@@ -141,7 +154,7 @@ export function rightPart(core: IslandCore) {
   taskViewButton.innerHTML = '<i class="tv-glyph"></i>'
   Promise.resolve(pet.taskbar.taskViewIcons?.()).then(icons => {
     if (!icons?.light || !icons?.dark) return
-    const img = (svg, cls) => `<img class="${cls}" alt="" draggable="false" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}">`
+    const img = (svg: string, cls: string) => `<img class="${cls}" alt="" draggable="false" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}">`
     taskViewButton.innerHTML = img(icons.light, 'tv-light') + img(icons.dark, 'tv-dark')
   })
   const startPart = el('span', 'tstart')
@@ -162,7 +175,7 @@ export function rightPart(core: IslandCore) {
   // the volume, in its own icon font (.fi: Segoe Fluent Icons).
   const quickBox = el('span', 'tquick')
   quickBox.dataset.bar = 'quick'
-  const NET = { wired: '', wifi: '', other: '', none: '' }
+  const NET: Record<string, string> = { wired: '', wifi: '', other: '', none: '' }
   const netMark = el('span', 'fi net')
   // The Wi-Fi as Windows 11 draws it, as the volume is: all its arcs faint,
   // those its signal reaches solid over them (keys.bars, tasks.rs
@@ -205,7 +218,7 @@ export function rightPart(core: IslandCore) {
     saver: ['', '', '', '', '', '', '', '', '', '', ''],
   }
   let sysBatt = false
-  let batShown = null
+  let batShown: Battery | null = null
   pet.taskbar
     .batteryFont()
     .then(bytes => {
@@ -240,14 +253,14 @@ export function rightPart(core: IslandCore) {
     },
     { passive: false },
   )
-  function showNet(kind, bars?) {
-    const level = kind === 'wifi' && Number.isInteger(bars) ? Math.min(Math.max(bars, 1), 4) : 0
+  function showNet(kind: string, bars?: number) {
+    const level = kind === 'wifi' && Number.isInteger(bars) ? Math.min(Math.max(bars!, 1), 4) : 0
     netFront.textContent = level ? WIFI[level - 1] : NET[kind] || NET.other
     netBack.textContent = level ? NET.wifi : ''
     netBack.hidden = !level
   }
   showNet('other')
-  function showVolume(v) {
+  function showVolume(v: unknown) {
     const [level, muted] = Array.isArray(v) ? v : [null, false]
     volFront.textContent = muted ? '' : level == null || level >= 67 ? '' : level >= 34 ? '' : level > 0 ? '' : ''
     // Muted, the waves' room is the struck-through speaker's, unseen.
@@ -256,7 +269,7 @@ export function rightPart(core: IslandCore) {
     volMark.title = level == null ? '' : muted ? t(st.lang, 'taskbar.muted') : t(st.lang, 'taskbar.volume', { n: level })
   }
   // { percent, plugged, charging, saver, critical, left (s), shown } (widgets.rs battery_state), or none.
-  function showBattery(b) {
+  function showBattery(b: Battery | null) {
     batShown = b
     batMark.hidden = !b
     if (!b) return
@@ -278,17 +291,17 @@ export function rightPart(core: IslandCore) {
     batMark.dataset.tint = b.charging ? 'green' : plugged ? '' : b.critical ? 'red' : b.saver ? 'yellow' : ''
     batText.textContent = `${n}%`
     batText.hidden = !b.shown
-    const left = Number.isFinite(b.left) ? Math.round(b.left / 60) : null
+    const left = Number.isFinite(b.left) ? Math.round(b.left! / 60) : null
     const time = left == null ? '' : left >= 60 ? t(st.lang, 'taskbar.hm', { h: Math.floor(left / 60), m: left % 60 }) : t(st.lang, 'taskbar.m', { m: left })
     const said = plugged ? t(st.lang, 'taskbar.batteryPlugged', { n }) : time ? t(st.lang, 'taskbar.batteryLeft', { n, time }) : t(st.lang, 'taskbar.battery', { n })
     batMark.title = b.saver ? `${said}\n${t(st.lang, 'taskbar.batterySaver')}` : said
   }
   // What is using the microphone, the camera, the location, as Windows'
   // taskbar shows it before the input method; a press, its privacy settings.
-  const PRIVACY = { mic: '', cam: '', loc: '' }
+  const PRIVACY: Record<string, string> = { mic: '', cam: '', loc: '' }
   const privBox = el('span', 'tpriv')
   let privDrawn = ''
-  function showPrivacy(use) {
+  function showPrivacy(use?: Record<string, string[]>) {
     const drawn = JSON.stringify(use || {})
     if (drawn === privDrawn) return
     privDrawn = drawn
@@ -298,7 +311,7 @@ export function rightPart(core: IslandCore) {
         .map(k => {
           const mark = el('span', 'fi', PRIVACY[k])
           mark.dataset.bar = `privacy-${k}`
-          mark.title = t(st.lang, `taskbar.inUse.${k}`, { apps: use[k].join(st.lang === 'zh' ? '、' : ', ') })
+          mark.title = t(st.lang, `taskbar.inUse.${k}`, { apps: use![k].join(st.lang === 'zh' ? '、' : ', ') })
           return mark
         }),
     )

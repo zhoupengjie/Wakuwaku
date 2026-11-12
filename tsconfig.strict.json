@@ -39,6 +39,7 @@
     "src/pet/handoff.ts",
     "src/pet/hovers.ts",
     "src/pet/island-plate.ts",
+    "src/pet/island-right.ts",
     "src/pet/mica.ts",
     "src/pet/panel.ts",
     "src/pet/pet.ts",

@@ -134,6 +134,7 @@ scripts/build-release.ps1 编译发布用的 exe，不带本机路径（见「�
 test/                     页面的单元测试（node --test，不需要 npm install）；fake-imap.js、fake-smtp.js 是试邮件用的假 IMAP、SMTP 服务器；fake-relay.js 是假的崩溃报告中转；fake-lhm.js 是假的 LibreHardwareMonitor 网页服务器
 test/fixtures/replay/     重放测试（replay.rs）：<名字>.json 是一家 agent 的一串事件，<名字>.out.json 是每一步的消息和之后的会话；改了 agent 那边的代码，结果变了测试就报出是哪一步。有意改变时 REPLAY_BLESS=1 cargo test replay 重写，再看 git diff
 relay/                    崩溃报告中转（Cloudflare Worker → GitHub issue；阿里云函数计算 → Gitee issue），部署步骤在 relay/README.md
+CLAUDE.md                 给 Claude Code 的几条约定（语言、提交信息、PR 开到 dev、测试命令、发布用的 exe），细节都指回这份说明
 docs/WIDGETS.md           自己写插件：往 /widget 发的 JSON（字段、大小和明细）
 integrations/thunderbird/ Thunderbird 扩展：未读邮件发到岛上（build.ps1 打包成 .xpi）
 docs/prototypes/          设计原型：island-settings.html 是设置长在岛里的手感原型
@@ -201,6 +202,27 @@ pwsh scripts/build-release.ps1 [-Out <文件夹>]   # 发布用的 exe：wakuwak
 | `CODEX_HOME` | Codex 的配置目录（`hooks.json`、`pets/`），默认 `~/.codex` |
 | `WAKUWAKU_DEBUG=1` | `/health` 带上两个窗口和设置，开放 `/debug/eval`、`/debug/walk` |
 | `WAKUWAKU_IDLE_HIDE_MS` | 空闲会话多久不再显示（毫秒，`0` 一直显示），代替设置 `idleHideMin` |
+
+## 提交信息
+
+`git log --oneline` 要一眼看得懂。以前一个提交的整段说明都写在标题那一行里（最近 200 个提交的标题中位数 428 个字符），一行就占满屏幕。从 2026-11-12 起这样写：
+
+- **标题**：一行，英文，不超过 72 个字符左右，说清楚改了什么，不写为什么、怎么验证的；照旧用「她」的口吻，结尾不加句号。比如 `Give Windows' taskbar back while she does not answer`。
+- **正文**：空一行再写。为什么改（用户的原话照旧可以引用，带上日期）、怎么改的、怎么验证的（测试数、在哪种环境里实测、看到了什么）。每行 72 列左右换行；整行的引用、链接、日志行、命令可以超。
+- **末尾**：用 Claude 提交的，照旧空一行写 `Co-Authored-By`。
+- **一件事一个提交**。只重构的提交，正文里写明行为不变、是怎么确认的。issue 和 PR 写成 `zhoupengjie/Wakuwaku#123`，放在正文里，不占标题。
+
+```text
+Give Windows' taskbar back while she does not answer
+
+Her guard looks at her every two seconds (crash.rs Hang). While her
+taskbar holds the strip and none of her threads has answered for ten
+seconds, it shows Windows' own again and says so in the log; ...
+
+cargo test 546; in a test VM, her main thread held for 30 s: ...
+
+Co-Authored-By: ...
+```
 
 ## 插件
 

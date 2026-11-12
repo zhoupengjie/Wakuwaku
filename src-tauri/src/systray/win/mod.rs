@@ -2,6 +2,7 @@
 // its thread and window, the icons it keeps; the icons' messages, those
 // only Explorer's tray holds, and the presses each in a file of its own.
 use crate::lock::Lock;
+use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, Ordering};
 
@@ -205,25 +206,110 @@ struct Icon {
 }
 
 static OURS: AtomicIsize = AtomicIsize::new(0);
-// Where each shown icon is on the screen (key, left, top, right, bottom), from the host.
-// Read inside ICONS (answer_rect): ranked above it (lock.rs).
-static RECTS: Lock<Vec<(u64, (i32, i32, i32, i32))>> = Lock::ranked("systray::RECTS", INSIDE_ICONS, Vec::new());
 static RAW_NOTED: AtomicU32 = AtomicU32::new(0);
-// When programs were last asked for their icons.
-static ASKED: Lock<Option<std::time::Instant>> = Lock::new("systray::ASKED", None);
 static NOTIFY: AtomicIsize = AtomicIsize::new(0);
 static NOTIFY_MSG: AtomicU32 = AtomicU32::new(0);
 static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
-static ICONS: Lock<Vec<Icon>> = Lock::new("systray::ICONS", Vec::new());
-// Icons Explorer's tray holds that never came to ours (scan_held).
-// Taken inside ICONS too (new_icon, on_icon), never the other way about.
-static HELD: Lock<Vec<HeldIcon>> = Lock::ranked("systray::HELD", INSIDE_ICONS, Vec::new());
+
+// What ours keeps is the tray's thread's alone (the one that made it,
+// start, and runs its window's loop: the taskbar's, in the pet), gone
+// with it: no lock is taken there while a program waits on its answer.
+// Others read what a press needs as it was last published (REACH), and
+// tell it where the icons are with a message (set_rects).
+thread_local! {
+    static ON_TRAY: Cell<bool> = const { Cell::new(false) };
+    // The icons ours holds.
+    static ICONS: RefCell<Vec<Icon>> = const { RefCell::new(Vec::new()) };
+    // Icons Explorer's tray holds that never came to ours (scan_held).
+    static HELD: RefCell<Vec<HeldIcon>> = const { RefCell::new(Vec::new()) };
+    // Where each shown icon is on the screen (key, left, top, right,
+    // bottom), as the page last said (set_rects).
+    static RECTS: RefCell<Vec<(u64, (i32, i32, i32, i32))>> = const { RefCell::new(Vec::new()) };
+    // When programs were last asked for their icons.
+    static ASKED: Cell<Option<std::time::Instant>> = const { Cell::new(None) };
+    // What was published last (REACH), to publish only a change.
+    static REACH_SENT: RefCell<Vec<Reach>> = const { RefCell::new(Vec::new()) };
+}
+
+// The tray's own state touched on its thread only (tests have their own).
+fn on_tray() {
+    debug_assert!(ON_TRAY.get() || cfg!(test), "the tray's icons are the tray's thread's");
+}
+
+// The icons as they are, looked at.
+fn icons_read<R>(f: impl FnOnce(&Vec<Icon>) -> R) -> R {
+    on_tray();
+    ICONS.with_borrow(f)
+}
+
+// Changed: what a press needs of them published again, if that changed.
+// Short, calling nothing out but the log's notes: a program's message
+// that comes while this thread waits on another's (hand_on) is answered
+// meanwhile, and may come back here.
+fn icons_edit<R>(f: impl FnOnce(&mut Vec<Icon>) -> R) -> R {
+    on_tray();
+    let r = ICONS.with_borrow_mut(f);
+    let now: Vec<Reach> = ICONS.with_borrow(|icons| icons.iter().map(Reach::of).collect());
+    let changed = REACH_SENT.with_borrow_mut(|was| {
+        let changed = *was != now;
+        if changed {
+            was.clone_from(&now);
+        }
+        changed
+    });
+    if changed {
+        *REACH.lock().unwrap() = Some(std::sync::Arc::new(now));
+    }
+    r
+}
+
+fn held_edit<R>(f: impl FnOnce(&mut Vec<HeldIcon>) -> R) -> R {
+    on_tray();
+    HELD.with_borrow_mut(f)
+}
+
+// What a press on an icon needs of it (tell), and whose it is (holders):
+// the tray's thread publishes it as its icons change.
+#[derive(Clone, PartialEq)]
+struct Reach {
+    key: u64,
+    hwnd: u32,
+    id: u32,
+    callback: u32,
+    version: u32,
+    pid: u32,
+    exe: String,
+}
+
+impl Reach {
+    fn of(i: &Icon) -> Reach {
+        Reach { key: i.key, hwnd: i.hwnd, id: i.id, callback: i.callback, version: i.version, pid: i.pid, exe: i.exe.clone() }
+    }
+}
+
+static REACH: Lock<Option<std::sync::Arc<Vec<Reach>>>> = Lock::ranked("systray::REACH", crate::lock::LEAF, None);
+
+fn reach() -> std::sync::Arc<Vec<Reach>> {
+    REACH.lock().unwrap().clone().unwrap_or_default()
+}
+
+// Where the icons are, as last said by another thread, not yet taken by
+// the tray's (RECTS_MSG): only the last matters.
+static RECTS_ASKED: Lock<Option<Vec<(u64, (i32, i32, i32, i32))>>> = Lock::ranked("systray::RECTS_ASKED", crate::lock::LEAF, None);
+
+// The message that tells ours to take them: one of its own name, as
+// every other message to it at WM_USER and above is a program's, for
+// Explorer's tray (hand_on).
+fn rects_msg() -> u32 {
+    static MSG: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    // SAFETY: a name of our own.
+    *MSG.get_or_init(|| unsafe { RegisterWindowMessageW(wide("WakuwakuTrayRects").as_ptr()) })
+}
 // What came, for the log: (kind, count).
-// What to say, and the next two: the log's, taken inside the others
-// (a note of what ICONS or HELD holds) and nothing inside them.
+// What to say, and the next two: the log's, taken anywhere, nothing
+// taken inside them.
 static SEEN: Lock<Vec<(String, u32)>> = Lock::ranked("systray::SEEN", crate::lock::LEAF, Vec::new());
 static NOTES: Lock<Vec<String>> = Lock::ranked("systray::NOTES", crate::lock::LEAF, Vec::new());
-const INSIDE_ICONS: u8 = crate::lock::PLAIN + 10;
 // The Explorer whose battery icon was last noted as left to it; how
 // many of its battery's messages have been told the log (the first
 // few of each Explorer's), and how many it refused in all (each told,
@@ -336,11 +422,31 @@ pub fn keep_first() -> bool {
     true
 }
 
+// Where the shown icons are on the screen (the page's command): kept by
+// the tray's thread, told it with a message, not waited for (on that
+// thread itself, as the spike draws them: kept at once).
 pub fn set_rects(rects: Vec<(u64, (i32, i32, i32, i32))>) {
-    *RECTS.lock().unwrap() = rects;
+    if ON_TRAY.get() {
+        RECTS.with_borrow_mut(|r| *r = rects);
+        return;
+    }
+    let ours = OURS.load(Ordering::SeqCst);
+    if ours == 0 {
+        return;
+    }
+    *RECTS_ASKED.lock().unwrap() = Some(rects);
+    // SAFETY: our own window; a posted message, no pointers.
+    unsafe { PostMessageW(ours as Hwnd, rects_msg(), 0, 0) };
 }
 
 extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize {
+    if msg == rects_msg() && msg != 0 {
+        let asked = RECTS_ASKED.lock().unwrap().take();
+        if let Some(rects) = asked {
+            RECTS.with_borrow_mut(|r| *r = rects);
+        }
+        return 0;
+    }
     if msg == WM_COPYDATA && lparam != 0 {
         // SAFETY: Windows' copy of the sender's struct, for the length of this call.
         let cds = unsafe { &*(lparam as *const CopyData) };
@@ -392,8 +498,8 @@ extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -
         // in that moment, or one Explorer's did not take, comes to it
         // when every program is told again (handed_back).
         let adding = tray.filter(|d| d.message == NIM_ADD);
-        let known = adding.is_some_and(|d| ICONS.lock().unwrap().iter().any(|i| same(i, &d.nid)));
-        let answering = adding.is_some() && ASKED.lock().unwrap().is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(3));
+        let known = adding.is_some_and(|d| icons_read(|icons| icons.iter().any(|i| same(i, &d.nid))));
+        let answering = adding.is_some() && ASKED.get().is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(3));
         let answer = if known || answering { Some(1) } else { hand_on(msg, wparam, lparam) };
         match tray {
             Some(data) => {
@@ -448,6 +554,7 @@ pub fn start(rect: (i32, i32, i32, i32), notify: isize, notify_msg: u32) -> bool
     if OURS.load(Ordering::SeqCst) != 0 {
         return true;
     }
+    ON_TRAY.set(true);
     NOTIFY.store(notify, Ordering::SeqCst);
     NOTIFY_MSG.store(notify_msg, Ordering::SeqCst);
     // SAFETY: our own class and window, on this thread.
@@ -508,13 +615,14 @@ fn tell_all() {
 
 // Every program asked to add its icons again (they come to ours, ahead).
 pub fn ask_again() {
-    *ASKED.lock().unwrap() = Some(std::time::Instant::now());
+    on_tray();
+    ASKED.set(Some(std::time::Instant::now()));
     tell_all();
 }
 
-// The programs with an icon in her tray (their processes).
+// The programs with an icon in her tray (their processes), as last published.
 pub fn holders() -> Vec<u32> {
-    ICONS.lock().unwrap().iter().map(|i| i.pid).filter(|&p| p != 0).collect()
+    reach().iter().map(|i| i.pid).filter(|&p| p != 0).collect()
 }
 
 pub fn place(rect: (i32, i32, i32, i32)) {
@@ -606,14 +714,17 @@ pub fn stop() {
         unsafe { DestroyWindow(ours as Hwnd) };
     }
     ASIDE.store(false, Ordering::SeqCst);
-    *ASKED.lock().unwrap() = None;
-    for icon in ICONS.lock().unwrap().drain(..) {
+    ASKED.set(None);
+    let gone = icons_edit(std::mem::take);
+    for icon in gone {
         if icon.icon != 0 {
             // SAFETY: our own copies.
             unsafe { DestroyIcon(icon.icon) };
         }
     }
-    HELD.lock().unwrap().clear();
+    held_edit(|held| held.clear());
+    RECTS.with_borrow_mut(|r| r.clear());
+    RECTS_ASKED.lock().unwrap().take();
 }
 
 // The taskbar Explorer's again, shown, ours gone (the host giving it
@@ -635,21 +746,22 @@ pub fn handed_back() -> bool {
 
 // Icons whose program is gone without saying so.
 pub fn sweep() {
-    let mut icons = ICONS.lock().unwrap();
-    let before = icons.len();
-    icons.retain(|i| {
-        // SAFETY: a plain check.
-        let alive = unsafe { IsWindow(hwnd_of(i.hwnd)) } != 0;
-        if !alive {
-            note(format!("tray: {} gone without a word", i.exe));
-            if i.icon != 0 {
-                unsafe { DestroyIcon(i.icon) };
+    let swept = icons_edit(|icons| {
+        let before = icons.len();
+        icons.retain(|i| {
+            // SAFETY: a plain check.
+            let alive = unsafe { IsWindow(hwnd_of(i.hwnd)) } != 0;
+            if !alive {
+                note(format!("tray: {} gone without a word", i.exe));
+                if i.icon != 0 {
+                    unsafe { DestroyIcon(i.icon) };
+                }
             }
-        }
-        alive
+            alive
+        });
+        icons.len() != before
     });
-    if icons.len() != before {
-        drop(icons);
+    if swept {
         changed();
     }
 }
@@ -692,7 +804,7 @@ mod tests {
     }
 
     fn ours(hwnd: u32, id: u32) -> Option<(String, u32, bool, String)> {
-        ICONS.lock().unwrap().iter().find(|i| i.hwnd == hwnd && i.id == id).map(|i| (i.exe.clone(), i.callback, i.had_icon, i.tip.clone()))
+        ICONS.with_borrow(|icons| icons.iter().find(|i| i.hwnd == hwnd && i.id == id).map(|i| (i.exe.clone(), i.callback, i.had_icon, i.tip.clone())))
     }
 
     #[test]
@@ -727,9 +839,9 @@ mod tests {
     #[test]
     fn an_icon_its_program_hands_ours_takes_the_place_of_the_one_shown_from_windows_record() {
         let guid = super::super::guid_bytes("{7120A42D-CB02-4A51-B3B5-58E36E8B14E1}").unwrap();
-        HELD.lock().unwrap().push(HeldIcon { key: 9_000_001, exe: "nvcontainer.exe".into(), uid: 0, guid: Some(guid), hwnd: 0, tip: String::new(), png: vec![0x89], out: false });
+        held_edit(|held| held.push(HeldIcon { key: 9_000_001, exe: "nvcontainer.exe".into(), uid: 0, guid: Some(guid), hwnd: 0, tip: String::new(), png: vec![0x89], out: false }));
         let other = HeldIcon { key: 9_000_002, exe: "ace-tray.exe".into(), uid: 10001, guid: None, hwnd: 0x7a03, tip: String::new(), png: vec![0x89], out: true };
-        HELD.lock().unwrap().push(other);
+        held_edit(|held| held.push(other));
         let held = shown().into_iter().filter(|s| s.key >= 9_000_001).map(|s| (s.name, s.reach, s.out)).collect::<Vec<_>>();
         assert!(held.contains(&("nvcontainer.exe:2da4207102cb514ab3b558e36e8b14e1".to_string(), false, Some(false))), "{held:?}");
         assert!(held.contains(&("ace-tray.exe:10001".to_string(), false, Some(true))), "{held:?}");
@@ -737,7 +849,7 @@ mod tests {
         let mut add = nid(0x7a04, 1, NIF_GUID | NIF_TIP, "NVIDIA");
         add.guid = guid;
         assert!(on_icon(NIM_ADD, &add, Some(r"C:\Program Files\NVIDIA Corporation\NvContainer\nvcontainer.exe"), false));
-        assert!(HELD.lock().unwrap().iter().any(|h| h.key == 9_000_001));
+        assert!(HELD.with_borrow(|held| held.iter().any(|h| h.key == 9_000_001)));
         assert!(on_icon(NIM_DELETE, &add, None, false));
         #[link(name = "user32")]
         extern "system" {
@@ -747,12 +859,12 @@ mod tests {
         // SAFETY: Windows' own application icon.
         add.icon = unsafe { LoadIconW(0, 32512) } as u32;
         assert!(on_icon(NIM_ADD, &add, Some(r"C:\Program Files\NVIDIA Corporation\NvContainer\nvcontainer.exe"), false));
-        let keys: Vec<u64> = HELD.lock().unwrap().iter().map(|h| h.key).collect();
+        let keys: Vec<u64> = HELD.with_borrow(|held| held.iter().map(|h| h.key).collect());
         assert!(!keys.contains(&9_000_001) && keys.contains(&9_000_002), "{keys:?}");
         assert!(on_icon(NIM_DELETE, &add, None, false));
         // Its program removing one shown from Windows' record: gone at once.
         assert!(on_icon(NIM_DELETE, &nid(0x7a03, 10001, 0, ""), None, false));
-        assert!(!HELD.lock().unwrap().iter().any(|h| h.key == 9_000_002));
+        assert!(!HELD.with_borrow(|held| held.iter().any(|h| h.key == 9_000_002)));
     }
 
     #[test]

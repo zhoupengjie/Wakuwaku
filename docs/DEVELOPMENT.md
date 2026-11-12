@@ -84,7 +84,7 @@ src-tauri/
       win/apps.rs         按应用 id 向 shell 要应用的名字和图标
     icons.rs              桌面图标让开顶、左、右边的条带：告诉桌面工作区变了，存下位置，交还时放回
     shell.rs              把 Windows 自己的任务栏藏起来、还回去；状态文件、守护进程、下次启动时补还
-    systray/              接管托盘：自己的 Shell_TrayWnd 排在 Explorer 前面，图标、点击、图标位置的查询，原样转给 Explorer；只在 Explorer 托盘里的图标按 Windows 的记录补上。mod.rs 是平台无关的小函数；win/mod.rs 是 Win32 声明、状态、自己的窗口和线程的开关，icons.rs 是图标的增删改和位置，held.rs 是只在 Explorer 托盘里的图标，press.rs 是显示的列表和按下；other.rs 是别的系统上的空实现
+    systray/              接管托盘：自己的 Shell_TrayWnd 排在 Explorer 前面，图标、点击、图标位置的查询，原样转给 Explorer；只在 Explorer 托盘里的图标按 Windows 的记录补上。mod.rs 是平台无关的小函数；win/mod.rs 是 Win32 声明、状态、自己的窗口和线程的开关，icons.rs 是图标的增删改和位置，held.rs 是只在 Explorer 托盘里的图标，press.rs 是显示的列表和按下；other.rs 是别的系统上的空实现。图标、只在 Explorer 里的图标、各图标的位置都只归托盘线程（建窗口、跑它消息循环的那个，宠物里就是任务栏线程；thread_local），程序等着回答时那边不拿锁；按下要用的那几项（窗口、回调、版本、进程）由它整份发布（REACH），页面说的位置用自己注册的消息（WakuwakuTrayRects）交给它。只有 explorer_first 还从别的线程同步挪它的窗口：应用栏的消息发出去之前它必须已经排到 Explorer 后面
     tasks.rs              任务栏上该有按钮的窗口、程序名和图标、启动程序；输入法和大写锁定
     inputs.rs             前台是哪个输入法（Windows 自己的输入法切换器告诉我们）、它的图标和模式图片、可选的输入法列表和切换
     pins.rs               第一次启动时读 Windows 自己任务栏的固定项（只读一次，不写回）

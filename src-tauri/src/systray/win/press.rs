@@ -2,21 +2,21 @@
 // on one told to its program.
 use super::*;
 
+// On the tray's thread (the taskbar's sends them from there: WM_TRAY_CHANGED).
 pub fn shown() -> Vec<Shown> {
-    let mut list: Vec<Shown> = ICONS
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|i| !i.hidden && i.had_icon)
-        .map(|i| Shown { key: i.key, icon: i.icon, tip: i.tip.clone(), exe: i.exe.clone(), uid: i.id, name: icon_name(&i.exe, i.guid, i.id), guid: i.guid, reach: !i.taken || i.callback != 0, snapshot: Vec::new(), out: None })
-        .collect();
-    let held: Vec<Shown> = HELD
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|h| !list.iter().any(|s| h.is(&s.exe, s.uid, s.guid)))
-        .map(|h| Shown { key: h.key, icon: 0, tip: h.tip.clone(), exe: h.exe.clone(), uid: h.uid, name: icon_name(&h.exe, h.guid, h.uid), guid: h.guid, reach: false, snapshot: h.png.clone(), out: Some(h.out) })
-        .collect();
+    let mut list: Vec<Shown> = icons_read(|icons| {
+        icons
+            .iter()
+            .filter(|i| !i.hidden && i.had_icon)
+            .map(|i| Shown { key: i.key, icon: i.icon, tip: i.tip.clone(), exe: i.exe.clone(), uid: i.id, name: icon_name(&i.exe, i.guid, i.id), guid: i.guid, reach: !i.taken || i.callback != 0, snapshot: Vec::new(), out: None })
+            .collect()
+    });
+    let held: Vec<Shown> = HELD.with_borrow(|held| {
+        held.iter()
+            .filter(|h| !list.iter().any(|s| h.is(&s.exe, s.uid, s.guid)))
+            .map(|h| Shown { key: h.key, icon: 0, tip: h.tip.clone(), exe: h.exe.clone(), uid: h.uid, name: icon_name(&h.exe, h.guid, h.uid), guid: h.guid, reach: false, snapshot: h.png.clone(), out: Some(h.out) })
+            .collect()
+    });
     list.extend(held);
     list
 }
@@ -24,30 +24,23 @@ pub fn shown() -> Vec<Shown> {
 // The spike writes it down (tray.txt); the pet only logs the icons as they come.
 #[allow(dead_code)]
 pub fn describe() -> String {
-    ICONS
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|i| format!("{} id={} v{} cb={:#x} changed ×{}{}{} \"{}\"", i.exe, i.id, i.version, i.callback, i.modified, if i.hidden { " hidden" } else { "" }, if i.icon == 0 { " no-icon" } else { "" }, i.tip))
-        .collect::<Vec<_>>()
-        .join("\n")
+    icons_read(|icons| {
+        icons
+            .iter()
+            .map(|i| format!("{} id={} v{} cb={:#x} changed ×{}{}{} \"{}\"", i.exe, i.id, i.version, i.callback, i.modified, if i.hidden { " hidden" } else { "" }, if i.icon == 0 { " no-icon" } else { "" }, i.tip))
+            .collect::<Vec<_>>()
+            .join("\n")
+    })
 }
 
 // A press on an icon, told to its program as Explorer tells it. at: the
-// pointer on the screen.
+// pointer on the screen. From the page's command, on another thread than
+// the tray's: what it needs of the icon as the tray's thread published it
+// (REACH), nothing of ours waited on (her own icon's menu, opened on the
+// press, held the list until it closed, every program's tray messages
+// waiting, when the list was a lock).
 pub fn tell(key: u64, press: Press, at: (i32, i32)) -> bool {
-    // What is needed of it, the list let go before anything is sent: her
-    // own icon's menu, opened on the press, would hold it (every
-    // program's tray messages waiting) until it closed.
-    struct Told {
-        hwnd: u32,
-        id: u32,
-        callback: u32,
-        version: u32,
-        pid: u32,
-        exe: String,
-    }
-    let found = ICONS.lock().unwrap().iter().find(|i| i.key == key).map(|i| Told { hwnd: i.hwnd, id: i.id, callback: i.callback, version: i.version, pid: i.pid, exe: i.exe.clone() });
+    let found = reach().iter().find(|i| i.key == key).cloned();
     let Some(i) = found else { return false };
     if i.callback == 0 {
         return false;

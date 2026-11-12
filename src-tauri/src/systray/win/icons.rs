@@ -96,7 +96,7 @@ pub(super) fn new_icon(nid: &IconData, path: Option<&str>) -> Icon {
     // One shown from Windows' record until now: this one in its place,
     // once it has a picture.
     if icon.had_icon {
-        HELD.lock().unwrap().retain(|h| !h.is(&icon.exe, icon.id, icon.guid));
+        held_edit(|held| held.retain(|h| !h.is(&icon.exe, icon.id, icon.guid)));
     }
     icon
 }
@@ -104,7 +104,10 @@ pub(super) fn new_icon(nid: &IconData, path: Option<&str>) -> Icon {
 // A NIM_ message: whether ours took it. held: Explorer's tray answered
 // a change of it yes (it holds the icon).
 pub(super) fn on_icon(message: u32, nid: &IconData, path: Option<&str>, held: bool) -> bool {
-    let mut icons = ICONS.lock().unwrap();
+    icons_edit(|icons| on_icon_in(icons, message, nid, path, held))
+}
+
+fn on_icon_in(icons: &mut Vec<Icon>, message: u32, nid: &IconData, path: Option<&str>, held: bool) -> bool {
     let at = icons.iter().position(|i| same(i, nid));
     match (message, at) {
         (NIM_ADD | NIM_MODIFY, Some(i)) => {
@@ -148,13 +151,14 @@ pub(super) fn on_icon(message: u32, nid: &IconData, path: Option<&str>, held: bo
         // now, not at the next look.
         (NIM_DELETE, None) => {
             let guid = (nid.flags & NIF_GUID != 0 && nid.guid != [0; 16]).then_some(nid.guid);
-            let mut held = HELD.lock().unwrap();
-            let before = held.len();
-            held.retain(|h| match guid {
-                Some(g) => h.guid != Some(g),
-                None => h.guid.is_some() || h.hwnd != nid.hwnd || h.uid != nid.id,
-            });
-            held.len() != before
+            held_edit(|held| {
+                let before = held.len();
+                held.retain(|h| match guid {
+                    Some(g) => h.guid != Some(g),
+                    None => h.guid.is_some() || h.hwnd != nid.hwnd || h.uid != nid.id,
+                });
+                held.len() != before
+            })
         }
         (NIM_SETVERSION, Some(i)) => {
             icons[i].version = nid.version;
@@ -183,18 +187,16 @@ pub(super) fn answer_rect(cds: &CopyData) -> Option<isize> {
     if q.signature != SIGNATURE {
         return None;
     }
-    let icons = ICONS.lock().unwrap();
     let by_guid = q.guid != [0; 16];
-    let icon = icons.iter().find(|i| if by_guid { i.guid == Some(q.guid) } else { i.hwnd == q.hwnd && i.id == q.id });
-    let Some(icon) = icon else {
+    let key = icons_read(|icons| icons.iter().find(|i| if by_guid { i.guid == Some(q.guid) } else { i.hwnd == q.hwnd && i.id == q.id }).map(|i| i.key));
+    let Some(key) = key else {
         if RAW_NOTED.fetch_add(1, Ordering::SeqCst) < 6 {
             note(format!("tray: where-is for an icon not here: window {:#x} id {}", q.hwnd, q.id));
         }
         return None;
     };
-    let rects = RECTS.lock().unwrap();
-    let (_, (l, t, r, b)) = rects.iter().find(|(k, _)| *k == icon.key)?;
-    let (x, y) = if q.message == 2 { (*r, *b) } else { (*l, *t) };
+    let (l, t, r, b) = RECTS.with_borrow(|rects| rects.iter().find(|(k, _)| *k == key).map(|(_, rect)| *rect))?;
+    let (x, y) = if q.message == 2 { (r, b) } else { (l, t) };
     Some(((x as u16 as u32) | ((y as u16 as u32) << 16)) as i32 as isize)
 }
 

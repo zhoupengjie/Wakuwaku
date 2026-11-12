@@ -169,10 +169,20 @@ pub fn scan_held() {
     }
     // Those ours shows (one taken from a change without a picture yet is
     // still shown from Windows').
-    let ours: Vec<(String, u32, Option<[u8; 16]>)> = ICONS.lock().unwrap().iter().filter(|i| !i.hidden && i.had_icon).map(|i| (i.exe.clone(), i.id, i.guid)).collect();
+    let ours: Vec<(String, u32, Option<[u8; 16]>)> = icons_read(|icons| icons.iter().filter(|i| !i.hidden && i.had_icon).map(|i| (i.exe.clone(), i.id, i.guid)).collect());
     // Explorer's not answering: what was found last kept until it does.
+    // (Asked with nothing of ours borrowed: its answers may wait on
+    // programs' messages to ours, answered here meanwhile.)
     let Some(mut found) = look_held(explorer, &ours) else { return };
-    let mut held = HELD.lock().unwrap();
+    let differs = held_edit(|held| keep_found(held, &mut found));
+    if differs {
+        changed();
+    }
+}
+
+// What was found kept, each with its key from the last look (a new one
+// a new key), what is no longer there said; whether it differs.
+fn keep_found(held: &mut Vec<HeldIcon>, found: &mut Vec<HeldIcon>) -> bool {
     for h in found.iter_mut() {
         match held.iter().find(|was| was.is(&h.exe, h.uid, h.guid) && was.hwnd == h.hwnd) {
             Some(was) => h.key = was.key,
@@ -187,11 +197,8 @@ pub fn scan_held() {
         note(format!("tray: {}'s icon no longer held by Windows' taskbar alone", was.exe));
     }
     let differs = found.len() != held.len() || found.iter().zip(held.iter()).any(|(a, b)| a.key != b.key);
-    *held = found;
-    drop(held);
-    if differs {
-        changed();
-    }
+    *held = std::mem::take(found);
+    differs
 }
 
 // The icons ours has, then those only Explorer's holds (none that ours

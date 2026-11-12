@@ -13,9 +13,9 @@
 // page, so the tests can say it. island.ts draws it.
 // The events, and which colours win while one ring is playing: an error
 // over changes to review, over a turn done, over a hello, over a plugin.
-const PRIORITY = { error: 5, review: 4, done: 3, hello: 2, plugin: 1 }
+const PRIORITY: Record<string, number> = { error: 5, review: 4, done: 3, hello: 2, plugin: 1 }
 const ENDINGS = ['done', 'review', 'error']
-const isEnding = kind => ENDINGS.includes(kind)
+const isEnding = (kind: unknown) => ENDINGS.includes(kind as string)
 
 // Its turns (the user, 2026-10-18: two, in steps of 15 a second, then
 // still; they were three, smooth, 2.55 s): a turn at their average speed,
@@ -57,7 +57,7 @@ const HOP_MS = 300
 // turn done, changes to review, an error, a hello, a plugin's nudge):
 // open the island (as before), a ring (the default), or nothing but the
 // dot. One kept from before it was a choice (openOnEnd off) is nothing.
-function endCue(config) {
+function endCue(config: { endCue?: string; openOnEnd?: boolean } | null | undefined) {
   const set = config?.endCue
   if (set === 'open' || set === 'ring' || set === 'none') return set
   return config?.openOnEnd === false ? 'none' : 'ring'
@@ -79,7 +79,7 @@ function endCue(config) {
 // opened the island by itself still does. A session waiting on you while
 // she is out on the desktop (herOut): nothing, the prompt is over her head
 // (pet.ts, panel.ts).
-function cueFor(kind, { setting = 'ring', view = 'compact', blocked = false, herOut = false } = {}) {
+function cueFor(kind: string, { setting = 'ring', view = 'compact', blocked = false, herOut = false } = {}) {
   if (kind === 'waiting' && herOut) return null
   if (kind === 'waiting' || setting === 'open') return 'open'
   // A tool failed, an item of the turn's list done: how it goes, not how
@@ -97,20 +97,21 @@ function cueFor(kind, { setting = 'ring', view = 'compact', blocked = false, her
 // Her reactions with words (state.rs react): a hello (her arriving, a
 // session starting) rings; a task-list item done or a tool that failed
 // is inside a turn (process). Only a turn that ends in error rings red.
-const REACT_KIND = { wave: 'hello', jump: 'process', failed: 'process' }
-const kindOfReact = react => REACT_KIND[react] || 'process'
+const REACT_KIND: Record<string, string> = { wave: 'hello', jump: 'process', failed: 'process' }
+const kindOfReact = (react: string) => REACT_KIND[react] || 'process'
 
 // The hold setting as a time (ms): its seconds, or until seen (Infinity)
 // for "seen" and for anything that is not a number of them, as main reads
 // it (shared.rs hold).
-function holdMs(hold) {
+// (hold: the setting as kept, seconds or "seen", or anything else.)
+function holdMs(hold: any) {
   return Number.isInteger(hold) && hold > 0 ? hold * 1000 : Infinity
 }
 
 // How long what the island would have shown (a hello's words, a plugin's
 // card) stays to be seen on the next hover: as long as an ending stays
 // (the hold setting: 3 to 600 s, or until seen); a notice until seen.
-function keepFor(kind, hold) {
+function keepFor(kind: string, hold: any) {
   if (kind === 'notice') return Infinity
   return holdMs(hold)
 }
@@ -125,7 +126,7 @@ const CUED = ['done', 'review', 'error', 'hello', 'plugin']
 // being Infinity: open until the pointer has been over it (island.ts
 // seenNudge). A session waiting on you, a new version, what happens
 // inside a turn: their own time (ms), as before.
-function openFor(kind, hold, ms) {
+function openFor(kind: string, hold: any, ms: number) {
   return CUED.includes(kind) ? holdMs(hold) : ms
 }
 
@@ -139,7 +140,7 @@ const HOLD_QUICK = [8, 30, 120]
 // Seconds typed in Custom's box, as kept: rounded, within 3 to 600 (an
 // input method's full-width digits, or a unit after them, taken as well).
 // Nothing typed, or no number: null, and the box goes back to what it was.
-function holdSecs(typed) {
+function holdSecs(typed: unknown) {
   const text = String(typed ?? '')
     .replace(/[０-９]/g, d => String(d.charCodeAt(0) - 0xff10))
     .replace(/\s*(秒|s|secs?|seconds?)$/i, '')
@@ -152,7 +153,7 @@ function holdSecs(typed) {
 // Which choice is on: until seen, a quick one, or custom (a number of its
 // own, or Custom picked to type one in). No whole number: until seen, as
 // main reads it (shared.rs hold).
-function holdChoice(hold, custom = false) {
+function holdChoice(hold: any, custom = false) {
   if (custom) return 'custom'
   if (!Number.isInteger(hold) || hold < 0) return 'seen'
   return HOLD_QUICK.includes(hold) ? hold : 'custom'
@@ -162,7 +163,7 @@ function holdChoice(hold, custom = false) {
 // Each event its own set, colourful but still saying what happened; the
 // first and last the same, so the gradient's seam does not show. Deeper on
 // a light ground (the dark set's pale yellow is lost on a light strip).
-const PALETTES = {
+const PALETTES: Record<string, { dark: string[]; light: string[] }> = {
   done: {
     dark: ['#ff6b6b', '#ffb340', '#ffe066', '#34d27b', '#5ac8fa', '#8e7cff', '#ff6bd6', '#ff6b6b'],
     light: ['#e5484d', '#e8890c', '#c99a00', '#1f9d55', '#1a8fd6', '#6e56cf', '#d6409f', '#e5484d'],
@@ -181,15 +182,15 @@ const PALETTES = {
   },
 }
 
-const rgbOf = hex => {
+const rgbOf = (hex: unknown) => {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(hex || '').trim())
   if (!m) return null
   const h = m[1].length === 3 ? [...m[1]].map(c => c + c).join('') : m[1]
   return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16))
 }
-const hexOf = rgb => `#${rgb.map(v => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')).join('')}`
+const hexOf = (rgb: number[]) => `#${rgb.map(v => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')).join('')}`
 // A colour with that much of another in it (sRGB, as CSS color-mix).
-function mix(colour, other, share) {
+function mix(colour: string, other: string, share: number) {
   const a = rgbOf(colour)
   const b = rgbOf(other)
   if (!a || !b) return colour
@@ -200,27 +201,27 @@ function mix(colour, other, share) {
 // a light ground its colour 15 % deeper first. A plugin with no colour of
 // its own (or not one of ours to mix) rings in the fallback given (the
 // accent).
-function palette(kind, light, colour?, fallback = '#4cc2ff') {
+function palette(kind: string, light: boolean, colour?: string, fallback = '#4cc2ff'): string[] {
   const set = PALETTES[kind]
   if (set) return set[light ? 'light' : 'dark']
-  let c = rgbOf(colour) ? colour : rgbOf(fallback) ? fallback : '#4cc2ff'
+  let c = rgbOf(colour) ? colour! : rgbOf(fallback) ? fallback : '#4cc2ff'
   if (light) c = mix(c, '#000000', 0.15)
   const pale = mix(c, '#ffffff', 0.45)
   return [c, pale, c, pale, c]
 }
 
-const gradient = stops => `conic-gradient(${stops.join(', ')})`
+const gradient = (stops: string[]) => `conic-gradient(${stops.join(', ')})`
 
 // The soft glow under the ring (the same gradient blurred): on a dark
 // ground only (on a light one it smudges), and not with reduced motion.
-const glows = (light, still) => !light && !still
+const glows = (light: boolean, still: boolean) => !light && !still
 
 // --- The ring's turning ---------------------------------------------------------------
 // A cubic-bezier easing (CSS's): at x, the y; and the slope there.
-function bezier([x1, y1, x2, y2]) {
-  const at = (a, b, u) => 3 * a * (1 - u) * (1 - u) * u + 3 * b * (1 - u) * u * u + u * u * u
-  const slope = (a, b, u) => 3 * a * (1 - u) * (1 - u) + 6 * (b - a) * (1 - u) * u + 3 * (1 - b) * u * u
-  const solve = x => {
+function bezier([x1, y1, x2, y2]: number[]) {
+  const at = (a: number, b: number, u: number) => 3 * a * (1 - u) * (1 - u) * u + 3 * b * (1 - u) * u * u + u * u * u
+  const slope = (a: number, b: number, u: number) => 3 * a * (1 - u) * (1 - u) + 6 * (b - a) * (1 - u) * u + 3 * (1 - b) * u * u
+  const solve = (x: number) => {
     let u = x
     for (let i = 0; i < 8; i++) {
       const d = slope(x1, x2, u)
@@ -239,36 +240,70 @@ function bezier([x1, y1, x2, y2]) {
     return u
   }
   return {
-    y: x => (x <= 0 ? 0 : x >= 1 ? 1 : at(y1, y2, solve(x))),
-    dy: x => {
+    y: (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : at(y1, y2, solve(x))),
+    dy: (x: number) => {
       const u = solve(Math.min(1, Math.max(0, x)))
       const dx = slope(x1, x2, u)
       return dx < 1e-9 ? 0 : slope(y1, y2, u) / dx
     },
   }
 }
-const cssEase = p => `cubic-bezier(${p.map(v => +v.toFixed(4)).join(', ')})`
+const cssEase = (p: number[]) => `cubic-bezier(${p.map(v => +v.toFixed(4)).join(', ')})`
 
 // A turning goes from a0° to a1° between t0 and t1 (ms) on its curve:
 // the ring's two turns, and two again from where it rests when another
 // comes while it is held still.
 //
+// A turning: from a0° to a1° between t0 and t1 (ms), on its curve (ease).
+interface Turning {
+  t0: number
+  t1: number
+  a0: number
+  a1: number
+  ease: number[]
+}
+// A ring as play makes it: its kind, still (reduced motion) or turning,
+// when it began, its turns and where they began (base), its hold, its
+// turnings; its light's points ([t, opacity]) and its times (stillAt,
+// fadeAt, dotAt, until: see the hold's words below).
+export interface Ring {
+  kind: string
+  still: boolean
+  t0: number
+  turns: number
+  base: number
+  hold: number
+  turnings: Turning[]
+  fade: number[][]
+  stillAt: number | null
+  fadeAt: number
+  dotAt: number
+  until: number
+}
+// A ring before its light and times are worked out (timed, timedStill).
+type RingBase = Omit<Ring, 'fade' | 'stillAt' | 'fadeAt' | 'dotAt' | 'until'>
+// The rings' state: the one playing (or none) and when the last ends.
+export interface FlowState {
+  ring: Ring | null
+  until: number
+}
+
 // The turning a ring is in at t: its last one begun by then.
-function turningAt(ring, t) {
+function turningAt(ring: Ring, t: number) {
   let seg = ring.turnings[0]
   for (const s of ring.turnings) if (s.t0 <= t) seg = s
   return seg
 }
 
 // Where a ring has turned to by t (°), and how fast it turns then (°/ms).
-function angleAt(ring, t) {
+function angleAt(ring: Ring, t: number) {
   if (ring.still) return 0
   const s = turningAt(ring, t)
   if (t <= s.t0) return s.a0
   if (t >= s.t1) return s.a1
   return s.a0 + (s.a1 - s.a0) * bezier(s.ease).y((t - s.t0) / (s.t1 - s.t0))
 }
-function speedAt(ring, t) {
+function speedAt(ring: Ring, t: number) {
   if (ring.still) return 0
   const s = turningAt(ring, t)
   if (t <= s.t0 || t >= s.t1) return 0
@@ -276,7 +311,7 @@ function speedAt(ring, t) {
 }
 
 // How lit it is at t: along its fade's points ([t, opacity], in time).
-function lightAt(ring, t) {
+function lightAt(ring: Ring, t: number) {
   const f = ring.fade
   if (t <= f[0][0]) return f[0][1]
   for (let i = 1; i < f.length; i++) {
@@ -308,7 +343,7 @@ function lightAt(ring, t) {
 // Its light from the points given (coming up), lit after them until its
 // end: its turning's (t1), and with a hold, held still from there until
 // the hold after t is over.
-function timed(ring, t, up, t1) {
+function timed(ring: RingBase, t: number, up: number[][], t1: number): Ring {
   if (!(ring.hold > 0)) {
     const fadeAt = t1 - FADE_LEAD_MS
     return { ...ring, fade: [...up, [fadeAt, 1], [t1 + TAIL_MS, 0]], stillAt: null, fadeAt, dotAt: fadeAt, until: t1 + TAIL_MS }
@@ -319,7 +354,7 @@ function timed(ring, t, up, t1) {
 
 // The same with reduced motion: lit once the points given are, held
 // still from then until the hold after t is over, down over 0.2 s.
-function timedStill(ring, t, up) {
+function timedStill(ring: RingBase, t: number, up: number[][]): Ring {
   const lit = up[up.length - 1][0]
   const fadeAt = Math.max(lit, t + ring.hold)
   return { ...ring, fade: [...up, [fadeAt, 1], [fadeAt + STILL_FADE_MS, 0]], stillAt: lit, fadeAt, dotAt: fadeAt, until: fadeAt + STILL_FADE_MS }
@@ -329,19 +364,19 @@ function timedStill(ring, t, up) {
 // 0.28 s; still (reduced motion), 1.4 s lit. Held (hold, ms), lit still
 // after its turns until the hold after t is over, then down, the dot
 // coming as it starts to; held by nothing, down over the turns' end.
-function begin(kind, t, still, hold = 0) {
+function begin(kind: string, t: number, still: boolean, hold = 0): Ring {
   if (still) {
     if (hold > 0) return timedStill({ kind, still: true, t0: t, turns: 0, base: 0, hold, turnings: [] }, t, [[t, 0], [t + STILL_FADE_MS, 1]])
     const until = t + STILL_MS
     return { kind, still: true, t0: t, turns: 0, base: 0, hold: 0, turnings: [], fade: [[t, 0], [t + STILL_FADE_MS, 1], [until - STILL_FADE_MS, 1], [until, 0]], stillAt: null, fadeAt: until - STILL_FADE_MS, dotAt: until - STILL_FADE_MS, until }
   }
   const t1 = t + TURNS * TURN_MS
-  const ring = { kind, still: false, t0: t, turns: TURNS, base: 0, hold, turnings: [{ t0: t, t1, a0: 0, a1: TURNS * 360, ease: EASE }] }
+  const ring: RingBase = { kind, still: false, t0: t, turns: TURNS, base: 0, hold, turnings: [{ t0: t, t1, a0: 0, a1: TURNS * 360, ease: EASE }] }
   return timed(ring, t, [[t, 0], [t + FADE_IN_MS, 1]], t1)
 }
 
 // No ring yet.
-const idle = () => ({ ring: null, until: -Infinity })
+const idle = (): FlowState => ({ ring: null, until: -Infinity })
 
 // An event that rings, at t, on what plays already: what to do, and the
 // rings' state after. act is
@@ -358,14 +393,22 @@ const idle = () => ({ ring: null, until: -Infinity })
 // hold anew from itself; one while it is held still (or fading after)
 // turns it again in its colour, two turns from where it rests; one while
 // it turns only gives it its colour.
-function play(state, kind, t, { still = false, hold = 0 } = {}) {
+// What play says: what to do (act), the rings' state after, the ring (none
+// for a hop or a swap), and whether a blend was retimed.
+interface Step {
+  state: FlowState
+  act: string
+  retimed?: boolean
+  ring?: Ring
+}
+function play(state: FlowState, kind: string, t: number, { still = false, hold = 0 } = {}): Step {
   const ring = state.ring && t < state.ring.until ? state.ring : null
   if (ring) {
     if ((PRIORITY[kind] || 0) < (PRIORITY[ring.kind] || 0)) return { state, act: 'hold', ring }
-    const retimed = next => ({ state: { ring: next, until: next.until }, act: 'blend', retimed: true, ring: next })
+    const retimed = (next: Ring) => ({ state: { ring: next, until: next.until }, act: 'blend', retimed: true, ring: next })
     // Lit again over the blend, should it be fading (or coming up).
     const lit = lightAt(ring, t)
-    const up = [[t, lit], ...(lit < 1 ? [[t + (ring.still ? STILL_FADE_MS : BLEND_MS), 1]] : [])]
+    const up: number[][] = [[t, lit], ...(lit < 1 ? [[t + (ring.still ? STILL_FADE_MS : BLEND_MS), 1]] : [])]
     const held = { ...ring, kind, hold }
     if (ring.still) {
       if (hold > 0) return retimed(timedStill(held, t, up))
@@ -399,12 +442,12 @@ const stop: (state?: unknown) => ReturnType<typeof idle> = () => idle()
 // Held, and what it says has moved on (its session at work again: island.ts
 // movedOn): its hold over at t, down as at its time (after its turning,
 // should it still turn), the dot coming. Anything else as it is.
-function release(state, t) {
+function release(state: FlowState, t: number): FlowState {
   const ring = state.ring && t < state.ring.until ? state.ring : null
   if (!ring || ring.stillAt == null || t >= ring.fadeAt) return state
   const fadeAt = Math.max(t, ring.stillAt)
   const until = fadeAt + (ring.still ? STILL_FADE_MS : FADE_OUT_MS)
-  const next = { ...ring, fade: [...ring.fade.slice(0, -2), [fadeAt, 1], [until, 0]], fadeAt, dotAt: fadeAt, until }
+  const next: Ring = { ...ring, fade: [...ring.fade.slice(0, -2), [fadeAt, 1], [until, 0]], fadeAt, dotAt: fadeAt, until }
   return { ring: next, until }
 }
 
@@ -419,18 +462,18 @@ function release(state, t) {
 //          (none while held until seen)
 //   steps  its turning in steps (stepsOf), from the one showing now
 // dotIn and end are Infinity while held until seen.
-function frames(ring, now) {
+function frames(ring: Ring, now: number) {
   const s = ring.still ? null : turningAt(ring, now)
   const turn = s && { from: s.a0, to: s.a1, delay: s.t0 - now, duration: s.t1 - s.t0, easing: cssEase(s.ease) }
   const steps = stepsOf(ring, now)
-  const keys = (points, f0, fN) => points.map(([ti, o]) => ({ offset: fN > f0 ? (ti - f0) / (fN - f0) : 1, opacity: o }))
+  const keys = (points: number[][], f0: number, fN: number) => points.map(([ti, o]) => ({ offset: fN > f0 ? (ti - f0) / (fN - f0) : 1, opacity: o }))
   const at = { dotIn: ring.dotAt - now, end: ring.until - now }
   if (ring.stillAt == null) {
     const f0 = ring.fade[0][0]
     const fN = ring.fade[ring.fade.length - 1][0]
     return { turn, steps, light: { keyframes: keys(ring.fade, f0, fN), delay: f0 - now, duration: fN - f0 }, still: null, rest: null, out: null, ...at }
   }
-  const up = [...ring.fade.slice(0, -2).filter(([ti]) => ti < ring.stillAt), [ring.stillAt, 1]]
+  const up: number[][] = [...ring.fade.slice(0, -2).filter(([ti]) => ti < ring.stillAt!), [ring.stillAt, 1]]
   const f0 = up[0][0]
   return {
     turn,
@@ -457,13 +500,13 @@ function frames(ring, now) {
 // each after it, the last at the turning's end, at its angle there.
 // { delay: ms from now (0 or less for the one showing), angle: ° }. None
 // once it has turned (or still, with reduced motion).
-function stepsOf(ring, now) {
+function stepsOf(ring: Ring, now: number) {
   if (ring.still || !ring.turnings.length) return []
   const s = turningAt(ring, now)
   if (now >= s.t1) return []
   const n = Math.ceil((s.t1 - s.t0) / STEP_MS - 1e-9)
   const from = Math.max(0, Math.floor((now - s.t0) / STEP_MS + 1e-9))
-  const out = []
+  const out: { delay: number; angle: number }[] = []
   for (let k = from; k <= n; k++) {
     const at = Math.min(s.t1, s.t0 + k * STEP_MS)
     out.push({ delay: at - now, angle: at >= s.t1 ? s.a1 : angleAt(ring, at) })

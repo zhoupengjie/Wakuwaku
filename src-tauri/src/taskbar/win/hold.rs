@@ -587,10 +587,22 @@ impl Tug {
 
 pub(super) static TUG: Mutex<Tug> = Mutex::new(Tug::new());
 
+// Said once for each time her guard shows Windows' taskbar for a hang.
+static LEFT_FOR_HANG: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub(super) fn put_away_again(how: &str) {
     if HANDING_BACK.load(Ordering::SeqCst) || TUG.lock().unwrap().lost {
         return;
     }
+    // Shown by her guard while she did not answer: no tug of war, and up
+    // till the guard says she answers; then the timer finds it shown.
+    if shown_for_hang() {
+        if !LEFT_FOR_HANG.swap(true, Ordering::SeqCst) {
+            log(&format!("Windows' shown by her guard while she did not answer ({how}): left up till she does"));
+        }
+        return;
+    }
+    LEFT_FOR_HANG.store(false, Ordering::SeqCst);
     // A new Explorer's taskbar showing is no tug of war (zhoupengjie/Wakuwaku#85).
     if !explorer_check() && TUG.lock().unwrap().shown(TICKS.load(Ordering::SeqCst)) {
         give_up();

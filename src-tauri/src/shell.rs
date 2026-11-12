@@ -59,6 +59,8 @@ mod imp {
         fn GetShellWindow() -> Hwnd;
         fn FindWindowW(class: *const u16, title: *const u16) -> Hwnd;
         fn IsWindow(hwnd: Hwnd) -> i32;
+        fn ShowWindowAsync(hwnd: Hwnd, cmd: i32) -> i32;
+        fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
     }
 
     #[repr(C)]
@@ -95,6 +97,11 @@ mod imp {
 
     const SW_HIDE: i32 = 0;
     const SW_SHOWNA: i32 = 8;
+    const HWND_TOPMOST: isize = -1;
+    const SWP_NOSIZE: u32 = 0x1;
+    const SWP_NOMOVE: u32 = 0x2;
+    const SWP_NOACTIVATE: u32 = 0x10;
+    const SWP_ASYNCWINDOWPOS: u32 = 0x4000;
     const SYNCHRONIZE: u32 = 0x0010_0000;
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
     const WAIT_TIMEOUT: u32 = 0x102;
@@ -419,6 +426,10 @@ mod imp {
 
     // At start: put away by a process no longer running (both it and its guard gone)?
     pub fn recover(file: &Path) -> bool {
+        // A mark of a run before (its guard ended before it could take it away).
+        if read(&hang_mark(file)).and_then(|v| v["pid"].as_u64()) != Some(u64::from(std::process::id())) {
+            let _ = std::fs::remove_file(hang_mark(file));
+        }
         let Some(v) = read(file) else { return false };
         let (pid, at) = (v["pid"].as_u64().unwrap_or(0) as u32, v["started"].as_u64());
         if pid != std::process::id() && at.is_some() && started(pid) == at {
@@ -447,6 +458,164 @@ mod imp {
         ok
     }
 
+    // --- Her not answering --------------------------------------------------------
+    // Her main thread or her taskbar's not answering (the guard's look every
+    // two seconds, crash.rs Hang: Windows takes a window for hung after five
+    // seconds without a look at its messages) left the screen with no
+    // taskbar at all, hers stuck and Windows' put away, till the person
+    // found Ctrl+Shift+Esc and ended her (the user, 2026-11-12: 卡住 10 秒就
+    // 先还回). Ten seconds of it in all while hers holds the strip (the file
+    // hers, written by her: not one left by a run before), and the guard
+    // shows Windows' own again over hers. Nothing more: its state (auto-hide)
+    // is set by a message to the first Shell_TrayWnd, hers, and the
+    // windows refitted to a work area are hers among others, any of which
+    // may be the one not answering; the guard waits on none of them. The
+    // file is kept: her quitting, or the guard as she ends, gives the taskbar
+    // back as ever. Set over hers (topmost, first), Explorer's tray is the
+    // one a program finds meanwhile (FindWindow), so its icons go on
+    // changing there; once she answers, hers is put first again and the
+    // programs asked for their icons anew (taskbar/win/hold.rs
+    // put_away_again: systray keep_first, ask_soon).
+    // Beside the file, taskbar-hang.json says so while it lasts: her
+    // taskbar's thread, should it still answer, leaves Windows' own up
+    // (shown_for_hang) till the guard takes the mark away as she answers
+    // again; its tick then sees it shown and puts it away (hold.rs).
+    const HANG_BACK_AFTER: std::time::Duration = std::time::Duration::from_secs(5);
+
+    pub fn hang_mark(file: &Path) -> std::path::PathBuf {
+        file.with_file_name("taskbar-hang.json")
+    }
+
+    // Whether her guard has shown Windows' taskbar for a hang of this run's.
+    pub fn shown_for_hang(file: &Path) -> bool {
+        read(&hang_mark(file)).and_then(|v| v["pid"].as_u64()) == Some(u64::from(std::process::id()))
+    }
+
+    // Windows' taskbars shown and set over hers, the mark written first; none
+    // when hers does not hold the strip or Explorer has no taskbar. Neither
+    // call waits on Explorer (async), nor anything on her.
+    fn show_for_hang(file: &Path, pid: u32) -> bool {
+        if read(file).and_then(|v| v["pid"].as_u64()) != Some(u64::from(pid)) {
+            return false;
+        }
+        let bars = taskbars();
+        if bars.is_empty() || std::fs::write(hang_mark(file), json!({ "pid": pid }).to_string()).is_err() {
+            return false;
+        }
+        for h in bars {
+            // SAFETY: Explorer's windows; a gone one does nothing.
+            unsafe {
+                ShowWindowAsync(h as Hwnd, SW_SHOWNA);
+                SetWindowPos(h as Hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+            }
+        }
+        true
+    }
+
+    // The guard's side: told every two seconds whether she is hung (her main
+    // thread or her taskbar's), it shows Windows' taskbar once that has gone
+    // on HANG_BACK_AFTER past Windows' five seconds, and takes the mark away
+    // once she answers again; each said through `say`.
+    #[derive(Default)]
+    pub struct HangBack {
+        since: Option<std::time::Instant>,
+        shown: bool,
+    }
+
+    // What a look comes to (HangBack::next).
+    #[derive(Debug, PartialEq)]
+    enum Next {
+        Wait,
+        Show,
+        Answered,
+    }
+
+    impl HangBack {
+        pub fn look(&mut self, file: &Path, pid: u32, hung: bool, say: impl Fn(&str)) {
+            match self.next(hung, std::time::Instant::now()) {
+                Next::Show if show_for_hang(file, pid) => {
+                    self.shown = true;
+                    say(&format!("pid {pid}: not answering ten seconds and more while her taskbar holds the strip: Windows' shown again over it till she answers (taskbar.json kept)"));
+                }
+                Next::Answered => {
+                    let _ = std::fs::remove_file(hang_mark(file));
+                    say(&format!("pid {pid}: answering again: Windows' taskbar left for her to put away"));
+                }
+                _ => {}
+            }
+        }
+
+        fn next(&mut self, hung: bool, now: std::time::Instant) -> Next {
+            if !hung {
+                self.since = None;
+                return if std::mem::take(&mut self.shown) { Next::Answered } else { Next::Wait };
+            }
+            let since = *self.since.get_or_insert(now);
+            if !self.shown && now.duration_since(since) >= HANG_BACK_AFTER {
+                Next::Show
+            } else {
+                Next::Wait
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod hang_tests {
+        use super::*;
+        use std::time::{Duration, Instant};
+
+        // Hung: shown once it has gone on five seconds past Windows' own
+        // five, once; answering again, the mark taken away, once; hung
+        // again later, counted anew.
+        #[test]
+        fn shown_after_ten_seconds_and_once() {
+            let mut b = HangBack::default();
+            let t0 = Instant::now();
+            assert_eq!(b.next(true, t0), Next::Wait);
+            assert_eq!(b.next(true, t0 + Duration::from_secs(2)), Next::Wait);
+            assert_eq!(b.next(true, t0 + Duration::from_secs(4)), Next::Wait);
+            assert_eq!(b.next(true, t0 + Duration::from_secs(6)), Next::Show);
+            b.shown = true;
+            assert_eq!(b.next(true, t0 + Duration::from_secs(8)), Next::Wait);
+            assert_eq!(b.next(false, t0 + Duration::from_secs(10)), Next::Answered);
+            assert_eq!(b.next(false, t0 + Duration::from_secs(12)), Next::Wait);
+            let t1 = t0 + Duration::from_secs(20);
+            assert_eq!(b.next(true, t1), Next::Wait);
+            assert_eq!(b.next(true, t1 + Duration::from_secs(5)), Next::Show);
+        }
+
+        // Not shown (hers did not hold the strip): asked again at each look,
+        // and an answer then is nothing to say.
+        #[test]
+        fn not_shown_is_asked_again() {
+            let mut b = HangBack::default();
+            let t0 = Instant::now();
+            assert_eq!(b.next(true, t0), Next::Wait);
+            assert_eq!(b.next(true, t0 + Duration::from_secs(6)), Next::Show);
+            assert_eq!(b.next(true, t0 + Duration::from_secs(8)), Next::Show);
+            assert_eq!(b.next(false, t0 + Duration::from_secs(10)), Next::Wait);
+        }
+
+        // The mark is this run's only: one of another's is none, and gone
+        // as she starts (recover).
+        #[test]
+        fn the_mark_is_this_runs() {
+            let dir = std::env::temp_dir().join(format!("waku-hang-{}", std::process::id()));
+            let _ = std::fs::create_dir_all(&dir);
+            let file = dir.join("taskbar.json");
+            std::fs::write(hang_mark(&file), json!({ "pid": std::process::id() }).to_string()).unwrap();
+            assert!(shown_for_hang(&file));
+            // No taskbar.json: nothing to give back, the mark kept.
+            assert!(!recover(&file));
+            assert!(hang_mark(&file).exists());
+            std::fs::write(hang_mark(&file), json!({ "pid": std::process::id() + 1 }).to_string()).unwrap();
+            assert!(!shown_for_hang(&file));
+            assert!(!recover(&file));
+            assert!(!hang_mark(&file).exists());
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
     // The guard's whole life: wait for her to end, `watch` every two seconds
     // meanwhile (main.rs: whether she answers, crash.rs Hang), then `ended`
     // (main.rs: the desktop's icons where they are, icons.rs), then give the
@@ -471,6 +640,8 @@ mod imp {
                 CloseHandle(process);
             }
         }
+        // Ended: no hang of hers to leave Windows' taskbar up for.
+        let _ = std::fs::remove_file(hang_mark(file));
         ended();
         let meanwhile = std::thread::spawn(move || after(code, started));
         for _ in 0..30 {
@@ -536,6 +707,14 @@ mod imp {
         false
     }
     pub fn guard(_pid: u32, _file: &Path, _watch: impl FnMut(), _ended: impl FnOnce(), _after: impl FnOnce(Option<u32>, Option<u64>) + Send + 'static) {}
+    #[derive(Default)]
+    pub struct HangBack;
+    impl HangBack {
+        pub fn look(&mut self, _file: &Path, _pid: u32, _hung: bool, _say: impl Fn(&str)) {}
+    }
+    pub fn shown_for_hang(_file: &Path) -> bool {
+        false
+    }
     pub fn lone_win() -> super::LoneWin {
         super::LoneWin { taskman: None, shell: None, tray: None }
     }
@@ -550,7 +729,7 @@ mod imp {
     }
 }
 
-pub use imp::{desktop_up, explorer_pid, explorer_tray, guard, hide, keep_room, kept_room, lone_win, recover, rehide, restore, room, running_for, show_bars, shown_bar, shown_room, spawn_guard, started, taskbar_created, taskbars, visible};
+pub use imp::{desktop_up, explorer_pid, explorer_tray, guard, hide, shown_for_hang, HangBack, keep_room, kept_room, lone_win, recover, rehide, restore, room, running_for, show_bars, shown_bar, shown_room, spawn_guard, started, taskbar_created, taskbars, visible};
 
 // The shell's windows Win pressed alone may go by, none of them hers
 // (zhoupengjie/Wakuwaku#54, where it opened no Start after she was quit,

@@ -269,6 +269,14 @@ pub(super) fn tick() {
 
 // Explorer started again (a new taskbar window), or a program's asking
 // (the same one: ours, or another tray's).
+// Debug only (server.rs /debug/hang): this thread held still for `secs`
+// seconds, as a hang of it is (her guard's ten seconds, shell.rs HangBack).
+pub fn hold_still(secs: u64) -> bool {
+    let ours = OURS.load(Ordering::SeqCst);
+    // SAFETY: our own window; posting asks nothing of it now.
+    ours != 0 && unsafe { PostMessageW(ours as Hwnd, WM_HOLD_STILL, secs as usize, 0) } != 0
+}
+
 pub(super) fn on_created() {
     explorer_check();
     let now = shell::taskbars().first().copied().unwrap_or(0);
@@ -276,7 +284,10 @@ pub(super) fn on_created() {
         return;
     }
     log("Explorer started again");
-    shell::rehide();
+    // Not while her guard shows Windows' for a hang (put_away_again).
+    if !shown_for_hang() {
+        shell::rehide();
+    }
     take_strip_again();
     systray::keep_first();
     ask_soon();
@@ -312,6 +323,7 @@ pub(super) extern "system" fn wndproc(hwnd: Hwnd, msg: u32, wparam: usize, lpara
             unsafe { PostQuitMessage(0) }
         }
         WM_WATCH_PRESSES => watch(wparam != 0),
+        WM_HOLD_STILL => std::thread::sleep(Duration::from_secs(wparam as u64)),
         WM_PRESS_SEEN => press_seen(wparam as u32 as i32, lparam as i32),
         _ if msg == CREATED_MSG.load(Ordering::SeqCst) && msg != 0 => on_created(),
         _ if msg == SHELL_MSG.load(Ordering::SeqCst) && msg != 0 => on_shell(wparam, lparam),

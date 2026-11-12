@@ -59,6 +59,7 @@
     "src/pet/placing.ts",
     "src/pet/presses.ts",
     "src/pet/settings-addons.ts",
+    "src/pet/settings-letter.ts",
     "src/pet/settings-look.ts",
     "src/pet/settings-mail.ts",
     "src/pet/settings-market.ts",

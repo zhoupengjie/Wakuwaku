@@ -43,7 +43,7 @@ interface MailModel {
   efforts: string[]
 }
 // The choices of a list: [value, label, why it can't be picked].
-type Choices = readonly (readonly unknown[])[]
+export type Choices = readonly (readonly unknown[])[]
 
 export function mailPart(core: SettingsCore) {
   const {
@@ -543,7 +543,7 @@ export function mailPart(core: SettingsCore) {
   // agent (when no talk is there yet), and ⋯ for the rest. Handing it is a
   // split button: its left part to the first agent, ▾ to another one found
   // for this letter only, or that one made the first (handMenu).
-  function handButtons(l: Letter, talk: Talk | null) {
+  function handButtons(l: Letter, talk: Talk | null | undefined) {
     const ag = firstAgent()
     const off = !(st.snap.mailAgents || {})[ag] ? 'disabled' : ''
     const others = mailList().filter(a => a.found && a.id !== ag)

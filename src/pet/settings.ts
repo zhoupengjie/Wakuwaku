@@ -44,6 +44,7 @@ import type { Widget } from './widgets.ts'
 import type { SettingsEvent } from './settings-state.ts'
 import type { IslandFace } from './island.ts'
 import type { PickerFace } from './picker.ts'
+import type { Way } from './settings-letter.ts'
 import type { Config } from '../shared/config.ts'
 
 // Where one is put (island-wmenu.ts placeNow): its place (null: nowhere),
@@ -1511,7 +1512,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       return true
     }
     if (at('[data-talk-send]')) {
-      const box = body.querySelector<HTMLButtonElement>('[data-talk]')
+      const box = body.querySelector<HTMLInputElement>('[data-talk]')
       if (box && !box.disabled) say(box)
       return true
     }
@@ -1955,9 +1956,9 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // A plugin's setting kept once typed (Enter, or leaving the box); a
   // number that is none goes back to what it was.
   layer.addEventListener('change', e => {
-    if ((e.target as HTMLElement).matches('[data-w-file]')) return addFiles(e.target)
+    if ((e.target as HTMLElement).matches('[data-w-file]')) return addFiles(e.target as HTMLInputElement)
     if ((e.target as HTMLElement).dataset.ilook) return ilookInput(e.target as HTMLInputElement, true)
-    if ((e.target as HTMLElement).dataset.proxyAt !== undefined) return proxyAddress((e.target as HTMLElement).dataset.proxyAt, (e.target as HTMLInputElement).value)
+    if ((e.target as HTMLElement).dataset.proxyAt !== undefined) return proxyAddress((e.target as HTMLElement).dataset.proxyAt as Way, (e.target as HTMLInputElement).value)
     if ((e.target as HTMLElement).dataset.mon) return monitorField((e.target as HTMLElement).dataset.mon)
     if ((e.target as HTMLElement).dataset.hold) return holdTyped(e.target)
     const key = (e.target as HTMLElement).dataset.field
@@ -2105,7 +2106,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       if (e.key === 'Enter' && (e.target as HTMLElement).id === 's-ref' && !e.isComposing) layer.querySelector('[data-fetch]')?.click()
       if (e.key === 'Enter' && ((e.target as HTMLElement).dataset.field || (e.target as HTMLElement).dataset.mon || (e.target as HTMLElement).dataset.hold || (e.target as HTMLElement).dataset.proxyAt !== undefined)) (e.target as HTMLElement).blur()
       if (e.key === 'Enter' && (e.target as HTMLElement).dataset.mf) layer.querySelector('[data-mail-find]:not([disabled]), [data-mail-save]:not([disabled])')?.click()
-      if (e.key === 'Enter' && (e.target as HTMLElement).dataset.talk && !e.isComposing) say(e.target)
+      if (e.key === 'Enter' && (e.target as HTMLElement).dataset.talk && !e.isComposing) say(e.target as HTMLInputElement)
       return
     }
     // Two panes: the letter above or below in the list.

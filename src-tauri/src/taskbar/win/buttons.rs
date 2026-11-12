@@ -161,8 +161,8 @@ extern "system" {
 // Over its display: maximized on it, or full screen there (all of the
 // display, as a game or a video has it; one minimized lies far off), in
 // front or behind another. The clear strip on that display is not clear
-// then: hers (island.js isFilled, by "max", on the strip's display) and
-// those on the others (bar.js, by "fills" and the window's "mon").
+// then: hers (island.ts isFilled, by "max", on the strip's display) and
+// those on the others (bar.ts, by "fills" and the window's "mon").
 pub(super) fn fills_display(hwnd: isize) -> bool {
     if tasks::maximized(hwnd) {
         return true;
@@ -232,7 +232,7 @@ pub(super) fn send_windows(sh: &Shared) {
         flashing.retain(|h| *h != front && tasks::alive(*h));
         flashing.clone()
     };
-    // As big as the buttons show them alone (island.js, 24px); smaller
+    // As big as the buttons show them alone (island.ts, 24px); smaller
     // with their titles, and in the lists above them.
     let size = (24.0 * crate::island::scale(sh)).round() as i32;
     let marks = MARKS.lock().unwrap().clone().unwrap_or_default();

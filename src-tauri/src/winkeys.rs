@@ -5,7 +5,7 @@
 // one there on her strip); Win+T and Win+B put the keyboard on its buttons
 // and its tray, unseen, and what was typed after went to them. Now:
 //   - Win+digit: the program in that place on her strip, in her order (as
-//     island-glide.js orderedApps lays them out): started when it does not run;
+//     island-glide.ts orderedApps lays them out): started when it does not run;
 //     one window to the front, or minimized when it is in front; several,
 //     the one last in front, then the next of them at each press, as
 //     Windows 11 does. Win+Shift+digit another of it, Win+Ctrl+Shift+digit
@@ -13,7 +13,7 @@
 //     Win+Alt+digit would open its jump list: there is none on her taskbar
 //     yet, so it does nothing (and does not reach Windows' either).
 //   - Win+T (Win+Shift+T from the last) the keyboard on her programs'
-//     buttons, Win+B on her tray (island.js: the arrows, Enter, Esc).
+//     buttons, Win+B on her tray (island.ts: the arrows, Enter, Esc).
 // Everything else with Win (Win+D, Win+E, Win+Shift+S, Win+Space…) is
 // Windows' as ever, and Win itself is never taken.
 //
@@ -179,7 +179,7 @@ pub fn decode(w: usize) -> Option<Act> {
     (w & 0xF < 10).then_some(Act::App(w & 0xF, how))
 }
 
-// The programs' buttons in the order her strip shows them (island.js
+// The programs' buttons in the order her strip shows them (island.ts
 // orderedApps): those dragged into an order first, in it (taskbarOrder,
 // their keys), the rest after, as they came.
 pub fn ordered(list: &Value, order: &[String]) -> Vec<Value> {
@@ -550,7 +550,7 @@ mod imp {
     // taskbar, the keyboard with it. So the keyboard is taken once Win is
     // let go (wanted): Win held, T pressed again goes on to the next button
     // as on Windows'. And Win pressed on her strip (the page tells it,
-    // island.js keysPause) gives the keyboard back for as long as Win is
+    // island.ts keysPause) gives the keyboard back for as long as Win is
     // held (paused), the page keeping its place: let go after a Win+T or
     // Win+B, taken again; after anything else (Win alone, Start opening;
     // Win+D, Win+digit) the keys on her strip are over.
@@ -659,7 +659,7 @@ mod imp {
         }
     }
 
-    // The keyboard on her strip (island.js keys): the page puts the ring on
+    // The keyboard on her strip (island.ts keys): the page puts the ring on
     // the button at once; her window takes the keyboard once Win is let go
     // (win_up). True when it is to.
     fn focus(sh: &Arc<Shared>, key: &str, tray: bool, back: bool) -> bool {

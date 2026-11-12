@@ -81,10 +81,10 @@ keys! {
     // out, she is on the desktop.
     DISPLAY: Setting = "display" => (if cfg!(windows) { "taskbar" } else { "island" }),
     OUT: Flag = "out" => false,
-    // The compact island's width: narrow, normal or wide (island.js WIDTHS).
+    // The compact island's width: narrow, normal or wide (island.ts WIDTHS).
     "islandWidth" => "normal",
     // Where it sits at the top of the screen: left, center or right
-    // (anchor.js, zhoupengjie/Wakuwaku#59); the top centre as ever.
+    // (anchor.ts, zhoupengjie/Wakuwaku#59); the top centre as ever.
     ISLAND_POS: Setting = "islandPos" => "center",
     // Where it is: top (the top of the screen, as ever), or taskbar, in
     // Windows' own taskbar along whichever edge that is, which stays as
@@ -94,9 +94,9 @@ keys! {
     // (embed.rs), unless turned off: laid over it then.
     ISLAND_EMBED: Setting = "islandEmbed" => true,
     // At the top of the screen, slid up out of the way while a window
-    // lies under it (island-plate.js setStow, zhoupengjie/Wakuwaku#49).
+    // lies under it (island-plate.ts setStow, zhoupengjie/Wakuwaku#49).
     ISLAND_HIDE_UNDER: Flag = "islandHideUnder" => true,
-    // The taskbar's strip: mica (the desktop's picture through it, mica.js),
+    // The taskbar's strip: mica (the desktop's picture through it, mica.ts),
     // black (solid: black, or light in Windows' light mode) or clear (the
     // desktop itself through it, a new user's since 2026-10-13); clear,
     // Mica or solid while a window is maximized or full screen on its
@@ -110,7 +110,7 @@ keys! {
     TASKBAR_DISPLAYS: Setting = "taskbarDisplays" => "main",
     TASKBAR_CLEAR_WHEN: Setting = "taskbarClearWhen" => "mica",
     // Its programs' buttons: icons alone or with their titles; in the
-    // middle of the screen or after her end (island-layout.js alignApps).
+    // middle of the screen or after her end (island-layout.ts alignApps).
     "taskbarButtons" => "icons",
     TASKBAR_ALIGN: Setting = "taskbarAlign" => "center",
     // The screen's edge it is along: bottom (Windows' own place), top,
@@ -124,7 +124,7 @@ keys! {
     SPLIT_DOCK: Setting = "splitDock" => "hide",
     SPLIT_KEYS: Setting = "splitKeys" => "top",
     // OLED's guard, on unless turned off: the island's and the taskbar's
-    // icons and words a screen pixel off by turns (island.js oledShift).
+    // icons and words a screen pixel off by turns (island.ts oledShift).
     "oledShift" => true,
     // Her updates looked for as she starts and once a day (updates.rs;
     // a downloaded exe only); downloaded from Gitee first in China and
@@ -156,7 +156,7 @@ keys! {
     HOLD: Setting = "hold" => 8,
     // At each, and whenever she has something to tell that needs no
     // answer (a hello, a plugin's nudge): round her closed island a ring
-    // of colour, then a dot until seen (ring, the flow light: island.js
+    // of colour, then a dot until seen (ring, the flow light: island.ts
     // cue); the island open by itself for a moment (open, all as before
     // 2026-10-16); or the dot alone (none). A session waiting on you
     // opens it whatever this says.
@@ -221,10 +221,10 @@ mod tests {
             // out, she is on the desktop.
             "display": if cfg!(windows) { "taskbar" } else { "island" },
             "out": false,
-            // The compact island's width: narrow, normal or wide (island.js WIDTHS).
+            // The compact island's width: narrow, normal or wide (island.ts WIDTHS).
             "islandWidth": "normal",
             // Where it sits at the top of the screen: left, center or right
-            // (anchor.js, zhoupengjie/Wakuwaku#59); the top centre as ever.
+            // (anchor.ts, zhoupengjie/Wakuwaku#59); the top centre as ever.
             "islandPos": "center",
             // Where it is: top (the top of the screen, as ever), or taskbar, in
             // Windows' own taskbar along whichever edge that is, which stays as
@@ -234,9 +234,9 @@ mod tests {
             // (embed.rs), unless turned off: laid over it then.
             "islandEmbed": true,
             // At the top of the screen, slid up out of the way while a window
-            // lies under it (island-plate.js setStow, zhoupengjie/Wakuwaku#49).
+            // lies under it (island-plate.ts setStow, zhoupengjie/Wakuwaku#49).
             "islandHideUnder": true,
-            // The taskbar's strip: mica (the desktop's picture through it, mica.js),
+            // The taskbar's strip: mica (the desktop's picture through it, mica.ts),
             // black (solid: black, or light in Windows' light mode) or clear (the
             // desktop itself through it, a new user's since 2026-10-13); clear,
             // Mica or solid while a window is maximized or full screen on its
@@ -250,7 +250,7 @@ mod tests {
             "taskbarDisplays": "main",
             "taskbarClearWhen": "mica",
             // Its programs' buttons: icons alone or with their titles; in the
-            // middle of the screen or after her end (island-layout.js alignApps).
+            // middle of the screen or after her end (island-layout.ts alignApps).
             "taskbarButtons": "icons",
             "taskbarAlign": "center",
             // The screen's edge it is along: bottom (Windows' own place), top,
@@ -264,7 +264,7 @@ mod tests {
             "splitDock": "hide",
             "splitKeys": "top",
             // OLED's guard, on unless turned off: the island's and the taskbar's
-            // icons and words a screen pixel off by turns (island.js oledShift).
+            // icons and words a screen pixel off by turns (island.ts oledShift).
             "oledShift": true,
             // Her updates looked for as she starts and once a day (updates.rs;
             // a downloaded exe only); downloaded from Gitee first in China and
@@ -296,7 +296,7 @@ mod tests {
             "hold": 8,
             // At each, and whenever she has something to tell that needs no
             // answer (a hello, a plugin's nudge): round her closed island a ring
-            // of colour, then a dot until seen (ring, the flow light: island.js
+            // of colour, then a dot until seen (ring, the flow light: island.ts
             // cue); the island open by itself for a moment (open, all as before
             // 2026-10-16); or the dot alone (none). A session waiting on you
             // opens it whatever this says.

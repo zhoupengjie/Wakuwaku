@@ -5,6 +5,7 @@
 - **语言**：代码注释和提交信息用英文，用「她」的口吻（她就是这只桌宠，照现有代码的写法）；`docs/` 下的文档用中文。
 - **提交信息**：标题一行英文，不超过 72 个字符左右，说清楚改了什么；空一行写正文，讲为什么改、怎么验证的，72 列左右换行；末尾带 `Co-Authored-By`。详见 DEVELOPMENT.md 的「提交信息」。
 - **PR** 开到 `dev`，不开到 `main`。
-- **测试**：Rust 在 `src-tauri` 里 `cargo test`；页面在仓库根目录 `node --test "test/*.test.js"`。改了页面，用 `tools/preview` 拍改动前后的对比图（见它的 README）。
+- **测试**：Rust 在 `src-tauri` 里 `cargo test`；页面在仓库根目录 `node --test "test/*.test.ts"`，类型 `npm ci` 一次后 `npm run typecheck`。改了页面，用 `tools/preview` 拍改动前后的对比图（见它的 README）。
+- **页面是 TypeScript**（`src/**/*.ts`，ES 模块，互相 import；`build.rs` 用 Node 写进 `dist/`）：只用去掉类型后就是 JavaScript 的写法，只为类型的 import 写 `import type`。见 DEVELOPMENT.md「页面的模块和类型」。
 - **发布用的 exe** 用 `pwsh scripts/build-release.ps1` 编，不要直接 `cargo build --release`（为什么见 DEVELOPMENT.md「构建和运行」）。
 - 仓库是公开的：代码、文档、提交信息里不写个人信息（账号、机器名、IP、本机路径）。

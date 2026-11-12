@@ -14,20 +14,20 @@
 // window never active, as this one never is, and neither honours a window
 // region; the accent blurs either way. Rounded by DWM's own corners
 // (DWMWA_WINDOW_CORNER_PREFERENCE, ROUND: 8 px), set in from the island's
-// edge (by the page, island-plate.js plateInset) far enough that they stay inside
+// edge (by the page, island-plate.ts plateInset) far enough that they stay inside
 // the island's rounder ones; the page paints the band left over (its rim).
 // Layered, so it lets the pointer through and fades (its alpha). Where the
 // accent is not there or is refused (SetWindowCompositionAttribute missing,
 // or answering 0, when tried at first and whenever set), there is none:
 // available says so, and the page deepens its ground instead.
 //
-// The page says where and when (island-plate.js placePlate): for a look that is
+// The page says where and when (island-plate.ts placePlate): for a look that is
 // see-through and blurred, under the island as it is, moved with it as it
 // changes size; nothing otherwise, nor while she is quiet. Made on first
 // use, on a thread of its own that waits for messages, so nothing runs
 // while it is not moving.
 //
-// A second one, the same, under her dock (split: bars.rs, bar.js glass):
+// A second one, the same, under her dock (split: bars.rs, bar.ts glass):
 // its window stays as it is while its glass grows and shrinks in its page,
 // as the island's does, the plate under the glass where it settles.
 use crate::Shared;
@@ -538,7 +538,7 @@ fn refused() {
 }
 
 // A plate wholly in (faded in, or at once): the dock's page told, which
-// keeps its glass solid till then (bars.rs plate_in, bar.js plateCame).
+// keeps its glass solid till then (bars.rs plate_in, bar.ts plateCame).
 #[cfg_attr(not(windows), allow(dead_code))]
 fn plate_in(which: usize) {
     if which != DOCK {

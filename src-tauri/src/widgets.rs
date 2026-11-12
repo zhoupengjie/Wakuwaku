@@ -103,7 +103,7 @@ fn is_color(c: &str) -> bool {
 // --- A widget's detail: what its larger sizes show ----------------------------------
 // A widget is small (its icon and value) at least; its detail says which
 // sizes it has and gives them more to show (the page draws them,
-// wcards.js):
+// wcards.ts):
 //   sizes   some of "s", "m", "l", in that order
 //   series  { points: [n…], unit, hi?, lo? }: a curve or bars, the last
 //           POINTS points kept
@@ -1102,7 +1102,7 @@ pub struct Power {
 
 // The battery for the taskbar's quick settings, beside the network and the
 // volume as Windows' own shows it there on a laptop (taskbar/win/keys.rs keys_loop,
-// island-right.js showBattery), with whether Windows shows its percentage beside
+// island-right.ts showBattery), with whether Windows shows its percentage beside
 // it; null without a battery (a desktop), and none is shown.
 pub fn battery_state() -> Value {
     match sys::power() {

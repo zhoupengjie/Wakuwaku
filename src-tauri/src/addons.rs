@@ -9,14 +9,14 @@
 // came from (a file or the market, reviewed or not), its zip's SHA-256, its
 // version and the permissions granted as it was installed.
 //
-// How they run. The island's page (src/pet/addons.js) keeps a hidden frame,
+// How they run. The island's page (src/pet/addons.ts) keeps a hidden frame,
 // sandboxed with scripts alone, for each one that is on (placed), has its
 // required settings filled, asks for an API she has, and is not stopped:
 // running(), told again as it changes (addons:changed). A frame's files come
 // from her own scheme (serve: http://wakuplugin.localhost/<id>/… on
 // Windows), its own folder's alone, under a Content-Security-Policy that
 // leaves it no network and nothing of anyone else's; its first page is hers
-// (__waku/main.html: the SDK, src/addon/sdk.js, which loads the plugin's
+// (__waku/main.html: the SDK, src/addon/sdk.ts, which loads the plugin's
 // main). The rest it reaches by messages to the page, which asks here by
 // command in the plugin's name, as the page knows it by its frame: its
 // widgets (checked as a script's are, kept while it runs), the web
@@ -27,7 +27,7 @@
 // page's watchdog stops one that hangs or is too busy (stop: stopped until
 // turned on again).
 //
-// Its view (tier 2: view.html, src/pet/views.js) is drawn in the desktop's
+// Its view (tier 2: view.html, src/pet/views.ts) is drawn in the desktop's
 // medium and large cards and the capsule's unfolded card, served with her
 // SDK first in its head (view_page); a widget it draws carries a revision
 // of what it gave for it (widgets.rs viewRev), the view itself asked for
@@ -1240,7 +1240,7 @@ struct Run {
     sent: Option<Value>,
     // What went wrong last in each (an uncaught error, waku.log's warning).
     said: HashMap<String, String>,
-    // Those stopped by the island's watchdog (addons.js), until turned on
+    // Those stopped by the island's watchdog (addons.ts), until turned on
     // again (revive) or installed anew.
     stopped: HashMap<String, Stopped>,
     // Each plugin's views' messages to its main this second (addon_view
@@ -1449,11 +1449,11 @@ pub fn view(sh: &Shared) -> Value {
                         "missing": missing,
                         // The permissions it newly asks for (market.rs's words:
                         // "net:<host>", "agents", "hardware", "notify"), for the
-                        // 「允许…」 layer (addonui.js) when it needsApproval.
+                        // 「允许…」 layer (addonui.ts) when it needsApproval.
                         "newPerms": more,
                         "said": said.get(id),
                         // Stopped by the watchdog: why, when, since when it
-                        // did not answer and how many times (addonui.js says it).
+                        // did not answer and how many times (addonui.ts says it).
                         "stopped": stopped.get(id).filter(|_| state == "stopped").map(|s| json!({ "why": s.why, "at": s.at, "since": s.since, "times": s.times })),
                         "settings": settings,
                     }))
@@ -2100,8 +2100,9 @@ fn content_type(ext: &str) -> &'static str {
     }
 }
 
-// The SDK, the waku object of main.js (docs/PLUGINS.md).
-const SDK: &str = include_str!("../../src/addon/sdk.js");
+// The SDK, the waku object of main.js (docs/PLUGINS.md): src/addon/sdk.ts
+// as scripts/build-pages.mjs writes it (build.rs runs it first).
+const SDK: &str = include_str!("../../dist/addon/sdk.js");
 
 // A plugin frame's first page: the SDK alone, which then loads its main.
 fn host_page(id: &str) -> String {
@@ -2322,7 +2323,7 @@ pub async fn addons_running(app: AppHandle) -> Value {
     list
 }
 
-// A running plugin's asking (src/pet/addons.js), from the island's page
+// A running plugin's asking (src/pet/addons.ts), from the island's page
 // alone: widget { sub, data }, remove { sub }, fetch { url, method, headers,
 // body }, storage { op, key, value }, notify { text }, hardware, said {
 // line }. And its watchdog's: stop { why, since, times } (one not answering
@@ -2438,7 +2439,7 @@ fn widget(sh: &Shared, id: &str, sub: Option<&str>, data: &Value) -> Result<Valu
     Ok(json!({ "ok": true }))
 }
 
-// One the watchdog gave up on (addons.js): stopped until turned on again,
+// One the watchdog gave up on (addons.ts): stopped until turned on again,
 // with why (hung, crashed, busy), since when it did not answer, how many
 // times; its frame and its widgets gone with it (sync).
 fn stop(sh: &Shared, id: &str, why: &str, since: Option<u64>, times: Option<u64>) -> Result<Value, String> {
@@ -2470,7 +2471,7 @@ fn pause_views(sh: &Shared, paused: bool) {
     }
 }
 
-// A card's view (src/pet/views.js), from her island's page or a desktop's:
+// A card's view (src/pet/views.ts), from her island's page or a desktop's:
 // data, the page to show for a widget drawn by its plugin's view and what
 // to hand it ({ page, data, rev }); send { message }, a message of the view
 // for its plugin's main.js, told the island's page (addons:view { id, sub,

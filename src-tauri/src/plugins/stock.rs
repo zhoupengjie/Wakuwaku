@@ -7,7 +7,7 @@
 // Up is red and down green, as Chinese markets show them, or green up (the
 // Plugins page's 涨跌颜色, her language's until chosen). The colour it sends
 // is the one place that says so: every place the widget is drawn follows it
-// (wcards.js trendOf).
+// (wcards.ts trendOf).
 use std::time::Duration;
 
 use serde_json::{json, Value};

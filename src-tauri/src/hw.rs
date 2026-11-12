@@ -147,7 +147,7 @@ impl Conf {
     }
 }
 
-// What a piece of hardware is: its glyph on the island (widgets.js
+// What a piece of hardware is: its glyph on the island (widgets.ts
 // PART_GLYPH) and its group in the settings.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Class {
@@ -198,7 +198,7 @@ pub struct Hardware {
 pub struct Reading {
     pub id: String,
     pub hardware_id: String,
-    // Its name, a key in her strings (i18n.js hw.*).
+    // Its name, a key in her strings (i18n.ts hw.*).
     pub label: &'static str,
     pub kind: Kind,
     pub value: Option<f64>,
@@ -1842,7 +1842,7 @@ mod tests {
     // both languages.
     #[test]
     fn its_words_are_in_both_languages() {
-        let strings = include_str!("../../src/shared/i18n.js");
+        let strings = include_str!("../../src/shared/i18n.ts");
         let keys = ["hw.load", "hw.clock", "hw.fastest", "hw.temp", "hw.coreClock", "hw.vram", "hw.shared", "hw.fan", "hw.inUseShare", "hw.inUse", "hw.available", "hw.cached", "hw.committed", "hw.active", "hw.read", "hw.write", "hw.down", "hw.up", "hw.charge", "hw.charging", "hw.cores", "hw.vramTotal", "hw.memTotal"];
         for key in keys {
             assert_eq!(strings.matches(&format!("'{key}':")).count(), 2, "{key}");

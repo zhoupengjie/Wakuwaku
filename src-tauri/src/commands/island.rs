@@ -14,7 +14,7 @@ pub async fn island_holding(app: AppHandle, is_holding: bool) {
     island::set_holding(&shared(&app), is_holding);
 }
 
-// The taskbar's layout being edited (island.js editTaskbar), and where its
+// The taskbar's layout being edited (island.ts editTaskbar), and where its
 // bar, library and tools are in the page: the window keeps the mouse there.
 #[tauri::command]
 pub async fn island_editing(app: AppHandle, on: bool, rects: Vec<[f64; 4]>, page_sf: Option<f64>) {

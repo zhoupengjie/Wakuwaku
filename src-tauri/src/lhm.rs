@@ -76,7 +76,7 @@ impl Kind {
         })
     }
 
-    // As the page knows it (widgets.js shareOf, isHigh).
+    // As the page knows it (widgets.ts shareOf, isHigh).
     pub fn name(self) -> &'static str {
         match self {
             Kind::Temperature => "temp",
@@ -203,7 +203,7 @@ pub fn defaults(sensors: &[Sensor]) -> Vec<String> {
     picked
 }
 
-// Its glyph in the monitor (widgets.js PART_GLYPH): the hardware's, a fan's own.
+// Its glyph in the monitor (widgets.ts PART_GLYPH): the hardware's, a fan's own.
 fn icon(s: &Sensor) -> &'static str {
     let h = s.hardware_id.as_str();
     if s.kind == Kind::Fan {

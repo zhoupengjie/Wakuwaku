@@ -141,8 +141,8 @@ pub(super) extern "system" fn on_event(_hook: isize, event: u32, hwnd: Hwnd, obj
     }
     // Moved or sized: only a window over a display, or no longer, or
     // over another one now, changes the buttons (a clear strip filled
-    // in while one is over its display: hers, island.js; the others',
-    // bar.js); every move of every window comes here.
+    // in while one is over its display: hers, island.ts; the others',
+    // bar.ts); every move of every window comes here.
     if event == EVENT_OBJECT_LOCATIONCHANGE {
         let h = hwnd as isize;
         // SAFETY: a plain query; a gone window gives the nearest display.

@@ -303,13 +303,13 @@ pub fn taskbar_input(id: String) -> bool {
 }
 
 // Windows' own battery font, for the page to draw the battery as Windows'
-// taskbar does (island.js); empty where Windows has none.
+// taskbar does (island.ts); empty where Windows has none.
 #[tauri::command]
 pub fn taskbar_battery_font() -> tauri::ipc::Response {
     tauri::ipc::Response::new(crate::widgets::battery_font())
 }
 
-// Windows' own Task View pictures, for its button (island.js, bar.js): the
+// Windows' own Task View pictures, for its button (island.ts, bar.ts): the
 // two Windows 11's Settings shows by the Task view switch, as its taskbar
 // has them, { light, dark } (for a light strip, for a dark one), each an
 // SVG. Kept within Settings' resource index, in no file of their own

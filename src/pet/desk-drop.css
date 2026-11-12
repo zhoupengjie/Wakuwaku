@@ -1,4 +1,4 @@
-/* A widget dragged from her home over the desktop (desk-drop.js): the
+/* A widget dragged from her home over the desktop (desk-drop.ts): the
    grid's cells faintly, where it would land as a dashed place (as a board
    shows where a tile goes, .bghost), amber where it may not; a board it
    would go into ringed. */

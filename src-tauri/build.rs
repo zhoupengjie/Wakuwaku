@@ -12,6 +12,7 @@ fn main() {
         let tree = std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
         println!("cargo:rustc-env=WAKUWAKU_SOURCE_TREE={tree}");
     }
+    pages();
     words();
     tauri_build::build();
     // The examples that make Tauri windows (examples/embed_spike.rs) linked
@@ -24,18 +25,42 @@ fn main() {
     }
 }
 
+// Her pages as WebView2 runs them: src/ (TypeScript, its pages and styles)
+// written into dist/, which tauri.conf.json's frontendDist points at and the
+// exe carries, by scripts/build-pages.mjs with Node (22.13 or later; no npm
+// packages needed). Run again whenever anything in src/ changes, so every
+// build carries the pages as they are. NODE names another node than the one
+// on PATH.
+fn pages() {
+    let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"));
+    let root = manifest.join("..");
+    let script = root.join("scripts").join("build-pages.mjs");
+    println!("cargo:rerun-if-changed={}", root.join("src").display());
+    println!("cargo:rerun-if-changed={}", script.display());
+    println!("cargo:rerun-if-env-changed=NODE");
+    let node = std::env::var_os("NODE").unwrap_or_else(|| "node".into());
+    let out = std::process::Command::new(&node)
+        .arg(&script)
+        .current_dir(&root)
+        .output()
+        .unwrap_or_else(|e| panic!("her pages are built with Node (scripts/build-pages.mjs, Node 22.13 or later), and {node:?} would not start: {e}"));
+    if !out.status.success() {
+        panic!("scripts/build-pages.mjs:\n{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    }
+}
+
 // The words the program says itself are written where the pages' are, in
-// src/shared/i18n.js, and nowhere else (i18n.rs): the keys its source names
+// src/shared/i18n.ts, and nowhere else (i18n.rs): the keys its source names
 // (a key in quotes, or a prefix it builds keys from, format!("mood.{mood}")),
 // with their Chinese and English, into OUT_DIR/words.rs, sorted by key.
 fn words() {
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"));
-    let js = manifest.join("..").join("src").join("shared").join("i18n.js");
+    let js = manifest.join("..").join("src").join("shared").join("i18n.ts");
     let src = manifest.join("src");
     println!("cargo:rerun-if-changed={}", js.display());
     println!("cargo:rerun-if-changed={}", src.display());
     let text = fs::read_to_string(&js).unwrap_or_else(|e| panic!("{}: {e}", js.display()));
-    let table = strings_of(&text).unwrap_or_else(|e| panic!("src/shared/i18n.js: {e}"));
+    let table = strings_of(&text).unwrap_or_else(|e| panic!("src/shared/i18n.ts: {e}"));
     let (zh, en) = (&table["zh"], &table["en"]);
     let (mut named, mut prefixes) = (BTreeSet::new(), BTreeSet::new());
     let mut files = Vec::new();
@@ -44,7 +69,7 @@ fn words() {
         let code = fs::read_to_string(&file).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
         names_in(&code, &mut named, &mut prefixes);
     }
-    let mut out = String::from("// Written by build.rs from src/shared/i18n.js: (key, Chinese, English), by key.\npub static WORDS: &[(&str, &str, &str)] = &[\n");
+    let mut out = String::from("// Written by build.rs from src/shared/i18n.ts: (key, Chinese, English), by key.\npub static WORDS: &[(&str, &str, &str)] = &[\n");
     for (key, english) in en {
         if named.contains(key) || prefixes.iter().any(|p: &String| key.starts_with(p.as_str())) {
             let chinese = zh.get(key).unwrap_or(english);
@@ -67,7 +92,7 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-// In a Rust file, each "a.b" in quotes (a key, if i18n.js has it: one the
+// In a Rust file, each "a.b" in quotes (a key, if i18n.ts has it: one the
 // program only hands to the pages costs a line here, no more), and each
 // format!("a.{...}") in a t( call, a prefix keys are built from.
 fn names_in(code: &str, named: &mut BTreeSet<String>, prefixes: &mut BTreeSet<String>) {
@@ -97,7 +122,7 @@ fn names_in(code: &str, named: &mut BTreeSet<String>, prefixes: &mut BTreeSet<St
     }
 }
 
-// i18n.js's STRINGS: { zh: { 'key': 'words', ... }, en: { ... } }, comments
+// i18n.ts's STRINGS: { zh: { 'key': 'words', ... }, en: { ... } }, comments
 // skipped, each string in ' or " with JS's escapes. Anything else in it is
 // an error here, so the table stays one both sides read.
 fn strings_of(js: &str) -> Result<BTreeMap<String, BTreeMap<String, String>>, String> {
@@ -138,7 +163,7 @@ fn strings_of(js: &str) -> Result<BTreeMap<String, BTreeMap<String, String>>, St
 struct Tokens {
     chars: Vec<char>,
     at: usize,
-    // i18n.js's line the first char is on, for errors.
+    // i18n.ts's line the first char is on, for errors.
     first_line: usize,
 }
 

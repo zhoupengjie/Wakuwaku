@@ -78,7 +78,7 @@ pub fn error_kind(error: &str) -> &'static str {
 
 // Whether any of them is connected, as last looked (at start, as the
 // settings read it, after connecting) or heard (any event from them): what
-// the island asks for while it is not (island.js), without reading their
+// the island asks for while it is not (island.ts), without reading their
 // settings files on every redraw. Connected until looked, so a first draw
 // never asks wrongly.
 static CONNECTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
@@ -125,7 +125,7 @@ pub fn tools_here() -> Vec<&'static str> {
 // agent-core is asked for here, by the compiler, in each.
 
 // The agents she connects, in the order she names them (tools_here; the
-// Agent page has its own, agents.js).
+// Agent page has its own, agents.ts).
 pub const ALL: [Agent; 8] = [Agent::Claude, Agent::Codex, Agent::Agy, Agent::Opencode, Agent::Omp, Agent::Zcode, Agent::Dsh, Agent::Reasonix];
 
 // Its place in ALL: what is kept for each of them goes by it (shared.rs seen).
@@ -213,7 +213,7 @@ pub fn connected(agent: Agent, port: u16) -> bool {
 }
 
 // The statuses that count as ours being there: each the page's `in` too
-// (agents.js; its DeepSeek Harness's words its own, from these two).
+// (agents.ts; its DeepSeek Harness's words its own, from these two).
 fn counts_in(agent: Agent, status: &str) -> bool {
     match agent {
         Agent::Claude => !matches!(status, "missing" | "unreadable"),
@@ -286,18 +286,18 @@ mod tests {
         assert_eq!(by_id("gemini"), None);
     }
 
-    // What counts as ours being there, here and on the page (agents.js, each
+    // What counts as ours being there, here and on the page (agents.ts, each
     // agent's `in`): the same statuses, so the island and the Agent page
     // never tell one apart. Claude Code's counts by its plugin or hooks
     // (connection), and the page's DeepSeek Harness words come of ok and
     // stale (dsh_view): those two count, and are among its own.
     #[test]
     fn connected_as_the_page_counts_it() {
-        let page = include_str!("../../../src/pet/agents.js");
+        let page = include_str!("../../../src/pet/agents.ts");
         let mut ins: Vec<(Agent, Vec<String>)> = Vec::new();
-        for part in page.split("      id: '").skip(1) {
+        for part in page.split("\n    id: '").skip(1) {
             let id = &part[..part.find('\'').unwrap()];
-            let list = part.split("      in: [").nth(1).and_then(|rest| rest.split(']').next()).unwrap_or_else(|| panic!("{id}'s in"));
+            let list = part.split("\n    in: [").nth(1).and_then(|rest| rest.split(']').next()).unwrap_or_else(|| panic!("{id}'s in"));
             let agent = by_id(id).unwrap_or_else(|| panic!("{id}: an id settings_agent knows"));
             ins.push((agent, list.split(',').map(|s| s.trim().trim_matches('\'').to_string()).filter(|s| !s.is_empty()).collect()));
         }

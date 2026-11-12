@@ -31,7 +31,7 @@
 // "mailAgentConf": { claude | codex | agy: { access, model, effort,
 // sumModel, sumEffort } }, what a session may do and the models (agent.rs);
 // "mailPanes": "two" | "one", the Mail page as list and letter side by side
-// (the default), or one under the other (settings.js);
+// (the default), or one under the other (settings.ts);
 // "mailOffline": "year" (the default) | "90d" | "all" | "opened", how much
 // is kept whole on this computer ahead (store.rs Offline);
 // "mailCodes": true (the default) | false, a code or a link to sign in with

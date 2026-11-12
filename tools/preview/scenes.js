@@ -71,11 +71,11 @@
     dock: [0, SCREEN[1] - 48, SCREEN[0], 48],
   }
   // The island's window at a top corner (islandPos: left, right), as
-  // island.rs puts it (zhoupengjie/Wakuwaku#59; anchor.js
+  // island.rs puts it (zhoupengjie/Wakuwaku#59; anchor.ts
   // windowLeft): at the screen's side; the island in it 8 px from that side.
   // Windows' own taskbar at the bottom, not drawn: the work area's top and
   // sides are the screen's. Along the foot of the screen (islandEdge
-  // bottom, zhoupengjie/Wakuwaku#105; anchor.js windowTop): its foot on the
+  // bottom, zhoupengjie/Wakuwaku#105; anchor.ts windowTop): its foot on the
   // screen's, over where Windows' taskbar would be, as tall as it is kept here.
   function islandWindow(pos, edge) {
     const [, y, w, h] = WINDOWS.island
@@ -457,7 +457,7 @@
   const openMarketItem = async (p, id) => {
     await openMarket(p)
     p.click(`#island-settings [data-mk-item="${id}"]`)
-    // Her desktop's card templates loaded the first time (wdesk.js), and desk.css in their shadow.
+    // Her desktop's card templates loaded the first time (wdesk.ts), and desk.css in their shadow.
     await p.wait(900)
   }
   const addonShot = (id, title, steps, more = {}, shot = {}) => ({ id, section: 'settings', title: `设置 · 插件 · ${title}`, page: 'island', home: 'taskbar', view: [0, above(660), 560, 660], world: F => ({ ...withAddons(F), ...more }), steps, ...shot })
@@ -1298,7 +1298,9 @@
       settle: 700,
       world: F => ({ ...withAddons(F), sessions: [F.session('working')], taskbarLayout: { left: ['her'], center: ['start', 'apps'], right: [{ id: 'wtw', type: 'plugin', of: 'weather', size: 'M', icon: 'weather' }, 'monitor', 'tray', 'keys', 'quick', 'clock'] } }),
       steps: async p => {
-        window.AddonUI?.news.add('tally')
+        // The page's addonui (a module the page imports; on window before).
+        const ui = window.AddonUI || (await import(new URL('addonui.js', window.Fake.PAGES).href))
+        ui.news.add('tally')
         await p.wait(200)
         p.emit('taskbar:edit', { picker: true })
         await p.wait(600)

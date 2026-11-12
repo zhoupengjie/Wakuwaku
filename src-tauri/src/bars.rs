@@ -16,7 +16,7 @@
 // her strip the top bar. A window of its own (dock-1, ...) as her island's
 // is: a band along the whole foot as high as Windows' room there, never
 // moved nor sized while it is up, its glass in its middle growing and
-// shrinking in its page alone (bar.js glass), the pointer going through
+// shrinking in its page alone (bar.ts glass), the pointer going through
 // the band but where the glass is (dock_glass: hit, poll); Windows'
 // acrylic on a plate of its own under it (backplate.rs DOCK), where the
 // glass settles, so what is behind it shows blurred through it, the windows
@@ -533,7 +533,7 @@ fn outward((ox, oy): (i32, i32), sf: f64, (x, y, w, h): (f64, f64, f64, f64)) ->
 }
 
 // Its page told whether its glass is to be out of the way (slid down in it
-// but for its top) or up (bar.js dock:stow); the pointer going through it
+// but for its top) or up (bar.ts dock:stow); the pointer going through it
 // meanwhile, its plate and its minimized windows' pictures off as it goes
 // (its page puts them back once it is up and still).
 // The dock's plate of Windows' acrylic wholly in under it (backplate.rs):
@@ -603,7 +603,7 @@ fn reveal(sh: &Shared, label: &str) {
 // window's id and x, y, w, h in its px, and where its program's icon goes
 // over it; dpr, their scale): their live pictures there while it is up,
 // their icons over them. Sent at every frame as a window grows into it or
-// shrinks away (bar.js follow), the pictures kept all the while.
+// shrinks away (bar.ts follow), the pictures kept all the while.
 #[tauri::command]
 #[allow(clippy::type_complexity)]
 pub fn dock_thumbs(app: tauri::AppHandle, window: WebviewWindow, items: Vec<(i64, f64, f64, f64, f64, Option<(f64, f64, f64, f64)>)>, dpr: Option<f64>) {
@@ -644,7 +644,7 @@ fn show_mins(sh: &Shared, off: bool) {
     });
 }
 
-// From its page (bar.js glass; its px from its corner, dpr their scale):
+// From its page (bar.ts glass; its px from its corner, dpr their scale):
 // where its glass is (glass), the part of its window that takes the pointer
 // (hit: as it grows or shrinks, the bigger of where it was and where it
 // goes; down to the window's foot), and its plate of Windows' acrylic (plate: under the glass where
@@ -907,7 +907,7 @@ pub fn read_papers(sh: &Shared) {
     refresh(sh);
 }
 
-// A display's wallpaper for a strip's page (mica.js place): the display and
+// A display's wallpaper for a strip's page (mica.ts place): the display and
 // all of them from the strip's corner, in its px.
 fn paper_from(paper: &crate::wallpaper::Paper, strip: Mon, mon: Mon, screen: Mon, sf: f64) -> Value {
     let rel = |(x, y, w, h): Mon| json!([(x - strip.0) as f64 / sf, (y - strip.1) as f64 / sf, w as f64 / sf, h as f64 / sf]);
@@ -981,14 +981,14 @@ pub fn full_screen(sh: &Shared, cover: Option<Mon>) {
 }
 
 // --- A program's windows or what can be done with it, over its button -----------------
-// As on her own taskbar (island-glide.js openPop): the pointer resting on a
+// As on her own taskbar (island-glide.ts openPop): the pointer resting on a
 // running program's button, its windows, each a card with its live picture
 // (Windows draws them, taskbar/mod.rs thumbs); a right press, its menu (another
 // window, keep it on the taskbar or no longer, close). A strip there is too
 // thin to hold them: one window of their own (barpop: pet/barpop.html),
 // made the first time, laid against the strip over the button, for any of
 // them. It goes once the pointer has left the button and it a moment
-// (barpop.js), at a press anywhere else, or when its program goes.
+// (barpop.ts), at a press anywhere else, or when its program goes.
 const POP: &str = "barpop";
 
 struct Pop {
@@ -1059,8 +1059,8 @@ fn open_pop(sh: &Arc<Shared>) {
     send_pop(sh);
 }
 
-// The pointer on a strip's buttons or off them (bar.js), for the list to
-// stay while it goes from one to the other (barpop.js).
+// The pointer on a strip's buttons or off them (bar.ts), for the list to
+// stay while it goes from one to the other (barpop.ts).
 #[tauri::command]
 pub fn bar_pop_over(app: tauri::AppHandle, window: WebviewWindow, over: bool) {
     let open = OPEN.lock().unwrap().as_ref().is_some_and(|p| p.bar == window.label());
@@ -1156,7 +1156,7 @@ pub fn barpop_place(app: tauri::AppHandle, w: f64, h: f64, dpr: Option<f64>) {
         p.rect = Some(rect);
     }
     // Where it lies, told the strip's page in its px: the pointer on its way
-    // up to it across another button keeps it (bar.js aimPop, #56).
+    // up to it across another button keeps it (bar.ts aimPop, #56).
     let (left, top) = ((rect.0 - strip.0) as f64 / sf, (rect.1 - strip.1) as f64 / sf);
     let _ = sh.app.emit_to(bar.as_str(), "bar:pop-at", json!({ "left": left, "top": top, "right": left + rect.2 as f64 / sf, "bottom": top + rect.3 as f64 / sf }));
     taskbar::watch_presses(taskbar::WATCH_BARS, true);
@@ -1272,7 +1272,7 @@ pub fn for_main(sh: &Shared, all: &Value) -> Value {
 // A window maximized or full screen on this display, not minimized
 // (taskbar/win/buttons.rs fills_display), whichever taskbar has its button: a clear
 // strip here fills in then, as Mica or solid (taskbarClearWhen), as hers
-// does on hers (island.js isFilled).
+// does on hers (island.ts isFilled).
 fn fills(all: &Value, mon: Mon) -> bool {
     all.as_array().into_iter().flatten().flat_map(|a| a["windows"].as_array().into_iter().flatten()).any(|w| {
         w["fills"].as_bool() == Some(true)

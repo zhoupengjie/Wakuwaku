@@ -1,0 +1,51 @@
+// What her pages find on window that no script of theirs made: Tauri's
+// (withGlobalTauri in tauri.conf.json; in the preview, its stand-in,
+// tools/preview/fake-tauri.js), and what Rust calls on the page. Only what the
+// pages use of each.
+
+interface TauriEvent<T> {
+  event: string
+  id: number
+  payload: T
+}
+
+// listen()'s target: this window alone (Tauri 2 sends to every window else).
+interface TauriTarget {
+  kind: 'Any' | 'AnyLabel' | 'App' | 'Window' | 'Webview' | 'WebviewWindow'
+  label?: string
+}
+
+// What setTimeout and setInterval give back, 0 while none is set: a number
+// in the page, a Timeout where the tests check the pages with Node's types.
+type Timer = ReturnType<typeof setTimeout> | number
+
+interface Window {
+  __TAURI__: {
+    core: {
+      invoke<T = any>(cmd: string, args?: Record<string, unknown>): Promise<T>
+    }
+    event: {
+      listen<T = any>(event: string, handler: (event: TauriEvent<T>) => void, options?: { target?: string | TauriTarget }): Promise<() => void>
+    }
+    webviewWindow?: {
+      getCurrentWebviewWindow?(): { label: string }
+    }
+  }
+  __TAURI_INTERNALS__?: {
+    metadata?: { currentWebview?: { label?: string } }
+  }
+  // /debug/eval (debug.rs): Rust hands the page a function to run and takes
+  // back what it gives (bridge.ts, desk.ts).
+  __wkEval?: (id: string | number, fn: () => unknown) => void
+}
+
+// Her pages' elements are HTML ones: a query by selector gives an HTMLElement
+// (an SVG one, of the few, is said so where it is used). Overloads declared
+// here come before lib.dom's own.
+interface ParentNode {
+  querySelector<E extends Element = HTMLElement>(selectors: string): E | null
+  querySelectorAll<E extends Element = HTMLElement>(selectors: string): NodeListOf<E>
+}
+interface Element {
+  closest<E extends Element = HTMLElement>(selectors: string): E | null
+}

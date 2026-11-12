@@ -1,4 +1,4 @@
-// The settings, grown out of the island (src/pet/settings.js): what they
+// The settings, grown out of the island (src/pet/settings.ts): what they
 // show (a snapshot, pushed again as things change) and what they change.
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ const REPO: &str = "https://github.com/zhoupengjie/wakuwaku";
 // How to write a plugin (the Plugins page's 开发文档, under a .zip it cannot take).
 const PLUGIN_DOCS: &str = "https://github.com/zhoupengjie/wakuwaku/blob/main/docs/PLUGINS.md";
 
-// Each agent's own page, by its id (src/pet/agents.js), for the Agent page's
+// Each agent's own page, by its id (src/pet/agents.ts), for the Agent page's
 // other supported tools: the only pages it may open.
 const AGENT_SITES: [(&str, &str); 8] = [
     ("claude", "https://claude.com/product/claude-code"),
@@ -34,7 +34,7 @@ fn seen_at(sh: &Shared, agent: Agent) -> u64 {
     sh.seen[connection::slot(agent)].load(Ordering::SeqCst)
 }
 
-// An agent's block of the snapshot (agents.js block): how ours stands
+// An agent's block of the snapshot (agents.ts block): how ours stands
 // (connection::status; DeepSeek Harness's as dsh_view tells it), the file
 // it is written into and the same as read (~ for the home folder), whether
 // a copy of that was kept, whether any event of it came since she started;
@@ -112,7 +112,7 @@ fn agent_row(sh: &Shared, agent: Agent) -> AgentRow {
     }
 }
 
-// The displays for the Look page (settings-welcome.js screenRow, #104): each one's
+// The displays for the Look page (settings-welcome.ts screenRow, #104): each one's
 // key (what homeDisplay holds), its number as Windows numbers them
 // (\\.\DISPLAY2: 2; its place in the list where the name has none), its
 // size in physical px, whether it is Windows' main display, and whether her
@@ -252,12 +252,12 @@ fn is_island_look(v: &Value) -> bool {
 }
 
 // The taskbar's layout: { left, center, right }, each a list of its parts
-// (island-layout.js TB_PARTS), none twice and nothing else; one left out goes where
+// (island-layout.ts TB_PARTS), none twice and nothing else; one left out goes where
 // the default has it.
 // "front": the program in front, by its name (the top bar's first, split).
 const TASKBAR_PARTS: [&str; 9] = ["her", "start", "apps", "monitor", "tray", "keys", "quick", "clock", "front"];
 
-// A widget put on the taskbar (widgets.js isEntry): { id, type, of, size,
+// A widget put on the taskbar (widgets.ts isEntry): { id, type, of, size,
 // name, icon }, its id "w" and up to 15 of a-z 0-9; a widget's or a
 // plugin's (of: its id), or a spacer (flex, gap, sep); or several in one
 // place (carousel: in turn; stack: the first, the rest opened over it),
@@ -336,7 +336,7 @@ pub fn is_on_taskbar(layout: &Value, widget: &str) -> bool {
         .any(|e| shows(e) || e["items"].as_array().is_some_and(|items| items.iter().any(shows)))
 }
 
-// The desktop's widgets (deskgrid.js isEntry, isLayout): up to 32, each
+// The desktop's widgets (deskgrid.ts isEntry, isLayout): up to 32, each
 // { id, type, of, size, name, icon, d, at } alone (a widget's or a
 // plugin's) or { id, type: "stack", items, size, d, at } several in one, 2
 // to 8 as the taskbar's groups have them, or { id, type: "board", name,
@@ -381,7 +381,7 @@ fn is_desk_entry(v: &Value) -> bool {
     ok_id && e.contains_key("size") && ok_kind && ok_rest
 }
 
-// A board's tiles (deskgrid.js isBoardEntry): 16 at most, each a member
+// A board's tiles (deskgrid.ts isBoardEntry): 16 at most, each a member
 // with its size and its cell on the board's grid of 8 columns and 4 rows,
 // whole on it, none over another, each widget or plugin once.
 fn is_board_tiles(v: &Value) -> bool {
@@ -433,7 +433,7 @@ pub fn is_desk_layout(v: &Value) -> bool {
 }
 
 // Boards kept as combos (the picker's 组合, a board's 存为组合…), checked as
-// deskgrid.js isBoardSets checks them: up to 20, each { id, name, items,
+// deskgrid.ts isBoardSets checks them: up to 20, each { id, name, items,
 // saved } and nothing else, ids and names each once. id: "s" and 1 to 15 of
 // a-z 0-9; name: 1 to 16 characters, none a control character, no space at
 // either end (as JavaScript's trim() has them); items: 1 to 16 tiles {
@@ -459,7 +459,7 @@ fn is_board_set(v: &Value) -> bool {
     id && name && saved && tiles && keys && s.get("items").is_some_and(is_board_tiles)
 }
 
-// A combo's name (deskgrid.js isSetName): a board's (16 characters at most,
+// A combo's name (deskgrid.ts isSetName): a board's (16 characters at most,
 // no control character: U+0000 to U+001F, U+007F), not blank, and with no
 // space at either end, the spaces being those JavaScript's trim() takes off
 // (Rust's White_Space less U+0085, and U+FEFF).
@@ -468,9 +468,9 @@ fn is_set_name(n: &str) -> bool {
     !n.is_empty() && n.chars().count() <= 16 && !n.chars().any(|c| c <= '\u{1f}' || c == '\u{7f}') && n.trim_matches(space) == n
 }
 
-// Her capsule as a container of widgets (capsule.js: storedOf and the
+// Her capsule as a container of widgets (capsule.ts: storedOf and the
 // patches it writes): { members, spin }, each of them optional (a turn's
-// length is kept on its own before any member is ordered: capsule.js
+// length is kept on its own before any member is ordered: capsule.ts
 // spinPatch). members: up to 64 of { key, mode } and nothing else, each key
 // once; key "widget:" or "plugin:" and 1 to 40 of a-z 0-9 _ -; mode turn
 // (takes its turn in the closed capsule, 轮播), pin (always at its right end,
@@ -509,7 +509,7 @@ pub fn is_on_desk(layout: &Value, widget: &str) -> bool {
 // Put elsewhere than the island: on the desktop, or on the taskbar while
 // that is her home. A widget is in one place (the widget design's §7): it
 // neither takes turns in the closed island nor stays pinned at its end
-// there (island.js placedOut); the open island lists it all the same.
+// there (island.ts placedOut); the open island lists it all the same.
 pub fn is_placed_out(desk: &Value, taskbar: &Value, taskbar_home: bool, widget: &str) -> bool {
     (cfg!(windows) && is_on_desk(desk, widget)) || (taskbar_home && is_on_taskbar(taskbar, widget))
 }
@@ -540,7 +540,7 @@ fn is_taskbar_layout(v: &Value) -> bool {
 
 // How long done, review and error stay (shared.rs hold): until seen, or whole
 // seconds from 3 to 600; the settings offer 8, 30 and 120, and Custom for
-// any other (#59; flow.js holdSecs keeps what is typed within).
+// any other (#59; flow.ts holdSecs keeps what is typed within).
 const HOLD_SECS: std::ops::RangeInclusive<u64> = 3..=600;
 
 fn is_hold(v: &Value) -> bool {
@@ -550,7 +550,7 @@ fn is_hold(v: &Value) -> bool {
 // Where her island sits at the top of the screen (zhoupengjie/Wakuwaku#59):
 // a top corner, or the top centre (the default). Kept here; placing the
 // window by it is island.rs's (fit, side_changed), and the page lays the
-// island out at the side it is told (anchor.js, pet:update islandAt).
+// island out at the side it is told (anchor.ts, pet:update islandAt).
 fn is_island_pos(v: &Value) -> bool {
     matches!(v.as_str(), Some("left" | "center" | "right"))
 }
@@ -560,7 +560,7 @@ fn is_island_pos(v: &Value) -> bool {
 // left as it is (its capsule inside it, embed.rs; "bottom" until 2026-11-07,
 // data.rs adopt_island_edge). Placing the window by it is island.rs's (fit)
 // too, and the page lays the island out along the edge of the screen it is
-// told (anchor.js, pet:update islandEdge).
+// told (anchor.ts, pet:update islandEdge).
 fn is_island_edge(v: &Value) -> bool {
     matches!(v.as_str(), Some("top" | "taskbar"))
 }
@@ -605,7 +605,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         // The top bar and the dock (split) stand in for Windows' taskbar too.
         "display" => v.as_str() == Some("island") || (cfg!(windows) && matches!(v.as_str(), Some("taskbar" | "split"))),
         "islandWidth" => matches!(v.as_str(), Some("narrow" | "normal" | "wide")),
-        // Where her island sits at the top of the screen (anchor.js, #59).
+        // Where her island sits at the top of the screen (anchor.ts, #59).
         "islandPos" => is_island_pos(v),
         // Where it is: at the top of the screen, or in Windows' taskbar (#105).
         "islandEdge" => is_island_edge(v),
@@ -630,9 +630,9 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         // desk.rs key_for), kept while that display is unplugged so she goes
         // back to it; "" for Windows' main display.
         "homeDisplay" => v.as_str().is_some_and(|k| k.len() <= 64 && !k.chars().any(char::is_control)),
-        // The taskbar's parts in three runs (island-layout.js tbLayout), each once.
+        // The taskbar's parts in three runs (island-layout.ts tbLayout), each once.
         "taskbarLayout" => v.is_null() || is_taskbar_layout(v),
-        // The desktop's widgets (desk.rs, deskgrid.js).
+        // The desktop's widgets (desk.rs, deskgrid.ts).
         "deskLayout" => is_desk_layout(v),
         // Boards kept as combos, to be put up again from the picker's 组合.
         "boardSets" => is_board_sets(v),
@@ -643,7 +643,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "hold" => is_hold(v),
         // When she has something to tell that needs no answer (a turn's end,
         // a hello, a plugin's nudge): the island open by itself, a ring round
-        // it (the flow light), or only the dot (island-ring.js cue).
+        // it (the flow light), or only the dot (island-ring.ts cue).
         "endCue" => matches!(v.as_str(), Some("open" | "ring" | "none")),
         // Minutes a session at rest stays in sight, or 0: always (state.rs is_shown).
         "idleHideMin" => matches!(v.as_u64(), Some(0 | 15 | 30 | 60 | 120)),
@@ -652,7 +652,7 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "widgetsOff" | "widgetOrder" => v.as_array().is_some_and(|ids| ids.len() <= 64 && ids.iter().all(|id| id.as_str().is_some_and(crate::widgets::is_id))),
         "widgetSpin" => matches!(v.as_u64(), Some(0 | 5 | 8 | 15)),
         // Each widget's row in the open island, small or medium, by its id
-        // (island.js rowSize).
+        // (island.ts rowSize).
         "widgetSize" => v.as_object().is_some_and(|m| m.len() <= 64 && m.iter().all(|(id, s)| crate::widgets::is_id(id) && matches!(s.as_str(), Some("S" | "M")))),
         "plugins" => plugins::is_ok(v),
         "monitor" => v.as_object().is_some_and(|m| {
@@ -669,11 +669,11 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         "widgetNudge" => is_bool,
         // The market's plugins updated by themselves when they ask for no more (market.rs).
         "pluginAutoUpdate" => is_bool,
-        // Not to be reminded that nothing is connected (island.js isHinting).
+        // Not to be reminded that nothing is connected (island.ts isHinting).
         "connectHintOff" => is_bool,
-        // Her island's look on the taskbar, by Windows' mode (island.js
+        // Her island's look on the taskbar, by Windows' mode (island.ts
         // drawIslandLook): none, or a mode's none, is Windows' own grey.
-        // And at the top of the screen (island-look.js lookNow), kept apart:
+        // And at the top of the screen (island-look.ts lookNow), kept apart:
         // none is black, as it always was.
         "islandLook" | "islandTopLook" => v.is_null() || v.as_object().is_some_and(|m| m.iter().all(|(mode, look)| matches!(mode.as_str(), "dark" | "light") && is_island_look(look))),
         "mailAgent" => matches!(v.as_str(), Some("claude" | "codex" | "agy")),
@@ -924,7 +924,7 @@ async fn agent_write(sh: Arc<Shared>, agent: Agent, action: String, dsh_way: &'s
     }
 }
 
-// One agent's files, by its id (agents.js): install, remove; Claude Code's
+// One agent's files, by its id (agents.ts): install, remove; Claude Code's
 // install-http too (no command to start her). DeepSeek Harness's go the
 // way chosen (dshVia: her plugin, its folder in DSH's home and its row in
 // the home-level patch file; or DSH's own hook bridge, its packages in
@@ -1134,7 +1134,7 @@ fn site_url(place: &str, account: Option<&str>) -> String {
         "appleAppPasswords" => "https://account.apple.com/account/manage",
         "yahooAppPasswords" => "https://login.yahoo.com/account/security",
         "lhm" => "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases",
-        // Where to get an agent not on this computer (the Agent page, agents.js site).
+        // Where to get an agent not on this computer (the Agent page, agents.ts site).
         other => match other.strip_prefix("agent:").and_then(|id| AGENT_SITES.iter().find(|(a, _)| *a == id)) {
             Some((_, url)) => *url,
             None => fetch::SITE,
@@ -1159,7 +1159,7 @@ fn is_address(a: &str) -> bool {
 mod tests {
     use serde_json::json;
 
-    // An agent's block as agents.js reads it: what each has, and its own
+    // An agent's block as agents.ts reads it: what each has, and its own
     // beside that (Codex's async by that name, Claude Code's commands as
     // pluginCommands, DeepSeek Harness's view as it is); nothing more for
     // the others.
@@ -1336,7 +1336,7 @@ mod layout_tests {
         assert!(!super::is_on_taskbar(&json!(null), "tokens"));
     }
 
-    // The desktop's widgets, as deskgrid.js isLayout has them.
+    // The desktop's widgets, as deskgrid.ts isLayout has them.
     #[test]
     fn desk_layouts() {
         let ok = |v: serde_json::Value| super::is_desk_layout(&v);
@@ -1403,7 +1403,7 @@ mod layout_tests {
         assert!(super::is_on_desk(&json!([{ "id": "wb", "type": "board", "items": [{ "type": "widget", "of": "weather", "size": "s", "at": [0, 0] }] }]), "weather"));
     }
 
-    // Boards kept as combos, as deskgrid.js isBoardSets has them (the same
+    // Boards kept as combos, as deskgrid.ts isBoardSets has them (the same
     // edges as test/deskboard.test.js).
     #[test]
     fn board_sets() {
@@ -1455,13 +1455,13 @@ mod layout_tests {
         assert!(!ok(json!([null])));
     }
 
-    // Her capsule, as capsule.js storedOf and its patches have it.
+    // Her capsule, as capsule.ts storedOf and its patches have it.
     #[test]
     fn capsules() {
         let ok = |v: serde_json::Value| super::is_capsule(&v);
         assert!(ok(json!({ "members": [{ "key": "widget:monitor", "mode": "pin" }, { "key": "plugin:weather", "mode": "turn" }, { "key": "widget:mail-a_1", "mode": "open" }], "spin": 8 })));
         assert!(ok(json!({ "members": [] })));
-        // A turn's length alone (capsule.js spinPatch before any order), or nothing.
+        // A turn's length alone (capsule.ts spinPatch before any order), or nothing.
         assert!(ok(json!({ "spin": 0 })));
         assert!(ok(json!({})));
         let long = "a".repeat(40);

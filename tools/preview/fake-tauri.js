@@ -1,6 +1,6 @@
 // A stand-in for Tauri (window.__TAURI__, __TAURI_INTERNALS__) that the real
-// pages take as Tauri's: bridge.js (the island's page, her window), desk.js
-// and bar.js. Loaded before the page's own scripts (boot.js), so the pages
+// pages take as Tauri's: bridge.ts (the island's page, her window), desk.ts
+// and bar.ts. Loaded before the page's own scripts (boot.js), so the pages
 // run in a plain browser as they run in her windows.
 //
 // What the Rust side would say comes from a world kept here (Fake.world):
@@ -26,17 +26,18 @@
 // so the taskbar's time, the sessions' clocks and her frames are the same
 // each run; ?clock=real, and in the playground, the real one.
 //
-// Where things are: in the repo (tools/preview beside src/ and pets/), or as
-// the playground is published (preview/ beside pet/, shared/, pets/, assets/).
+// Where things are: in the repo (tools/preview beside dist/, her pages as
+// scripts/build-pages.mjs writes them from src/, and pets/), or as the
+// playground is published (preview/ beside pet/, shared/, pets/, assets/).
 ;(function () {
   const HERE = new URL('.', document.currentScript.src).href
   const IN_REPO = /\/tools\/preview\/$/.test(new URL(HERE).pathname)
   const ROOT = new URL(IN_REPO ? '../../' : '../', HERE).href
-  const PAGES = new URL(IN_REPO ? 'src/pet/' : 'pet/', ROOT).href
+  const PAGES = new URL(IN_REPO ? 'dist/pet/' : 'pet/', ROOT).href
   const ASSETS = IN_REPO ? new URL('assets/', HERE).href : new URL('assets/', ROOT).href
   // The example plugins' folders (their views) and her SDK, as published.
   const PLUGIN_FILES = new URL(IN_REPO ? 'examples/plugins/' : 'plugins/', ROOT).href
-  const SDK_FILE = new URL(IN_REPO ? 'src/addon/sdk.js' : 'addon/sdk.js', ROOT).href
+  const SDK_FILE = new URL(IN_REPO ? 'dist/addon/sdk.js' : 'addon/sdk.js', ROOT).href
   const Q = new URLSearchParams(location.search)
   const HOST_PAGE = window.WAKU_HOST_PAGE === true
   const host = (() => {
@@ -48,7 +49,7 @@
     }
   })()
   const role = HOST_PAGE ? 'host' : Q.get('role') || 'island'
-  // Each window's label, as main names them (bridge.js listens for its own).
+  // Each window's label, as main names them (bridge.ts listens for its own).
   const LABELS = { island: 'island', pet: 'pet', desk: 'desk-1', bar: 'bar-1', barpop: 'barpop' }
   const label = LABELS[role] || role
   const clone = value => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)))
@@ -387,7 +388,7 @@
       fullScreen: false,
       plate: true,
       ...(world.home !== 'taskbar' ? { winLight: world.mode === 'light' } : {}),
-      // At the top of the screen, the side her window is at (anchor.js): as
+      // At the top of the screen, the side her window is at (anchor.ts): as
       // island.rs says it, having placed the window by islandPos
       // (zhoupengjie/Wakuwaku#59). The playground and the gallery put the
       // island's page there (scenes.js islandWindow).
@@ -1188,7 +1189,7 @@
       return new Promise(done => setTimeout(() => done({ ok: true, via, ms: 412 }), 300))
     },
     session_jump: () => true,
-    // Other people's plugins to run in the island's page (addons.js): none
+    // Other people's plugins to run in the island's page (addons.ts): none
     // here (no frame of theirs; what each says is the fixtures', widgetsNow).
     addons_running: () => [],
     // The Plugins page's doings with them (addons.rs addon_manage).
@@ -1234,7 +1235,7 @@
       keepDesk(entries || [], gone || [])
       return true
     },
-    // Mail, as mail.rs and its parts answer (bridge.js window.pet.mail),
+    // Mail, as mail.rs and its parts answer (bridge.ts window.pet.mail),
     // from the mail world and kept there.
     // The inbox's conversations (letters.rs list): one account's or ("*")
     // every account's as one, newest first, the first `count`; how many

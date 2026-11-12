@@ -5,7 +5,7 @@
 // transitions at their end there too, for headless shots). In the head of
 // page.html, after fake-tauri.js, fixtures.js and scenes.js:
 //
-// 1. The page's own file (src/pet/index.html, desk.html) is read and written
+// 1. The page's own file (dist/pet/index.html, desk.html) is read and written
 //    into this document as it is, but for its Content-Security-Policy, its
 //    links made absolute, and a style that holds transitions at their end
 //    (headless Edge leaves them at their start). Its scripts run as they
@@ -79,7 +79,7 @@
     emit: (channel, payload) => window.Fake.emit(channel, payload),
     set: patch => window.Fake.set(patch),
     push: () => window.Fake.push(),
-    // The pointer comes onto it (as bridge.js plays it for a window that
+    // The pointer comes onto it (as bridge.ts plays it for a window that
     // lets clicks through: mouseenter, not bubbling).
     hover(sel) {
       const node = needed(sel)
@@ -130,7 +130,7 @@
   // --- Freezing --------------------------------------------------------------------------
   // flow: the flow light's ring held this many ms into its play, from when
   // it began turning: its animations drawn anew since (a blend, the hold's
-  // retimings, island-ring.js animateRing) begin later, their own time less; its
+  // retimings, island-ring.ts animateRing) begin later, their own time less; its
   // turning, drawn in steps by timers, set to the step showing then
   // (Island.ringAt).
   function freeze({ flow } = {}) {
@@ -212,7 +212,7 @@
 
   window.addEventListener('load', async () => {
     await wait(60)
-    // No handover with Windows' own strip here (handoff.js): hers in sight at once.
+    // No handover with Windows' own strip here (handoff.ts): hers in sight at once.
     document.documentElement.classList.remove('handoff-wait')
     window.Fake.push()
     if (!scene) return tell({ ready: true, role })

@@ -1,5 +1,5 @@
-/* The widget picker, its popover and toasts, her capsule's panel (picker.js,
-   capsule-panel.js; the picker of 2026-10-17). As Windows 11 draws its own
+/* The widget picker, its popover and toasts, her capsule's panel (picker.ts,
+   capsule-panel.ts; the picker of 2026-10-17). As Windows 11 draws its own
    flyouts (docs/design/style.md): a near-solid ground over other windows
    (the page's blur reaches only what it draws itself), a thin line and a
    top highlight, Windows' accent for what is on and what is pressed,
@@ -179,7 +179,7 @@
   transform: translate(-50%, 0);
 }
 
-/* Her island at a top corner (anchor.js, zhoupengjie/Wakuwaku#59): under
+/* Her island at a top corner (anchor.ts, zhoupengjie/Wakuwaku#59): under
    it there, lined up with its side, as far in from the screen's side. */
 .isl-at-left .pk[data-home='island'] {
   left: 8px;
@@ -197,7 +197,7 @@
   transform: none;
 }
 
-/* Her island along the foot of the screen (isl-at-bottom, island.js
+/* Her island along the foot of the screen (isl-at-bottom, island.ts
    placeAnchor; zhoupengjie/Wakuwaku#105): above it there instead, off the
    closed island's top (--isl-foot up from the window's foot, 36 high),
    sliding in from below. */
@@ -221,7 +221,7 @@
   transform: none;
 }
 
-/* Over her capsule inside Windows' taskbar (isl-embed, island.js
+/* Over her capsule inside Windows' taskbar (isl-embed, island.ts
    placeAnchor): about the capsule's middle (--isl-cx), kept in the window;
    above it along the bottom, under it along the top (isl-in-top). */
 .isl-at-bottom.isl-embed .pk[data-home='island'],
@@ -1223,7 +1223,7 @@ body.pk-dragging .pk-toasts {
 }
 
 /* --- In her island: the members pinned at its end (five at most) -------------------------
-   Short of room (island.js fitPinned): a pin's value goes (.short; the
+   Short of room (island.ts fitPinned): a pin's value goes (.short; the
    monitor's readings its glyph alone), then the leftmost pins (.gone), a
    "+k" before the rest. */
 #island-compact .pinned {

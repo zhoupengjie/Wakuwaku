@@ -9,7 +9,8 @@
 // is published at: playground.html (the page: its content alone, the host
 // wraps it), preview/ (the stand-in and the playground's own scripts),
 // pet/ and shared/ (her pages and every script and style they load, read
-// from their own HTML), pets/claude-chan/ (her sprites), assets/ (the
+// from their own HTML and what each script imports; as scripts/build-pages.mjs
+// writes them into dist/, which build runs first), pets/claude-chan/ (her sprites), assets/ (the
 // wallpaper), addon/sdk.js and plugins/<id>/ (her SDK and the example
 // plugins with a view of their own, for the cards that draw them). Her two
 // pages get a viewport meta (published HTML starts with its own); nothing
@@ -21,8 +22,8 @@
 // what files.json has (so a file left out shows here too), the page wrapped
 // in a document as the host would.
 //
-// dev answers from the repo's own files under the same paths (no build), and
-// tells the open page what changed (server-sent events, /__live): a
+// dev answers from the repo's own files under the same paths (her pages from
+// dist/, built again as src/ changes), and tells the open page what changed (server-sent events, /__live): a
 // stylesheet of her pages (swapped in place), a script or page of theirs
 // (their frames reloaded), the playground's own (the page reloaded, its
 // world carried over). A file it served that a build would leave out is
@@ -30,12 +31,18 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const http = require('node:http')
+const { execFileSync } = require('node:child_process')
+const { stripTypeScriptTypes } = require('node:module')
 const os = require('node:os')
 const gitinfo = require('./gitinfo')
 
 const HERE = __dirname
 const REPO = path.join(HERE, '..', '..')
+// Her pages' sources (their HTML read here), and as they run (what is served).
 const PET = path.join(REPO, 'src', 'pet')
+const DIST = path.join(REPO, 'dist')
+const BUILD_PAGES = path.join(REPO, 'scripts', 'build-pages.mjs')
+const buildPages = () => execFileSync(process.execPath, [BUILD_PAGES], { stdio: 'inherit' })
 const PREVIEW = ['page.html', 'boot.js', 'fake-tauri.js', 'fixtures.js', 'scenes.js', 'playground.js']
 const PAGES = ['index.html', 'desk.html']
 // The role each page plays in the playground (its frame).
@@ -47,10 +54,38 @@ const PAGE_FILES = ['playground.html', 'playground.js', 'fake-tauri.js', 'fixtur
 // The folders the code it shows lives in (what a build's label looks at).
 const SOURCES = ['src/pet', 'src/shared', 'src/addon', 'examples/plugins', 'pets/claude-chan', 'tools/preview']
 
-// Her pages' scripts and styles, as their HTML loads them (src/pet relative).
+// Her pages' scripts and styles, as their HTML loads them, and every script
+// those import (import, import()), each by its published name (x.js) relative
+// to src/pet; what a script imports is read from its source (x.ts), its
+// types taken out first (an import type brings nothing at run time).
+const IMPORTS = /(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])(\.{1,2}\/[^'"\n]+?)\2/g
+// (Node says each time that its stripping is experimental: not here.)
+function typesOut(code) {
+  const said = process.emitWarning
+  process.emitWarning = () => {}
+  try {
+    return stripTypeScriptTypes(code, { mode: 'strip' })
+  } finally {
+    process.emitWarning = said
+  }
+}
 function pageFiles(page) {
   const html = fs.readFileSync(path.join(PET, page), 'utf8')
-  return [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="([^"]+)"/g)].map(m => m[1]).filter(p => !/^[a-z]+:/i.test(p))
+  const refs = [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="([^"]+)"/g)].map(m => m[1]).filter(p => !/^[a-z]+:/i.test(p))
+  const seen = new Set(refs)
+  const queue = refs.filter(r => r.endsWith('.js'))
+  while (queue.length) {
+    const ref = queue.shift()
+    const source = path.resolve(PET, ref).replace(/\.js$/, '.ts')
+    if (!fs.existsSync(source)) continue
+    for (const m of typesOut(fs.readFileSync(source, 'utf8')).matchAll(IMPORTS)) {
+      const next = path.posix.normalize(path.posix.join(path.posix.dirname(ref), m[3].replace(/\.ts$/, '.js')))
+      if (seen.has(next)) continue
+      seen.add(next)
+      queue.push(next)
+    }
+  }
+  return [...seen]
 }
 
 // Her page as published: with a viewport meta.
@@ -86,13 +121,13 @@ function plan() {
   for (const f of PREVIEW) out.set(`preview/${f}`, { file: path.join(HERE, f) })
   out.set('assets/wall.jpg', { file: path.join(HERE, 'assets', 'wall.jpg') })
   out.set('pets/claude-chan/spritesheet.webp', { file: path.join(REPO, 'pets', 'claude-chan', 'spritesheet.webp') })
-  out.set('addon/sdk.js', { file: path.join(REPO, 'src', 'addon', 'sdk.js') })
+  out.set('addon/sdk.js', { file: path.join(DIST, 'addon', 'sdk.js') })
   for (const [pub, file] of viewFiles()) out.set(pub, { file })
   for (const page of PAGES) {
     out.set(`pet/${page}`, { text: pageText(page) })
     for (const ref of pageFiles(page)) {
-      const abs = path.resolve(PET, ref)
-      const rel = path.relative(path.join(REPO, 'src'), abs).split(path.sep).join('/')
+      const abs = path.resolve(DIST, 'pet', ref)
+      const rel = path.relative(DIST, abs).split(path.sep).join('/')
       out.set(rel, { file: abs })
     }
   }
@@ -102,6 +137,7 @@ function plan() {
 function build(folder, { label } = {}) {
   const dir = path.resolve(folder)
   const said = label === undefined ? gitinfo.label(REPO, SOURCES) : label
+  buildPages()
   fs.mkdirSync(dir, { recursive: true })
   const files = {}
   let total = 0
@@ -165,11 +201,11 @@ function serve(port, folder) {
 // The published paths and the repo's folders they are read from.
 const ROOTS = [
   ['preview/', HERE],
-  ['pet/', PET],
-  ['shared/', path.join(REPO, 'src', 'shared')],
+  ['pet/', path.join(DIST, 'pet')],
+  ['shared/', path.join(DIST, 'shared')],
   ['pets/', path.join(REPO, 'pets')],
   ['assets/', path.join(HERE, 'assets')],
-  ['addon/', path.join(REPO, 'src', 'addon')],
+  ['addon/', path.join(DIST, 'addon')],
   ['plugins/', EXAMPLES],
 ]
 // A published path's file in the repo (none outside those folders).
@@ -182,8 +218,11 @@ function repoFile(pub) {
   }
   return null
 }
-// A repo path (posix, from its root) as published, or null.
+// A repo path (posix, from its root) as published, or null: a page script's
+// source (x.ts) as what it is built into (x.js); a file of types alone, none.
 function publishedOf(rel) {
+  if (rel.endsWith('.d.ts')) return null
+  if (rel.startsWith('src/') && rel.endsWith('.ts')) rel = rel.slice(0, -3) + '.js'
   const map = [
     ['tools/preview/assets/', 'assets/'],
     ['tools/preview/', 'preview/'],
@@ -239,6 +278,7 @@ function mergeChanges(list) {
 }
 
 function dev(port) {
+  buildPages()
   const clients = new Set()
   const inBuild = () => new Set(plan().keys())
   const server = http.createServer((req, res) => {
@@ -271,6 +311,14 @@ function dev(port) {
     timer = setTimeout(() => {
       const rels = [...pending.keys()]
       pending = new Map()
+      // Her pages built again first: what is served is dist/.
+      if (rels.some(rel => rel.startsWith('src/'))) {
+        try {
+          buildPages()
+        } catch {
+          return console.log('  her pages did not build: the open page left as it was')
+        }
+      }
       let pages
       try {
         pages = framePages()
@@ -290,7 +338,7 @@ function dev(port) {
       fs.watch(path.join(REPO, dir), { recursive: true }, (_, name) => {
         if (!name) return
         const rel = `${dir}/${String(name).split(path.sep).join('/')}`
-        if (/\.(js|css|html|webp|png|jpg|json)$/i.test(rel)) told(rel)
+        if (/\.(ts|js|css|html|webp|png|jpg|json)$/i.test(rel)) told(rel)
       })
     } catch (err) {
       console.log(`  cannot watch ${dir}: ${err.message}`)

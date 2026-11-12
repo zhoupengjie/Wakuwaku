@@ -4,7 +4,7 @@
   "version": "0.4.2",
   "identifier": "com.zhoupengjie.wakuwaku",
   "build": {
-    "frontendDist": "../src"
+    "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": true,

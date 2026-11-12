@@ -33,7 +33,7 @@
 // the tray goes along to its new end and the stretch left is bare desktop),
 // and TrafficMonitor on Windows 11 makes none either (its source read). So
 // the capsule goes where there is room, and narrows, or shows her portrait
-// alone, or hides, as the room goes (anchor.js capsuleWidth): UI Automation
+// alone, or hides, as the room goes (anchor.ts capsuleWidth): UI Automation
 // reads every button on the taskbar (Taskbar.TaskListButtonAutomationPeer
 // and the rest: Start, search, the widgets, task view), the tray
 // (TrayNotifyWnd) is a window of its own, and the stretches left between
@@ -58,12 +58,12 @@ pub type Rect = (i32, i32, i32, i32);
 
 // The capsule's room off the stretch's end (logical px): the flow light's
 // ring runs 3 px outside it (style.css #flow), and the island keeps 8 px
-// off its window's edge (island.js TOP, midLeft).
+// off its window's edge (island.ts TOP, midLeft).
 pub const MARGIN: f64 = 8.0;
-// The closed capsule before its page has said its size (island.js WIDTHS normal, 36 high).
+// The closed capsule before its page has said its size (island.ts WIDTHS normal, 36 high).
 pub const CAPSULE: (f64, f64) = (300.0, 36.0);
-// The narrowest the page lays the closed capsule (island.js WIDTHS narrow),
-// and its round capsule with her portrait alone (island.js TIGHT_W), logical.
+// The narrowest the page lays the closed capsule (island.ts WIDTHS narrow),
+// and its round capsule with her portrait alone (island.ts TIGHT_W), logical.
 pub const NARROW: f64 = 240.0;
 pub const TIGHT: f64 = 36.0;
 
@@ -116,7 +116,7 @@ pub fn fits(gap: Span, width: i32, margin: i32) -> bool {
 }
 
 // The capsule's width in a stretch as its page will lay it there, told the
-// room (anchor.js capsuleWidth): as wide as it is now while that fits; else
+// room (anchor.ts capsuleWidth): as wide as it is now while that fits; else
 // the narrowest (`narrow`, never wider than it is); else her portrait alone
 // (`tight`); none with not even that fitting. Laid at that width at once, so
 // a capsule set to a stretch too short for it as it is (the right, just

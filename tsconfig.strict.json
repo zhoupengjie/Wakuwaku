@@ -18,6 +18,23 @@
     "src/pet/island-state.ts",
     "src/pet/island-vars.ts",
     "src/pet/settings-state.ts",
-    "src/pet/settings-vars.ts"
+    "src/pet/settings-vars.ts",
+    "src/pet/addonui.ts",
+    "src/pet/agents.ts",
+    "src/pet/aim.ts",
+    "src/pet/anchor.ts",
+    "src/pet/capsule.ts",
+    "src/pet/deskgrid.ts",
+    "src/pet/flow.ts",
+    "src/pet/hovers.ts",
+    "src/pet/mica.ts",
+    "src/pet/placing.ts",
+    "src/pet/presses.ts",
+    "src/pet/sprite.ts",
+    "src/pet/status.ts",
+    "src/pet/views.ts",
+    "src/pet/wcards.ts",
+    "src/pet/wdesk.ts",
+    "src/pet/widgets.ts"
   ]
 }

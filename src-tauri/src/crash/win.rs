@@ -383,8 +383,21 @@ pub fn stack_of(pid: u32, thread: u32) -> Vec<String> {
         let handle = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, 0, thread);
         let mut pcs = Vec::with_capacity(32);
         options(OPTIONS);
-        // Its modules listed (invade), for their tables and bases.
-        if handle != 0 && init(process, std::ptr::null(), 1) != 0 {
+        // Its modules listed (invade), for their tables and bases. A list
+        // that changes as it is read (a module loaded meanwhile) fails it,
+        // STATUS_INFO_LENGTH_MISMATCH: taken back and tried again, a few
+        // times. The test of this read nothing about one run in six of the
+        // whole suite (MSA2, 2026-11-11), the other tests loading modules.
+        let invaded = handle != 0
+            && (0..4).any(|_| {
+                if init(process, std::ptr::null(), 1) != 0 {
+                    return true;
+                }
+                cleanup(process);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                false
+            });
+        if invaded {
             if SuspendThread(handle) != u32::MAX {
                 let mut context = Context([0; 154]);
                 context.0[6] = CONTEXT_FULL;

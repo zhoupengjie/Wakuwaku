@@ -558,7 +558,9 @@ mod imp {
     #[link(name = "advapi32")]
     extern "system" {
         fn ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl: *const u16, revision: u32, sd: *mut *mut core::ffi::c_void, size: *mut u32) -> i32;
-        fn ConvertSecurityDescriptorToStringSecurityDescriptorW(sd: *const core::ffi::c_void, revision: u32, info: u32, sddl: *mut *mut u16, len: *mut u32) -> i32;
+        // PSECURITY_DESCRIPTOR, a PVOID, as lhm_setup.rs declares it too: two
+        // declarations that differ are a warning (clashing_extern_declarations).
+        fn ConvertSecurityDescriptorToStringSecurityDescriptorW(sd: *mut core::ffi::c_void, revision: u32, info: u32, sddl: *mut *mut u16, len: *mut u32) -> i32;
         fn SetFileSecurityW(file: *const u16, info: u32, sd: *const core::ffi::c_void) -> i32;
         fn GetFileSecurityW(file: *const u16, info: u32, sd: *mut u8, len: u32, needed: *mut u32) -> i32;
     }
@@ -691,7 +693,7 @@ mod imp {
         let mut text: *mut u16 = std::ptr::null_mut();
         let mut len = 0u32;
         // SAFETY: our own descriptor; the string it makes is ours to free.
-        if unsafe { ConvertSecurityDescriptorToStringSecurityDescriptorW(buf.as_ptr() as *const core::ffi::c_void, 1, DACL_SECURITY_INFORMATION, &mut text, &mut len) } == 0 || text.is_null() {
+        if unsafe { ConvertSecurityDescriptorToStringSecurityDescriptorW(buf.as_mut_ptr() as *mut core::ffi::c_void, 1, DACL_SECURITY_INFORMATION, &mut text, &mut len) } == 0 || text.is_null() {
             return Err("the folder's security did not read as text".into());
         }
         // SAFETY: a null-terminated wide string of `len`, freed once read.

@@ -29,7 +29,7 @@ Invoke-RestMethod -Method Post http://127.0.0.1:47213/widget -ContentType applic
 | `private` | 可选，`true`：「显示具体内容」关掉时，不显示 `label` 和 `nudge` 的话，只显示 `value` |
 | `remove` | `true`：拿掉这个插件 |
 
-回复 `{ "ok": true }`，或者 400 和 `{ "error": "…" }` 说明哪里不对。
+回复 `{ "ok": true }`，或者 400 和 `{ "error": "…" }` 说明哪里不对。从网页里发（浏览器带上了网站的 `Origin`）一律回 403：脚本和程序照常，浏览器扩展（比如 Thunderbird 的）也照常。
 
 ### 大小和明细
 
@@ -55,6 +55,6 @@ Invoke-RestMethod -Method Post http://127.0.0.1:47213/widget -ContentType applic
 
 ---
 
-**Your own widgets.** POST that JSON to `http://127.0.0.1:47213/widget` and it shows in the island while no session needs you; send it again within `ttl` seconds to keep it there. The fields are in the table above. The weather, stocks, a pomodoro, a countdown, a stretch reminder, CI and dev servers are hers already: switch them on in the Plugins page.
+**Your own widgets.** POST that JSON to `http://127.0.0.1:47213/widget` and it shows in the island while no session needs you; send it again within `ttl` seconds to keep it there. From a script or a program, or a browser extension (Thunderbird's); not from a web page, which is answered 403. The fields are in the table above. The weather, stocks, a pomodoro, a countdown, a stretch reminder, CI and dev servers are hers already: switch them on in the Plugins page.
 
 A widget is small at least (its icon and value). Its `detail`, as an object, says which sizes it has (`sizes`: `s`, `m`, `l`) and gives the larger ones more to show: `extra` (a few words, 24 characters: its second line), `series` (`points`, 120 at most, with `unit`, `hi`, `lo`) and `rows` (12 at most, each of `from code name when price change value unit kind icon`, 16 characters each, `subject text`, 60, `at` and `points`). Longer words are cut with "…"; anything else is dropped. A string `detail`, as before, is its extra.

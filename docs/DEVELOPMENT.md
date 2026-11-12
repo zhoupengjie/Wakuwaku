@@ -115,6 +115,8 @@ cd .. && node --test "test/*.test.js"   # 页面的单元测试
 pwsh scripts/build-release.ps1 [-Out <文件夹>]   # 发布用的 exe：wakuwaku-v<版本>-windows-x64.exe，不带本机路径
 ```
 
+**CI**（`.github/workflows/test.yml`，2026-11-11 起）：推到 `main`、`dev`，打 `v*` 标签，以及每个 pull request，GitHub Actions 在 `windows-latest` 上跑上面两样测试：`cargo test --locked`（Cargo.lock 和 Cargo.toml 对不上就失败；`rustup update stable` 先换成最新的稳定版；依赖和 `target` 用 Swatinem/rust-cache 按 Cargo.lock 缓存），和 Node 24 的 `node --test "test/*.test.js"`。同一个分支或 PR 又推了新的，之前那次还没跑完就取消。检出时换行是 runner 上 Git 的默认（`core.autocrlf=true`，和开发机一样），所以 `.gitattributes` 里要求 LF 的文件照样是 LF。通过 SSH 跑 `cargo test` 时有两个测试必然失败，它们要交互式登录：`logon::tests::this_sessions_logon_reads`（这次登录的时间）和 `mail::tests::a_password_is_kept_and_forgotten`（凭据管理器）；不是回归。整套测试一起跑时，别的测试正在加载模块，`crash::tests::a_held_threads_stack_is_read` 曾经约六次挂一次（`SymInitializeW` 列模块时列表变了，`STATUS_INFO_LENGTH_MISMATCH`），现在 `crash/win.rs` 的 `stack_of` 会重试；之后再有偶尔才挂的测试，先找出它为什么挂，别靠 CI 重跑。
+
 **发布用的 exe 要用 `scripts/build-release.ps1` 编译**，不要直接用 `cargo build --release`。
 
 - **为什么**：Rust 程序里每个可能 panic 的地方（`unwrap`、下标），都会以明文记下源文件路径，供 panic 信息使用；这些是数据不是符号，`strip` 去不掉。她自己的文件记的是仓库里的相对路径，但 crate 记的是 cargo 缓存的整条路径，标准库记的是工具链的整条路径，里面都有用户名；打过补丁的 tiny_http（path 依赖）记的是仓库的整条路径。v0.3.3 里用户名出现了 425 次。另外 `data.rs` 编进了源码目录（从源码运行时数据放在源码树里）。
@@ -270,6 +272,8 @@ hook 事件先由 agent-core 读成 `AgentEvent`（每家在它自己的模块�
 | `POST /quit` | 像菜单里的「退出」一样退出（任务栏还回去），算主动退出：之后会话不再把她拉起来，直到她以别的方式启动（回 `{ ok, byChoice: true }`）；`?wake=1` 退出但会话可以再拉起她（`byChoice: false`）。换新版本时用（新的启动时清掉标记），别直接杀进程 |
 | `POST /debug/eval` | `{ page: "pet" \| "island", code }`：在页面里运行一段表达式，返回结果（可以是 Promise） |
 | `POST /debug/walk` | `{ dx, ms }`：立刻走一段 |
+
+**网页来的请求一概 403**（`server.rs` 的 `turned_away`，在 `serve` 里、任何处理之前；`/v1` 除外，它有自己的 Host 检查和令牌）。浏览器发 POST 时总带 `Origin`，`text/plain` 的简单请求不用预检就能送到，只是页面读不到回复；以前随便哪个打开着的网页都能让她退出（`/quit`）、弹一个假的确认面板等你点（`/hook` 的 `PermissionRequest`）、塞进假的会话（`/state`）和插件（`/widget`），设了 `WAKUWAKU_DEBUG=1` 时还能在她的页面里运行任意代码（`/debug/eval`，页面能调她的全部命令）。所以：`Origin` 是网站的（`http:`、`https:`）、本地文件的（`file:`）或 `null`（沙盒 iframe、data: 地址）的，不管什么路径都拒绝；`Host` 不是 `127.0.0.1` / `localhost` / `[::1]` 的也拒绝（DNS rebinding：同源的 GET 不带 `Origin`，但能读到 `/health` 的回复），没有 `Host` 的不是浏览器，照常处理。不拒绝的：不带 `Origin` 的（2026-11-11 实测 Claude Code 的 HTTP hook（axios 1.15）、Node 的 fetch 和 http、curl、PowerShell 7 和 5.1 都不带；她自己转发 Codex 等的 hook 用 ureq，也不带），以及浏览器扩展的（Thunderbird 扩展发 `/widget` 带 `moz-extension://…`）。被拒绝的写进日志 `http: POST /quit from the web page https://…, turned away (a web page's)`，同一句只写一次，最多 8 种。
 
 ## 给别的应用：/v1
 

@@ -32,6 +32,9 @@
 //                      replacing her, which starts her (and clears that), or a script (killing
 //                      her would leave the taskbar's strip taken)
 //                      ?wake=1: quit so that a session's hook may start her again
+//
+// None but /v1 is served to a web page (turned_away: 403): an Origin a site's,
+// a file's or "null", or a Host not this machine.
 use std::io::Read;
 use std::path::Path;
 use std::sync::mpsc::SyncSender;
@@ -181,7 +184,17 @@ pub fn serve(sh: Arc<Shared>, server: Server) {
         }
     });
     crate::spawn_named("server", move || {
+        // A web page's requests (turned_away), each kind said once: a page
+        // left open may send one every second.
+        let mut refused = Vec::new();
         for req in server.incoming_requests() {
+            if let Some(why) = turned_away(&req) {
+                if first_time(&mut refused, &why) {
+                    sh.log(&format!("http: {why}, turned away (a web page's)"));
+                }
+                reply(req, 403, json!({ "error": "not for web pages" }));
+                continue;
+            }
             handle(&sh, req, is_debug, &hooks);
         }
     });
@@ -379,6 +392,42 @@ fn is_local(req: &Request) -> bool {
 fn is_local_host(host: &str) -> bool {
     let name = host.rsplit_once(':').filter(|(_, port)| !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit())).map_or(host, |(name, _)| name);
     matches!(name.to_ascii_lowercase().as_str(), "127.0.0.1" | "localhost" | "[::1]")
+}
+
+// A web page's request, turned away before anything else (serve): what her
+// log says of it, or None for one to be served. A browser sends an Origin
+// with every POST, a site's (http, https, a file's) or "null" (a sandboxed
+// frame, a data: URL), and a simple one (text/plain) reaches her with no
+// preflight, though the page never reads the answer: any page open in the
+// browser could quit her (/quit), put up a prompt for the person to answer
+// (/hook), sessions (/state) and widgets (/widget) of its own, and with
+// WAKUWAKU_DEBUG run code in her pages, which reach all her commands
+// (/debug/eval). A page by a name of its own made to point here (DNS
+// rebinding) also reads her answers, /health's: so a Host not this machine
+// is turned away too; none at all is no browser's. The hooks, scripts and
+// programs that talk to her send no Origin (Claude Code's HTTP hooks, axios;
+// Node's fetch and http, curl, PowerShell 7 and 5.1: seen 2026-11-11), and
+// a mail app's extension (Thunderbird's, integrations/thunderbird: its
+// moz-extension://) is no page. /v1 keeps its own guard (is_local, and the
+// token): agent-hub's to say.
+fn turned_away(req: &Request) -> Option<String> {
+    let path = req.url().split('?').next().unwrap_or("");
+    if path == "/v1" || path.starts_with("/v1/") {
+        return None;
+    }
+    let (host, origin) = (header(req, "Host"), header(req, "Origin"));
+    let from = match (origin, host) {
+        (Some(origin), _) if is_page_origin(origin) => format!("the web page {origin}"),
+        (_, Some(host)) if !is_local_host(host) => format!("a page by the name {host}"),
+        _ => return None,
+    };
+    Some(format!("{} {path} from {from}", req.method().as_str()))
+}
+
+// An Origin a web page sends: a site's, a file's, or an opaque one's ("null").
+fn is_page_origin(origin: &str) -> bool {
+    let origin = origin.trim().to_ascii_lowercase();
+    origin == "null" || ["http:", "https:", "file:"].iter().any(|scheme| origin.starts_with(scheme))
 }
 
 fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool, hooks: &SyncSender<Hook>) {
@@ -672,6 +721,83 @@ mod tests {
         for host in ["", "evil.example:47213", "127.0.0.1.evil.example", "localhost.evil.example:80", "127.0.0.2:47213", "localhost:", "[::1]x"] {
             assert!(!is_local_host(host), "{host}");
         }
+    }
+
+    // A web page's requests are turned away, whatever they ask but /v1 (its
+    // own guard); the hooks', the scripts' and a mail app's extension's are
+    // served. Through tiny_http as she reads them, answered as serve does
+    // (403; served is 200 here), on a connection kept open after one turned
+    // away with its body unread too.
+    #[test]
+    fn a_web_pages_requests_are_turned_away() {
+        use std::io::Write;
+        use std::time::Duration;
+        for origin in ["null", "NULL", " https://evil.example", "http://127.0.0.1:47213", "http://localhost:5173", "file://"] {
+            assert!(is_page_origin(origin), "{origin}");
+        }
+        for origin in ["", "moz-extension://0b1c2d3e-0000-4000-8000-000000000000", "chrome-extension://abcdefghijklmnop"] {
+            assert!(!is_page_origin(origin), "{origin}");
+        }
+        let server = Server::http(("127.0.0.1", 0)).unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        // Sent on one connection, its n requests served: why each was
+        // turned away, and all that came back.
+        let exchange = |raw: String, n: usize| {
+            let asker = std::thread::spawn(move || -> std::io::Result<String> {
+                let mut conn = std::net::TcpStream::connect(("127.0.0.1", port))?;
+                conn.set_read_timeout(Some(Duration::from_secs(5)))?;
+                conn.write_all(raw.as_bytes())?;
+                let mut answer = String::new();
+                conn.read_to_string(&mut answer)?;
+                Ok(answer)
+            });
+            let whys: Vec<Option<String>> = (0..n)
+                .map(|_| {
+                    let req = server.recv_timeout(Duration::from_secs(5)).unwrap().expect("a request");
+                    let why = turned_away(&req);
+                    req.respond(Response::from_string("{}").with_status_code(if why.is_some() { 403 } else { 200 })).unwrap();
+                    why
+                })
+                .collect();
+            (whys, asker.join().unwrap().unwrap())
+        };
+        let status = |answer: &str| answer.split_whitespace().nth(1).unwrap_or("").to_string();
+        let host = "Host: 127.0.0.1:47213\r\n";
+        let body = "Content-Length: 2\r\nConnection: close\r\n\r\n{}";
+        let served = [
+            // Claude Code's HTTP hook (axios), and a script's.
+            format!("POST /hook?from=wakuwaku HTTP/1.1\r\n{host}User-Agent: axios/1.15.2\r\nContent-Type: application/json\r\n{body}"),
+            format!("POST /widget HTTP/1.1\r\nHost: localhost:47213\r\nContent-Type: application/json\r\n{body}"),
+            // Thunderbird's extension, its unread mail.
+            format!("POST /widget HTTP/1.1\r\n{host}Origin: moz-extension://0b1c2d3e-0000-4000-8000-000000000000\r\nContent-Type: text/plain\r\n{body}"),
+            // No Host at all: no browser's.
+            "POST /widget HTTP/1.0\r\nContent-Length: 2\r\n\r\n{}".to_string(),
+            format!("GET /health HTTP/1.1\r\n{host}Connection: close\r\n\r\n"),
+            // /v1 is agent-hub's to guard.
+            format!("GET /v1/info HTTP/1.1\r\n{host}Origin: https://evil.example\r\nConnection: close\r\n\r\n"),
+        ];
+        for raw in served {
+            let (whys, answer) = exchange(raw.clone(), 1);
+            assert_eq!(whys, [None::<String>], "{raw}");
+            assert_eq!(status(&answer), "200", "{raw}");
+        }
+        let refused = [
+            (format!("POST /quit HTTP/1.1\r\n{host}Origin: https://evil.example\r\nContent-Type: text/plain\r\n{body}"), "POST /quit from the web page https://evil.example"),
+            (format!("POST /debug/eval HTTP/1.1\r\n{host}origin: null\r\n{body}"), "POST /debug/eval from the web page null"),
+            (format!("POST /hook?from=wakuwaku HTTP/1.1\r\n{host}Origin: http://localhost:5173\r\n{body}"), "POST /hook from the web page http://localhost:5173"),
+            (format!("POST /state HTTP/1.1\r\n{host}Origin: file://\r\n{body}"), "POST /state from the web page file://"),
+            // A site's name made to point here (DNS rebinding): its own page, no Origin.
+            ("GET /health HTTP/1.1\r\nHost: evil.example:47213\r\nConnection: close\r\n\r\n".to_string(), "GET /health from a page by the name evil.example:47213"),
+        ];
+        for (raw, why) in refused {
+            let (whys, answer) = exchange(raw.clone(), 1);
+            assert_eq!(whys, [Some(why.to_string())], "{raw}");
+            assert_eq!(status(&answer), "403", "{raw}");
+        }
+        let (whys, answer) = exchange(format!("POST /quit HTTP/1.1\r\n{host}Origin: https://evil.example\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\n{{}}GET /health HTTP/1.1\r\n{host}Connection: close\r\n\r\n"), 2);
+        assert_eq!(whys, [Some("POST /quit from the web page https://evil.example".to_string()), None]);
+        let (first, second) = (answer.find("HTTP/1.1 403"), answer.find("HTTP/1.1 200"));
+        assert!(first.is_some() && second.is_some() && first < second, "{answer}");
     }
 
     // An event of the hub's reaches a client of /v1/events as it is

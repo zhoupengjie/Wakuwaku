@@ -5,10 +5,8 @@
 // and an import that brings types alone says so (import type), else it would
 // be left in. The tests have their own (test/tsconfig.json), with Node's types.
 //
-// Not strict yet: a parameter with no type is any (noImplicitAny off) and
-// null is in every type (strictNullChecks off), so the pages as they were
-// check; what each file exports, and so what one asks of another, is typed
-// from what it does.
+// Strict: every page file passes with it on (since 2026-11-12, the list
+// tsconfig.strict.json had grown to all of them), and a new one must too.
 {
   "compilerOptions": {
     "target": "esnext",
@@ -20,10 +18,7 @@
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
     "types": [],
-    "strict": false,
-    "noImplicitThis": true,
-    "strictBindCallApply": true,
-    "strictFunctionTypes": true,
+    "strict": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },

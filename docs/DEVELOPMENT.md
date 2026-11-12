@@ -33,6 +33,8 @@ src/                      页面的源码：TypeScript、HTML、CSS（见「页�
       island-ring.ts      流光提醒（flow.ts 说怎么转）：光环、停留、渐隐、接下一个，她的反应和小点
       island-drop.ts      把她从岛里拉出来（墨滴）、伸手够她、吸回去（reach、absorb）
     settings.ts           长在岛里的设置（五个页签：通用、Agent、外观、插件、邮件）：核心是快照和补丁、页面框架、提醒、绘制、开关、点击和按键；下面这些部分由它在原来的位置调用：
+      settings-vars.ts    设置记着的一切（SettingsVars）：每个会变的值的类型、说明和初值，settingsPage 建一次（st），每部分都拿它
+      settings-state.ts   设置在哪的状态机（SettingsState、事件、next）：开没开、哪页、插件页里打开的子页、要滚到的部分、展开的行；纯函数，测试直接调；TABS、PART_OF
       settings-look.ts    外观页：她的家、岛的外观（预设或自己调）、Windows 的深浅色和强调色、桌面壁纸
       settings-addons.ts  别人的插件和资源包：每个的一行、自己的一页（能做什么）、插件页下面的子页
       settings-market.ts  插件市场：列表、每个的一页、装和更新、卸载、新权限、从文件安装；底部的提示
@@ -181,13 +183,11 @@ art/                      美术和调查资料，只在本地（只有 art/READ
 - **一个 core**：核心在第一段之前建 `core`：`st`、`go`、`later`（建好后才有的设置和选择器）、`pieces`，和各段要用的核心自己的常量、函数。它的类型 `IslandCore` 在 island.ts 里一个个写明：`islandPage` 里面的东西从外面推不出类型，用工厂的返回值推又会经各段绕回自己（TS2502）。tsc 拿核心建的 core 对照它，段里用到不在里面的名字也报。段要用核心的一个新名字：加到 core 里，也加到 `IslandCore` 里。
 - **段之间**：每段建好，交回的东西放进 `pieces.<名字>`（`IslandParts`）。段开头从 `core` 解构核心的，从 `pieces.<名字>` 解构它之前建好的段的；要用它之后才建的段的函数，调用时写 `pieces.<名字>.<函数>()`（那时整页已经建好；以前这些是 getter）。登记处叫 `pieces` 不叫 parts：wmenu 里有个局部的 `parts`（菜单项），任务栏也有它自己的 parts。
 
-**设置**（还是拆分时的写法）：调用处传进去的对象说清了这一段用核心的什么：
+**设置**（2026-11-12 起，和岛一样）：
 
-- 核心的函数和调用处之前已经建好的常量：原样传，段的开头 `const { … } = core` 解构，代码不变。
-- 核心的 `let`（还有调用处之后才建的常量）：传 getter，段要写的再传 setter，段里写成 `core.名字`。
-- 段自己的 `let` 别处也读写的：声明留在核心里（调用处前面），段里同样是 `core.名字`。
-
-设置的段在 `settingsPage()` 里建，外面拿不到它的类型，所以每段自己写一个接口（`LookCore`……），列出它读的名字。段里用到核心的一个新名字、调用处忘了补上，tsc 就报。
+- **记着的都在一个对象里**：`settings-vars.ts` 的 `SettingsVars` 和 `settingsVars()`，`settingsPage` 开头建一次（`st`），核心和段里都写 `st.名字`。里面会变的对象（画廊 gallery、市场 market、收件箱 inbox、drafts……）还是 `settingsPage` 里的常量，原样放进 core。
+- **在哪走状态机**：`settings-state.ts` 的 `SettingsState`（`isOpen`、`openedAt`、`tab`、`sub`、`partToShow`、`welcomeOpen`、`agentOpen`、`othersOpen`）、事件 `SettingsEvent` 和纯函数 `next`，`test/settings-state.test.ts` 直接调；打开时落在哪（页、旧页名对应的部分、小工具的行、市场、连接和欢迎卡片）、关上时收起什么、换页签、插件页里的子页和返回、卸载后它自己的页、Agent 页一次开一行，规则都在这里。`SettingsVars` 扩展它，这几个字段 readonly，只能经 `go(event)` 改。确认层（`gone`、`mkAsk`、安装的 `flow`）和别的输入状态还在 `st` 里直接改。
+- **一个 core**：第一段之前建 `core`（`SettingsCore`，在 settings.ts 里写明每个名字的类型，原因和 `IslandCore` 一样）：`st`、`go`、`pieces` 和段要用的设置自己的常量、函数。各段原来自己写的接口（`LookCore`……，名字都是 any）没有了。段从 `core` 解构设置的，从 `pieces.<名字>` 解构之前建好的段的，之后才建的段的函数调用时写 `pieces.<名字>.<函数>()`（`SettingsParts`）。
 
 `core` 这个名字两个文件里都没有别的用处，不要再拿它当局部变量；两个文件里也没有用到 `this`，所以经 `core.f()` 调用和直接调用一样。
 

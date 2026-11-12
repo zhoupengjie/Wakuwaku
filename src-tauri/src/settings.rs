@@ -207,7 +207,7 @@ pub fn snapshot(sh: &Shared) -> Value {
         "lhmSetup": crate::lhm_setup::view(sh, &lhm_status, lhm_shown),
         // The plugins she runs, and where waku is for the terminal.
         "plugins": plugins::view(sh),
-        // The third-party ones installed (addons.rs view), and the folders
+        // The third-party ones installed (addons/ view), and the folders
         // there whose manifest will not do, each with why.
         "addons": crate::addons::view(sh),
         "addonsBroken": crate::addons::broken_view(),
@@ -295,7 +295,7 @@ fn is_name(n: &str) -> bool {
 }
 
 // A widget by its id, or a plugin she runs: hers, or a third-party one
-// installed (its folder there, its manifest good or not: addons.rs is_known).
+// installed (its folder there, its manifest good or not: addons/ is_known).
 fn is_source_of(kind: &str, of: &str) -> bool {
     match kind {
         "widget" => crate::widgets::is_id(of),

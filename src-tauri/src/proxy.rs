@@ -302,7 +302,7 @@ impl Way {
     // this computer or the network at home and connects to exactly what is
     // left — the same lookup ureq uses, so a name that answered one address
     // to the pre-check cannot answer an inside one to the connection
-    // (addons.rs resolves_inside). Through a proxy the proxy resolves, so the
+    // (addons/ resolves_inside). Through a proxy the proxy resolves, so the
     // resolver is not consulted there (the pre-check is all, its residual
     // risk in docs/PLUGINS.md).
     pub fn guarded_agent(&self, timeout: Duration, tweak: impl FnOnce(ConfigBuilder<AgentScope>) -> ConfigBuilder<AgentScope>) -> Option<ureq::Agent> {
@@ -603,7 +603,7 @@ mod tests {
 
     // A plugin's fetch straight to the web (guarded_agent): a name or an
     // address of this computer is not connected to at all, whatever the
-    // pre-check said (addons.rs resolves_inside), as the same agent
+    // pre-check said (addons/ resolves_inside), as the same agent
     // unguarded would.
     #[test]
     fn a_guarded_agent_never_connects_inside() {

@@ -42,7 +42,7 @@
 //   starts.rs      what starts her (the hooks, at login, by hand), whether it may, and who did
 //   widgets.rs     plugins in the island: widgets from scripts, and the built-in ones
 //   plugins.rs     the plugins she runs for you (weather, stocks, timers, CI, dev servers)
-//   addons.rs      third-party plugins: installed from a zip, run in sandboxed frames of
+//   addons/      third-party plugins: installed from a zip, run in sandboxed frames of
 //                  the island's page (src/pet/addons.ts), their views in the cards
 //                  (src/pet/views.ts), served by wakuplugin://
 //   zip.rs         zips read and unpacked (LHM's download, a plugin's package)
@@ -410,7 +410,7 @@ fn main() {
             market::market,
         ])
         // Third-party plugins' files, for their sandboxed frames in the
-        // island's page and their views in the cards (addons.rs serve):
+        // island's page and their views in the cards (addons/ serve):
         // http://wakuplugin.localhost/<id>/… on Windows. Off the main
         // thread: a file read from the disk.
         .register_asynchronous_uri_scheme_protocol(addons::SCHEME, |ctx, request, responder| {

@@ -16,7 +16,7 @@
 // A plugin got from it: its zip downloaded beside the plugins
 // (.download-<id>.zip), its size and SHA-256 those the index gives, its
 // manifest's id, version and kind the item's, then put in as one from a
-// file is (addons.rs put_in), recorded as the market's (reviewed), the
+// file is (addons/ put_in), recorded as the market's (reviewed), the
 // permissions it asks for granted. Each step told to the island's page as
 // it goes (market:progress { id, got, total, stage }). A pack (a pet,
 // wallpapers) the same way, put where its kind goes (packs.rs).
@@ -460,7 +460,7 @@ fn auto_update(sh: &Shared) -> bool {
     sh.config().plugin_auto_update
 }
 
-// What of the market's is here: its plugins (addons.rs) and its packs (packs.rs).
+// What of the market's is here: its plugins (addons/) and its packs (packs.rs).
 fn installed(sh: &Shared) -> Vec<addons::FromMarket> {
     let mut all = addons::from_market(sh.lang());
     all.extend(crate::packs::from_market(&sh.dir, sh.lang()));
@@ -659,11 +659,11 @@ pub fn fetch_zip(bases: &[Base], item: &Item, to: &Path, cancel: &AtomicBool, te
     Err(failed)
 }
 
-// One from the market, by its id: downloaded, checked, put in (addons.rs
+// One from the market, by its id: downloaded, checked, put in (addons/
 // put_in, as the market's; a pack where its kind goes); the page told each
 // step. Ok(what went in, as a file's install says it) or Err { code,
 // detail }: notFound, busy, download, size, digest, mismatch, refused
-// (with addons.rs's Refused), write, cancelled.
+// (with addons/'s Refused), write, cancelled.
 pub fn install(sh: &Arc<Shared>, id: &str) -> Result<Value, Value> {
     if item(id).is_none() {
         index(sh, false);

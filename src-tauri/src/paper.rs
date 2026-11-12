@@ -586,7 +586,7 @@ mod imp {
     }
 
     // A file of the types given (their name, and a spec: "*.zip"), picked in
-    // the same dialog (a plugin's package: addons.rs).
+    // the same dialog (a plugin's package: addons/).
     pub fn pick_file(title: &str, name: &str, spec: &str, owner: isize) -> Option<String> {
         pick_with(false, title, Some((name, spec)), owner)
     }

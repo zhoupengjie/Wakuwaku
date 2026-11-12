@@ -234,7 +234,7 @@ fn param_ok(p: &Param, v: &Value) -> bool {
 
 // A "plugins" setting: only the plugins here, each with "on" and its own
 // parameters, text without control characters, numbers as text; and the
-// third-party ones installed, each by its manifest (addons.rs is_conf_ok).
+// third-party ones installed, each by its manifest (addons/ is_conf_ok).
 pub fn is_ok(v: &Value) -> bool {
     v.as_object().is_some_and(|all| all.iter().all(|(id, conf)| {
         if plugin(id).is_none() {
@@ -314,7 +314,7 @@ fn key_of(p: &Plugin, conf: &Value, lang: &'static str) -> Value {
 }
 
 // Which plugin a widget comes from, by the ids they give them: one of
-// hers, or a third-party one installed (addons.rs owner_of).
+// hers, or a third-party one installed (addons/ owner_of).
 pub fn owner_of(widget: &str) -> Option<String> {
     built_in_owner(widget).map(str::to_string).or_else(|| crate::addons::owner_of(widget))
 }
@@ -605,7 +605,7 @@ pub fn sync(sh: &Shared) -> bool {
     }
     drop(posting);
     // The third-party ones as their switches say too: the island's page
-    // told which to run (addons.rs).
+    // told which to run (addons/).
     changed |= crate::addons::sync(sh);
     if clean {
         let gone = clean_up(&sh.dir.join("plugins"));

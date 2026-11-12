@@ -289,7 +289,7 @@ pub fn catch_up(sh: &Shared) {
 // src/pet/views.ts), told as it changes (desk:views { on }): not while
 // nobody is about, nor while its desktop is not seen (as its words are not
 // sent then: push_widgets), nor while the island's watchdog has them taken
-// away (addons.rs pause_views). Looked at only while a plugin with a view
+// away (addons/ pause_views). Looked at only while a plugin with a view
 // runs: with none, nothing is.
 pub fn views(sh: &Shared) {
     if !crate::addons::views_running() {
@@ -432,7 +432,7 @@ fn create(sh: &Arc<Shared>, label: String, area: Area) {
         let hwnd = 0;
         crate::tasks::no_transitions(hwnd);
         sh.own_window(&win);
-        // Its cards' plugin views kept to their own page (addons.rs guard_frames).
+        // Its cards' plugin views kept to their own page (addons/ guard_frames).
         crate::addons::guard_frames(&sh, &win, false);
         lay(&win, rect);
         let _ = win.set_ignore_cursor_events(true);

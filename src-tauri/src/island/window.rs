@@ -204,7 +204,7 @@ pub(super) fn create(sh: &Arc<Shared>) {
                 sh.own_window(&win);
                 // Its renderer gone: told, and the page loaded again (crash.rs).
                 crate::crash::watch(&sh, &win);
-                // Its plugins' frames kept to their own page (addons.rs guard_frames).
+                // Its plugins' frames kept to their own page (addons/ guard_frames).
                 crate::addons::guard_frames(&sh, &win, true);
             }
             Err(err) => sh.log(&format!("island: could not make its window: {err}")),

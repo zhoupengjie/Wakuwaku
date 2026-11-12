@@ -2,12 +2,14 @@
 // network, the volume and the battery (taskbar:keys), what is using the
 // microphone, camera or location, the clock and the program in front.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.right(core)): what it takes of the island's core
+// (rightPart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.right = function (core) {
+import * as Widgets from './widgets.js'
+import { pet } from './bridge.js'
+
+export function rightPart(core) {
   const {
     Widgets, el, home, isDetailed, isPinned, isSide, island, stripHue, stripInk, t,
   } = core
@@ -118,7 +120,7 @@ window.IslandParts.right = function (core) {
   })
   for (const type of ['pointerup', 'pointerleave', 'pointercancel']) startButton.addEventListener(type, () => startButton.classList.remove('down'))
   startButton.addEventListener('animationend', () => startButton.classList.remove('bounce'))
-  window.pet.onStart(({ open } = {}) => {
+  pet.onStart(({ open } = {}) => {
     startButton.classList.toggle('open', !!open)
     if (!open || Date.now() - startPressedAt < 800) return
     startButton.classList.remove('bounce')
@@ -135,7 +137,7 @@ window.IslandParts.right = function (core) {
   taskViewButton.dataset.bar = 'tasks'
   taskViewButton.hidden = true
   taskViewButton.innerHTML = '<i class="tv-glyph"></i>'
-  Promise.resolve(window.pet.taskbar.taskViewIcons?.()).then(icons => {
+  Promise.resolve(pet.taskbar.taskViewIcons?.()).then(icons => {
     if (!icons?.light || !icons?.dark) return
     const img = (svg, cls) => `<img class="${cls}" alt="" draggable="false" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}">`
     taskViewButton.innerHTML = img(icons.light, 'tv-light') + img(icons.dark, 'tv-dark')
@@ -202,7 +204,7 @@ window.IslandParts.right = function (core) {
   }
   let sysBatt = false
   let batShown = null
-  window.pet.taskbar
+  pet.taskbar
     .batteryFont()
     .then(bytes => {
       // Bytes as they are, or as numbers where the IPC had to send them so.
@@ -232,7 +234,7 @@ window.IslandParts.right = function (core) {
       const steps = Math.trunc(wheelGathered / 100)
       if (!steps) return
       wheelGathered -= steps * 100
-      window.pet.taskbar.volume(-steps)
+      pet.taskbar.volume(-steps)
     },
     { passive: false },
   )

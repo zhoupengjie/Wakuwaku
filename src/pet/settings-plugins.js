@@ -2,12 +2,14 @@
 // where each is placed; and the monitor's settings folded out under it (its
 // sensors: Windows' own, the CPU helper, or LibreHardwareMonitor).
 // Made by settings.js in the section's place as the page starts
-// (window.SettingsParts.plugins(core)): what it takes of the settings' core
+// (pluginsPart(core), imported by settings.js): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
-window.SettingsParts = window.SettingsParts || {}
-window.SettingsParts.plugins = function (core) {
+import * as AddonUI from './addonui.js'
+import * as Widgets from './widgets.js'
+
+export function pluginsPart(core) {
   const {
     AddonUI, COLOR, SPINS, SUBS, T, Widgets, addonRow, drafts, esc, market, openHardware, packsGroup,
     placeHTML, placeOf, pluginFields, pluginNote, render, row, sec, seg, sw, widgetRows,

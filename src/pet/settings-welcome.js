@@ -2,12 +2,14 @@
 // each is connected, connecting them all at once; the displays' rows, the
 // shortcuts that failed; and which page draws which tab (PAGES).
 // Made by settings.js in the section's place as the page starts
-// (window.SettingsParts.welcome(core)): what it takes of the settings' core
+// (welcomePart(core), imported by settings.js): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
-window.SettingsParts = window.SettingsParts || {}
-window.SettingsParts.welcome = function (core) {
+import * as Agents from './agents.js'
+import { Island } from './pages.js'
+
+export function welcomePart(core) {
   const {
     Agents, COLOR, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
     pageMail, pageNet, pageNow, pageUpdate, pageWidgets, part, row, sec, seg, sw, thumb, winMode,
@@ -48,7 +50,7 @@ window.SettingsParts.welcome = function (core) {
   // dark settings, its dark one on the light (the taskbar's look, else
   // Windows' defaults).
   function accentButton() {
-    const pair = window.Island?.accent?.() || {}
+    const pair = Island?.accent?.() || {}
     return winMode() === 'light' ? `--acc:${pair.dark || '#0067c0'};--acc-ink:#fff` : `--acc:${pair.light || '#4cc2ff'};--acc-ink:#000`
   }
 
@@ -111,8 +113,8 @@ window.SettingsParts.welcome = function (core) {
       return `<div class="grp"><div class="r"><span class="dot" style="background:${COLOR.idle}"></span><div class="grow d">${esc(T('wc.notYet', { list: toolNames(tools) }))}</div><span class="link" data-welcome-open>${esc(T('hint.go'))} ›</span></div></div>`
     }
     const many = tools.length > 1
-    const pet = (core.snap.pets || []).find(p => p.id === core.snap.settings.pet)
-    const face = pet ? `<span class="wc-face">${thumb(40, pet.url, pet.version)}</span>` : ''
+    const chosen = (core.snap.pets || []).find(p => p.id === core.snap.settings.pet)
+    const face = chosen ? `<span class="wc-face">${thumb(40, chosen.url, chosen.version)}</span>` : ''
     // A nudge to approve only where one of them can ask (agents.js approve).
     const sub = `${T('wc.sub1')}${tools.some(tool => Agents.byId(tool).caps.approve[0] !== 'no') ? T('wc.subAsk') : ''}${T('wc.sub2')}${many ? T('wc.subMany') : ''}`
     // OpenCode alone: a file of ours, nothing backed up, and she is not woken

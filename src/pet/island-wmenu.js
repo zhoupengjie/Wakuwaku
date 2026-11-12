@@ -2,12 +2,18 @@
 // or in the open island; its sizes, where it is shown (the island, the
 // taskbar, the desktop), its settings, taken off.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.wmenu(core)): what it takes of the island's core
+// (wmenuPart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.wmenu = function (core) {
+import * as DeskGrid from './deskgrid.js'
+import * as Placing from './placing.js'
+import * as WCards from './wcards.js'
+import * as Widgets from './widgets.js'
+import { Picker } from './pages.js'
+import { pet } from './bridge.js'
+
+export function wmenuPart(core) {
   const {
     Widgets, barRest, closePop, closeStackPop, closeWidgetPop, el, entryNodes, fillHer, hasMonitorPart, home,
     isDetailed, island, isleCtx, keepLayout, memberName, openWidgetSettings, ownName, placedAt, popCtx,
@@ -90,7 +96,7 @@ window.IslandParts.wmenu = function (core) {
     if (w || entry) {
       const place = entry ? 'bar' : placeOf(w)
       const notBar = home() === 'taskbar' ? '' : t(core.lang, 'menu.notTaskbar')
-      parts.push(line(t(core.lang, 'menu.where'), opt('where', 'bar', t(core.lang, 'menu.bar'), place === 'bar', place === 'bar' ? '' : notBar) + opt('where', 'isle', t(core.lang, 'menu.isle'), place === 'isle') + opt('where', 'desk', t(core.lang, 'menu.desk'), place === 'desk', window.pet.mac ? t(core.lang, 'menu.noDesk') : '')))
+      parts.push(line(t(core.lang, 'menu.where'), opt('where', 'bar', t(core.lang, 'menu.bar'), place === 'bar', place === 'bar' ? '' : notBar) + opt('where', 'isle', t(core.lang, 'menu.isle'), place === 'isle') + opt('where', 'desk', t(core.lang, 'menu.desk'), place === 'desk', pet.mac ? t(core.lang, 'menu.noDesk') : '')))
     }
     parts.push('<div class="wmsep"></div>')
     // With others in one place, or apart again.
@@ -123,7 +129,7 @@ window.IslandParts.wmenu = function (core) {
     }
     // Into a board on the desktop (§7): each there is (three at most), or a
     // new one; never a group, never on a Mac.
-    if (window.pet.mac) parts.push(item('board', t(core.lang, 'menu.board'), t(core.lang, 'menu.noDesk')))
+    if (pet.mac) parts.push(item('board', t(core.lang, 'menu.board'), t(core.lang, 'menu.noDesk')))
     else if (group && member < 0) parts.push(item('board', t(core.lang, 'menu.board'), t(core.lang, 'desk.noStackInBoard')))
     else if (w || entry) {
       const it = menuItemOf(w, entry, member)
@@ -137,7 +143,7 @@ window.IslandParts.wmenu = function (core) {
     if (w) parts.push(item('settings', t(core.lang, 'menu.settings')))
     // picker.js: in the open island, a member's way of showing in her
     // capsule (under its name), and out of it (移出胶囊).
-    const isle = !bar && w ? window.Picker?.isleMenu?.(w, { opt, line }) : null
+    const isle = !bar && w ? Picker?.isleMenu?.(w, { opt, line }) : null
     if (isle) parts.splice(1, 0, ...isle.lines)
     parts.push(item('remove', isle?.remove || t(core.lang, bar && entry ? 'menu.remove' : 'capsule.out')))
     parts.push('<div class="wmwhy" hidden></div>')
@@ -248,13 +254,13 @@ window.IslandParts.wmenu = function (core) {
         return w && openWidgetSettings(w)
       // picker.js: its way of showing in her capsule.
       case 'cmode':
-        return w && window.Picker?.setMode(w, v)
+        return w && Picker?.setMode(w, v)
       case 'remove':
         // picker.js: taken off, with a way back (undo), and off once it is nowhere.
-        if (window.Picker?.remove(m.where === 'bar' && entry ? { entry: entry.id, member } : { widget: w })) return
+        if (Picker?.remove(m.where === 'bar' && entry ? { entry: entry.id, member } : { widget: w })) return
         if (m.where === 'bar' && entry) return Widgets.isGroup(entry) && member >= 0 ? removeMember(entry.id, member) : removeEntry(entry.id)
         // Out of her capsule with no picker to do it: off (put nowhere now).
-        if (w) return window.pet.settings.set({ widgetsOff: [...new Set([...(core.config.widgetsOff || []), w.id])] })
+        if (w) return pet.settings.set({ widgetsOff: [...new Set([...(core.config.widgetsOff || []), w.id])] })
     }
   })
 
@@ -316,7 +322,7 @@ window.IslandParts.wmenu = function (core) {
   // desktop by themselves counted as it.
   function placeNow(item, on) {
     const keys = [keyFor(item), ...(item.plugin ? core.allWidgets.filter(w => w.plugin === item.plugin).map(w => `widget:${w.id}`) : [])]
-    const p = window.Placing.whereIs({ keys, on, taskbar: home() === 'taskbar' ? tbLayout() : null, desk: core.config.deskLayout, home: home() })
+    const p = Placing.whereIs({ keys, on, taskbar: home() === 'taskbar' ? tbLayout() : null, desk: core.config.deskLayout, home: home() })
     return p.board ? { at: 'board', name: core.boardName(p.board) } : { at: p.at }
   }
   function placeWidget(item, where) {
@@ -357,7 +363,7 @@ window.IslandParts.wmenu = function (core) {
     // preset's for one put on the desktop from the capsule).
     if (off || where === 'isle') keepLayout(layout)
     if (where === 'desk') return core.putOnDesk(item)
-    if (item.id && (core.config.widgetsOff || []).includes(item.id)) window.pet.settings.set({ widgetsOff: core.config.widgetsOff.filter(x => x !== item.id) })
+    if (item.id && (core.config.widgetsOff || []).includes(item.id)) pet.settings.set({ widgetsOff: core.config.widgetsOff.filter(x => x !== item.id) })
   }
 
   // A widget or plugin (by its key) off a taskbar layout: alone, or out of

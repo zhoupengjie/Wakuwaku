@@ -3,12 +3,13 @@
 // and the inbox: letters by thread, who they are from, their talks with the
 // agents.
 // Made by settings.js in the section's place as the page starts
-// (window.SettingsParts.mail(core)): what it takes of the settings' core
+// (mailPart(core), imported by settings.js): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
-window.SettingsParts = window.SettingsParts || {}
-window.SettingsParts.mail = function (core) {
+import * as Agents from './agents.js'
+
+export function mailPart(core) {
   const {
     AGENTS, AGENT_NAMES, Agents, T, esc, expanded, inbox, patch, row, sec, seg,
   } = core

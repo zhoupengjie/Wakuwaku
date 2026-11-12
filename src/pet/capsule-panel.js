@@ -13,17 +13,18 @@
 // too for now). A widget dragged from the picker may be let go of over it.
 // Sessions come first: the capsule shows a session that needs you before
 // any of its widgets.
-;(function () {
-  const Isle = window.Isle
-  const Picker = window.Picker
-  if (!Isle || !Picker) {
-    window.CapsulePanel = null
-    return
-  }
-  const { t } = window.I18n
-  const Widgets = window.Widgets
-  const WCards = window.WCards
-  const C = window.Capsule
+import * as Anchor from './anchor.js'
+import * as C from './capsule.js'
+import * as WCards from './wcards.js'
+import * as Widgets from './widgets.js'
+import { t } from '../shared/i18n.js'
+import { Isle, Picker, provide } from './pages.js'
+import { pet } from './bridge.js'
+
+// Only with the island and the picker there (both made before this): else none.
+provide('CapsulePanel', Isle && Picker ? capsulePanel() : null)
+
+function capsulePanel() {
   const el = Isle.el
   const T = (key, vars) => t(Isle.lang, key, vars)
   const esc = WCards.esc
@@ -33,7 +34,7 @@
   const panel = el('div', 'cp')
   panel.hidden = true
   panel.setAttribute('role', 'dialog')
-  for (const type of ['mouseenter', 'mouseleave']) panel.addEventListener(type, () => window.pet.hover(type === 'mouseenter'))
+  for (const type of ['mouseenter', 'mouseleave']) panel.addEventListener(type, () => pet.hover(type === 'mouseenter'))
   panel.addEventListener('contextmenu', e => e.preventDefault())
   document.body.append(panel)
   let open = false
@@ -106,7 +107,7 @@
     } else {
       // Along the foot of the screen (zhoupengjie/Wakuwaku#105), above it.
       const r = Isle.island.getBoundingClientRect()
-      x = window.Anchor.under(r, w, Isle.anchor(), innerWidth)
+      x = Anchor.under(r, w, Isle.anchor(), innerWidth)
       y = Isle.islandEdge?.() === 'bottom' ? r.top - h - 12 : Math.max(r.bottom, 44) + 12
     }
     panel.style.left = `${Math.round(Math.max(8, Math.min(x, innerWidth - w - 8)))}px`
@@ -122,7 +123,7 @@
     panel.classList.remove('cp-in')
     void panel.offsetWidth
     panel.classList.add('cp-in')
-    if (home() === 'island') window.pet.keyboard(true)
+    if (home() === 'island') pet.keyboard(true)
     changed()
   }
   function hide() {
@@ -130,7 +131,7 @@
     open = false
     rowDrag = null
     panel.hidden = true
-    if (home() === 'island' && !Picker.isOpen()) window.pet.keyboard(false)
+    if (home() === 'island' && !Picker.isOpen()) pet.keyboard(false)
     changed()
   }
   // The window's room and where it takes the mouse; presses elsewhere watched.
@@ -209,10 +210,10 @@
     true,
   )
   // Its words and values follow the widgets and the settings.
-  window.pet.onWidgets(() => draw())
-  window.pet.onUpdate(() => draw())
+  pet.onWidgets(() => draw())
+  pet.onUpdate(() => draw())
 
-  window.CapsulePanel = {
+  return {
     el: panel,
     isOpen: () => open,
     open: show,
@@ -231,4 +232,4 @@
       return at < 0 ? rows.length : at
     },
   }
-})()
+}

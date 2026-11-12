@@ -2,12 +2,16 @@
 // as the clock's opens Windows' calendar; a stack opened (the spec's §5),
 // its members side by side.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.wpop(core)): what it takes of the island's core
+// (wpopPart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.wpop = function (core) {
+import * as WCards from './wcards.js'
+import * as Widgets from './widgets.js'
+import { Picker, Settings } from './pages.js'
+import { pet } from './bridge.js'
+
+export function wpopPart(core) {
   const {
     Widgets, barRest, closePop, el, entryNodes, fillHer, home, isDetailed, isSide, memberName, needsSettings,
     popCtx, t, tbLayout, update, watchPresses,
@@ -117,12 +121,12 @@ window.IslandParts.wpop = function (core) {
     if (core.editLayout) core.editLayout = layout
     else {
       core.config.taskbarLayout = layout
-      window.pet.settings.set({ taskbarLayout: layout })
+      pet.settings.set({ taskbarLayout: layout })
     }
     core.arranged = ''
     update()
     // picker.js: its cards' "已放" anew.
-    window.Picker?.changed()
+    Picker?.changed()
   }
 
   // Off the taskbar, and kept so.
@@ -149,13 +153,13 @@ window.IslandParts.wpop = function (core) {
     if (what === 'remove') {
       // picker.js: taken off with a way back (undo), off once it is nowhere.
       const at = group && w ? entry.items.findIndex(m => Widgets.sourcesOf(m, core.allWidgets).includes(w)) : -1
-      if (window.Picker?.remove({ entry: entry.id, member: at })) return closeWidgetPop()
+      if (Picker?.remove({ entry: entry.id, member: at })) return closeWidgetPop()
       if (!group) return removeEntry(entry.id)
       const index = w ? entry.items.findIndex(m => Widgets.sourcesOf(m, core.allWidgets).includes(w)) : -1
       return index >= 0 ? removeMember(entry.id, index) : removeEntry(entry.id)
     }
     closeWidgetPop()
-    if (what === 'mail') return window.pet.openSettings('mail')
+    if (what === 'mail') return pet.openSettings('mail')
     openWidgetSettings(w || (entry.type === 'plugin' ? { plugin: entry.of } : { id: entry.of }))
   })
 
@@ -163,10 +167,10 @@ window.IslandParts.wpop = function (core) {
   // else its row on the plugins page, its own settings folded out (the
   // monitor's, a plugin's she runs).
   function openWidgetSettings(w) {
-    if (w.from === 'mail') return window.pet.openSettings('mail')
+    if (w.from === 'mail') return pet.openSettings('mail')
     const key = w.plugin || w.id
-    if (w.plugin || key === 'monitor') window.Settings?.openPlugin?.(key)
-    window.pet.openSettings(key ? `widgets:${key}` : 'widgets')
+    if (w.plugin || key === 'monitor') Settings?.openPlugin?.(key)
+    pet.openSettings(key ? `widgets:${key}` : 'widgets')
   }
   wgPop.addEventListener('contextmenu', e => {
     e.preventDefault()

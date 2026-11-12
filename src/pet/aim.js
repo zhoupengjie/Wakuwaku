@@ -24,102 +24,94 @@
 //   reaches down to the strip: style.css, barpop.css);
 // - gone from both, it went 0.45 to 0.48 s later, its fade counted:
 //   CLOSE_MS (island.js, barpop.js).
-;(function (root) {
-  const OPEN_MS = 500
-  const SWITCH_MS = 225
-  const CLOSE_MS = 400
-  // Heading into the list: from where the pointer was about this long ago
-  // to where it is. One move's step alone is a pixel or two, too little to
-  // say where it goes.
-  const TRAIL_MS = 80
-  // Not moved for this long: at rest, heading nowhere.
-  const REST_MS = 60
-  // The list's near side taken this much longer at each end (px).
-  const SLACK_PX = 6
+const OPEN_MS = 500
+const SWITCH_MS = 225
+const CLOSE_MS = 400
+// Heading into the list: from where the pointer was about this long ago
+// to where it is. One move's step alone is a pixel or two, too little to
+// say where it goes.
+const TRAIL_MS = 80
+// Not moved for this long: at rest, heading nowhere.
+const REST_MS = 60
+// The list's near side taken this much longer at each end (px).
+const SLACK_PX = 6
 
-  // p in the triangle a, b, c (on an edge counts).
-  function inTriangle(p, a, b, c) {
-    const side = (u, v, w) => (v.x - u.x) * (w.y - u.y) - (v.y - u.y) * (w.x - u.x)
-    const d1 = side(p, a, b)
-    const d2 = side(p, b, c)
-    const d3 = side(p, c, a)
-    const neg = d1 < 0 || d2 < 0 || d3 < 0
-    const pos = d1 > 0 || d2 > 0 || d3 > 0
-    return !(neg && pos)
+// p in the triangle a, b, c (on an edge counts).
+function inTriangle(p, a, b, c) {
+  const side = (u, v, w) => (v.x - u.x) * (w.y - u.y) - (v.y - u.y) * (w.x - u.x)
+  const d1 = side(p, a, b)
+  const d2 = side(p, b, c)
+  const d3 = side(p, c, a)
+  const neg = d1 < 0 || d2 < 0 || d3 < 0
+  const pos = d1 > 0 || d2 > 0 || d3 > 0
+  return !(neg && pos)
+}
+
+// The two ends of the list's side that faces the strip ({ left, top,
+// right, bottom }), by the strip's edge of the screen: a bottom bar's
+// list stands above it, a left bar's to its right.
+function nearSide(list, edge, slack = SLACK_PX) {
+  if (edge === 'top') return [{ x: list.left - slack, y: list.top }, { x: list.right + slack, y: list.top }]
+  if (edge === 'left') return [{ x: list.left, y: list.top - slack }, { x: list.left, y: list.bottom + slack }]
+  if (edge === 'right') return [{ x: list.right, y: list.top - slack }, { x: list.right, y: list.bottom + slack }]
+  return [{ x: list.left - slack, y: list.bottom }, { x: list.right + slack, y: list.bottom }]
+}
+
+// Gone from `from` to `to`, heading into the list: `to` in the triangle
+// from `from` to the ends of the list's near side. Along the strip, or
+// away from the list, is not; nor staying put.
+function heading(from, to, list, edge, slack = SLACK_PX) {
+  if (!from || !to || !list || (from.x === to.x && from.y === to.y)) return false
+  const [b, c] = nearSide(list, edge, slack)
+  return inTriangle(to, from, b, c)
+}
+
+// The pointer's way along the buttons, for one strip: told where it moves
+// (move) and which program's button it is on (over); due says how long
+// until that program's list is to show.
+function create({ openMs = OPEN_MS, switchMs = SWITCH_MS, trailMs = TRAIL_MS, restMs = REST_MS, slack = SLACK_PX } = {}) {
+  // Where it was, oldest first: the newest point older than trailMs, and
+  // all since.
+  const trail = []
+  // The button it is on ({ key, since }), counted from when it came, or
+  // from when it last headed into the list.
+  let on = null
+  const api = {
+    move(x, y, t) {
+      const last = trail[trail.length - 1]
+      if (last && last.x === x && last.y === y) return
+      trail.push({ x, y, t })
+      while (trail.length > 2 && trail[1].t <= t - trailMs) trail.shift()
+    },
+    // On a program's button (its key), or on none (null).
+    over(key, t) {
+      if ((key ?? null) === (on?.key ?? null)) return
+      on = key == null ? null : { key, since: t }
+    },
+    key: () => on?.key ?? null,
+    // Heading into the list ({ key, rect, edge }) now, at t.
+    heading(list, t) {
+      const now = trail[trail.length - 1]
+      if (!list || !now || t - now.t > restMs || trail.length < 2) return false
+      return heading(trail[0], now, list.rect, list.edge, slack)
+    },
+    // How long until the list is to be the button's: ms (0: now), or null
+    // for nothing to do (on no button, or its list the one shown). list:
+    // the list shown ({ key, rect: { left, top, right, bottom }, edge }),
+    // or null. Heading into it, the time on the button counts from its
+    // last move, and it is asked again in restMs.
+    due(list, t) {
+      if (!on) return null
+      if (!list) return Math.max(0, openMs - (t - on.since))
+      if (list.key === on.key) return null
+      if (api.heading(list, t)) {
+        on.since = Math.max(on.since, trail[trail.length - 1].t)
+        return restMs
+      }
+      return Math.max(0, switchMs - (t - on.since))
+    },
   }
+  return api
+}
 
-  // The two ends of the list's side that faces the strip ({ left, top,
-  // right, bottom }), by the strip's edge of the screen: a bottom bar's
-  // list stands above it, a left bar's to its right.
-  function nearSide(list, edge, slack = SLACK_PX) {
-    if (edge === 'top') return [{ x: list.left - slack, y: list.top }, { x: list.right + slack, y: list.top }]
-    if (edge === 'left') return [{ x: list.left, y: list.top - slack }, { x: list.left, y: list.bottom + slack }]
-    if (edge === 'right') return [{ x: list.right, y: list.top - slack }, { x: list.right, y: list.bottom + slack }]
-    return [{ x: list.left - slack, y: list.bottom }, { x: list.right + slack, y: list.bottom }]
-  }
-
-  // Gone from `from` to `to`, heading into the list: `to` in the triangle
-  // from `from` to the ends of the list's near side. Along the strip, or
-  // away from the list, is not; nor staying put.
-  function heading(from, to, list, edge, slack = SLACK_PX) {
-    if (!from || !to || !list || (from.x === to.x && from.y === to.y)) return false
-    const [b, c] = nearSide(list, edge, slack)
-    return inTriangle(to, from, b, c)
-  }
-
-  // The pointer's way along the buttons, for one strip: told where it moves
-  // (move) and which program's button it is on (over); due says how long
-  // until that program's list is to show.
-  function create({ openMs = OPEN_MS, switchMs = SWITCH_MS, trailMs = TRAIL_MS, restMs = REST_MS, slack = SLACK_PX } = {}) {
-    // Where it was, oldest first: the newest point older than trailMs, and
-    // all since.
-    const trail = []
-    // The button it is on ({ key, since }), counted from when it came, or
-    // from when it last headed into the list.
-    let on = null
-    const api = {
-      move(x, y, t) {
-        const last = trail[trail.length - 1]
-        if (last && last.x === x && last.y === y) return
-        trail.push({ x, y, t })
-        while (trail.length > 2 && trail[1].t <= t - trailMs) trail.shift()
-      },
-      // On a program's button (its key), or on none (null).
-      over(key, t) {
-        if ((key ?? null) === (on?.key ?? null)) return
-        on = key == null ? null : { key, since: t }
-      },
-      key: () => on?.key ?? null,
-      // Heading into the list ({ key, rect, edge }) now, at t.
-      heading(list, t) {
-        const now = trail[trail.length - 1]
-        if (!list || !now || t - now.t > restMs || trail.length < 2) return false
-        return heading(trail[0], now, list.rect, list.edge, slack)
-      },
-      // How long until the list is to be the button's: ms (0: now), or null
-      // for nothing to do (on no button, or its list the one shown). list:
-      // the list shown ({ key, rect: { left, top, right, bottom }, edge }),
-      // or null. Heading into it, the time on the button counts from its
-      // last move, and it is asked again in restMs.
-      due(list, t) {
-        if (!on) return null
-        if (!list) return Math.max(0, openMs - (t - on.since))
-        if (list.key === on.key) return null
-        if (api.heading(list, t)) {
-          on.since = Math.max(on.since, trail[trail.length - 1].t)
-          return restMs
-        }
-        return Math.max(0, switchMs - (t - on.since))
-      },
-    }
-    return api
-  }
-
-  const api = { create, heading, inTriangle, nearSide, OPEN_MS, SWITCH_MS, CLOSE_MS, TRAIL_MS, REST_MS, SLACK_PX }
-
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = api
-  } else {
-    root.Aim = api
-  }
-})(this ?? window)
+export { create, heading, inTriangle, nearSide, OPEN_MS, SWITCH_MS, CLOSE_MS, TRAIL_MS, REST_MS, SLACK_PX }

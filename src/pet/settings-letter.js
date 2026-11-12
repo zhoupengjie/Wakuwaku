@@ -3,12 +3,14 @@
 // the Network page (the proxy, how she reaches the web, its test); and the
 // menus a letter and a button open.
 // Made by settings.js in the section's place as the page starts
-// (window.SettingsParts.letter(core)): what it takes of the settings' core
+// (letterPart(core), imported by settings.js): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
-window.SettingsParts = window.SettingsParts || {}
-window.SettingsParts.letter = function (core) {
+import * as Widgets from './widgets.js'
+import { pet } from './bridge.js'
+
+export function letterPart(core) {
   const {
     AGENTS, COLOR, MOST_FILES, PROXY_KINDS, T, Widgets, accountOf, agentsHTML, body, choicesOf, confOf, draw,
     esc, expanded, firstAgent, handButtons, inbox, inboxHTML, inboxId, isLetter, isReading, keepDraft,
@@ -218,7 +220,7 @@ window.SettingsParts.letter = function (core) {
       forward: d.forward ? { account: d.forward.account, folder: d.forward.folder || 'inbox', uid: d.forward.uid, keep: d.forward.files.map(f => f.index) } : null,
       files: d.files.map(f => ({ name: f.name, type: f.type, data: f.data })),
     }
-    const got = await window.pet.mail.send(letter)
+    const got = await pet.mail.send(letter)
     if (core.draft !== d) return
     d.busy = false
     if (!got.ok) {
@@ -549,7 +551,7 @@ window.SettingsParts.letter = function (core) {
     draw()
     const p = waySetting('netProxy')
     const typed = core.proxyTyped?.key === 'netProxy' && !core.proxyTyped.bad ? core.proxyTyped.text.trim() : p.address
-    window.pet.settings
+    pet.settings
       .netTest(p.mode === 'manual' ? { ...p, address: typed } : { mode: p.mode })
       .then(got => ((netTest = got), draw()))
       .catch(e => ((netTest = { ok: false, error: String(e) }), draw()))
@@ -586,7 +588,7 @@ window.SettingsParts.letter = function (core) {
     const rev = core.snap?.mailRev || 0
     Object.assign(inbox, { id, for: which, busy: true, error: null })
     if (!quiet) redrawMail()
-    const got = await window.pet.mail.letters(id, inbox.count, inbox.filter)
+    const got = await pet.mail.letters(id, inbox.count, inbox.filter)
     inbox.busy = false
     if (inbox.for !== which) return redrawMail()
     if (got.ok) Object.assign(inbox, { threads: got.threads, total: got.total, letters: got.letters, errors: got.errors || [], syncing: got.syncing, rev })
@@ -603,7 +605,7 @@ window.SettingsParts.letter = function (core) {
     core.reading = { account, folder, uid, busy: true }
     draw(true)
     core.relayout()
-    const got = await window.pet.mail.letter(account, uid, folder)
+    const got = await pet.mail.letter(account, uid, folder)
     if (!isReading(account, folder, uid)) return
     core.reading = got.ok ? { account, folder, uid, letter: got.letter, talk: got.talk } : { account, folder, uid, error: got.error }
     const l = listed(account, folder, uid)
@@ -633,7 +635,7 @@ window.SettingsParts.letter = function (core) {
     closeMenu()
     if (how === 'talk' && !isReading(account, folder, uid)) await openLetter(account, uid, folder)
     noteFor({ text: T('mail.hand.busy', { agent: AGENTS[agent] }) })
-    const got = await window.pet.mail.hand(account, uid, agent, how, folder)
+    const got = await pet.mail.hand(account, uid, agent, how, folder)
     if (got.ok && how === 'talk' && core.reading?.letter && isReading(account, folder, uid)) core.reading.talk = null
     noteFor(got.ok ? (how === 'open' ? { text: T('mail.hand.opened', { agent: AGENTS[agent] }) } : null) : { text: handError(got.error, agent), bad: true })
   }
@@ -643,7 +645,7 @@ window.SettingsParts.letter = function (core) {
     const text = box.value.trim()
     if (!text) return
     box.value = ''
-    const got = await window.pet.mail.say(box.dataset.talk, text)
+    const got = await pet.mail.say(box.dataset.talk, text)
     if (!got.ok) {
       box.value = text
       noteFor({ text: handError(got.error), bad: true })
@@ -658,7 +660,7 @@ window.SettingsParts.letter = function (core) {
     const on = !(inList || open)?.flagged
     for (const l of [inList, open]) if (l) l.flagged = on
     redrawMail()
-    const got = await window.pet.mail.flag(account, uid, on, folder)
+    const got = await pet.mail.flag(account, uid, on, folder)
     if (!got.ok) {
       for (const l of [inList, open]) if (l) l.flagged = !on
       noteFor({ text: mailError(got.error, accountOf(account)), bad: true })

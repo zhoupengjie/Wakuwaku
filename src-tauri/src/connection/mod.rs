@@ -295,9 +295,9 @@ mod tests {
     fn connected_as_the_page_counts_it() {
         let page = include_str!("../../../src/pet/agents.js");
         let mut ins: Vec<(Agent, Vec<String>)> = Vec::new();
-        for part in page.split("      id: '").skip(1) {
+        for part in page.split("\n    id: '").skip(1) {
             let id = &part[..part.find('\'').unwrap()];
-            let list = part.split("      in: [").nth(1).and_then(|rest| rest.split(']').next()).unwrap_or_else(|| panic!("{id}'s in"));
+            let list = part.split("\n    in: [").nth(1).and_then(|rest| rest.split(']').next()).unwrap_or_else(|| panic!("{id}'s in"));
             let agent = by_id(id).unwrap_or_else(|| panic!("{id}: an id settings_agent knows"));
             ins.push((agent, list.split(',').map(|s| s.trim().trim_matches('\'').to_string()).filter(|s| !s.is_empty()).collect()));
         }

@@ -7,7 +7,7 @@ test('a DPR-only resize resends unchanged settings hit regions, once per scale',
   const source = readFileSync(require.resolve('../src/pet/island.js'), 'utf8').replace(/\r\n/g, '\n')
   // The strip's thickness and the resize that tells it are the taskbar's look's (island-look.js).
   const look = readFileSync(require.resolve('../src/pet/island-look.js'), 'utf8').replace(/\r\n/g, '\n')
-  const solid = source.slice(source.indexOf("  let solidSent = ''"), source.indexOf('  const solidWatch ='))
+  const solid = source.slice(source.indexOf("\nlet solidSent = ''"), source.indexOf('\nconst solidWatch ='))
   const resize = look.slice(look.indexOf('  let stripThick =')).match(/  window\.addEventListener\('resize', \(\) => \{[\s\S]*?\n  \}\)/)[0]
   const sent = []
   const listeners = {}
@@ -21,9 +21,12 @@ test('a DPR-only resize resends unchanged settings hit regions, once per scale',
     isOn: () => true,
     fitPage: () => {},
     document: { documentElement: { style: { setProperty: () => {} } } },
+    // What the two files import: the picker's and the settings' faces
+    // (pages.js), the bridge's pet.
+    Picker: null,
+    Settings: { isOpen: () => true, layer: settings, redraw: () => redraws++ },
+    pet: { editing: (on, rects) => sent.push({ on, rects: JSON.parse(JSON.stringify(rects)), dpr: page.devicePixelRatio }) },
     window: {
-      Settings: { isOpen: () => true, layer: settings, redraw: () => redraws++ },
-      pet: { editing: (on, rects) => sent.push({ on, rects: JSON.parse(JSON.stringify(rects)), dpr: page.devicePixelRatio }) },
       addEventListener: (type, listener) => { listeners[type] = listener },
     },
   })

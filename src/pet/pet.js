@@ -7,8 +7,11 @@
 //
 // Frames are drawn when they change, not on a fixed tick, so a pet at rest
 // costs next to nothing.
-const { CELL_W, CELL_H, CLIPS, MOOD_CLIP, REACTIONS, lookCell } = window.Sprite
-const { t } = window.I18n
+import * as Status from './status.js'
+import { CELL_W, CELL_H, CLIPS, MOOD_CLIP, REACTIONS, lookCell } from './sprite.js'
+import { t } from '../shared/i18n.js'
+import { provide } from './pages.js'
+import { pet } from './bridge.js'
 
 const COLOR = {
   idle: '#9aa4b2',
@@ -306,10 +309,10 @@ function tick() {
 }
 
 bubble.addEventListener('click', () => {
-  if (isOut() && now.id) window.pet.jump(now.id)
+  if (isOut() && now.id) pet.jump(now.id)
 })
-bubble.addEventListener('mouseenter', () => isOut() && window.pet.hover(true, false))
-bubble.addEventListener('mouseleave', () => isOut() && window.pet.hover(false, false))
+bubble.addEventListener('mouseenter', () => isOut() && pet.hover(true, false))
+bubble.addEventListener('mouseleave', () => isOut() && pet.hover(false, false))
 
 // --- Her list, under the pointer ----------------------------------------------------
 
@@ -338,7 +341,7 @@ function fillList() {
       row.classList.add('go')
       row.addEventListener('click', () => {
         closeList()
-        window.pet.jump(r.id)
+        pet.jump(r.id)
       })
     }
     return row
@@ -354,7 +357,7 @@ function fillList() {
     })
     return b
   }
-  foot.append(button(t(lang, 'her.settings'), () => window.pet.openSettings()), button(t(lang, 'her.home'), () => window.pet.doubleClick()))
+  foot.append(button(t(lang, 'her.settings'), () => pet.openSettings()), button(t(lang, 'her.home'), () => pet.doubleClick()))
   herList.replaceChildren(head, ...rows, ...(more > 0 ? [span('rest', t(lang, 'status.moreSessions', { n: more }))] : []), foot)
 }
 
@@ -392,10 +395,10 @@ function leaveSoon() {
 
 herList.addEventListener('mouseenter', () => {
   clearTimeout(leaveTimer)
-  window.pet.hover(true, false)
+  pet.hover(true, false)
 })
 herList.addEventListener('mouseleave', () => {
-  window.pet.hover(false, false)
+  pet.hover(false, false)
   leaveSoon()
 })
 
@@ -430,7 +433,7 @@ function room(atOnce = false) {
       clearTimeout(roomTimer)
       roomTimer = null
       roomSent = want
-      window.pet.panel(want)
+      pet.panel(want)
     }
     if (same(want, roomSent)) {
       clearTimeout(roomTimer)
@@ -446,7 +449,7 @@ function room(atOnce = false) {
   })
 }
 
-window.HerTalk = { room }
+provide('HerTalk', { room })
 
 // The bubble never pushes her out of her window: one line for the status
 // and one for the others, cut short with an ellipsis; something she says
@@ -515,7 +518,7 @@ async function idleAct() {
     const distance = Math.round((60 + Math.random() * 140) * (config.scale / 0.55))
     walking = { dir }
     kick()
-    await window.pet.walk(dir * distance, distance * 18)
+    await pet.walk(dir * distance, distance * 18)
     walking = null
     kick()
   } else {
@@ -540,7 +543,7 @@ function stopIdle() {
   clearTimeout(glanceTimer)
   looking = null
   if (walking) {
-    window.pet.walkStop()
+    pet.walkStop()
     walking = null
   }
 }
@@ -573,7 +576,7 @@ function chime(mood) {
 
 // --- From main --------------------------------------------------------------------------
 
-window.pet.onUpdate(data => {
+pet.onUpdate(data => {
   const wasMood = now.mood
   now = data
   lang = data.lang || lang
@@ -591,7 +594,7 @@ window.pet.onUpdate(data => {
   kick()
 })
 
-window.pet.onQuiet(({ on }) => {
+pet.onQuiet(({ on }) => {
   quiet = on === true
   kick()
   tick()
@@ -607,12 +610,12 @@ function react({ react: name, say: text, times }) {
   scheduleIdle()
 }
 
-window.pet.onReact(react)
+pet.onReact(react)
 
-window.pet.onAlert(({ mood }) => chime(mood))
+pet.onAlert(({ mood }) => chime(mood))
 
 // Eyes on the cursor while it moves near enough.
-window.pet.onCursor(({ dx, dy }) => {
+pet.onCursor(({ dx, dy }) => {
   if (!config.look || isIsland() || spriteVersion !== 2 || now.mood !== 'idle' || reaction || walking || dragged) return
   const distance = Math.hypot(dx, dy)
   if (distance < LOOK_NEAR || distance > LOOK_FAR) return
@@ -621,7 +624,7 @@ window.pet.onCursor(({ dx, dy }) => {
   kick()
 })
 
-window.pet.onDrag(dx => {
+pet.onDrag(dx => {
   if (dx === 0) return
   const isNew = !dragged
   dragged = { dir: Math.sign(dx), at: performance.now() }
@@ -631,7 +634,7 @@ window.pet.onDrag(dx => {
   }
 })
 
-window.pet.onDragEnd(() => {
+pet.onDragEnd(() => {
   dragged = null
   kick()
   scheduleIdle()
@@ -643,7 +646,7 @@ function fillHint() {
   hint.replaceChildren(span('', t(lang, 'her.dblHome')))
 }
 
-window.pet.onCarried?.(({ on }) => {
+pet.onCarried?.(({ on }) => {
   if (on) fillHint()
   hint.hidden = on !== true
 })
@@ -652,13 +655,13 @@ window.pet.onCarried?.(({ on }) => {
 
 // Out on the desktop, resting on her opens her list (a press does not).
 sprite.addEventListener('mouseenter', () => {
-  window.pet.hover(true)
+  pet.hover(true)
   clearTimeout(leaveTimer)
   clearTimeout(listTimer)
   if (isOut() && !listOpen) listTimer = setTimeout(openList, LIST_MS)
 })
 sprite.addEventListener('mouseleave', () => {
-  window.pet.hover(false)
+  pet.hover(false)
   if (listOpen) leaveSoon()
   else clearTimeout(listTimer)
 })
@@ -668,22 +671,22 @@ sprite.addEventListener('mousedown', e => {
   closeList()
   if (e.button === 0) {
     stopIdle()
-    window.pet.dragStart()
+    pet.dragStart()
   }
 })
 sprite.addEventListener('contextmenu', e => {
   e.preventDefault()
   closeList()
-  window.pet.menu()
+  pet.menu()
 })
 
 window.addEventListener('mouseup', e => {
   console.log('mouseup, button', e.button)
-  if (e.button === 0) window.pet.dragEnd()
+  if (e.button === 0) pet.dragEnd()
 })
 // A double-click: back into the island if she is out of it, else the main
 // window (main decides). A single one makes her jump.
-sprite.addEventListener('dblclick', () => window.pet.doubleClick())
+sprite.addEventListener('dblclick', () => pet.doubleClick())
 
 // The first pet:update (on load) brings the sprite and the first render.
 kick()

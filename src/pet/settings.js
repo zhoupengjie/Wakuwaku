@@ -20,19 +20,31 @@
 //
 // Everything that came from elsewhere (session names, pet names, errors) is
 // escaped before it goes into the page.
-;(function () {
-  const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
-  if (ROLE !== 'island') {
-    window.Settings = { isOpen: () => false }
-    return
-  }
+import * as AddonUI from './addonui.js'
+import * as Agents from './agents.js'
+import * as Flow from './flow.js'
+import * as Status from './status.js'
+import * as Widgets from './widgets.js'
+import { t, list as nameList, render } from '../shared/i18n.js'
+import { CLIPS } from './sprite.js'
+import { Island, Picker, provide } from './pages.js'
+import { pet } from './bridge.js'
+import { lookPart } from './settings-look.js'
+import { addonsPart } from './settings-addons.js'
+import { marketPart } from './settings-market.js'
+import { pluginsPart } from './settings-plugins.js'
+import { mailPart } from './settings-mail.js'
+import { letterPart } from './settings-letter.js'
+import { agentsPart } from './settings-agents.js'
+import { welcomePart } from './settings-welcome.js'
 
-  const { t, list: nameList, render } = window.I18n
-  const { CLIPS } = window.Sprite
-  const Status = window.Status
-  const Widgets = window.Widgets
-  const Agents = window.Agents
-  const AddonUI = window.AddonUI
+// Her own window's page (role=pet) has none: isOpen alone, always false.
+const ROLE = new URLSearchParams(location.search).get('role') === 'island' ? 'island' : 'pet'
+provide('Settings', ROLE === 'island' ? settingsPage() : { isOpen: () => false })
+
+// The settings, on the island's page: made as it starts; what the others see of them.
+function settingsPage() {
+
 
   // The island's colours (on black), the same as island.js.
   const COLOR = { idle: '#8e8e93', working: '#5e9bff', waiting: '#ffb340', done: '#34d27b', review: '#b18cff', error: '#ff5c6c' }
@@ -55,7 +67,7 @@
   // How long what she tells stays (停留多久): the quick choices, until seen,
   // and Custom, whole seconds typed in a box beside them (flow.js holdSecs,
   // zhoupengjie/Wakuwaku#59).
-  const HOLDS = [...window.Flow.HOLD_QUICK, 'seen']
+  const HOLDS = [...Flow.HOLD_QUICK, 'seen']
   // Minutes a session at rest stays in sight; 0 always (state.rs is_shown).
   const IDLE_HIDES = [15, 30, 60, 120, 0]
   const WAITS = [30, 60, 120, 290]
@@ -128,10 +140,10 @@
   const setRecording = key => {
     if (key === recordingShortcut) return
     recordingShortcut = key
-    window.pet.shortcutsPause?.(key !== null)
+    pet.shortcutsPause?.(key !== null)
   }
   let failedShortcuts = null
-  window.pet.onShortcutStatus && window.pet.onShortcutStatus(({ failed } = {}) => {
+  pet.onShortcutStatus && pet.onShortcutStatus(({ failed } = {}) => {
     failedShortcuts = new Set(failed || [])
     if (snap) snap.shortcutsFailed = failed || []
     draw()
@@ -188,7 +200,7 @@
   const MOST_FILES = 25 << 20
 
   // The letter left being written, as kept (none begun meanwhile).
-  window.pet.mail.draft().then(d => {
+  pet.mail.draft().then(d => {
     if (draft || !d || typeof d !== 'object' || !d.account) return
     draft = { ...d, files: [], busy: false, error: null, note: null }
     if (isOpen) draw()
@@ -196,7 +208,7 @@
 
   function keepDraft() {
     clearTimeout(draftTimer)
-    draftTimer = setTimeout(() => window.pet.mail.keepDraft(draft ? { ...draft, files: [], busy: false, error: null, note: null } : null), 300)
+    draftTimer = setTimeout(() => pet.mail.keepDraft(draft ? { ...draft, files: [], busy: false, error: null, note: null } : null), 300)
   }
 
   const T = (key, vars) => t(lang, key, vars)
@@ -449,7 +461,7 @@
   const {
     ACCENT_PICKER, ilookDefault, ilookFor, ilookInput, ilookOf, ilookPresets, ilookSave, lhmAsks, pageLook,
     paperDo, winMode,
-  } = window.SettingsParts.look({
+  } = lookPart({
     AddonUI, COLOR, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
     get displaysRow() { return displaysRow },
     get ilookMode() { return ilookMode },
@@ -467,7 +479,7 @@
     // hello, a plugin's nudge): the island open, a ring round it (the flow
     // light, the default), or the dot alone (island-ring.js cue); its three
     // choices under it, too long beside it.
-    const cue = window.Flow.endCue(s)
+    const cue = Flow.endCue(s)
     const cues = [
       ['open', T('s.endCueOpen')],
       ['ring', T('s.endCueRing')],
@@ -483,12 +495,12 @@
     const holdOff = cue === 'none'
     const holds = HOLDS.map(h => [h, h === 'seen' ? T('s.holdSeen') : h >= 60 ? T('settings.minutes', { n: h / 60 }) : T('settings.seconds', { n: h })])
     holds.push(['custom', T('s.holdCustom')])
-    const holdOn = window.Flow.holdChoice(s.hold, holdCustom)
-    const range = esc(T('s.holdRange', { min: window.Flow.HOLD_MIN, max: window.Flow.HOLD_MAX }))
+    const holdOn = Flow.holdChoice(s.hold, holdCustom)
+    const range = esc(T('s.holdRange', { min: Flow.HOLD_MIN, max: Flow.HOLD_MAX }))
     const typed = 'hold:secs' in drafts ? drafts['hold:secs'] : Number.isInteger(s.hold) ? String(s.hold) : ''
     const secs =
       holdOn === 'custom'
-        ? `<span class="hold-secs"><input class="in secs" data-hold="secs" value="${esc(typed)}" inputmode="numeric" maxlength="5" placeholder="${window.Flow.HOLD_MIN}–${window.Flow.HOLD_MAX}" title="${range}" aria-label="${range}" spellcheck="false" autocomplete="off"${holdOff ? ' disabled' : ''}><span class="d">${esc(T('s.holdUnit'))}</span></span>`
+        ? `<span class="hold-secs"><input class="in secs" data-hold="secs" value="${esc(typed)}" inputmode="numeric" maxlength="5" placeholder="${Flow.HOLD_MIN}–${Flow.HOLD_MAX}" title="${range}" aria-label="${range}" spellcheck="false" autocomplete="off"${holdOff ? ' disabled' : ''}><span class="d">${esc(T('s.holdUnit'))}</span></span>`
         : ''
     const holdPick = holdOff ? seg('hold', holds, holdOn).replace('class="seg"', 'class="seg off" aria-disabled="true"') : seg('hold', holds, holdOn)
     const waits = WAITS.map(w => [w, w >= 60 ? T('settings.minutes', { n: Math.round(w / 60) }) : T('settings.seconds', { n: w })])
@@ -547,7 +559,7 @@
   // Where one is put (island-wmenu.js placeNow): its place in a quiet word, or,
   // put nowhere, 添加小工具… (the picker, as her menu opens it, on its card:
   // key, picker.js fromMenu focus).
-  const placeOf = (item, on) => window.Island?.placeNow?.(item, on) || { at: on ? 'isle' : null }
+  const placeOf = (item, on) => Island?.placeNow?.(item, on) || { at: on ? 'isle' : null }
   function placeHTML(place, key = '') {
     if (!place.at) return `<button class="pbtn sm" data-padd="${esc(key)}">${esc(T('pl.add'))}</button>`
     const where = esc(T(`pl.at.${place.at}`, { name: place.name || '' }))
@@ -574,7 +586,7 @@
   const {
     SUBS, addonById, addonField, addonRow, addonsNow, andList, backSub, canDoHTML, crumbHTML, openSub,
     packById, packTile, packsGroup, toLook,
-  } = window.SettingsParts.addons({
+  } = addonsPart({
     AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part, placeHTML, placeOf,
     sec, seg, showPart, sw,
     get lang() { return lang },
@@ -594,7 +606,7 @@
   const {
     approveGo, drawSheet, fillCards, flowStep, installFromFile, installGo, loadMarket, marketInstall,
     marketItem, marketItemPage, marketPage, toast, uninstallGo, updateAll,
-  } = window.SettingsParts.market({
+  } = marketPart({
     AddonUI, COLOR, T, Widgets, addonById, andList, body, canDoHTML, crumbHTML, draw, esc, freshRows, market,
     packById, sec, seg, setHTML, sheet, showPart, toastEl,
     get isOpen() { return isOpen },
@@ -614,7 +626,7 @@
 
   // --- The Plugins page, and the monitor's sensors -------------------------------------
   // In settings-plugins.js:
-  const { pageWidgets, picksKey } = window.SettingsParts.plugins({
+  const { pageWidgets, picksKey } = pluginsPart({
     AddonUI, COLOR, SPINS, SUBS, T, Widgets, addonRow, drafts, esc, market, openHardware, packsGroup,
     placeHTML, placeOf, pluginFields, pluginNote, render, row, sec, seg, sw, widgetRows,
     get lang() { return lang },
@@ -630,7 +642,7 @@
     boxName, choicesOf, confOf, firstAgent, formProxy, handButtons, inboxHTML, inboxId, isLetter, isReading,
     labelOf, listed, loginWhy, mailDate, mailError, mailFix, mailFormHTML, mailList, mailNote, mailSaid,
     mailSize, outFields, people, providerOf, proxyFields, setConf, talkHTML, talkOf, twoPanes, where,
-  } = window.SettingsParts.mail({
+  } = mailPart({
     AGENTS, AGENT_NAMES, Agents, T, esc, expanded, inbox, patch, row, sec, seg,
     get draft() { return draft },
     get handNote() { return handNote },
@@ -653,7 +665,7 @@
     addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu,
     openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setProxy,
     star, step, waySetting, write, writeAbout,
-  } = window.SettingsParts.letter({
+  } = letterPart({
     AGENTS, COLOR, MOST_FILES, PROXY_KINDS, T, Widgets, accountOf, agentsHTML, body, choicesOf, confOf, draw,
     esc, expanded, firstAgent, handButtons, inbox, inboxHTML, inboxId, isLetter, isReading, keepDraft,
     labelOf, layer, listed, loginWhy, mailDate, mailError, mailFormHTML, mailList, mailNote, mailSize, patch,
@@ -697,7 +709,7 @@
   // In settings-agents.js:
   const {
     aboutHTML, agentDo, connectAll, dshSwitch, failed, known, pageAgents, pageCrash, pageUpdate, sessionOpen,
-  } = window.SettingsParts.agents({
+  } = agentsPart({
     Agents, COLOR, T, draw, esc, nameList, netNow, patch, row, sec, seg, sw,
     get crashShown() { return crashShown },
     get failedHTML() { return failedHTML },
@@ -729,7 +741,7 @@
   // In settings-welcome.js:
   const {
     PAGES, cardShows, displaysRow, failedHTML, screenRow, toolNames, toolsHere,
-  } = window.SettingsParts.welcome({
+  } = welcomePart({
     Agents, COLOR, T, aboutHTML, esc, failed, known, nameList, pageAgents, pageAlerts, pageCrash, pageLook,
     pageMail, pageNet, pageNow, pageUpdate, pageWidgets, part, row, sec, seg, sw, thumb, winMode,
     get connecting() { return connecting },
@@ -745,8 +757,8 @@
 
   function drawHead() {
     const now = snap.now
-    const pet = snap.pets.find(p => p.id === snap.settings.pet)
-    const title = now.mood === 'idle' ? T('s.headIdle', { name: pet ? pet.name : 'Wakuwaku' }) : T(HEAD_KEY[now.mood])
+    const chosen = snap.pets.find(p => p.id === snap.settings.pet)
+    const title = now.mood === 'idle' ? T('s.headIdle', { name: chosen ? chosen.name : 'Wakuwaku' }) : T(HEAD_KEY[now.mood])
     const asks = (snap.asks || []).length
     const sub = [Status.nameOf(now, snap.settings.details !== false), asks ? T('s.asksWaiting', { n: asks }) : ''].filter(Boolean).join(' · ')
     // By ✕, in Windows' own glyphs: locked, a click outside (or on the head)
@@ -829,13 +841,13 @@
     // them down from under the pointer). Never taller than the screen, nor
     // than the home keeps room for (the taskbar's): a page scrolls inside.
     const rest = layer.offsetHeight - body.offsetHeight
-    const most = window.Island?.settingsMax?.() ?? screen.availHeight - 56
+    const most = Island?.settingsMax?.() ?? screen.availHeight - 56
     body.style.height = `${Math.max(160, Math.min(460, most - rest))}px`
-    window.Island?.changed()
+    Island?.changed()
   }
 
   // After the content changed height: measure once it is laid out.
-  const relayout = () => requestAnimationFrame(() => window.Island?.changed())
+  const relayout = () => requestAnimationFrame(() => Island?.changed())
 
   // --- Open and close ----------------------------------------------------------------------------
 
@@ -887,14 +899,14 @@
     isOpen = true
     if (!wasOpen) openedAt = Date.now()
     if (!wasOpen) {
-      window.pet.keyboard(true)
+      pet.keyboard(true)
       clearInterval(clockTimer)
       clockTimer = setInterval(tick, 1000)
     } else if (!document.hasFocus()) {
       // Locked and gone under another window: asked for again, to the front.
-      window.pet.keyboard(true)
+      pet.keyboard(true)
     }
-    window.pet.settings.get().then(got => {
+    pet.settings.get().then(got => {
       snap = got
       // Connecting while the welcome card shows (nothing connected yet):
       // the card, at General's top; else the Agent page.
@@ -913,7 +925,7 @@
       }
       layer.focus({ preventScroll: true })
     })
-    window.Island?.changed()
+    Island?.changed()
   }
 
   function close(why = 'asked') {
@@ -942,8 +954,8 @@
     // on next time only for a custom number kept.
     if (layer.contains(document.activeElement)) document.activeElement.blur()
     holdCustom = false
-    window.pet.settingsClosed()
-    window.Island?.changed()
+    pet.settingsClosed()
+    Island?.changed()
   }
 
   function setTab(next) {
@@ -959,7 +971,7 @@
   function patch(change) {
     Object.assign(snap.settings, change)
     draw()
-    window.pet.settings.set(change).then(got => {
+    pet.settings.set(change).then(got => {
       snap = got
       draw()
     })
@@ -971,7 +983,7 @@
     gallery.loading = true
     gallery.error = ''
     draw()
-    const got = await window.pet.settings.gallery(more ? gallery.page + 1 : 1, gallery.sort, gallery.query)
+    const got = await pet.settings.gallery(more ? gallery.page + 1 : 1, gallery.sort, gallery.query)
     if (asked !== gallery.asked) return
     gallery.loading = false
     if (got.ok) {
@@ -1015,7 +1027,7 @@
     else fetching = reference
     fetchNote = { text: '', isError: false }
     draw()
-    const got = await window.pet.settings.fetch(reference)
+    const got = await pet.settings.fetch(reference)
     fetching = null
     gallery.getting = ''
     if (got.snapshot) snap = got.snapshot
@@ -1055,7 +1067,7 @@
     // its buttons, its link to the developer docs; a press beside it is 取消.
     if (!sheet.hidden && sheet.contains(e.target)) {
       const site = at('[data-site]')
-      if (site) return window.pet.settings.openSite(site.dataset.site)
+      if (site) return pet.settings.openSite(site.dataset.site)
       const b = at('[data-sheet]')
       if (b?.disabled) return
       const what = b ? b.dataset.sheet : at('.sh') ? '' : 'cancel'
@@ -1113,7 +1125,7 @@
     // A session: to its window (the settings close as it comes to the front).
     const session = at('[data-jump]')
     if (session) {
-      return window.pet.jump(session.dataset.jump).then(went => {
+      return pet.jump(session.dataset.jump).then(went => {
         if (!went) session.querySelector('.d').textContent = T('jump.notFound')
       })
     }
@@ -1126,7 +1138,7 @@
     const toggle = at('[data-sw]')
     if (toggle && !toggle.disabled) {
       const key = toggle.dataset.sw
-      if (key === 'login') return window.pet.settings.login(!snap.loginAtStart).then(got => ((snap = got), draw()))
+      if (key === 'login') return pet.settings.login(!snap.loginAtStart).then(got => ((snap = got), draw()))
       // Crash reports: sent by themselves, or never (not asked again).
       if (key === 'crashReports') return patch({ crashReports: snap.crash?.mode === 'auto' ? 'off' : 'auto' })
       if (key === 'paperShuffle') return paperDo('shuffle', !snap.winPaper?.shuffle)
@@ -1193,7 +1205,7 @@
     const add = at('[data-padd]')
     if (add) {
       close('picker')
-      return window.Picker?.fromMenu?.({ open: 'picker', focus: add.dataset.padd || '' })
+      return Picker?.fromMenu?.({ open: 'picker', focus: add.dataset.padd || '' })
     }
     // Someone else's plugin: its own page (its name), back from it; turned
     // on again after it stopped responding; 卸载, asked first; one installed
@@ -1243,7 +1255,7 @@
       if (mkDo.dataset.mkDo === 'look') return toLook(marketItem(id)?.kind)
       if (mkDo.dataset.mkDo === 'add') {
         close('picker')
-        return window.Picker?.fromMenu?.({ open: 'picker', focus: `plugin:${id}` })
+        return Picker?.fromMenu?.({ open: 'picker', focus: `plugin:${id}` })
       }
       return
     }
@@ -1263,7 +1275,7 @@
     const revive = at('[data-revive]')
     if (revive && !revive.disabled) {
       revive.disabled = true
-      return window.pet.addons.revive(revive.dataset.revive).then(got => {
+      return pet.addons.revive(revive.dataset.revive).then(got => {
         if (got && typeof got === 'object' && got.settings) snap = got
         draw()
       })
@@ -1305,7 +1317,7 @@
       }
       if (key === 'taskbarLayout') {
         // Its parts as the preset has them; the widgets put there kept.
-        const layout = window.Island?.tbWithPreset?.(raw)
+        const layout = Island?.tbWithPreset?.(raw)
         return layout && patch({ taskbarLayout: layout })
       }
       if (key === 'ilookMode') {
@@ -1329,7 +1341,7 @@
       if (key === 'paperEvery') return Number(raw) !== snap.winPaper?.every && paperDo('every', raw)
       if (key === 'winMode') {
         if ((raw === 'light') === !!snap.winLook?.light) return
-        return window.pet.settings.winLook({ light: raw === 'light' }).then(got => ((snap = got), draw()))
+        return pet.settings.winLook({ light: raw === 'light' }).then(got => ((snap = got), draw()))
       }
       if (key === 'dshVia') return dshSwitch(raw)
       if (key === 'gallery') {
@@ -1349,7 +1361,7 @@
       const key = tile.dataset.tile
       if (key === 'show') {
         if (!snap.hidden) return patch({ out: s.out !== true })
-        return window.pet.settings.showPet(true).then(got => ((snap = got), draw()))
+        return pet.settings.showPet(true).then(got => ((snap = got), draw()))
       }
       if (key === 'home') return patch({ display: HOMES[(HOMES.indexOf(s.display) + 1) % HOMES.length] })
       return patch({ [key]: !s[key] })
@@ -1359,7 +1371,7 @@
     // The taskbar's layout dragged into shape on the strip: the settings make way.
     if (at('[data-tb-edit]')) {
       close('edit')
-      return window.Island?.editTaskbar?.()
+      return Island?.editTaskbar?.()
     }
     // Her island's look: folded out or in, a preset, a ground, back to Windows' grey.
     if (at('[data-ilook-fold]')) {
@@ -1381,22 +1393,22 @@
     const lhmButton = at('[data-lhm]')
     if (lhmButton && !lhmButton.disabled) {
       if (['get', 'start', 'startup', 'noStartup', 'remove'].includes(lhmButton.dataset.lhm)) lhmAsking = Date.now()
-      return window.pet.settings.lhm(lhmButton.dataset.lhm).then(got => ((snap = got), draw()))
+      return pet.settings.lhm(lhmButton.dataset.lhm).then(got => ((snap = got), draw()))
     }
     // Her updates: look now, the release's notes, Update.
     const updateButton = at('[data-update]')
-    if (updateButton && !updateButton.disabled) return window.pet.settings.update(updateButton.dataset.update).then(got => ((snap = got), draw()))
+    if (updateButton && !updateButton.disabled) return pet.settings.update(updateButton.dataset.update).then(got => ((snap = got), draw()))
     // The Network proxy: shown (from an update not reached), tried.
     if (at('[data-net-go]')) return ((partToShow = 'net'), showPart())
     const netButton = at('[data-net-test]')
     if (netButton && !netButton.disabled) return runNetTest()
     if (at('[data-crash-show]')) return ((crashShown = !crashShown), draw())
     const crashButton = at('[data-crash]')
-    if (crashButton && !crashButton.disabled) return window.pet.settings.crash(crashButton.dataset.crash).then(got => ((snap = got), draw()))
+    if (crashButton && !crashButton.disabled) return pet.settings.crash(crashButton.dataset.crash).then(got => ((snap = got), draw()))
     const paperButton = at('[data-paper]')
     if (paperButton && !paperButton.disabled) return paperDo(paperButton.dataset.paper, paperButton.dataset.packId)
     const accent = at('[data-accent]')
-    if (accent && ACCENT_PICKER) return window.pet.settings.winLook({ accent: accent.dataset.accent }).then(got => ((snap = got), draw()))
+    if (accent && ACCENT_PICKER) return pet.settings.winLook({ accent: accent.dataset.accent }).then(got => ((snap = got), draw()))
     const use = at('[data-use]')
     if (use) return patch({ pet: use.dataset.use })
     if (at('[data-fetch]')) {
@@ -1442,7 +1454,7 @@
     // are open).
     const cpuSensors = at('[data-cpu-sensors]')
     if (cpuSensors) {
-      return window.pet.settings.cpuSensors(cpuSensors.dataset.cpuSensors).then(got => {
+      return pet.settings.cpuSensors(cpuSensors.dataset.cpuSensors).then(got => {
         snap = got.snapshot
         draw()
         relayout()
@@ -1468,7 +1480,7 @@
     }
     const site = at('[data-site]')
     // Google's pages for the address being added (data-for), when it says.
-    if (site) return window.pet.settings.openSite(site.dataset.site, site.dataset.for)
+    if (site) return pet.settings.openSite(site.dataset.site, site.dataset.for)
   })
 
   // A mail account's setup: what was clicked, if it was its. True when it was.
@@ -1574,7 +1586,7 @@
     }
     if (at('[data-mail-refresh]')) {
       // The server asked now (the list follows as the store changes).
-      window.pet.mail.kick(inboxId())
+      pet.mail.kick(inboxId())
       loadInbox(false)
       return true
     }
@@ -1602,7 +1614,7 @@
     const turned = at('[data-sw^="mail:"]')
     if (turned) {
       const a = (snap.mail || []).find(x => x.id === turned.dataset.sw.slice(5))
-      if (a) window.pet.mail.switch(a.id, !a.on).then(got => ((snap = got), draw()))
+      if (a) pet.mail.switch(a.id, !a.on).then(got => ((snap = got), draw()))
       return true
     }
     if (at('[data-mail-add]')) {
@@ -1689,7 +1701,7 @@
       }
       mailDelete = ''
       mailForm = null
-      window.pet.mail.remove(id).then(got => ((snap = got), draw(), relayout()))
+      pet.mail.remove(id).then(got => ((snap = got), draw(), relayout()))
       return true
     }
     return false
@@ -1800,7 +1812,7 @@
     f.busy = 'find'
     f.result = null
     redrawMail()
-    const got = await window.pet.mail.discover(f.address.trim(), formProxy(f))
+    const got = await pet.mail.discover(f.address.trim(), formProxy(f))
     if (mailForm !== f) return
     f.busy = ''
     f.probed = null
@@ -1823,7 +1835,7 @@
   // looked up while its settings are open; filled in if none was typed.
   async function findOutgoing(f) {
     f.findingOut = true
-    const got = await window.pet.mail.discover(f.address, formProxy(f))
+    const got = await pet.mail.discover(f.address, formProxy(f))
     f.findingOut = false
     if (mailForm !== f) return
     if (got.ok && got.smtp && !String(f.smtpHost || '').trim()) Object.assign(f, outFields(got.smtp), { smtpUser: f.username || got.smtp.username })
@@ -1843,7 +1855,7 @@
     f.busy = 'probe'
     f.probedOut = null
     redrawMail()
-    const got = await window.pet.mail.probe(String(f.smtpHost).trim(), String(f.smtpPort ?? '').trim(), f.smtpSecurity || 'auto', 'smtp', formProxy(f))
+    const got = await pet.mail.probe(String(f.smtpHost).trim(), String(f.smtpPort ?? '').trim(), f.smtpSecurity || 'auto', 'smtp', formProxy(f))
     if (mailForm !== f) return false
     f.busy = ''
     if (got.ok && got.found) {
@@ -1869,7 +1881,7 @@
     f.result = null
     f.probed = null
     redrawMail()
-    const got = await window.pet.mail.probe(String(f.host).trim(), String(f.port ?? '').trim(), f.security || 'auto', 'imap', formProxy(f))
+    const got = await pet.mail.probe(String(f.host).trim(), String(f.port ?? '').trim(), f.security || 'auto', 'imap', formProxy(f))
     if (mailForm !== f) return false
     f.busy = ''
     if (got.ok && got.found) {
@@ -1912,7 +1924,7 @@
     // Google's app password as it shows it, in fours: the spaces left out.
     const typed = String(f.password || '')
     const password = providerOf(account.host) === 'google' && APP_PASSWORD.test(typed.trim()) ? typed.replace(/\s/g, '') : typed
-    const got = await window.pet.mail.save(account, password)
+    const got = await pet.mail.save(account, password)
     if (mailForm !== f) return
     f.busy = ''
     if (got.ok) {
@@ -2012,7 +2024,7 @@
   // at once; no number goes back to what is kept.
   function holdTyped(box) {
     delete drafts['hold:secs']
-    const secs = window.Flow.holdSecs(box.value)
+    const secs = Flow.holdSecs(box.value)
     const kept = snap.settings.hold
     box.value = String(secs ?? (Number.isInteger(kept) ? kept : ''))
     if (secs === null || secs === kept) return draw()
@@ -2023,7 +2035,7 @@
   layer.addEventListener('focusout', e => {
     if (!e.target.dataset?.hold) return
     delete drafts['hold:secs']
-    if (e.target.value.trim() || window.Flow.holdChoice(snap?.settings?.hold) === 'custom') return
+    if (e.target.value.trim() || Flow.holdChoice(snap?.settings?.hold) === 'custom') return
     holdCustom = false
     draw()
   })
@@ -2141,8 +2153,8 @@
     }
   })
 
-  window.pet.onSettings(({ tab: next } = {}) => open(next))
-  window.pet.onSettingsChanged(got => {
+  pet.onSettings(({ tab: next } = {}) => open(next))
+  pet.onSettingsChanged(got => {
     if (!isOpen) return
     snap = got
     draw()
@@ -2153,11 +2165,11 @@
   // picker (a letter's files, the desktop's picture: its own window takes
   // the focus).
   // Locked (the button by ✕), they stay.
-  window.pet.onBlur(() => !snap?.settings?.settingsPin && !picking && !pickingPaper && !pickingZip && !lhmAsks() && (!window.pet.mac || Date.now() - openedAt > BLUR_GRACE_MS) && close('blur'))
+  pet.onBlur(() => !snap?.settings?.settingsPin && !picking && !pickingPaper && !pickingZip && !lhmAsks() && (!pet.mac || Date.now() - openedAt > BLUR_GRACE_MS) && close('blur'))
   layer.addEventListener('cancel', e => e.target.matches?.('[data-w-file]') && (picking = false), true)
   window.addEventListener('focus', () => setTimeout(() => (picking = false), 1000))
 
-  window.Settings = {
+  return {
     isOpen: () => isOpen,
     layer,
     askSlot,
@@ -2169,4 +2181,4 @@
     // The plugin whose settings are folded out once the plugins page opens.
     openPlugin: id => (openPlugin = String(id || '')),
   }
-})()
+}

@@ -3,12 +3,15 @@
 // draws them: taskbar_thumbs), pressed, dragged, and files dragged onto a
 // button bringing its window up.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.winlist(core)): what it takes of the island's core
+// (winlistPart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.winlist = function (core) {
+import * as Aim from './aim.js'
+import * as Presses from './presses.js'
+import { pet } from './bridge.js'
+
+export function winlistPart(core) {
   const {
     across, along, appOf, appOrder, barRest, body, closePop, crossHi, crossLo, el, hi, home, isExplorer, isOn,
     isSide, island, len, lo, openPop, orderedApps, pop, popReach, t, tbEdge, windowsBox,
@@ -100,7 +103,7 @@ window.IslandParts.winlist = function (core) {
     core.popMoving = true
     clearTimeout(core.popMoveTimer)
     thumbsSent = '[]'
-    window.pet.taskbar.thumbs([])
+    pet.taskbar.thumbs([])
   }
 
   function settlePop(ms) {
@@ -157,7 +160,7 @@ window.IslandParts.winlist = function (core) {
     const sent = JSON.stringify(items)
     if (sent === thumbsSent) return
     thumbsSent = sent
-    window.pet.taskbar.thumbs(items)
+    pet.taskbar.thumbs(items)
   }
   window.addEventListener('resize', () => {
     thumbsSent = ''
@@ -180,18 +183,18 @@ window.IslandParts.winlist = function (core) {
     if (!what) return
     if (what === 'menu') return openPop(app.app, 'menu')
     if (what !== 'press') closePop()
-    if (what === 'launch' || what === 'admin') return window.pet.taskbar.app(app.path, what, app.id)
+    if (what === 'launch' || what === 'admin') return pet.taskbar.app(app.path, what, app.id)
     if (what === 'windowMenu') {
       menuUp = true
-      return window.pet.taskbar.windowMenu(windows.map(w => w.id)).finally(() => (menuUp = false))
+      return pet.taskbar.windowMenu(windows.map(w => w.id)).finally(() => (menuUp = false))
     }
     if (what === 'next') {
-      const last = cycled?.app === app.app && Date.now() - cycled.at < window.Presses.CYCLED_MS ? cycled.id : null
-      const next = window.Presses.nextWindow(windows, last)
+      const last = cycled?.app === app.app && Date.now() - cycled.at < Presses.CYCLED_MS ? cycled.id : null
+      const next = Presses.nextWindow(windows, last)
       cycled = { app: app.app, id: next.id, at: Date.now() }
-      return window.pet.taskbar.window(next.id, 'front')
+      return pet.taskbar.window(next.id, 'front')
     }
-    if (!windows.length) return window.pet.taskbar.app(app.path, 'launch', app.id)
+    if (!windows.length) return pet.taskbar.app(app.path, 'launch', app.id)
     if (windows.length > 1) {
       const listed = core.popFor?.kind === 'list' && core.popFor.app === app.app && !pop.hidden
       if (listed && core.popFor.pressed) return closePop()
@@ -200,7 +203,7 @@ window.IslandParts.winlist = function (core) {
       return
     }
     closePop()
-    window.pet.taskbar.window(windows[0].id, 'press')
+    pet.taskbar.window(windows[0].id, 'press')
   }
   // The window Ctrl and a press last brought, for the next to go on from
   // it while its mark in front has not come yet ({ app, id, at }).
@@ -214,7 +217,7 @@ window.IslandParts.winlist = function (core) {
   // when it could not say.
   let heldAtPress = null
   windowsBox.addEventListener('pointerdown', e => {
-    if (e.target.closest('[data-app]')) heldAtPress = window.pet.taskbar.held()
+    if (e.target.closest('[data-app]')) heldAtPress = pet.taskbar.held()
   })
   function pressAt(e) {
     const key = e.target.closest('[data-app]')?.dataset.app
@@ -224,7 +227,7 @@ window.IslandParts.winlist = function (core) {
     heldAtPress = null
     Promise.resolve(held).then(keys => {
       const app = appOf(key)
-      if (app) pressApp(app, window.Presses.pressOf(press, keys || own, (app.windows || []).length))
+      if (app) pressApp(app, Presses.pressOf(press, keys || own, (app.windows || []).length))
     })
   }
   windowsBox.addEventListener('click', e => {
@@ -300,7 +303,7 @@ window.IslandParts.winlist = function (core) {
     for (const a of orderedApps()) if (!order.includes(a.app)) order.push(a.app)
     order.splice(order.indexOf(press.app), 1)
     order.splice(order.indexOf(drop.target) + (drop.after ? 1 : 0), 0, press.app)
-    window.pet.settings.set({ taskbarOrder: order.slice(0, 200) })
+    pet.settings.set({ taskbarOrder: order.slice(0, 200) })
   })
   // Cancelled, or the pointer let go of before the button came up (the
   // window letting the mouse through once it left the taskbar): no drop.
@@ -346,7 +349,7 @@ window.IslandParts.winlist = function (core) {
   // Windows' own taskbar waits, and not while it is on its way up into
   // the list (aim.js, zhoupengjie/Wakuwaku#56): it changed at once to any
   // button crossed on the way to a card.
-  const aim = window.Aim.create()
+  const aim = Aim.create()
   const aimList = () => (core.popFor?.kind === 'list' && !pop.hidden ? { key: core.popFor.app, rect: pop.getBoundingClientRect(), edge: tbEdge() } : null)
   function aimPop() {
     clearTimeout(core.popTimer)
@@ -371,7 +374,7 @@ window.IslandParts.winlist = function (core) {
     node.addEventListener('mouseleave', () => {
       if (node === windowsBox) aim.over(null, performance.now())
       clearTimeout(core.popTimer)
-      core.popTimer = setTimeout(closePop, window.Aim.CLOSE_MS)
+      core.popTimer = setTimeout(closePop, Aim.CLOSE_MS)
     })
     node.addEventListener('mouseenter', () => core.popFor && clearTimeout(core.popTimer))
   }
@@ -386,12 +389,12 @@ window.IslandParts.winlist = function (core) {
   // pointer). What it is held over: 'win:<id>', 'app:<key>', or null.
   let fileHeld = null
   let fileTimer
-  window.pet.onFileDrag((type, at, paths) => {
+  pet.onFileDrag((type, at, paths) => {
     // Let go of over the strip: programs and shortcuts to them pinned, as
     // Windows' own taskbar pins one dropped on it (taskbar/mod.rs taskbar_pin_files).
     if (type === 'drop' && at && paths?.length && isOn() && home() === 'taskbar' && !core.editLayout) {
       const on = document.elementFromPoint(at.x, at.y)
-      if (on && (barRest.contains(on) || island.contains(on))) window.pet.taskbar.pinFiles(paths)
+      if (on && (barRest.contains(on) || island.contains(on))) pet.taskbar.pinFiles(paths)
     }
     const live = at && (type === 'enter' || type === 'over') && isOn() && home() === 'taskbar' && !core.editLayout
     const node = live ? document.elementFromPoint(at.x, at.y) : null
@@ -403,16 +406,16 @@ window.IslandParts.winlist = function (core) {
     clearTimeout(fileTimer)
     if (!held) return
     fileTimer = setTimeout(() => {
-      if (card) return window.pet.taskbar.window(card.dataset.win, 'drag')
+      if (card) return pet.taskbar.window(card.dataset.win, 'drag')
       const app = appOf(button.dataset.app)
       const windows = app?.windows || []
       if (windows.length === 1) {
         closePop()
-        window.pet.taskbar.window(windows[0].id, 'drag')
+        pet.taskbar.window(windows[0].id, 'drag')
       } else if (windows.length > 1 && !(core.popFor?.kind === 'list' && core.popFor.app === app.app && !pop.hidden)) {
         openPop(app.app, 'list')
       }
-    }, window.Presses.DRAG_HOLD_MS)
+    }, Presses.DRAG_HOLD_MS)
   })
 
   // On the press, not the click: what was pressed may be drawn anew before
@@ -424,18 +427,18 @@ window.IslandParts.winlist = function (core) {
     const app = core.popFor && appOf(core.popFor.app)
     if (!app) return
     const close = e.target.closest('[data-close]')
-    if (close) return window.pet.taskbar.window(close.dataset.close, 'close')
+    if (close) return pet.taskbar.window(close.dataset.close, 'close')
     const row = e.target.closest('[data-win]')
     // A window picked: to the front, never minimized (taskbar/ 'front').
     if (row) {
       closePop()
-      return window.pet.taskbar.window(row.dataset.win, 'front')
+      return pet.taskbar.window(row.dataset.win, 'front')
     }
     const act = e.target.closest('[data-act]')?.dataset.act
     if (!act) return
     closePop()
-    if (act === 'close' || act === 'end') for (const w of app.windows || []) window.pet.taskbar.window(w.id, act)
-    else window.pet.taskbar.app(app.path, act, app.id)
+    if (act === 'close' || act === 'end') for (const w of app.windows || []) pet.taskbar.window(w.id, act)
+    else pet.taskbar.app(app.path, act, app.id)
   })
   pop.addEventListener('contextmenu', e => {
     e.preventDefault()

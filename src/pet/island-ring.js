@@ -2,12 +2,13 @@
 // ring turning round the closed capsule in the colour of what happened, held
 // lit, faded, blended into the next; her reactions and the news dot.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.ring(core)): what it takes of the island's core
+// (ringPart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.ring = function (core) {
+import * as Flow from './flow.js'
+
+export function ringPart(core) {
   const {
     ANCHORED, CLIPS, Flow, REACTIONS, animateHer, body, compact, flow, her, herTalks, hintAccent, home, hue,
     ink, isCapsule, isHinting, isHome, isNudging, isOn, isRinging, isSide, island, modeNow, newsDot, nudgeFor,

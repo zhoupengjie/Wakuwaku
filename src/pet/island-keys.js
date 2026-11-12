@@ -2,12 +2,14 @@
 // programs' buttons and the tray's icons gone through with the arrow keys,
 // pressed with Enter or Space, their menus with Shift+F10.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.keys(core)): what it takes of the island's core
+// (keysPart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.keys = function (core) {
+import { Picker, Settings } from './pages.js'
+import { pet } from './bridge.js'
+
+export function keysPart(core) {
   const {
     along, appOf, barRest, batMark, body, chevron, clockBox, closeImeList, closePop, closeStackPop,
     closeWidgetPop, el, endEdit, flyout, hi, home, isOn, isOut, isSetting, isSide, lo, netMark, openImeList,
@@ -99,7 +101,7 @@ window.IslandParts.keys = function (core) {
     keyPart = keyAt = keyFrom = null
     keyRing()
     if (barRest.contains(document.activeElement)) document.activeElement.blur()
-    window.pet.keyboard(false)
+    pet.keyboard(false)
   }
 
   // Enter, Space: as a press with the pointer, by the same handlers (a
@@ -124,8 +126,8 @@ window.IslandParts.keys = function (core) {
       if (core.trayOpen) keyInto('fly')
       return
     }
-    window.pet.taskbar.tray(node.dataset.tray, 'leftDown')
-    window.pet.taskbar.tray(node.dataset.tray, 'leftUp')
+    pet.taskbar.tray(node.dataset.tray, 'leftDown')
+    pet.taskbar.tray(node.dataset.tray, 'leftUp')
     if (keyPart === 'fly') {
       openTray(false)
       keyRing()
@@ -140,8 +142,8 @@ window.IslandParts.keys = function (core) {
       if (app) pressApp(app, 'menu')
       if (core.popFor?.kind === 'menu' && !pop.hidden) keyInto('pop')
     } else if (node.dataset.tray) {
-      window.pet.taskbar.tray(node.dataset.tray, 'rightDown')
-      window.pet.taskbar.tray(node.dataset.tray, 'rightUp')
+      pet.taskbar.tray(node.dataset.tray, 'rightDown')
+      pet.taskbar.tray(node.dataset.tray, 'rightUp')
     }
   }
 
@@ -153,19 +155,19 @@ window.IslandParts.keys = function (core) {
     keyRing()
   }
 
-  window.pet.onFocusBar(({ part, back } = {}) => {
+  pet.onFocusBar(({ part, back } = {}) => {
     // Win let go after something else than Win+T or Win+B (winkeys.rs win_up).
     if (part === 'end') return keysOff()
     keyPaused = false
     barRest.setAttribute('aria-label', t(core.lang, 'taskbar.aria'))
-    if (!isOn() || home() !== 'taskbar' || core.editLayout) return window.pet.keyboard(false)
+    if (!isOn() || home() !== 'taskbar' || core.editLayout) return pet.keyboard(false)
     // The settings open: closed (theirs went back to the window before as
     // they closed, which blurs this one); the keyboard comes once Win is let
     // go (winkeys.rs).
     keyedAt = 0
     if (isSetting()) {
       keyedAt = Date.now()
-      window.Settings?.close?.('keys')
+      Settings?.close?.('keys')
     }
     const want = part === 'tray' ? 'tray' : 'apps'
     // Win+T again with the keyboard on the buttons: the next one (Shift: the one before), as Windows' does.
@@ -182,7 +184,7 @@ window.IslandParts.keys = function (core) {
   })
   // Gone to another window: over. Not for the settings closing as it began
   // (keyedAt: then).
-  window.pet.onBlur(() => keyPart && !keyPaused && Date.now() - keyedAt > 600 && keysOff())
+  pet.onBlur(() => keyPart && !keyPaused && Date.now() - keyedAt > 600 && keysOff())
 
   document.addEventListener(
     'keydown',
@@ -192,14 +194,14 @@ window.IslandParts.keys = function (core) {
       // reaches the hook only so (winkeys.rs); the settings close with it.
       if (e.key === 'Meta' && !e.repeat && home() === 'taskbar' && (keyPart || isSetting())) {
         keyPaused = !!keyPart
-        return window.pet.taskbar.keysPause()
+        return pet.taskbar.keysPause()
       }
       // Editing the taskbar's layout: Esc closes what the picker has open
       // (picker.js: a drag, its popover, the search's words, the picker),
       // then ends it, as 完成: kept as it goes, there is no 取消 (#53).
       if (core.editLayout && e.key === 'Escape') {
         e.preventDefault()
-        if (window.Picker?.escape()) return
+        if (Picker?.escape()) return
         return endEdit(true)
       }
       if (!keyPart) return
@@ -255,11 +257,11 @@ window.IslandParts.keys = function (core) {
     const key = trayKey(e)
     if (!key) return
     e.stopPropagation()
-    if (e.button === 2) return window.pet.taskbar.tray(key, 'rightDown')
+    if (e.button === 2) return pet.taskbar.tray(key, 'rightDown')
     if (e.button !== 0) return
     if (e.detail === 2) {
       trayPress = null
-      return window.pet.taskbar.tray(key, 'double')
+      return pet.taskbar.tray(key, 'double')
     }
     trayPress = { key, name: e.target.closest('[data-tray]').dataset.name, x: e.clientX, y: e.clientY, ghost: null }
   })
@@ -267,15 +269,15 @@ window.IslandParts.keys = function (core) {
     const key = trayKey(e)
     if (e.button === 2 && key) {
       e.stopPropagation()
-      return window.pet.taskbar.tray(key, 'rightUp')
+      return pet.taskbar.tray(key, 'rightUp')
     }
     if (e.button !== 0 || !trayPress) return
     e.stopPropagation()
     const press = trayPress
     trayPress = null
     if (!press.ghost) {
-      window.pet.taskbar.tray(press.key, 'leftDown')
-      window.pet.taskbar.tray(press.key, 'leftUp')
+      pet.taskbar.tray(press.key, 'leftDown')
+      pet.taskbar.tray(press.key, 'leftUp')
       if (flyout.contains(e.target)) openTray(false)
       return
     }
@@ -298,7 +300,7 @@ window.IslandParts.keys = function (core) {
       at = there.length ? order.indexOf(there[there.length - 1].name) + 1 : order.length
     }
     order.splice(at, 0, press.name)
-    window.pet.taskbar.trayPin(press.name, isOut(icon) === drop.out ? null : drop.out, order.slice(0, 200))
+    pet.taskbar.trayPin(press.name, isOut(icon) === drop.out ? null : drop.out, order.slice(0, 200))
   })
 
   // Where a dragged icon would land at (x, y): kept out (anywhere on the
@@ -347,17 +349,17 @@ window.IslandParts.keys = function (core) {
   trayBox.addEventListener('mousemove', e => {
     const key = trayKey(e) || null
     if (key !== trayOver) {
-      if (trayOver) window.pet.taskbar.tray(trayOver, 'out')
-      if (key) window.pet.taskbar.tray(key, 'in')
+      if (trayOver) pet.taskbar.tray(trayOver, 'out')
+      if (key) pet.taskbar.tray(key, 'in')
       trayOver = key
     }
     if (key && Date.now() - trayMovedAt > 100) {
       trayMovedAt = Date.now()
-      window.pet.taskbar.tray(key, 'move')
+      pet.taskbar.tray(key, 'move')
     }
   })
   trayBox.addEventListener('mouseleave', () => {
-    if (trayOver) window.pet.taskbar.tray(trayOver, 'out')
+    if (trayOver) pet.taskbar.tray(trayOver, 'out')
     trayOver = null
   })
 
@@ -365,7 +367,7 @@ window.IslandParts.keys = function (core) {
   // clock the notifications and the calendar (once the button is up).
   barRest.addEventListener('click', e => {
     const what = e.target.closest('[data-bar]')?.dataset.bar
-    if (what && what !== 'settings') window.pet.taskbar.open(what)
+    if (what && what !== 'settings') pet.taskbar.open(what)
     if (what === 'ime' && core.imeOpen) closeImeList()
     // A widget put there: its card, or closed again; a carousel's, the one
     // it shows; a stack: its others opened over it, or closed again.
@@ -387,7 +389,7 @@ window.IslandParts.keys = function (core) {
     if (widget) return openMenu({ where: 'bar', entry: widget.dataset.entry }, widget)
     if (e.target.closest('[data-bar="ime"]')) return core.imeOpen ? closeImeList() : openImeList()
     const mark = quickBox.contains(e.target) ? quickMarkAt(e.clientX, e.clientY) : null
-    window.pet.menu(mark === volMark ? 'volume' : mark === netMark ? 'network' : clockBox.contains(e.target) ? 'clock' : null)
+    pet.menu(mark === volMark ? 'volume' : mark === netMark ? 'network' : clockBox.contains(e.target) ? 'clock' : null)
   })
   // Which of the quick settings' marks a press on its button is for: the
   // nearest along the strip, each having the button's height (its width
@@ -405,6 +407,6 @@ window.IslandParts.keys = function (core) {
     return nearest
   }
   // It takes the pointer while it is under it (the window lets clicks through elsewhere).
-  barRest.addEventListener('mouseenter', () => window.pet.hover(true))
-  barRest.addEventListener('mouseleave', () => window.pet.hover(false))
+  barRest.addEventListener('mouseenter', () => pet.hover(true))
+  barRest.addEventListener('mouseleave', () => pet.hover(false))
 }

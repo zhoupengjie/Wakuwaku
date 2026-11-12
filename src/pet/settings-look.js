@@ -2,12 +2,15 @@
 // island's look by Windows' mode (presets, or its colour and parts), Windows'
 // own mode and accent, and the desktop's picture.
 // Made by settings.js in the section's place as the page starts
-// (window.SettingsParts.look(core)): what it takes of the settings' core
+// (lookPart(core), imported by settings.js): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
-window.SettingsParts = window.SettingsParts || {}
-window.SettingsParts.look = function (core) {
+import * as AddonUI from './addonui.js'
+import { Island } from './pages.js'
+import { pet } from './bridge.js'
+
+export function lookPart(core) {
   const {
     AddonUI, COLOR, SIZES, T, draw, esc, onTaskbar, pagePets, part, patch, row, sec, seg, sw, toMarketRow,
   } = core
@@ -240,7 +243,7 @@ window.SettingsParts.look = function (core) {
   function layoutRow() {
     // The top bar (split): no presets, its own default (island.js SPLIT_PRESET); edited as ever.
     if (core.snap.settings.display === 'split') return row(esc(T('s.taskbarLayout')), esc(T('s.layoutSplit')), `<button class="pbtn sm" data-tb-edit>${esc(T('s.layoutEdit'))}</button>`)
-    const preset = window.Island?.tbPreset?.() || 'win11'
+    const preset = Island?.tbPreset?.() || 'win11'
     const presets = ['win11', 'left', 'herRight'].map(p => [p, T(`s.layout.${p}`)])
     const note = T(preset === 'custom' ? 's.layoutCustom' : 's.layoutNote')
     return row(esc(T('s.taskbarLayout')), esc(note), `<span class="btns">${seg('taskbarLayout', presets, preset)}<button class="pbtn sm" data-tb-edit>${esc(T('s.layoutEdit'))}</button></span>`)
@@ -259,7 +262,7 @@ window.SettingsParts.look = function (core) {
       const top = s.display === 'split'
       return row(esc(T('s.islandPos')), esc(T(top ? 's.islandPosTopBar' : 's.islandPosTaskbar')), `<button class="pbtn sm" data-tb-edit>${esc(T(top ? 'menu.editTopBar' : 's.islandPosEdit'))}</button>`)
     }
-    const notch = window.Island?.notched?.() === true
+    const notch = Island?.notched?.() === true
     // In Windows' taskbar (islandEdgeRow): its left end or its right end,
     // where the capsule inside it takes its room (embed.rs); laid over it
     // (the embedding off), the middle of it too (s.islandPosBar.*).
@@ -280,9 +283,9 @@ window.SettingsParts.look = function (core) {
   // On the taskbar home none: the strip has its own edge row.
   function islandEdgeRow() {
     const s = core.snap.settings
-    const notch = window.Island?.notched?.() === true
+    const notch = Island?.notched?.() === true
     const where = notch || s.islandEdge !== 'taskbar' ? 'top' : s.islandEmbed === false ? 'over' : 'taskbar'
-    const places = ['top', 'over', 'taskbar'].map(e => [e, T(`s.islandWhere.${e}`), (notch && e !== 'top') || (window.pet.mac && e === 'taskbar')])
+    const places = ['top', 'over', 'taskbar'].map(e => [e, T(`s.islandWhere.${e}`), (notch && e !== 'top') || (pet.mac && e === 'taskbar')])
     return row(esc(T('s.islandEdge')), notch ? esc(T('s.islandEdgeNotch')) : '', seg('islandWhere', places, where))
   }
 
@@ -308,7 +311,7 @@ window.SettingsParts.look = function (core) {
         <div class="mode${s.display === 'split' ? ' on' : ''}" data-mode="split"><div class="pv"><u></u><b></b></div><div class="l"><span class="rd"></span>${esc(T('s.displaySplit'))}</div></div>
       </div>
       ${onTaskbar(s) ? `<div class="grp"><div class="note">${esc(T(s.display === 'split' ? 's.splitNote' : 's.taskbarNote'))}</div></div><div class="grp">${s.display === 'split' ? splitRows() : row(esc(T('s.taskbarEdge')), esc(T('s.taskbarEdgeNote')), seg('taskbarEdge', ['bottom', 'top', 'left', 'right'].map(e => [e, T(`s.edge.${e}`)]), s.taskbarEdge || 'bottom'))}${core.screenRow()}${core.displaysRow()}${row(esc(T('s.taskbarMaterial')), esc(T('s.taskbarMaterialNote')), seg('taskbarMaterial', ['mica', 'black', 'clear'].map(m => [m, T(`s.material.${m}`)]), s.taskbarMaterial || 'mica'))}${s.taskbarMaterial === 'clear' ? row(esc(T('s.clearWhen')), esc(T('s.clearWhenNote')), seg('taskbarClearWhen', ['mica', 'solid', 'always'].map(w => [w, T(`s.clearWhen.${w}`)]), ['solid', 'always'].includes(s.taskbarClearWhen) ? s.taskbarClearWhen : 'mica')) : ''}${s.display === 'split' || ['left', 'right'].includes(s.taskbarEdge) ? row(esc(T('s.taskbarButtons')), esc(T(s.display === 'split' ? 's.taskbarButtonsDock' : 's.taskbarButtonsSide')), `<span class="seg off">${['icons', 'labels'].map(b => `<span class="${b === 'icons' ? 'on' : ''}">${esc(T(`s.buttons.${b}`))}</span>`).join('')}</span>`) : row(esc(T('s.taskbarButtons')), esc(T('s.taskbarButtonsNote')), seg('taskbarButtons', ['icons', 'labels'].map(b => [b, T(`s.buttons.${b}`)]), s.taskbarButtons || 'icons'))}${layoutRow()}${ilookRow()}</div>` : ''}
-      ${part('place', '')}<div class="grp">${onTaskbar(s) ? '' : core.screenRow()}${islandPosRow()}${onTaskbar(s) ? '' : islandEdgeRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${onTaskbar(s) || window.pet.mac || s.islandEdge === 'taskbar' ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${onTaskbar(s) ? '' : ilookRow()}</div>
+      ${part('place', '')}<div class="grp">${onTaskbar(s) ? '' : core.screenRow()}${islandPosRow()}${onTaskbar(s) ? '' : islandEdgeRow()}${row(esc(T('s.islandWidth')), esc(T('s.islandWidthNote')), seg('islandWidth', ['narrow', 'normal', 'wide'].map(w => [w, T(`s.width.${w}`)]), s.islandWidth || 'normal'))}${onTaskbar(s) || pet.mac || s.islandEdge === 'taskbar' ? '' : hideUnderRow()}${row(esc(T('s.oledShift')), esc(T('s.oledShiftNote')), sw('oledShift', s.oledShift))}${onTaskbar(s) ? '' : ilookRow()}</div>
       ${pageWindows()}
       ${sec(T('s.her'))}<div class="grp">
         ${row(esc(T('menu.size')), '', seg('scale', SIZES.map(([name, scale]) => [scale, T(`menu.${name}`)]), s.scale))}
@@ -357,7 +360,7 @@ window.SettingsParts.look = function (core) {
     paperBusy = true
     core.pickingPaper = what === 'picture' || what === 'folder'
     draw()
-    return window.pet.settings
+    return pet.settings
       .wallpaper(what, value)
       .then(got => {
         core.snap = got

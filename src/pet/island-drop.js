@@ -3,12 +3,13 @@
 // own window taking her under the cursor; brought close again, it reaches
 // out a drop for her and takes her back in (reach, absorb).
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.drop(core)): what it takes of the island's core
+// (dropPart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.drop = function (core) {
+import { pet } from './bridge.js'
+
+export function dropPart(core) {
   const {
     BODY_H, BODY_W, BREAK_PX, CLIPS, DROP_R, PULL_ROOM, REACH_R, REACH_SHARE, atBottom, body, dropHer,
     dropSheet, gooDrop, gooIsland, gooNeck, her, hidePlate, home, isHome, isNudging, isOn, isSetting, isSide,
@@ -21,7 +22,7 @@ window.IslandParts.drop = function (core) {
     // No mouse events follow, so the island does not take this for a click.
     e.preventDefault()
     core.pull = { x0: e.clientX, y0: e.clientY, started: false, broken: false, at: null, carrying: false }
-    window.pet.holding(true)
+    pet.holding(true)
     window.addEventListener('pointermove', pullMove)
     window.addEventListener('pointerup', pullUp)
     window.addEventListener('pointercancel', pullUp)
@@ -135,7 +136,7 @@ window.IslandParts.drop = function (core) {
     console.log('hand-off')
     core.pull.carrying = true
     clearTimeout(core.dropTimer)
-    window.pet.releaseHer({ dx: core.pull.at.cx - e.clientX, dy: core.pull.at.cy - e.clientY })
+    pet.releaseHer({ dx: core.pull.at.cx - e.clientX, dy: core.pull.at.cy - e.clientY })
     body.classList.remove('pulling')
     wobble()
     core.herClip = null
@@ -154,7 +155,7 @@ window.IslandParts.drop = function (core) {
     window.removeEventListener('pointermove', pullMove)
     window.removeEventListener('pointerup', pullUp)
     window.removeEventListener('pointercancel', pullUp)
-    window.pet.holding(false)
+    pet.holding(false)
     if (!core.pull) return
     const done = core.pull
     core.pull = null
@@ -164,15 +165,15 @@ window.IslandParts.drop = function (core) {
       // The click the browser sends after, on the island that held the
       // pointer, is this press too: not one to open the settings.
       if (core.view === 'ask') return
-      if (!isNudging()) return window.pet.openSettings()
+      if (!isNudging()) return pet.openSettings()
       core.pulledAt = Date.now()
       return pressNudge()
     }
     core.pulledAt = Date.now()
     if (done.carrying) {
       // Let go: she lands there, or comes home if she was let go by the island.
-      window.pet.dropHer()
-      window.pet.hover(false)
+      pet.dropHer()
+      pet.hover(false)
       return
     }
     core.pull = done
@@ -197,7 +198,7 @@ window.IslandParts.drop = function (core) {
       core.pull = null
       core.isAbsorbing = false
       core.herClip = null
-      window.pet.hover(island.matches(':hover'))
+      pet.hover(island.matches(':hover'))
       update()
     }, 340)
   }
@@ -282,17 +283,17 @@ window.IslandParts.drop = function (core) {
     })
   }
 
-  window.pet.onReach(reach)
-  window.pet.onAbsorb(absorb)
+  pet.onReach(reach)
+  pet.onAbsorb(absorb)
   // She landed but this page never heard the button go up: forget the pull.
-  window.pet.onLanded(() => {
+  pet.onLanded(() => {
     if (!core.pull?.carrying) return
     console.log('landed without a pointerup here')
     window.removeEventListener('pointermove', pullMove)
     window.removeEventListener('pointerup', pullUp)
     window.removeEventListener('pointercancel', pullUp)
     core.pull = null
-    window.pet.hover(false)
+    pet.hover(false)
     update()
   })
 

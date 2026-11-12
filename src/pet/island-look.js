@@ -2,12 +2,15 @@
 // light or dark and Windows' accent, the ink of its words on what is under
 // them; the clock, the tray drawn and opened, the peek at the desktop.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.look(core)): what it takes of the island's core
+// (lookPart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.look = function (core) {
+import * as Mica from './mica.js'
+import { Settings } from './pages.js'
+import { pet } from './bridge.js'
+
+export function lookPart(core) {
   const {
     DEEP_OP, PEEK_MS, TASKBAR_H, alignApps, barRest, body, clearWhen, clockBox, deskEdge, drawEntries,
     drawWindows, el, endNudge, frontBox, frontIcon, frontName, glide, home, isCapsule, isClear, isFilled,
@@ -36,7 +39,7 @@ window.IslandParts.look = function (core) {
     fitPage()
     // A monitor's scale or Windows text scaling may have changed while the
     // settings are open; recompute their body height with the new CSS room.
-    if (window.Settings?.isOpen?.()) window.Settings.redraw()
+    if (Settings?.isOpen?.()) Settings.redraw()
     // Once laid out for it (its edge may have just changed too).
     setTimeout(() => {
       const r = island.parentElement.getBoundingClientRect()
@@ -56,8 +59,8 @@ window.IslandParts.look = function (core) {
     update()
   }
   // Her tray icon toggles it; a double-click on her only opens it ({ open }).
-  window.pet.onPeek(p => setPeek(p?.open === true ? true : !core.peek))
-  window.pet.onTop(({ height, notch } = {}) => {
+  pet.onPeek(p => setPeek(p?.open === true ? true : !core.peek))
+  pet.onTop(({ height, notch } = {}) => {
     const next = height > 0 ? { height, notch: notch > 0 ? notch : 0 } : null
     if (JSON.stringify(next) === JSON.stringify(core.screenTop)) return
     core.screenTop = next
@@ -84,7 +87,7 @@ window.IslandParts.look = function (core) {
     root.style.setProperty('--page-cut-x', `${winPx ? over(r.width, winPx[0]) : 0}px`)
     root.style.setProperty('--page-cut-y', `${winPx ? over(r.height, winPx[1]) : 0}px`)
   }
-  window.pet.onStrip(({ thick, win, sf } = {}) => {
+  pet.onStrip(({ thick, win, sf } = {}) => {
     if (!(thick > 0)) return
     stripThick = thick
     if (Number.isFinite(sf) && sf > 0) core.stripScale = sf
@@ -95,7 +98,7 @@ window.IslandParts.look = function (core) {
     if (!stripThick) return
     document.documentElement.style.setProperty('--strip-h', `${stripThick / (devicePixelRatio || 1)}px`)
     fitPage()
-    if (window.Settings?.isOpen?.()) window.Settings.redraw()
+    if (Settings?.isOpen?.()) Settings.redraw()
     sendSolid()
   })
 
@@ -284,7 +287,7 @@ window.IslandParts.look = function (core) {
     if (was !== core.inkLight) islandViews?.relook(core.allWidgets)
   }
 
-  window.pet.onWallpaper(p => {
+  pet.onWallpaper(p => {
     paper = p
     drawMica()
   })
@@ -302,7 +305,7 @@ window.IslandParts.look = function (core) {
     else on.style.removeProperty(name)
   }
 
-  window.pet.onLook(l => {
+  pet.onLook(l => {
     const seconds = core.look.seconds
     core.look = { mode: l?.mode === 'light' ? 'light' : 'dark', accent: l?.accent || null, endTask: l?.endTask === true, seconds: l?.seconds === true, taskView: l?.taskView === true }
     if (core.look.seconds !== seconds) clockLoop()
@@ -333,7 +336,7 @@ window.IslandParts.look = function (core) {
     frontBox.title = win?.title || name
   }
 
-  window.pet.onWindows(list => {
+  pet.onWindows(list => {
     core.taskWindows = Array.isArray(list) ? list : []
     if (isOn() && home() === 'taskbar') {
       drawFront()
@@ -379,7 +382,7 @@ window.IslandParts.look = function (core) {
   // full with its weekday, in the person's own format, and Windows'
   // additional clocks; read anew each minute and as the pointer comes.
   function tipClock() {
-    window.pet.taskbar.clockTip().then(tip => {
+    pet.taskbar.clockTip().then(tip => {
       if (typeof tip === 'string' && tip) clockBox.title = tip
     })
   }
@@ -546,7 +549,7 @@ window.IslandParts.look = function (core) {
     const sent = JSON.stringify(rects)
     if (sent === core.trayRectsSent) return
     core.trayRectsSent = sent
-    window.pet.taskbar.trayRects(rects)
+    pet.taskbar.trayRects(rects)
   }
   window.addEventListener('resize', () => {
     core.trayRectsSent = ''
@@ -557,7 +560,7 @@ window.IslandParts.look = function (core) {
   // and again only when it is another; a list without one's png means the
   // one kept.
   const trayPngs = new Map()
-  window.pet.onTray(list => {
+  pet.onTray(list => {
     core.trayIcons = (Array.isArray(list) ? list : []).map(i => {
       if (i.png === undefined) i.png = trayPngs.get(i.key) ?? ''
       trayPngs.set(i.key, i.png)

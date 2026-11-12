@@ -26,12 +26,16 @@
 // A display with nothing on it has its window made as the drag reaches it
 // (desk.rs): what comes before this page knows its display (desk:state,
 // its icons read first) waits for it, the last preview and the drop.
-;(function () {
-  const D = window.Desk?.inner
-  if (!D) return
+import * as G from './deskgrid.js'
+import { Desk } from './pages.js'
+
+// Once desk.js has made the desktop (its inner parts, D).
+const D = Desk?.inner
+if (D) deskDrop()
+
+function deskDrop() {
   const { invoke } = window.__TAURI__.core
   const { listen } = window.__TAURI__.event
-  const G = window.DeskGrid
   const LABEL = window.__TAURI_INTERNALS__?.metadata?.currentWebview?.label || ''
   const target = { kind: 'WebviewWindow', label: LABEL }
 
@@ -215,4 +219,4 @@
 
   listen('desk:drag-preview', e => whenHere('preview', e.payload), { target })
   listen('desk:drop', e => whenHere('drop', e.payload), { target })
-})()
+}

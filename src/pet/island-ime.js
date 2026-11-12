@@ -2,12 +2,13 @@
 // input method (taskbar:keys), Windows' own icons for it where it has them,
 // and the list of input methods a press on it opens.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.ime(core)): what it takes of the island's core
+// (imePart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.ime = function (core) {
+import { pet } from './bridge.js'
+
+export function imePart(core) {
   const {
     besideOrOver, capsMark, closePop, closeWidgetPop, el, imeMark, imePop, isSide, showBattery, showNet,
     showPrivacy, showVolume, t, watchPresses,
@@ -53,11 +54,11 @@ window.IslandParts.ime = function (core) {
     }
     imeMark.classList.toggle('unknown', !modePic && !!script && (keys?.native == null || !!ime?.mode?.off))
   }
-  window.pet.onImeIcons(icons => {
+  pet.onImeIcons(icons => {
     Object.assign(imeIcons, icons || {})
     if (keysNow) showIme(keysNow)
   })
-  window.pet.onKeys(keys => {
+  pet.onKeys(keys => {
     keysNow = keys
     showIme(keys)
     capsMark.classList.toggle('on', !!keys?.caps)
@@ -76,8 +77,8 @@ window.IslandParts.ime = function (core) {
   async function openImeList() {
     if (core.popFor) closePop()
     if (core.wgFor) closeWidgetPop()
-    const list = await window.pet.taskbar.inputs()
-    if (!Array.isArray(list) || !list.length) return window.pet.taskbar.open('inputs')
+    const list = await pet.taskbar.inputs()
+    if (!Array.isArray(list) || !list.length) return pet.taskbar.open('inputs')
     const rows = list.map(m => {
       const row = el('div', m.current ? 'wrow irow front' : 'wrow irow')
       row.dataset.input = m.id
@@ -113,8 +114,8 @@ window.IslandParts.ime = function (core) {
     const row = e.target.closest('[data-input]')
     if (!row) return
     closeImeList()
-    if (row.dataset.input) window.pet.taskbar.input(row.dataset.input)
-    else window.pet.taskbar.open('languages')
+    if (row.dataset.input) pet.taskbar.input(row.dataset.input)
+    else pet.taskbar.open('languages')
   })
   imePop.addEventListener('contextmenu', e => {
     e.preventDefault()

@@ -2,12 +2,14 @@
 // (backplate.rs), or a deeper ground of its own; and the island out of the
 // way of the window under it (zhoupengjie/Wakuwaku#49), its size told.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.plate(core)): what it takes of the island's core
+// (platePart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.plate = function (core) {
+import * as Anchor from './anchor.js'
+import { pet } from './bridge.js'
+
+export function platePart(core) {
   const {
     Anchor, afterSpring, anchor, atBottom, body, home, inTopStrip, isCapsule, isEmbedded, isOn, isRinging,
     isSide, island, sizeOf, stillMotion, tbEdge,
@@ -157,7 +159,7 @@ window.IslandParts.plate = function (core) {
     if (sent === core.plateSent) return
     const first = !core.plateSent
     core.plateSent = sent
-    window.pet.plate(rect, first && !stillMotion() ? fade : 0)
+    pet.plate(rect, first && !stillMotion() ? fade : 0)
   }
 
   function hidePlate(fade) {
@@ -168,7 +170,7 @@ window.IslandParts.plate = function (core) {
     body.classList.remove('plated', 'isl-firm')
     if (!core.plateSent) return
     core.plateSent = ''
-    window.pet.plate(null, stillMotion() ? 0 : fade)
+    pet.plate(null, stillMotion() ? 0 : fade)
   }
 
   // Resized for its room, the window moves the island in the page.
@@ -179,7 +181,7 @@ window.IslandParts.plate = function (core) {
   // over DEEP_MS (at once as it opens), and back as it closes or the window
   // is no longer maximized.
   const overMax = () => (home() === 'taskbar' ? core.taskWindows.some(a => (a.windows || []).some(w => w.max && !w.min)) : overMaxTop)
-  window.pet.onOverMax(({ on } = {}) => {
+  pet.onOverMax(({ on } = {}) => {
     overMaxTop = on === true
     if (isOn()) setDeep(true)
   })
@@ -234,18 +236,18 @@ window.IslandParts.plate = function (core) {
     const sent = JSON.stringify([on, width, height])
     if (sent !== stowSent) {
       stowSent = sent
-      window.pet.stow(on, width, height)
+      pet.stow(on, width, height)
     }
     // The blur under it goes with it, and comes back once it is down, the
     // ground as solid as DEEP_OP till then, as when it opens.
     if (on !== was) placePlate(!on)
   }
 
-  window.pet.onUnder(({ on } = {}) => {
+  pet.onUnder(({ on } = {}) => {
     underTop = on === true
     setStow()
   })
-  window.pet.onCalled(({ on } = {}) => {
+  pet.onCalled(({ on } = {}) => {
     calledDown = on === true
     setStow()
   })

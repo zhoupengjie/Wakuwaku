@@ -2,12 +2,15 @@
 // button opens above it (its windows, or a widget's card): opened, closed,
 // kept up while the pointer is on its way to it.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.glide(core)): what it takes of the island's core
+// (glidePart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.glide = function (core) {
+import * as Presses from './presses.js'
+import { Picker } from './pages.js'
+import { pet } from './bridge.js'
+
+export function glidePart(core) {
   const {
     alignApps, barRest, body, crossLo, el, entryNodes, flashSince, hi, home, imeMark, isOn, isSide, lo,
     openedUp, placeSlot, t, trayBox, windowsBox,
@@ -73,7 +76,7 @@ window.IslandParts.glide = function (core) {
   const isGlideOn = node => node?.matches?.(GLIDE_ON) && !node.closest('.wpop, .wgpop, .tfly, .wstk, .wmenu')
   // The programs' buttons pressed in and springing back (presses.js pressIn;
   // Start and Task View have their own, style.css .start.down).
-  window.Presses.pressIn(windowsBox, '.win')
+  Presses.pressIn(windowsBox, '.win')
   barRest.addEventListener(
     'mouseenter',
     e => {
@@ -251,7 +254,7 @@ window.IslandParts.glide = function (core) {
     // Windows' End task as its setting is now (the look tells it only every
     // half minute): the menu drawn again should it have changed.
     if (kind === 'menu')
-      window.pet.taskbar.endTask().then(on => {
+      pet.taskbar.endTask().then(on => {
         if (on === core.look.endTask) return
         core.look.endTask = on === true
         if (core.popFor?.kind === 'menu') core.drawPop()
@@ -279,13 +282,13 @@ window.IslandParts.glide = function (core) {
   let watching = false
   function watchPresses() {
     // picker.js: its capsule panel, its popover, closed by a press elsewhere too.
-    const want = !!core.popFor || core.trayOpen || !!core.wgFor || !!core.stackFor || core.menuFor?.where === 'bar' || core.imeOpen || !!window.Picker?.watches()
+    const want = !!core.popFor || core.trayOpen || !!core.wgFor || !!core.stackFor || core.menuFor?.where === 'bar' || core.imeOpen || !!Picker?.watches()
     if (want === watching) return
     watching = want
-    window.pet.taskbar.watch(want)
+    pet.taskbar.watch(want)
     openedUp('pops', want)
   }
-  window.pet.onPress(at => {
+  pet.onPress(at => {
     if (!isOn() || home() !== 'taskbar' || !at) return
     const over = document.elementFromPoint(at.x, at.y)
     if (core.popFor && !(over && (pop.contains(over) || windowsBox.contains(over)))) closePop()

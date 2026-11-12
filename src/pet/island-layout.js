@@ -2,12 +2,16 @@
 // strip, her seat, the widgets on it, and several in one place (the spec's
 // §5): stacks and carousels taking turns.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.layout(core)): what it takes of the island's core
+// (layoutPart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.layout = function (core) {
+import * as WCards from './wcards.js'
+import * as Widgets from './widgets.js'
+import { Picker } from './pages.js'
+import { pet } from './bridge.js'
+
+export function layoutPart(core) {
   const {
     CAPSULE_X, CELL_W, CLIPS, MOOD_CLIP, PER_PX, TASKBAR_GAP, Widgets, barRest, body, clockBox, deskEdge, el,
     face, facesBox, frontBox, growNode, home, isCapsule, isDetailed, isLight, isOn, isSide, isSlim, isSplit,
@@ -386,7 +390,7 @@ window.IslandParts.layout = function (core) {
   function askPlugins(now = false) {
     if (!now && Date.now() - pluginsSaid.at < 30000) return
     pluginsSaid.at = Date.now()
-    window.pet.settings.get().then(got => tellPlugins(got && [...(got.plugins || []), ...(got.addons || [])]))
+    pet.settings.get().then(got => tellPlugins(got && [...(got.plugins || []), ...(got.addons || [])]))
   }
   function tellPlugins(list) {
     if (!Array.isArray(list)) return
@@ -429,7 +433,7 @@ window.IslandParts.layout = function (core) {
     const seat = Math.round(left + taskCompactH() / 2)
     if (seat !== seatSent) {
       seatSent = seat
-      window.pet.seat(seat)
+      pet.seat(seat)
     }
   }
   const midLeft = width => Math.min(Math.max(8, core.slotMiddle - width / 2), innerWidth - width - 8)
@@ -460,7 +464,7 @@ window.IslandParts.layout = function (core) {
     const seat = Math.round(top + cap.width / 2)
     if (seat !== seatSent) {
       seatSent = seat
-      window.pet.seat(seat)
+      pet.seat(seat)
     }
   }
   // A run grown or shrunk moves her slot in it: the tray's icons come in a
@@ -521,7 +525,7 @@ window.IslandParts.layout = function (core) {
     snapStart()
     core.inkParts()
     // Editing: picker.js's popover over its widget, where it is now.
-    if (core.editLayout) window.Picker?.relaid()
+    if (core.editLayout) Picker?.relaid()
   }
 
   // The middle run in the middle of the screen, as Windows 11 has Start and
@@ -599,7 +603,7 @@ window.IslandParts.layout = function (core) {
     placeSlot()
     snapStart()
     core.inkParts()
-    if (core.editLayout) window.Picker?.relaid()
+    if (core.editLayout) Picker?.relaid()
     if (core.wgFor) core.drawWidgetPop()
     requestAnimationFrame(core.sendTrayRects)
   })

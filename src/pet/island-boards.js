@@ -1,12 +1,15 @@
 // Boards on the desktop (§7 工作台): widgets and stacks sent from the island
 // or the taskbar to the desktop (deskLayout), gathered on a board, and back.
 // Made by island.js in the section's place as the page starts
-// (window.IslandParts.boards(core)): what it takes of the island's core
+// (boardsPart(core), imported by island.js): what it takes of the island's core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // island's again.
-window.IslandParts = window.IslandParts || {}
-window.IslandParts.boards = function (core) {
+import * as DeskGrid from './deskgrid.js'
+import * as Widgets from './widgets.js'
+import { pet } from './bridge.js'
+
+export function boardsPart(core) {
   const {
     Widgets, closeStackPop, home, keepLayout, offBar, placeWidget, removeEntry, removeMember, t, takeWidgets,
     tbLayout, update,
@@ -51,7 +54,7 @@ window.IslandParts.boards = function (core) {
     const was = new Map(old.map(e => [e.id, JSON.stringify(e)]))
     const ids = new Set(next.map(e => e.id))
     core.config.deskLayout = next
-    window.pet.desk.keep(
+    pet.desk.keep(
       next.filter(e => was.get(e.id) !== JSON.stringify(e)),
       old.filter(e => !ids.has(e.id)).map(e => e.id),
     )
@@ -73,7 +76,7 @@ window.IslandParts.boards = function (core) {
   }
   function keepDesk(entries) {
     core.config.deskLayout = [...(Array.isArray(core.config.deskLayout) ? core.config.deskLayout : []), ...entries]
-    window.pet.desk.keep(entries, [])
+    pet.desk.keep(entries, [])
     takeWidgets(core.allWidgets)
     update()
   }
@@ -81,7 +84,7 @@ window.IslandParts.boards = function (core) {
     let next = Array.isArray(core.config.deskLayout) ? core.config.deskLayout : []
     for (const it of items) next = DeskGrid.without(next, it, core.newId)
     core.config.deskLayout = next
-    window.pet.settings.set({ deskLayout: next })
+    pet.settings.set({ deskLayout: next })
   }
   // From the strip or the capsule to the desktop: a group as a stack there
   // (medium where all of it has that), one alone as itself.
@@ -117,7 +120,7 @@ window.IslandParts.boards = function (core) {
     if (Widgets.isGroup(entry) && member >= 0) removeMember(entry.id, member)
     else removeEntry(entry.id)
     const id = w?.id || (entry.type === 'widget' ? entry.of : null)
-    if (id && (core.config.widgetsOff || []).includes(id)) window.pet.settings.set({ widgetsOff: core.config.widgetsOff.filter(x => x !== id) })
+    if (id && (core.config.widgetsOff || []).includes(id)) pet.settings.set({ widgetsOff: core.config.widgetsOff.filter(x => x !== id) })
   }
 
   return { backToIsland, boardName, boardSize, deskBoards, deskOff, deskPlace, keepDesk, keepDeskLayout, putOnDesk, toBoard, toDesk }

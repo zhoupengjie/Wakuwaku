@@ -43,19 +43,20 @@
 // 设置, 移除); a press on her capsule opens its panel (capsule-panel.js).
 // Every widget taken off says so in a toast with 撤销 for 5 s, and is put
 // back where it was. Esc: what is open first, then (editing) 完成.
-;(function () {
-  const Isle = window.Isle
-  if (!Isle || !Isle.isOn()) {
-    window.Picker = null
-    return
-  }
-  const { t } = window.I18n
-  const Widgets = window.Widgets
-  const WCards = window.WCards
-  const G = window.DeskGrid
-  const C = window.Capsule
-  const P = window.Placing
-  const AddonUI = window.AddonUI
+import * as AddonUI from './addonui.js'
+import * as C from './capsule.js'
+import * as G from './deskgrid.js'
+import * as P from './placing.js'
+import * as WCards from './wcards.js'
+import * as Widgets from './widgets.js'
+import { t } from '../shared/i18n.js'
+import { CapsulePanel, Isle, provide } from './pages.js'
+import { pet } from './bridge.js'
+
+// Only with the island on (island.js made Isle, before this): else none.
+provide('Picker', Isle?.isOn() ? pickerPage() : null)
+
+function pickerPage() {
   const el = Isle.el
   const T = (key, vars) => t(Isle.lang, key, vars)
   const esc = WCards.esc
@@ -116,8 +117,8 @@
   band.hidden = true
   const gapNode = el('span', 'pk-ph')
   for (const node of [pk, pop, toasts]) {
-    node.addEventListener('mouseenter', () => window.pet.hover(true))
-    node.addEventListener('mouseleave', () => window.pet.hover(false))
+    node.addEventListener('mouseenter', () => pet.hover(true))
+    node.addEventListener('mouseleave', () => pet.hover(false))
     node.addEventListener('contextmenu', e => e.preventDefault())
   }
   document.body.append(pk, pop, toasts, ghost, band)
@@ -314,12 +315,12 @@
     // In from the side: laid out first, then slid (style picker.css).
     void pk.offsetWidth
     pk.classList.add('pk-open')
-    window.pet.settings.get().then(got => {
+    pet.settings.get().then(got => {
       snap = got
       if (open) drawGrid()
     })
     // The keyboard for its search (editing has it already).
-    if (home() === 'island') window.pet.keyboard(true)
+    if (home() === 'island') pet.keyboard(true)
     if (lastPointer !== 'touch' && lastPointer !== 'pen') setTimeout(() => open && search.focus({ preventScroll: true }), 40)
     after()
   }
@@ -336,7 +337,7 @@
     search.blur()
     // Out by the side, then gone (or at once, motion reduced).
     setTimeout(() => !open && (pk.hidden = true), reduced() ? 0 : 220)
-    if (home() === 'island' && !window.CapsulePanel?.isOpen()) window.pet.keyboard(false)
+    if (home() === 'island' && !CapsulePanel?.isOpen()) pet.keyboard(false)
     after()
   }
   // What it changed: the edit bar's 添加小工具, the window's room and where
@@ -371,7 +372,7 @@
       // The settings over her island: editing lets the pointer through it, so done first.
       if (editing()) Isle.endEdit(true)
       hide()
-      return window.pet.openSettings(what === 'more' ? 'widgets:market:widget' : 'widgets')
+      return pet.openSettings(what === 'more' ? 'widgets:market:widget' : 'widgets')
     }
   })
   search.addEventListener('input', () => {
@@ -404,7 +405,7 @@
   function setConfig(patch) {
     if (!patch) return
     Object.assign(Isle.config, clone(patch))
-    window.pet.settings.set(patch)
+    pet.settings.set(patch)
   }
   // On or off: the setting (placing.js switchPatch), and the widgets as
   // this page has them, at once (the Rust side's word on them comes after:
@@ -514,7 +515,7 @@
     Isle.takeWidgets(Isle.allWidgets)
     Isle.update()
     if (open) drawBadges()
-    window.CapsulePanel?.refresh()
+    CapsulePanel?.refresh()
   }
 
   // Into the strip at a place (moved there from elsewhere on it, or new);
@@ -861,7 +862,7 @@
       }
     }
     if (snap?.plugins) check(snap)
-    else window.pet.settings.get().then(check)
+    else pet.settings.get().then(check)
   }
   // Its settings: editing done first (the settings come over her island), the picker closed.
   function settingsOf(plugin) {
@@ -1105,8 +1106,8 @@
     const d = drag
     const pr = open ? rectOf(pk) : null
     if (pr && inRect(x, y, pr)) return { kind: 'picker' }
-    const panel = window.CapsulePanel?.isOpen() ? rectOf(window.CapsulePanel.el) : null
-    if (panel && inRect(x, y, panel)) return { kind: 'capsule', at: window.CapsulePanel.indexAt(y) }
+    const panel = CapsulePanel?.isOpen() ? rectOf(CapsulePanel.el) : null
+    if (panel && inRect(x, y, panel)) return { kind: 'capsule', at: CapsulePanel.indexAt(y) }
     if (home() !== 'taskbar') {
       const r = Isle.island.getBoundingClientRect()
       if (inRect(x, y, { left: r.left - 14, right: r.right + 14, top: r.top - 14, bottom: r.bottom + 14 })) return { kind: 'capsule' }
@@ -1182,7 +1183,7 @@
     // Her capsule lit, the picker, the band.
     const capsuleHot = tg.kind === 'capsule'
     Isle.island.classList.toggle('pk-hot', capsuleHot)
-    window.CapsulePanel?.hot(capsuleHot)
+    CapsulePanel?.hot(capsuleHot)
     pk.classList.toggle('pk-hot', tg.kind === 'picker')
     pk.dataset.drop = tg.kind === 'picker' ? labelOf(tg)[0] : ''
     band.classList.toggle('pk-hot', tg.kind === 'bare')
@@ -1192,13 +1193,13 @@
       if (!last || Math.hypot(x - last.x, y - last.y) > 6 || Date.now() - last.at > 120) {
         d.sent = { x, y, at: Date.now() }
         // A combo as desk-drop.js takes one: those of its widgets still there.
-        if (d.set) window.pet.deskPreview({ x: Math.round(x), y: Math.round(y), set: setToSend(d.set).set })
-        else window.pet.deskPreview({ x: Math.round(x), y: Math.round(y), item: d.item, size: d.size })
+        if (d.set) pet.deskPreview({ x: Math.round(x), y: Math.round(y), set: setToSend(d.set).set })
+        else pet.deskPreview({ x: Math.round(x), y: Math.round(y), item: d.item, size: d.size })
       }
     } else if (d.sent) {
       d.sent = null
       deskSaid = null
-      window.pet.deskPreview(null)
+      pet.deskPreview(null)
     }
     const [words, tone] = labelOf(tg)
     ghost.querySelector('.pk-gl').textContent = `${d.name} · ${words}`
@@ -1266,8 +1267,8 @@
     band.hidden = true
     band.classList.remove('pk-hot')
     Isle.island.classList.remove('pk-hot')
-    window.CapsulePanel?.hot(false)
-    if (d.sent && tg.kind !== 'desk') window.pet.deskPreview(null)
+    CapsulePanel?.hot(false)
+    if (d.sent && tg.kind !== 'desk') pet.deskPreview(null)
     let landed = false
     switch (tg.kind) {
       case 'strip':
@@ -1338,8 +1339,8 @@
     const was = { key: d.key, strip: d.src === 'strip' ? d.strip : d.strip || null, item: d.item, keys: d.capsuleKeys, fresh: d.src === 'card', set: d.set || null, sent }
     clearTimeout(pending?.timer)
     pending = { ticket, was, timer: setTimeout(() => pending?.ticket === ticket && deskFallback(), 2500) }
-    if (sent) window.pet.deskDrop({ x: Math.round(x), y: Math.round(y), set: sent.set, ticket })
-    else window.pet.deskDrop({ x: Math.round(x), y: Math.round(y), item: d.item, size: d.size, ticket })
+    if (sent) pet.deskDrop({ x: Math.round(x), y: Math.round(y), set: sent.set, ticket })
+    else pet.deskDrop({ x: Math.round(x), y: Math.round(y), item: d.item, size: d.size, ticket })
   }
   function deskFallback() {
     const { was } = pending
@@ -1351,7 +1352,7 @@
     refresh()
     if (was.fresh) askFirst([was.key])
   }
-  window.pet.onDeskAnswer(a => {
+  pet.onDeskAnswer(a => {
     if (!a || typeof a !== 'object') return
     if (a.ticket == null) {
       // About the preview: the ghost's words.
@@ -1414,7 +1415,7 @@
       // A press on her capsule: its panel; on a widget: its popover, kept.
       if (p.key === 'her') {
         closePop()
-        return window.CapsulePanel?.toggle()
+        return CapsulePanel?.toggle()
       }
       if (isWidgetNode(p.node)) return popFor === p.node && popSticky ? closePop() : openPop(p.node, true)
       closePop()
@@ -1464,8 +1465,8 @@
       drawGrid()
       return true
     }
-    if (window.CapsulePanel?.isOpen()) {
-      window.CapsulePanel.close()
+    if (CapsulePanel?.isOpen()) {
+      CapsulePanel.close()
       return true
     }
     if (open) {
@@ -1479,13 +1480,13 @@
   })
   // A press elsewhere (the Rust side's word, or in the page): the popover
   // and the capsule's panel go.
-  window.pet.onPress(at => {
+  pet.onPress(at => {
     if (!at) return
     const over = document.elementFromPoint(at.x, at.y)
     // Its own (the picker, a toast, the edit bar, the strip being edited) are not elsewhere.
     const ours = over?.closest?.('.pk, .pk-toasts, .pk-pop, .cp, .tbedit, #bar-rest, #island')
     if (popFor && !(over && (pop.contains(over) || popFor.contains(over))) && !over?.closest?.('.pk-toasts')) closePop()
-    if (window.CapsulePanel?.isOpen() && !ours) window.CapsulePanel.close()
+    if (CapsulePanel?.isOpen() && !ours) CapsulePanel.close()
   })
   document.addEventListener(
     'pointerdown',
@@ -1498,10 +1499,10 @@
   )
   // Her island's window lost the keyboard (a press on another window): in
   // the island's home, what it has open goes (editing the strip, it stays).
-  window.pet.onBlur(() => {
+  pet.onBlur(() => {
     if (home() !== 'island' || drag) return
     hide()
-    window.CapsulePanel?.close()
+    CapsulePanel?.close()
   })
   // Her menu in the island's home: 添加小工具… (the picker alone), 编辑胶囊;
   // on the taskbar, the picker comes with editing its layout. The Plugins
@@ -1512,7 +1513,7 @@
     const what = p?.open === 'capsule' ? 'capsule' : 'picker'
     if (what === 'capsule') {
       if (home() === 'island') hide()
-      return window.CapsulePanel?.open()
+      return CapsulePanel?.open()
     }
     if (typeof p?.focus === 'string' && p.focus) {
       focusKey = p.focus
@@ -1522,10 +1523,10 @@
       if (open) drawPicker()
     }
     if (home() === 'taskbar') return Isle.editTaskbar({ picker: true })
-    window.CapsulePanel?.close()
+    CapsulePanel?.close()
     show()
   }
-  window.pet.onPicker(fromMenu)
+  pet.onPicker(fromMenu)
   // Placed is on, and nothing else says it now (the Plugins page has no
   // switches since 2026-10-17): one put on the strip or the desktop that a
   // switch of before turned off there (to hide it from her capsule, its
@@ -1538,7 +1539,7 @@
     setConfig(P.placedOnPatch(Isle.config, { taskbar: strip, desk: Isle.config.deskLayout, home: home() }))
   }
   // What it shows follows the settings and the widgets.
-  window.pet.onUpdate(() => {
+  pet.onUpdate(() => {
     heal()
     if (open) {
       theme()
@@ -1547,13 +1548,13 @@
       drawBadges()
     }
   })
-  window.pet.onSettingsChanged(got => {
+  pet.onSettingsChanged(got => {
     if (got && typeof got === 'object') snap = got
     if (open) drawGrid()
   })
 
   // --- For island.js -------------------------------------------------------------------------
-  window.Picker = {
+  return {
     open: show,
     close: hide,
     toggle: () => (open ? hide() : show()),
@@ -1597,12 +1598,12 @@
       press = null
       closePop()
       if (home() === 'taskbar') hide()
-      window.CapsulePanel?.close()
+      CapsulePanel?.close()
     },
     closeAll() {
       hide()
       closePop()
-      window.CapsulePanel?.close()
+      CapsulePanel?.close()
     },
     // The strip laid out anew: the popover over its widget again.
     relaid() {
@@ -1611,15 +1612,15 @@
     },
     changed() {
       if (open) drawBadges()
-      window.CapsulePanel?.refresh()
+      CapsulePanel?.refresh()
     },
     // Where the window takes the mouse (island.js sendSolid).
-    solids: () => [...(open ? [pk] : []), ...(pop.hidden ? [] : [pop]), ...(toasts.children.length ? [toasts] : []), ...(window.CapsulePanel?.isOpen() ? [window.CapsulePanel.el] : [])],
-    watches: () => (!!popFor && popSticky) || !!window.CapsulePanel?.isOpen(),
+    solids: () => [...(open ? [pk] : []), ...(pop.hidden ? [] : [pop]), ...(toasts.children.length ? [toasts] : []), ...(CapsulePanel?.isOpen() ? [CapsulePanel.el] : [])],
+    watches: () => (!!popFor && popSticky) || !!CapsulePanel?.isOpen(),
     // The island's home: room in the window for the picker, the panel, a toast under her island.
     roomOver(room, base) {
       if (home() !== 'island') return room
-      const want = open ? 640 : window.CapsulePanel?.isOpen() ? window.CapsulePanel.height() + 72 : toasts.children.length ? 120 : 0
+      const want = open ? 640 : CapsulePanel?.isOpen() ? CapsulePanel.height() + 72 : toasts.children.length ? 120 : 0
       if (!want) return room
       const r = room || base
       return { width: Math.max(r.width, base.width), height: Math.max(r.height, want) }
@@ -1635,4 +1636,4 @@
     nameOfKey,
     colorOf: w => colorOf({ w }),
   }
-})()
+}

@@ -1,13 +1,19 @@
-// window.pet: what the page asks of the Rust side and hears from it, over
-// Tauri's IPC, in her window (role=pet) and the island's (role=island).
-// Loaded before the page's own scripts. The Rust side knows which window a
-// call comes from.
+// pet: what the page asks of the Rust side and hears from it, over Tauri's
+// IPC, in her window (role=pet) and the island's (role=island). Loaded
+// before the page's own scripts. The Rust side knows which window a call
+// comes from.
 //
 // A window that lets clicks through hears no mouse moves. So while the
 // pointer is near and the window lets clicks through, the Rust side sends
 // where it is (pet:pointer), and this plays the mouseenter / mouseleave the
 // page would have heard.
-;(function () {
+import * as Hovers from './hovers.js'
+
+// Made only where Tauri is (her windows; the preview's stand-in): the tests
+// import scripts that use it with none, and get null.
+export const pet = typeof window !== 'undefined' && window.__TAURI__ ? bridge() : null
+
+function bridge() {
   const { invoke } = window.__TAURI__.core
   const { listen } = window.__TAURI__.event
 
@@ -33,7 +39,7 @@
     queue = queue.then(() => invoke(cmd, args)).catch(err => console.error(cmd, err))
   }
 
-  window.pet = {
+  const pet = {
     // On a Mac (WebKit says MacIntel, on Apple silicon too): what is done
     // for its notch and its menus only there, so Windows and macOS never
     // change each other.
@@ -391,7 +397,7 @@
         // on now (gone: all of it) is left; caught, only once the pointer is
         // clear of its box (hovers.js).
         for (const el of [...entered]) if (!el.isConnected) entered.delete(el)
-        for (const el of window.Hovers.stale([...entered], next, at, el => el.getBoundingClientRect())) {
+        for (const el of Hovers.stale([...entered], next, at, el => el.getBoundingClientRect())) {
           entered.delete(el)
           play('mouseleave', el, at?.x ?? -1, at?.y ?? -1)
         }
@@ -464,4 +470,6 @@
       .then(() => send('pet_ready'))
       .catch(err => console.log('listeners failed:', err))
   })
-})()
+
+  return pet
+}

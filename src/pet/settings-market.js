@@ -2,12 +2,16 @@
 // an item's page, installing and updating, taken away, permissions allowed,
 // installing from a file; a word at the panel's foot (toast).
 // Made by settings.js in the section's place as the page starts
-// (window.SettingsParts.market(core)): what it takes of the settings' core
+// (marketPart(core), imported by settings.js): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
-window.SettingsParts = window.SettingsParts || {}
-window.SettingsParts.market = function (core) {
+import * as AddonUI from './addonui.js'
+import * as WCards from './wcards.js'
+import * as Widgets from './widgets.js'
+import { pet } from './bridge.js'
+
+export function marketPart(core) {
   const {
     AddonUI, COLOR, T, Widgets, addonById, andList, body, canDoHTML, crumbHTML, draw, esc, freshRows, market,
     packById, sec, seg, setHTML, sheet, showPart, toastEl,
@@ -29,7 +33,7 @@ window.SettingsParts.market = function (core) {
     if (market.loading) return
     market.loading = true
     draw()
-    const got = await window.pet.market.index(force).catch(e => ({ items: market.items, at: market.at, error: { code: 'failed', detail: String(e?.message || e || '') } }))
+    const got = await pet.market.index(force).catch(e => ({ items: market.items, at: market.at, error: { code: 'failed', detail: String(e?.message || e || '') } }))
     market.loading = false
     // As main has it: the last list read (none: not open, or never read).
     market.items = Array.isArray(got?.items) ? got.items : null
@@ -97,26 +101,25 @@ window.SettingsParts.market = function (core) {
   // (wdesk.js, loaded the first time one is shown), each in its glass at
   // its size, with the desktop's stylesheet in a shadow of their own so
   // neither page's styles reach the other's (desk.css takes its colours
-  // from :host there, light as Windows is: set-light). Beside this script's
-  // own tag (a module has no currentScript; the preview writes the page into
-  // one of its own, so location is not where these files are).
-  const PAGE_BASE = document.querySelector('script[src$="settings.js"]')?.src || location.href
+  // from :host there, light as Windows is: set-light). Beside this script
+  // (the preview writes the page into one of its own, so location is not
+  // where these files are).
+  const PAGE_BASE = import.meta.url
+  let WDesk = null
   let deskCards = null
   function loadDeskCards() {
-    if (window.WDesk) return Promise.resolve()
-    deskCards ||= new Promise((done, fail) => {
-      const s = document.createElement('script')
-      s.src = new URL('wdesk.js', PAGE_BASE).href
-      s.onload = done
-      s.onerror = fail
-      document.head.append(s)
-    }).catch(() => (deskCards = null))
+    if (WDesk) return Promise.resolve()
+    deskCards ||= import('./wdesk.js')
+      .then(m => {
+        WDesk = m
+      })
+      .catch(() => (deskCards = null))
     return deskCards
   }
   function fillCards() {
     const hosts = [...body.querySelectorAll('[data-mk-cards]')]
     if (!hosts.length) return
-    if (!window.WDesk) return void loadDeskCards().then(() => core.isOpen && fillCards())
+    if (!WDesk) return void loadDeskCards().then(() => core.isOpen && fillCards())
     const light = document.body.classList.contains('set-light')
     for (const host of hosts) {
       const item = marketItem(host.dataset.mkCards)
@@ -127,8 +130,8 @@ window.SettingsParts.market = function (core) {
       const root = host.shadowRoot || host.attachShadow({ mode: 'open' })
       host._drawn = key
       const ctx = { lang: core.lang, light, detailed: true, now: Date.now(), hour: new Date().getHours(), all: [w] }
-      const color = window.WCards.colorOf(w, ctx)
-      const cards = AddonUI.sampleSizes(item).map(size => `<div class="wd ${size}" style="--c:${esc(color)}"><div class="wtint"></div><div class="wbody">${window.WDesk.faceHTML(w, size, ctx)}</div></div>`)
+      const color = WCards.colorOf(w, ctx)
+      const cards = AddonUI.sampleSizes(item).map(size => `<div class="wd ${size}" style="--c:${esc(color)}"><div class="wtint"></div><div class="wbody">${WDesk.faceHTML(w, size, ctx)}</div></div>`)
       root.innerHTML = `<link rel="stylesheet" href="${esc(new URL('desk.css', PAGE_BASE).href)}"><style>:host { color: var(--w-fg); font: 12px/1.35 var(--font-ui); user-select: none; }</style>${cards.join('')}`
     }
   }
@@ -151,7 +154,7 @@ window.SettingsParts.market = function (core) {
     }
     market.jobs[id] = { id, got: 0, total: item.size, stage: 'download' }
     draw()
-    window.pet.market
+    pet.market
       .install(id)
       .catch(e => ({ ok: false, error: { code: 'other', detail: String(e?.message || e || '') } }))
       .then(got => {
@@ -184,7 +187,7 @@ window.SettingsParts.market = function (core) {
     }
     market.updating = true
     draw()
-    window.pet.market
+    pet.market
       .updateAll()
       .catch(e => ({ ok: false, done: [], failed: [{ name: '', error: { code: 'other', detail: String(e?.message || e || '') } }] }))
       .then(got => {
@@ -199,7 +202,7 @@ window.SettingsParts.market = function (core) {
 
   // How a download goes (market.rs, market:progress): its row and its
   // page say it, whoever began it (the daily look's updates too).
-  window.pet.onMarket(p => {
+  pet.onMarket(p => {
     if (!p?.id) return
     market.jobs[p.id] = p
     if (core.isOpen && core.tab === 'widgets' && core.sub) draw()
@@ -251,19 +254,19 @@ window.SettingsParts.market = function (core) {
     core.pickingZip = true
     let path = null
     try {
-      path = await window.pet.addons.pickZip()
+      path = await pet.addons.pickZip()
     } finally {
       core.pickingZip = false
     }
     flowStep({ type: 'picked', path })
     if (core.flow.step !== 'looking') return
-    const summary = await window.pet.addons.inspect(path).catch(() => null)
+    const summary = await pet.addons.inspect(path).catch(() => null)
     flowStep({ type: 'looked', path, summary })
   }
   async function installGo() {
     if (core.flow.step !== 'ask') return
     flowStep({ type: 'go' })
-    const result = await window.pet.addons.install(core.flow.path, core.flow.summary?.sha256).catch(e => ({ ok: false, refused: { reason: 'write', file: null, detail: String(e?.message || e || '') } }))
+    const result = await pet.addons.install(core.flow.path, core.flow.summary?.sha256).catch(e => ({ ok: false, refused: { reason: 'write', file: null, detail: String(e?.message || e || '') } }))
     flowStep({ type: 'installed', result })
     const done = core.flow.done
     if (!done) return
@@ -274,7 +277,7 @@ window.SettingsParts.market = function (core) {
     if (!AddonUI.isPack(done)) AddonUI.news.add(done.id)
     core.sub = null
     toast(AddonUI.installedWords(done, T))
-    core.snap = await window.pet.settings.get()
+    core.snap = await pet.settings.get()
     draw()
     core.relayout()
     core.partToShow = `widgets:${key}`
@@ -288,7 +291,7 @@ window.SettingsParts.market = function (core) {
     const { id, kind, del } = core.gone
     core.gone = { id, kind, del, busy: true }
     drawSheet()
-    const asked = kind ? window.pet.addons.uninstallPack(kind, id) : window.pet.addons.uninstall(id)
+    const asked = kind ? pet.addons.uninstallPack(kind, id) : pet.addons.uninstall(id)
     const got = await asked.catch(e => ({ ok: false, error: String(e?.message || e || '') }))
     core.gone = null
     if (got?.ok) {
@@ -308,7 +311,7 @@ window.SettingsParts.market = function (core) {
     if (!id) return
     core.approveFor = null
     drawSheet()
-    const got = await window.pet.addons.approve(id).catch(() => null)
+    const got = await pet.addons.approve(id).catch(() => null)
     if (got && typeof got === 'object' && got.settings) core.snap = got
     draw(true)
     core.relayout()

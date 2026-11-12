@@ -2,12 +2,14 @@
 // row and what opens under it, connecting, repairing, removing; and the
 // General page's update, crash reports and about.
 // Made by settings.js in the section's place as the page starts
-// (window.SettingsParts.agents(core)): what it takes of the settings' core
+// (agentsPart(core), imported by settings.js): what it takes of the settings' core
 // comes in core, its functions and constants as they are, its lets read
 // and written through core.<name> as they change; what it hands back is the
 // settings' again.
-window.SettingsParts = window.SettingsParts || {}
-window.SettingsParts.agents = function (core) {
+import * as Agents from './agents.js'
+import { pet } from './bridge.js'
+
+export function agentsPart(core) {
   const {
     Agents, COLOR, T, draw, esc, nameList, netNow, patch, row, sec, seg, sw,
   } = core
@@ -31,7 +33,7 @@ window.SettingsParts.agents = function (core) {
       delete failed[id]
       draw()
     }
-    const got = await window.pet.settings.agent(id, action)
+    const got = await pet.settings.agent(id, action)
     core.connecting = ''
     dshSwitching = ''
     core.snap = got.snapshot
@@ -61,7 +63,7 @@ window.SettingsParts.agents = function (core) {
     dshSwitching = via
     delete failed.dsh
     draw()
-    const got = await window.pet.settings.dshVia(via, registry)
+    const got = await pet.settings.dshVia(via, registry)
     core.connecting = ''
     dshSwitching = ''
     core.snap = got.snapshot

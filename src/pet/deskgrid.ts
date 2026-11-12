@@ -26,7 +26,7 @@ const GAP = 12
 const PITCH = CELL + GAP
 const EDGE = 24
 // Cells across and down, by size.
-const SIZES = { s: [2, 2], m: [4, 2], l: [4, 4] }
+const SIZES: Record<string, [number, number]> = { s: [2, 2], m: [4, 2], l: [4, 4] }
 const MAX_ENTRIES = 32
 const MAX_MEMBERS = 8
 const MAX_AT = 8
@@ -41,36 +41,89 @@ interface Grid {
   cols: number
   rows: number
 }
+// A box in px (a board's); what stands on a grid is a size ('s', 'm', 'l') or one.
+interface Box {
+  w: number
+  h: number
+}
+type SizeOrBox = string | Box
+// A place in px: a widget's or a board's on the display, an icon's.
+export interface Rect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+// The layout's entries, as above, from JSON (isEntry checks them): a widget
+// or plugin alone, a stack (items: its members), a board (items: its tiles).
+export interface Member {
+  type: string
+  of: string
+  name?: string
+  icon?: string
+}
+export interface Tile extends Member {
+  size: string
+  at: number[]
+}
+export interface Entry {
+  id: string
+  type: string
+  of?: string
+  size?: string
+  name?: string
+  icon?: string
+  // A stack's members, or a board's tiles (with their sizes and cells).
+  items?: (Member & { size?: string; at?: number[] })[]
+  folded?: boolean
+  d?: string
+  at?: Record<string, number[]>
+}
+export interface Stack extends Entry {
+  items: Member[]
+}
+export interface Board extends Entry {
+  items: Tile[]
+}
+// What a member is read from: one (a stack's, a tile) or an entry alone.
+type MemberLike = Pick<Entry, 'type' | 'of' | 'name' | 'icon'>
+// A display as desk.ts has it: its key (desk.rs key_of), whether it is the
+// main one, the keys of those there now.
+export interface Here {
+  key: string
+  primary?: boolean
+  keys?: string[]
+}
 
-const cellsOf = size => SIZES[size] || SIZES.s
-const pxOf = n => n * PITCH - GAP
+const cellsOf = (size: string) => SIZES[size] || SIZES.s
+const pxOf = (n: number) => n * PITCH - GAP
 // A size ('s', 'm', 'l') or a box ({ w, h } in px, a board's): the cells
 // it spans on the display's grid, and its px.
-const isBox = size => !!size && typeof size === 'object'
-const spanOf = size => (isBox(size) ? [Math.ceil((size.w + GAP) / PITCH), Math.ceil((size.h + GAP) / PITCH)] : cellsOf(size))
-const sizePx = size => (isBox(size) ? { w: size.w, h: size.h } : { w: pxOf(cellsOf(size)[0]), h: pxOf(cellsOf(size)[1]) })
+const isBox = (size: unknown): size is Box => !!size && typeof size === 'object'
+const spanOf = (size: SizeOrBox) => (isBox(size) ? [Math.ceil((size.w + GAP) / PITCH), Math.ceil((size.h + GAP) / PITCH)] : cellsOf(size))
+const sizePx = (size: SizeOrBox): Box => (isBox(size) ? { w: size.w, h: size.h } : { w: pxOf(cellsOf(size)[0]), h: pxOf(cellsOf(size)[1]) })
 
 // --- The grid ------------------------------------------------------------------------
 // A display's grid from its work area [x, y, w, h] (the window's CSS px):
 // its first cell 24 px in, as many whole cells as fit with 24 px to spare
 // at the far side too.
-function gridOf(work): Grid {
+function gridOf(work: number[] | null | undefined): Grid {
   const [x, y, w, h] = Array.isArray(work) && work.length === 4 ? work : [0, 0, 0, 0]
-  const fit = n => Math.max(0, Math.floor((n - 2 * EDGE + GAP) / PITCH))
+  const fit = (n: number) => Math.max(0, Math.floor((n - 2 * EDGE + GAP) / PITCH))
   return { x0: x + EDGE, y0: y + EDGE, cols: fit(w), rows: fit(h) }
 }
 
 // Where a cell is, and a widget of a size (or a board's box) standing on it.
-const rectAt = (grid, [c, r]: number[], size) => ({ x: grid.x0 + c * PITCH, y: grid.y0 + r * PITCH, ...sizePx(size) })
+const rectAt = (grid: Grid, [c, r]: number[], size: SizeOrBox): Rect => ({ x: grid.x0 + c * PITCH, y: grid.y0 + r * PITCH, ...sizePx(size) })
 
 // Whether a widget of a size on this cell is on the grid, whole.
-function fits(grid, [c, r]: number[], size) {
+function fits(grid: Grid, [c, r]: number[], size: SizeOrBox) {
   const [cw, ch] = spanOf(size)
   return Number.isInteger(c) && Number.isInteger(r) && c >= 0 && r >= 0 && c + cw <= grid.cols && r + ch <= grid.rows
 }
 
 // The cell nearest a top-left corner (px), kept on the grid.
-function snap(grid, x, y, size): Cell {
+function snap(grid: Grid, x: number, y: number, size: SizeOrBox): Cell {
   const [cw, ch] = spanOf(size)
   const c = Math.round((x - grid.x0) / PITCH)
   const r = Math.round((y - grid.y0) / PITCH)
@@ -78,15 +131,15 @@ function snap(grid, x, y, size): Cell {
 }
 
 // Two rects meet (sharing an edge is not meeting).
-const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 
 // Free: on the grid, over none of what is there (other widgets, icons).
-const isFree = (grid, cell, size, blocks) => fits(grid, cell, size) && !blocks.some(b => overlaps(rectAt(grid, cell, size), b))
+const isFree = (grid: Grid, cell: number[], size: SizeOrBox, blocks: Rect[]) => fits(grid, cell, size) && !blocks.some(b => overlaps(rectAt(grid, cell, size), b))
 
 // The free cell nearest one (by the distance between the two places'
 // corners; the same distance, the higher, then the more to the left);
 // null when there is none.
-function nearestFree(grid, [c0, r0]: number[], size, blocks): Cell | null {
+function nearestFree(grid: Grid, [c0, r0]: number[], size: SizeOrBox, blocks: Rect[]): Cell | null {
   const [cw, ch] = spanOf(size)
   let best = null
   for (let r = 0; r + ch <= grid.rows; r++)
@@ -100,12 +153,12 @@ function nearestFree(grid, [c0, r0]: number[], size, blocks): Cell | null {
 
 // Where a new one goes first: the top right, as the desktop's icons start
 // at the top left.
-const firstSpot = (grid, size): Cell => [Math.max(0, grid.cols - spanOf(size)[0]), 0]
+const firstSpot = (grid: Grid, size: SizeOrBox): Cell => [Math.max(0, grid.cols - spanOf(size)[0]), 0]
 
 // Let go of with its top-left here (px): the cell it snaps to, or, that
 // over another or over icons, the nearest free one; with nothing free,
 // where it snapped (over icons sooner than over another widget).
-function dropAt(grid, x, y, size, widgets, icons) {
+function dropAt(grid: Grid, x: number, y: number, size: SizeOrBox, widgets: Rect[], icons: Rect[]) {
   const want = snap(grid, x, y, size)
   return nearestFree(grid, want, size, [...widgets, ...icons]) || nearestFree(grid, want, size, widgets) || want
 }
@@ -113,7 +166,7 @@ function dropAt(grid, x, y, size, widgets, icons) {
 // --- Which display shows what ---------------------------------------------------------
 // Those this display shows: its own, and on the main display those whose
 // display is not there (gone, or none said yet).
-function shownHere(layout, here) {
+function shownHere<E extends Entry>(layout: E[] | null | undefined, here: Here) {
   const keys = here.keys || []
   return (Array.isArray(layout) ? layout : []).filter(e => e.d === here.key || (here.primary && (!e.d || !keys.includes(e.d))))
 }
@@ -126,15 +179,15 @@ function shownHere(layout, here) {
 // top right), clear of the icons. The boards first: one grown by a tile
 // keeps its place, the widgets alone make way. Gives { at: Map(id ->
 // [c, r]), moved: [ids] }: those moved, to keep.
-function settle(entries, here, grid, icons = [], fresh = null) {
-  const at = new Map()
-  const moved = []
-  const taken = []
+function settle(entries: Entry[], here: Here, grid: Grid, icons: Rect[] = [], fresh: Set<string> | null = null) {
+  const at = new Map<string, number[]>()
+  const moved: string[] = []
+  const taken: Rect[] = []
   for (const e of [...entries.filter(isBoard), ...entries.filter(x => !isBoard(x))]) {
     const size = boxOf(e)
     const was = Array.isArray(e.at?.[here.key]) ? e.at[here.key] : null
-    const clear = fresh && fresh.has(e.id) ? [...taken, ...icons] : taken
-    let cell = was && isFree(grid, was, size, clear) ? was : null
+    const clear: Rect[] = fresh && fresh.has(e.id) ? [...taken, ...icons] : taken
+    let cell: number[] | null = was && isFree(grid, was, size, clear) ? was : null
     if (!cell) {
       const from = was ? snap(grid, rectAt(grid, was, size).x, rectAt(grid, was, size).y, size) : firstSpot(grid, size)
       cell = nearestFree(grid, from, size, [...taken, ...icons]) || nearestFree(grid, from, size, taken) || from
@@ -149,9 +202,9 @@ function settle(entries, here, grid, icons = [], fresh = null) {
 // An entry standing on a cell of a display (and on it now). visiting:
 // shown on the main display while its own is not there, it stays its
 // own display's, to go back there once it is (its place here kept too).
-const placed = (e, key, cell, visiting = false) => ({ ...e, ...(visiting && e.d ? {} : { d: key }), at: keepAt({ ...(e.at || {}), [key]: cell }, key) })
+const placed = <E extends Entry>(e: E, key: string, cell: number[], visiting = false) => ({ ...e, ...(visiting && e.d ? {} : { d: key }), at: keepAt({ ...(e.at || {}), [key]: cell }, key) })
 // Eight displays remembered at most: the one it is on kept, the oldest gone.
-function keepAt(at, key) {
+function keepAt(at: Record<string, number[]>, key: string) {
   const keys = Object.keys(at)
   if (keys.length <= MAX_AT) return at
   const drop = keys.filter(k => k !== key).slice(0, keys.length - MAX_AT)
@@ -159,26 +212,26 @@ function keepAt(at, key) {
 }
 
 // --- Several in one: a stack (§7) ------------------------------------------------------
-const isStack = e => e?.type === 'stack'
-const isBoard = e => e?.type === 'board'
-const memberOf = e => ({ type: e.type, of: e.of, ...(e.name ? { name: e.name } : {}), ...(e.icon ? { icon: e.icon } : {}) })
-const membersOf = e => (isStack(e) ? e.items : isBoard(e) ? e.items.map(memberOf) : e && (e.type === 'widget' || e.type === 'plugin') ? [memberOf(e)] : [])
-const keyOf = m => `${m.type}:${m.of}`
+const isStack = (e: any): e is Stack => e?.type === 'stack'
+const isBoard = (e: any): e is Board => e?.type === 'board'
+const memberOf = (e: MemberLike): Member => ({ type: e.type, of: e.of!, ...(e.name ? { name: e.name } : {}), ...(e.icon ? { icon: e.icon } : {}) })
+const membersOf = (e: Omit<Entry, 'id'> | null | undefined): Member[] => (isStack(e) ? e.items : isBoard(e) ? e.items.map(memberOf) : e && (e.type === 'widget' || e.type === 'plugin') ? [memberOf(e)] : [])
+const keyOf = (m: MemberLike) => `${m.type}:${m.of}`
 // A member as the island's placeWidget takes it: a widget ({ id }) or a plugin ({ plugin }).
-const itemOf = m => (m.type === 'plugin' ? { plugin: m.of } : { id: m.of })
+const itemOf = (m: MemberLike) => (m.type === 'plugin' ? { plugin: m.of } : { id: m.of })
 
 // The sizes a member has: its widgets' (a plugin's, the first's); one
 // with nothing to say yet, any.
-function sizesOfMember(m, all) {
+function sizesOfMember(m: Member, all: any[]): string[] {
   const ws = Widgets.sourcesOf(m, all)
   return ws.length ? Widgets.sizesOf(ws[0]) : ['s', 'm', 'l']
 }
 // An entry's: those all its members have.
-const sizesOfEntry = (e, all) => membersOf(e).reduce((acc, m) => acc.filter(z => sizesOfMember(m, all).includes(z)), ['s', 'm', 'l'])
+const sizesOfEntry = (e: Omit<Entry, 'id'>, all: any[]) => membersOf(e).reduce((acc, m) => acc.filter(z => sizesOfMember(m, all).includes(z)), ['s', 'm', 'l'])
 
 // Whether one may be stacked onto another: the same size, not itself,
 // eight at most in all once none is there twice; never a board, nor onto one.
-function canStack(from, onto) {
+function canStack(from: Entry | undefined, onto: Entry | undefined) {
   if (!from || !onto || from.id === onto.id || isBoard(from) || isBoard(onto) || from.size !== onto.size) return false
   const keys = new Set(membersOf(onto).map(keyOf))
   const more = membersOf(from).filter(m => !keys.has(keyOf(m)))
@@ -189,9 +242,10 @@ function canStack(from, onto) {
 // other stood, the one dropped on top (first); one stack onto another,
 // all of its members. The one dropped gone from the layout. Unchanged
 // when they may not stack.
-function stackOnto(layout, fromId, ontoId, newId) {
+function stackOnto(layout: Entry[], fromId: string, ontoId: string, newId: () => string): Entry[] {
   const from = layout.find(e => e.id === fromId)
-  const onto = layout.find(e => e.id === ontoId)
+  // There, once canStack says so.
+  const onto = layout.find(e => e.id === ontoId)!
   if (!canStack(from, onto)) return layout
   const keys = new Set(membersOf(onto).map(keyOf))
   const items = [...membersOf(from).filter(m => !keys.has(keyOf(m))), ...membersOf(onto)]
@@ -202,7 +256,7 @@ function stackOnto(layout, fromId, ontoId, newId) {
 // One member of a stack taken out (dragged out of it): alone, where it
 // was let go of; the stack without it (one left, that one alone, where
 // the stack stood).
-function takeOut(layout, stackId, index, newId, key, cell) {
+function takeOut(layout: Entry[], stackId: string, index: number, newId: () => string, key: string, cell: number[]): Entry[] {
   const s = layout.find(e => e.id === stackId)
   if (!isStack(s) || !s.items[index]) return layout
   const items = s.items.filter((_, i) => i !== index)
@@ -214,7 +268,7 @@ function takeOut(layout, stackId, index, newId, key, cell) {
 
 // A stack taken apart: each alone, the first where it stood, the others
 // where the display finds room (settle).
-function ungroup(layout, stackId, newId) {
+function ungroup(layout: Entry[], stackId: string, newId: () => string): Entry[] {
   const s = layout.find(e => e.id === stackId)
   if (!isStack(s)) return layout
   const where = { ...(s.d ? { d: s.d } : {}) }
@@ -223,11 +277,11 @@ function ungroup(layout, stackId, newId) {
 }
 
 // Turned by the wheel, a drag or a dot: the next, the one before, or one.
-const flip = (top, n, by) => (n ? (((top + by) % n) + n) % n : 0)
+const flip = (top: number, n: number, by: number) => (n ? (((top + by) % n) + n) % n : 0)
 
 // A member with news comes to the top, once (§7): a letter came (its
 // unread grew, widgets.ts newsIn). Its index, or -1.
-function newsTop(stack, before, after) {
+function newsTop(stack: Entry | null | undefined, before: any[] | null | undefined, after: any[] | null | undefined) {
   if (!isStack(stack)) return -1
   const was = new Map((before || []).map(w => [w.id, w]))
   return stack.items.findIndex(m => Widgets.sourcesOf(m, after || []).some(w => Widgets.newsIn(was.get(w.id), w)))
@@ -243,34 +297,34 @@ const MAX_TILES = 16
 const BOARD_NAME = 16
 
 // Its rows: as many as its tiles reach, 2 at least.
-function boardRows(b) {
+function boardRows(b: Partial<Board> | null | undefined) {
   const used = Math.max(0, ...(b?.items || []).map(t => t.at[1] + cellsOf(t.size)[1]))
   return Math.min(BOARD.maxRows, Math.max(BOARD.minRows, used))
 }
 // Its box on the desktop (px): the title bar alone while folded.
-const boardBox = b => ({ w: BOARD.width, h: b?.folded ? BOARD.head : BOARD.head + pxOf(boardRows(b)) + BOARD.pad })
+const boardBox = (b: Partial<Board> | null | undefined): Box => ({ w: BOARD.width, h: b?.folded ? BOARD.head : BOARD.head + pxOf(boardRows(b)) + BOARD.pad })
 // What an entry takes on the desktop's grid: its size, or a board's box.
-const boxOf = e => (isBoard(e) ? boardBox(e) : e.size)
+const boxOf = (e: Entry): SizeOrBox => (isBoard(e) ? boardBox(e) : e.size!)
 // A tile's place in its board (px from the board's top left).
-const tileRect = ([c, r]: number[], size) => ({ x: BOARD.pad + c * PITCH, y: BOARD.head + r * PITCH, ...sizePx(size) })
+const tileRect = ([c, r]: number[], size: string): Rect => ({ x: BOARD.pad + c * PITCH, y: BOARD.head + r * PITCH, ...sizePx(size) })
 
 // On the board's grid, whole, within so many rows.
-function tileFits([c, r]: number[], size, rows) {
+function tileFits([c, r]: number[], size: string, rows: number) {
   const [cw, ch] = cellsOf(size)
   return Number.isInteger(c) && Number.isInteger(r) && c >= 0 && r >= 0 && c + cw <= BOARD.cols && r + ch <= rows
 }
 // Two tiles meet.
-function tilesMeet(a, as, b, bs) {
+function tilesMeet(a: number[], as: string, b: number[], bs: string) {
   const [aw, ah] = cellsOf(as)
   const [bw, bh] = cellsOf(bs)
   return a[0] < b[0] + bw && b[0] < a[0] + aw && a[1] < b[1] + bh && b[1] < a[1] + ah
 }
 // Free: on the grid within the rows, over none of the others (but skip, the one moving).
-const tileFree = (b, cell, size, rows, skip = -1) => tileFits(cell, size, rows) && !b.items.some((t, i) => i !== skip && tilesMeet(cell, size, t.at, t.size))
+const tileFree = (b: Board, cell: number[], size: string, rows: number, skip = -1) => tileFits(cell, size, rows) && !b.items.some((t, i) => i !== skip && tilesMeet(cell, size, t.at, t.size))
 
 // The empty cell nearest one, within so many rows (the same distance, the
 // higher, then the more to the left); null when there is none.
-function tileNearest(b, [c0, r0]: number[], size, rows, skip = -1): Cell | null {
+function tileNearest(b: Board, [c0, r0]: number[], size: string, rows: number, skip = -1): Cell | null {
   const [cw, ch] = cellsOf(size)
   let best = null
   for (let r = 0; r + ch <= rows; r++)
@@ -282,20 +336,20 @@ function tileNearest(b, [c0, r0]: number[], size, rows, skip = -1): Cell | null 
   return best ? [best.c, best.r] : null
 }
 // Rows it has without the one moving.
-const rowsWithout = (b, skip) => boardRows({ ...b, items: b.items.filter((_, i) => i !== skip) })
+const rowsWithout = (b: Board, skip: number) => boardRows({ ...b, items: b.items.filter((_, i) => i !== skip) })
 
 // Where one let go of over a board goes, from the cell under it: the
 // nearest empty cell in the rows it has; none there, a row more and so
 // on, up to four; null when it is full (the board shakes, the widget goes
 // back). skip: a tile of its own moving in it.
-function boardSpot(b, want, size, skip = -1) {
+function boardSpot(b: Partial<Board> | null | undefined, want: number[], size: string, skip = -1) {
   if (!isBoard(b) || (skip < 0 && b.items.length >= MAX_TILES)) return null
   const rows = rowsWithout(b, skip)
   return tileNearest(b, want, size, rows, skip) || tileNearest(b, want, size, BOARD.maxRows, skip)
 }
 // The first empty cell (its Add's pick): the first in reading order, in
 // the rows it has, else a row more; null when full.
-function boardFirst(b, size): Cell | null {
+function boardFirst(b: Partial<Board> | null | undefined, size: string): Cell | null {
   if (!isBoard(b) || b.items.length >= MAX_TILES) return null
   const [cw, ch] = cellsOf(size)
   for (const rows of [boardRows(b), BOARD.maxRows])
@@ -303,7 +357,7 @@ function boardFirst(b, size): Cell | null {
   return null
 }
 // The board's cell a tile's top left (px from the board's) snaps to.
-function tileAt(x, y, size): Cell {
+function tileAt(x: number, y: number, size: string): Cell {
   const [cw, ch] = cellsOf(size)
   const c = Math.round((x - BOARD.pad) / PITCH)
   const r = Math.round((y - BOARD.head) / PITCH)
@@ -313,26 +367,26 @@ function tileAt(x, y, size): Cell {
 // A widget or plugin put in a board on a cell, at a size: out of wherever
 // else it was on the desktop (its entry gone, or it out of its stack or
 // its other board) first.
-function intoBoard(layout, boardId, m, size, cell, newId) {
-  const tile = { ...memberOf(m), size, at: cell }
+function intoBoard(layout: Entry[], boardId: string, m: MemberLike, size: string, cell: number[], newId: () => string): Entry[] {
+  const tile: Tile = { ...memberOf(m), size, at: cell }
   return without(layout, itemOf(m), newId).map(e => (e.id === boardId && isBoard(e) ? { ...e, items: [...e.items, tile] } : e))
 }
 // A tile moved in its board, or given another size there.
-function moveInBoard(layout, boardId, index, cell, size?) {
+function moveInBoard(layout: Entry[], boardId: string, index: number, cell: number[], size?: string): Entry[] {
   return layout.map(e => (e.id === boardId && isBoard(e) && e.items[index] ? { ...e, items: e.items.map((t, i) => (i === index ? { ...t, at: cell, ...(size ? { size } : {}) } : t)) } : e))
 }
 // A tile taken out (dragged off the board, or by its menu): alone on the
 // desktop, on that cell of a display.
-function outOfBoard(layout, boardId, index, newId, key, cell) {
+function outOfBoard(layout: Entry[], boardId: string, index: number, newId: () => string, key: string, cell: number[]): Entry[] {
   const b = layout.find(e => e.id === boardId)
   if (!isBoard(b) || !b.items[index]) return layout
   const t = b.items[index]
   const alone = placed({ id: newId(), ...memberOf(t), size: t.size, ...(b.d ? { d: b.d } : {}) }, key, cell)
-  return layout.flatMap(e => (e.id === boardId ? [{ ...e, items: e.items.filter((_, i) => i !== index) }, alone] : [e]))
+  return layout.flatMap(e => (e.id === boardId ? [{ ...e, items: e.items!.filter((_, i) => i !== index) }, alone] : [e]))
 }
 // A widget alone made the first tile of a new board, where it stood (a
 // stack may not: no stacks in a board).
-function newBoard(layout, entryId, newId) {
+function newBoard(layout: Entry[], entryId: string, newId: () => string): Entry[] {
   const e = layout.find(x => x.id === entryId)
   if (!e || isStack(e) || isBoard(e)) return layout
   const board = { id: newId(), type: 'board', items: [{ ...memberOf(e), size: e.size, at: [0, 0] }], ...(e.d ? { d: e.d } : {}), ...(e.at ? { at: e.at } : {}) }
@@ -340,7 +394,7 @@ function newBoard(layout, entryId, newId) {
 }
 // A board taken apart: each tile alone on the desktop, the first where
 // the board stood, the others where the display finds room (settle).
-function boardApart(layout, boardId, newId) {
+function boardApart(layout: Entry[], boardId: string, newId: () => string): Entry[] {
   const b = layout.find(e => e.id === boardId)
   if (!isBoard(b)) return layout
   const alone = b.items.map((t, i) => ({ id: newId(), ...memberOf(t), size: t.size, ...(b.d ? { d: b.d } : {}), ...(i === 0 && b.at ? { at: b.at } : {}) }))
@@ -349,14 +403,14 @@ function boardApart(layout, boardId, newId) {
 
 // --- Several made one board (Ctrl-selected on the desktop, desk.ts; the user's call of 2026-10-17) ---
 // What may be selected: one alone or a stack, never a board.
-const isSelectable = e => !!e && !isBoard(e) && (isStack(e) || e.type === 'widget' || e.type === 'plugin')
+const isSelectable = (e: Entry | null | undefined) => !!e && !isBoard(e) && (isStack(e) || e.type === 'widget' || e.type === 'plugin')
 // Those a rectangle dragged over the desktop meets (each { id, rect, entry }), boards left out.
-const selectIn = (box, list) => list.filter(x => isSelectable(x.entry) && overlaps(box, x.rect)).map(x => x.id)
+const selectIn = (box: Rect, list: { id: string; rect: Rect; entry: Entry }[]) => list.filter(x => isSelectable(x.entry) && overlaps(box, x.rect)).map(x => x.id)
 
 // In reading order of where they stand (at: Map id -> [col, row]): top to
 // bottom, then left to right.
-function readingOrder(entries, at) {
-  const cell = e => at.get(e.id) || [Infinity, Infinity]
+function readingOrder(entries: Entry[], at: Map<string, number[]>) {
+  const cell = (e: Entry) => at.get(e.id) || [Infinity, Infinity]
   return [...entries].sort((a, b) => cell(a)[1] - cell(b)[1] || cell(a)[0] - cell(b)[0])
 }
 
@@ -364,20 +418,20 @@ function readingOrder(entries, at) {
 // order, each at the size it had where the board has room for it (its
 // first free cell), else small, the later ones made small first. { items },
 // or { why: 'tooMany' } past what a board holds (16).
-function tilesOf(entries, at) {
-  const seen = new Set()
-  const list = []
+function tilesOf(entries: Entry[], at: Map<string, number[]>) {
+  const seen = new Set<string>()
+  const list: { m: Member; size: string }[] = []
   for (const e of readingOrder(entries.filter(isSelectable), at))
     for (const m of membersOf(e)) {
       if (seen.has(keyOf(m))) continue
       seen.add(keyOf(m))
-      list.push({ m: isStack(e) ? memberOf(m) : memberOf(e), size: e.size })
+      list.push({ m: isStack(e) ? memberOf(m) : memberOf(e), size: e.size! })
     }
   if (!list.length) return { why: 'none' }
   if (list.length > MAX_TILES) return { why: 'tooMany' }
   const sizes = list.map(x => x.size)
   for (;;) {
-    const b = { type: 'board', items: [] }
+    const b: { type: string; items: Tile[] } = { type: 'board', items: [] }
     let ok = true
     for (const [i, x] of list.entries()) {
       const spot = boardFirst(b, sizes[i])
@@ -398,15 +452,25 @@ function tilesOf(entries, at) {
 // top-left-most stood, or the nearest place there its box fits, over none
 // of the others here (clear of the icons where it can be). { layout,
 // board }, or { why } as tilesOf says.
-function boardOf(layout, ids, { at, grid, key, icons = [], newId, name }: { at?: Map<string, number[]>; grid?: Grid; key?: string; icons?: any[]; newId?: () => string; name?: string } = {}) {
+// What it reads: where each stands (settle's at), this display's grid and
+// key, its icons, new ids, the board's own name. All but those two always given.
+interface BoardOfOpts {
+  at: Map<string, number[]>
+  grid: Grid
+  key: string
+  icons?: Rect[]
+  newId: () => string
+  name?: string
+}
+function boardOf(layout: Entry[], ids: string[], { at, grid, key, icons = [], newId, name }: BoardOfOpts = {} as BoardOfOpts) {
   const chosen = layout.filter(e => ids.includes(e.id) && isSelectable(e))
   const tiles = tilesOf(chosen, at)
   if (tiles.why) return { why: tiles.why }
   const first = readingOrder(chosen, at)[0]
-  const board = { id: newId(), type: 'board', ...(name ? { name } : {}), items: tiles.items }
+  const board: Board = { id: newId(), type: 'board', ...(name ? { name } : {}), items: tiles.items! }
   const box = boardBox(board)
   const rest = layout.filter(e => !chosen.includes(e))
-  const blocks = rest.filter(e => at.has(e.id)).map(e => rectAt(grid, at.get(e.id), boxOf(e)))
+  const blocks = rest.filter(e => at.has(e.id)).map(e => rectAt(grid, at.get(e.id)!, boxOf(e)))
   const want = at.get(first.id) || firstSpot(grid, box)
   const cell = isFree(grid, want, box, blocks) ? want : nearestFree(grid, want, box, [...blocks, ...icons]) || nearestFree(grid, want, box, blocks) || want
   const out = placed(board, key, cell)
@@ -417,34 +481,45 @@ function boardOf(layout, ids, { at, grid, key, icons = [], newId, name }: { at?:
 // A combo: { id, name, items: [{ type, of, size, at }], saved } (saved:
 // when, ms); twenty at most, each name once. Its tiles as a board's, with
 // neither names nor icons (those are its widgets' own, read as it goes up).
+export interface BoardSet {
+  id: string
+  name: string
+  items: Tile[]
+  saved: number
+}
+// One gone (removeSet), to put back where it stood (restoreSet).
+export interface SetRemoval {
+  set: BoardSet
+  index: number
+}
 const MAX_SETS = 20
-const isSetId = id => typeof id === 'string' && /^s[a-z0-9]{1,15}$/.test(id)
-const isSetName = n => isBoardName(n) && n.trim() !== '' && n.trim() === n
-const isSetItem = t => !!t && typeof t === 'object' && Object.keys(t).every(k => ['type', 'of', 'size', 'at'].includes(k)) && isTile(t)
-function isBoardSet(s) {
+const isSetId = (id: unknown) => typeof id === 'string' && /^s[a-z0-9]{1,15}$/.test(id)
+const isSetName = (n: string) => isBoardName(n) && n.trim() !== '' && n.trim() === n
+const isSetItem = (t: any) => !!t && typeof t === 'object' && Object.keys(t).every(k => ['type', 'of', 'size', 'at'].includes(k)) && isTile(t)
+function isBoardSet(s: any): s is BoardSet {
   if (!s || typeof s !== 'object' || Array.isArray(s)) return false
   if (!Object.keys(s).every(k => ['id', 'name', 'items', 'saved'].includes(k))) return false
   if (!isSetId(s.id) || !isSetName(s.name) || !Number.isSafeInteger(s.saved) || s.saved < 0) return false
   return Array.isArray(s.items) && s.items.length >= 1 && s.items.every(isSetItem) && isBoardEntry({ id: 'wx', type: 'board', items: s.items })
 }
-function isBoardSets(list) {
+function isBoardSets(list: unknown) {
   if (!Array.isArray(list) || list.length > MAX_SETS || !list.every(isBoardSet)) return false
   return new Set(list.map(s => s.id)).size === list.length && new Set(list.map(s => s.name)).size === list.length
 }
 // Those kept that hold (one written by hand left out).
-const setsOf = list => (Array.isArray(list) ? list.filter(isBoardSet) : [])
+const setsOf = (list: unknown): BoardSet[] => (Array.isArray(list) ? list.filter(isBoardSet) : [])
 
 // A board as a combo: its tiles' widgets, sizes and places.
-const setOf = (b, { id, name, saved }) => ({ id, name, items: (b?.items || []).map(t => ({ type: t.type, of: t.of, size: t.size, at: [t.at[0], t.at[1]] })), saved })
+const setOf = (b: Partial<Board> | null | undefined, { id, name, saved }: { id: string; name: string; saved: number }): BoardSet => ({ id, name, items: (b?.items || []).map(t => ({ type: t.type, of: t.of, size: t.size, at: [t.at[0], t.at[1]] })), saved })
 
 // Kept: one of its name replaced (its id kept), else added at the end;
 // past twenty the oldest goes. { list, replaced, dropped: the one gone or null }.
-function saveSet(list, set) {
+function saveSet(list: unknown, set: BoardSet) {
   const now = setsOf(list)
   const at = now.findIndex(s => s.name === set.name)
   if (at >= 0) return { list: now.map((s, i) => (i === at ? { ...set, id: s.id } : s)), replaced: true, dropped: null }
   let out = [...now, set]
-  let dropped = null
+  let dropped: BoardSet | null = null
   if (out.length > MAX_SETS) {
     dropped = out.filter(s => s !== set).reduce((a, b) => (b.saved < a.saved ? b : a))
     out = out.filter(s => s !== dropped)
@@ -452,20 +527,20 @@ function saveSet(list, set) {
   return { list: out, replaced: false, dropped }
 }
 // Named anew: null when the name is not one, or another has it.
-function renameSet(list, id, name) {
+function renameSet(list: unknown, id: string, name: unknown) {
   const now = setsOf(list)
   const n = String(name ?? '').trim()
   if (!isSetName(n) || now.some(s => s.name === n && s.id !== id) || !now.some(s => s.id === id)) return null
   return now.map(s => (s.id === id ? { ...s, name: n } : s))
 }
 // Gone, and what puts it back (undo): it, where it stood.
-function removeSet(list, id) {
+function removeSet(list: unknown, id: string): { list: BoardSet[]; record: SetRemoval | null } {
   const now = setsOf(list)
   const index = now.findIndex(s => s.id === id)
   if (index < 0) return { list: now, record: null }
   return { list: now.filter(s => s.id !== id), record: { set: now[index], index } }
 }
-function restoreSet(list, record) {
+function restoreSet(list: unknown, record: SetRemoval | null | undefined) {
   const now = setsOf(list)
   if (!record?.set || now.some(s => s.id === record.set.id || s.name === record.set.name)) return now
   const out = [...now]
@@ -476,38 +551,38 @@ function restoreSet(list, record) {
 // Put up again: its board (its name, its tiles where they were), those
 // whose widget or plugin is not there any more (known(member): false)
 // left out. { board, skipped }; board null when none is left.
-function boardFromSet(set, { known = () => true, newId }: { known?: (m: { type: string; of: string }) => boolean; newId?: () => string } = {}) {
+function boardFromSet(set: Partial<BoardSet>, { known = () => true, newId }: { known?: (m: { type: string; of: string }) => boolean; newId?: () => string } = {}) {
   const items = (set?.items || []).filter(isSetItem)
   const kept = items.filter(t => known({ type: t.type, of: t.of }))
-  const board = kept.length ? { id: newId(), type: 'board', ...(isBoardName(set.name) && set.name ? { name: set.name } : {}), items: kept.map(t => ({ type: t.type, of: t.of, size: t.size, at: [t.at[0], t.at[1]] })) } : null
+  const board: Board | null = kept.length ? { id: newId!(), type: 'board', ...(isBoardName(set.name) && set.name ? { name: set.name } : {}), items: kept.map(t => ({ type: t.type, of: t.of, size: t.size, at: [t.at[0], t.at[1]] })) } : null
   return { board, skipped: items.length - kept.length }
 }
 // The layout with it there: its widgets out of wherever else they were on
 // the desktop first (one place each), then the board on that cell of this
 // display (key); with no cell, where the display finds room for it (settle).
-function withBoard(layout, board, { key, cell, newId }: { key?: string; cell?: number[]; newId?: () => string } = {}) {
-  let out = Array.isArray(layout) ? layout : []
-  for (const t of board.items) out = without(out, itemOf(t), newId)
+function withBoard(layout: Entry[] | null | undefined, board: Board, { key, cell, newId }: { key?: string; cell?: number[]; newId?: () => string } = {}) {
+  let out: Entry[] = Array.isArray(layout) ? layout : []
+  for (const t of board.items) out = without(out, itemOf(t), newId!)
   return [...out, key && cell ? placed(board, key, cell) : board]
 }
 
 // --- Kept as settings.rs checks it ------------------------------------------------------
-const isKey = k => typeof k === 'string' && /^[a-z0-9]{1,40}$/.test(k)
-const isCell = v => Array.isArray(v) && v.length === 2 && v.every(n => Number.isInteger(n) && n >= 0 && n <= 255)
-const isAt = at => at && typeof at === 'object' && !Array.isArray(at) && Object.keys(at).length <= MAX_AT && Object.entries(at).every(([k, v]) => isKey(k) && isCell(v))
-const isBoardName = n => typeof n === 'string' && [...n].length <= BOARD_NAME && !/[\u0000-\u001f\u007f]/.test(n)
-const isTile = t =>
+const isKey = (k: unknown) => typeof k === 'string' && /^[a-z0-9]{1,40}$/.test(k)
+const isCell = (v: unknown) => Array.isArray(v) && v.length === 2 && v.every(n => Number.isInteger(n) && n >= 0 && n <= 255)
+const isAt = (at: any) => at && typeof at === 'object' && !Array.isArray(at) && Object.keys(at).length <= MAX_AT && Object.entries(at).every(([k, v]) => isKey(k) && isCell(v))
+const isBoardName = (n: unknown) => typeof n === 'string' && [...n].length <= BOARD_NAME && !/[\u0000-\u001f\u007f]/.test(n)
+const isTile = (t: any) =>
   !!t && typeof t === 'object' && !Array.isArray(t) && Object.keys(t).every(k => ['type', 'of', 'name', 'icon', 'size', 'at'].includes(k)) && ['s', 'm', 'l'].includes(t.size) && isCell(t.at) && tileFits(t.at, t.size, BOARD.maxRows) && Widgets.isMember(memberOf(t))
-function isBoardEntry(e) {
+function isBoardEntry(e: any) {
   const known = ['id', 'type', 'name', 'items', 'folded', 'd', 'at']
   if (!Object.keys(e).every(k => known.includes(k))) return false
   if (e.name !== undefined && !isBoardName(e.name)) return false
   if (e.folded !== undefined && typeof e.folded !== 'boolean') return false
   if (!Array.isArray(e.items) || e.items.length > MAX_TILES || !e.items.every(isTile)) return false
   if (new Set(e.items.map(keyOf)).size !== e.items.length) return false
-  return e.items.every((t, i) => e.items.every((u, j) => j <= i || !tilesMeet(t.at, t.size, u.at, u.size)))
+  return e.items.every((t: Tile, i: number) => e.items.every((u: Tile, j: number) => j <= i || !tilesMeet(t.at, t.size, u.at, u.size)))
 }
-function isEntry(e) {
+function isEntry(e: any) {
   if (!e || typeof e !== 'object' || Array.isArray(e)) return false
   if (typeof e.id !== 'string' || !/^w[a-z0-9]{1,15}$/.test(e.id)) return false
   if (e.d !== undefined && !isKey(e.d)) return false
@@ -522,7 +597,7 @@ function isEntry(e) {
   return (e.type === 'widget' || e.type === 'plugin') && e.items === undefined && Widgets.isMember(memberOf(e))
 }
 // A layout: 32 at most, each id once, each widget or plugin once.
-function isLayout(layout) {
+function isLayout(layout: unknown) {
   if (!Array.isArray(layout) || layout.length > MAX_ENTRIES || !layout.every(isEntry)) return false
   const ids = layout.map(e => e.id)
   const keys = layout.flatMap(membersOf).map(keyOf)
@@ -530,19 +605,19 @@ function isLayout(layout) {
 }
 
 // Whether the desktop shows a widget ({ id }) or a plugin ({ plugin }).
-function has(layout, item) {
+function has(layout: Entry[] | null | undefined, item: { id?: string; plugin?: string }) {
   const key = item.plugin ? `plugin:${item.plugin}` : `widget:${item.id}`
   return (Array.isArray(layout) ? layout : []).some(e => membersOf(e).some(m => keyOf(m) === key))
 }
 // The widgets it shows (not to take their turns in the island too).
-function shownOn(layout, all) {
-  const ids = new Set()
+function shownOn(layout: Entry[] | null | undefined, all: any[]) {
+  const ids = new Set<string>()
   for (const e of Array.isArray(layout) ? layout : []) for (const m of membersOf(e)) for (const w of Widgets.sourcesOf(m, all)) ids.add(w.id)
   return ids
 }
 // A widget or plugin off the desktop: its entry gone, or it out of its
 // stack or its board (the board stays, empty or not).
-function without(layout, item, newId) {
+function without(layout: Entry[] | null | undefined, item: { id?: string; plugin?: string }, newId: () => string): Entry[] {
   const key = item.plugin ? `plugin:${item.plugin}` : `widget:${item.id}`
   return (Array.isArray(layout) ? layout : []).flatMap(e => {
     if (isBoard(e)) return e.items.some(t => keyOf(t) === key) ? [{ ...e, items: e.items.filter(t => keyOf(t) !== key) }] : [e]
@@ -575,7 +650,7 @@ function placement({ all = [], home = 'island', taskbar = null, desk = [], pin, 
   const monitor = all.find(w => w.id === 'monitor' && w.on !== false) || null
   const part = !taskbar || Object.values(taskbar).some(run => Array.isArray(run) && run.includes('monitor'))
   const inPart = !!monitor && home === 'taskbar' && part && pin !== false && !out.has('monitor')
-  const inCapsule = w => w.on !== false && !out.has(w.id) && !(inPart && w === monitor)
+  const inCapsule = (w: any) => w.on !== false && !out.has(w.id) && !(inPart && w === monitor)
   const members = C.effective({ capsule, all, home, pin, inCapsule })
   const turning = members.filter(m => m.mode === 'turn').flatMap(m => m.widgets)
   const pins = members.filter(m => m.mode === 'pin').map(m => m.widgets[0])
@@ -588,7 +663,7 @@ function placement({ all = [], home = 'island', taskbar = null, desk = [], pin, 
 // From the cell wanted, row by row to the next free one, round to the top
 // again (as Plasma finds a place: not the nearest, the next); null when
 // there is none.
-function nextFree(grid, [c0, r0]: number[], size, blocks = []): Cell | null {
+function nextFree(grid: Grid, [c0, r0]: number[], size: SizeOrBox, blocks: Rect[] = []): Cell | null {
   const [cw, ch] = spanOf(size)
   const cols = grid.cols - cw + 1
   const rows = grid.rows - ch + 1
@@ -607,7 +682,16 @@ function nextFree(grid, [c0, r0]: number[], size, blocks = []): Cell | null {
 // middle: over a board, its first free cell (at tileSize); else the cell
 // under it, or the next free one, clear of the icons if it can be, never
 // over another widget. { ok, where: 'desk' | 'board', cell | spot, want, why }.
-function landing({ grid, x, y, size, blocks = [], icons = [], board = null, tileSize = 's' }) {
+// ok, on a board (its spot) or the desktop (its cell, and the cell wanted); not, why.
+export interface Landing {
+  ok: boolean
+  where?: string
+  spot?: number[]
+  cell?: number[]
+  want?: number[]
+  why?: string
+}
+function landing({ grid, x, y, size, blocks = [], icons = [], board = null, tileSize = 's' }: { grid: Grid; x: number; y: number; size: SizeOrBox; blocks?: Rect[]; icons?: Rect[]; board?: Partial<Board> | null; tileSize?: string }): Landing {
   if (board) {
     const spot = boardFirst(board, tileSize)
     return spot ? { ok: true, where: 'board', spot } : { ok: false, where: 'board', why: 'boardFull' }
@@ -621,10 +705,10 @@ function landing({ grid, x, y, size, blocks = [], icons = [], board = null, tile
 // The layout with it there (a member: { type, of, name?, icon? }): out of
 // wherever else it was on the desktop first (one place), then into the
 // board, or alone on the cell of this display (key).
-function dropped(layout, land, { m, size, tileSize = 's', key, boardId, newId }: { m: any; size?: any; tileSize?: string; key?: string; boardId?: string; newId: () => string }) {
+function dropped(layout: Entry[], land: Landing | null | undefined, { m, size, tileSize = 's', key, boardId, newId }: { m: MemberLike; size?: string; tileSize?: string; key?: string; boardId?: string; newId: () => string }) {
   if (!land?.ok) return layout
-  if (land.where === 'board') return intoBoard(layout, boardId, m, tileSize, land.spot, newId)
-  return [...without(layout, itemOf(m), newId), placed({ id: newId(), ...memberOf(m), size }, key, land.cell)]
+  if (land.where === 'board') return intoBoard(layout, boardId!, m, tileSize, land.spot!, newId)
+  return [...without(layout, itemOf(m), newId), placed({ id: newId(), ...memberOf(m), size }, key!, land.cell!)]
 }
 
 export {

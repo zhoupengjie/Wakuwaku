@@ -12,46 +12,48 @@ import { render } from '../shared/i18n.ts'
 import * as WCards from './wcards.ts'
 import { esc, spark, ring, kindOf, colorOf, briefOf, titleOf, trendOf } from './wcards.ts'
 import * as Widgets from './widgets.ts'
+import type { Member, Widget } from './widgets.ts'
+import type { Ctx } from './wcards.ts'
 
-const t = (ctx, key, vars?) => I18n.t(ctx.lang, key, vars)
+const t = (ctx: Ctx, key: string, vars?: Record<string, unknown>) => I18n.t(ctx.lang, key, vars)
 
 const UP = ['#34d27b', '#0f7b3f']
 const DOWN = ['#ff6b6b', '#c42b3c']
-const pick = (pair, ctx) => pair[ctx.light ? 1 : 0]
-const trendColor = (w, ctx) => (trendOf(w) === 'red' ? pick(DOWN, ctx) : trendOf(w) === 'green' ? pick(UP, ctx) : '')
-const track = ctx => (ctx.light ? 'rgba(0,0,0,.09)' : 'rgba(255,255,255,.12)')
-const detailOf = w => Widgets.detailOf(w)
-const rowsOf = w => (Array.isArray(detailOf(w).rows) ? detailOf(w).rows : [])
-const row = (w, kind) => rowsOf(w).find(r => r.kind === kind)
-const varsOf = w => (w?.value && typeof w.value === 'object' ? w.value.vars || {} : {})
+const pick = (pair: string[], ctx: Ctx) => pair[ctx.light ? 1 : 0]
+const trendColor = (w: Widget, ctx: Ctx) => (trendOf(w) === 'red' ? pick(DOWN, ctx) : trendOf(w) === 'green' ? pick(UP, ctx) : '')
+const track = (ctx: Ctx) => (ctx.light ? 'rgba(0,0,0,.09)' : 'rgba(255,255,255,.12)')
+const detailOf = (w: Widget) => Widgets.detailOf(w)
+const rowsOf = (w: Widget) => (Array.isArray(detailOf(w).rows) ? detailOf(w).rows! : [])
+const row = (w: Widget, kind: string) => rowsOf(w).find(r => r.kind === kind)
+const varsOf = (w: Widget | null | undefined) => (w?.value && typeof w.value === 'object' ? w.value.vars || {} : {})
 // A private widget's words blurred until the pointer is on them (desk.css
 // .wpriv.hid), as the specifics setting says.
-const priv = (w, text, ctx) => (w?.private && !ctx.detailed ? `<span class="wpriv hid">${esc(text)}</span>` : esc(text))
-const nodata = ctx => `<span class="nodata">${esc(t(ctx, 'taskbar.w.none'))}</span>`
-const meter = (pct, color) => `<div class="meter"><i style="width:${Math.max(0, Math.min(100, pct || 0))}%;background:${color}"></i></div>`
+const priv = (w: Widget, text: unknown, ctx: Ctx) => (w?.private && !ctx.detailed ? `<span class="wpriv hid">${esc(text)}</span>` : esc(text))
+const nodata = (ctx: Ctx) => `<span class="nodata">${esc(t(ctx, 'taskbar.w.none'))}</span>`
+const meter = (pct: number, color: string) => `<div class="meter"><i style="width:${Math.max(0, Math.min(100, pct || 0))}%;background:${color}"></i></div>`
 // A number and its unit after it, half as big (46px, "天" 23px).
-const big = (n, unit = '', cls = '') => `<div class="big${cls ? ` ${cls}` : ''}">${esc(n)}${unit ? `<small>${esc(unit)}</small>` : ''}</div>`
+const big = (n: unknown, unit = '', cls = '') => `<div class="big${cls ? ` ${cls}` : ''}">${esc(n)}${unit ? `<small>${esc(unit)}</small>` : ''}</div>`
 // A share "17%" as its number and its sign.
-const share = text => {
+const share = (text: unknown) => {
   const m = /^\s*(-?[\d.]+)\s*%\s*$/.exec(String(text ?? ''))
   return m ? { n: m[1], unit: '%', pct: parseFloat(m[1]) } : { n: String(text ?? '—'), unit: '', pct: 0 }
 }
 
 // The head: its glyph in its colour (her face for today), its name, and
 // something on the right (a place, how many).
-function head(w, name, ctx, right = '') {
+function head(w: Widget, name: string, ctx: Ctx, right = '') {
   return `<div class="hd">${WCards.glyphHTML(w, 'gl')}<span class="hn">${esc(name)}</span>${right ? `<span class="r">${right}</span>` : ''}</div>`
 }
 
 // --- Weather (s, m, l) ------------------------------------------------------------------
-const SKY = { sun: 'E706', moon: 'E708', partly: 'E753', cloud: 'E753', fog: 'E753', rain: 'EB42', snow: 'EA38', storm: 'E945' }
-function weather(w, size, ctx) {
+const SKY: Record<string, string> = { sun: 'E706', moon: 'E708', partly: 'E753', cloud: 'E753', fog: 'E753', rain: 'EB42', snow: 'EA38', storm: 'E945' }
+function weather(w: Widget, size: string, ctx: Ctx) {
   const said = Widgets.words(ctx.lang, w, true)
   const [city = '', sky = ''] = String(said.label).split(' · ')
   const range = detailOf(w).extra || ''
   const color = colorOf(w, ctx)
   const hours = rowsOf(w).filter(r => r.kind === 'hour')
-  const strip = n =>
+  const strip = (n: number) =>
     hours.length
       ? `<div class="wx-hours" style="grid-template-columns:repeat(${Math.min(n, hours.length)},1fr)">${hours
           .slice(0, n)
@@ -69,7 +71,7 @@ function weather(w, size, ctx) {
 }
 
 // --- The system monitor (s, m, l) ---------------------------------------------------------
-function monitor(w, size, ctx) {
+function monitor(w: Widget, size: string, ctx: Ctx) {
   const color = colorOf(w, ctx)
   const cpu = row(w, 'cpu')
   const mem = row(w, 'memory')
@@ -87,7 +89,7 @@ function monitor(w, size, ctx) {
   if (size === 'm') {
     // One not read (no graphics card in a VM): greyed with "no data", as
     // the large one says it (the design session, §8).
-    const col = (label, r) => {
+    const col = (label: string, r: any) => {
       const s = share(r?.value)
       if (!r) return `<div class="col off"><div class="row"><span class="ter n">${esc(label)}</span>${nodata(ctx)}</div>${meter(0, color)}</div>`
       return `<div class="col"><div class="row"><span class="ter n">${esc(label)}</span><span class="num mid">${esc(s.n)}<small>${esc(s.unit)}</small></span></div>${meter(s.pct, color)}</div>`
@@ -98,7 +100,7 @@ function monitor(w, size, ctx) {
   }
   const about = cpu ? ['CPU', cpu.name && cpu.unit ? t(ctx, 'card.cores', { cores: cpu.name, threads: cpu.unit }) : '', cpu.text || ''].filter(Boolean).join(' · ') : 'CPU'
   const series = detailOf(w).series
-  const line = (label, r) => {
+  const line = (label: string, r: any) => {
     if (!r) return `<div class="mline off"><div class="row"><span class="n sub">${esc(label)}</span>${nodata(ctx)}</div></div>`
     const s = share(r.value)
     const sub = [r.name, r.text].filter(Boolean).join(' · ')
@@ -109,13 +111,13 @@ function monitor(w, size, ctx) {
 }
 
 // --- Stocks (s, m, l): the first, and the plugin's others -------------------------------
-function stockLine(x, ctx) {
+function stockLine(x: Widget, ctx: Ctx) {
   const b = briefOf(x, ctx)
   const r = rowsOf(x)[0] || {}
   return { code: r.code || Widgets.words(ctx.lang, x, true).label, name: Widgets.words(ctx.lang, x, true).label, price: b.big, change: b.unit, color: trendColor(x, ctx) || colorOf(x, ctx), up: trendOf(x), series: detailOf(x).series, volume: r.value }
 }
-const chip = (s, extra = '') => (s.change ? `<span class="chip" style="--t:${s.color}${extra}">${esc(s.change)}</span>` : '')
-function stock(w, size, ctx) {
+const chip = (s: { change: string; color: string }, extra = '') => (s.change ? `<span class="chip" style="--t:${s.color}${extra}">${esc(s.change)}</span>` : '')
+function stock(w: Widget, size: string, ctx: Ctx) {
   const mine = (ctx.all || []).filter(x => x.plugin && x.plugin === w.plugin)
   const list = [w, ...mine.filter(x => x !== w)]
   const first = stockLine(w, ctx)
@@ -151,12 +153,12 @@ function stock(w, size, ctx) {
 }
 
 // --- Mail (s, m, l): a mailbox's unread, its newest ----------------------------------------
-function mail(w, size, ctx) {
+function mail(w: Widget, size: string, ctx: Ctx) {
   const n = varsOf(w).n ?? Widgets.words(ctx.lang, w, true).value
   const rows = rowsOf(w)
   const label = render(ctx.lang, w.label)
   const name = t(ctx, 'card.mail')
-  const letter = r => `<div class="mailrow"><b>${priv(w, r.from || '', ctx)}</b><em>${esc(WCards.whenOf(r.at, ctx))}</em><span>${priv(w, r.subject || '', ctx)}</span></div>`
+  const letter = (r: any) => `<div class="mailrow"><b>${priv(w, r.from || '', ctx)}</b><em>${esc(WCards.whenOf(r.at, ctx))}</em><span>${priv(w, r.subject || '', ctx)}</span></div>`
   if (size === 's') {
     const newest = rows[0] ? `${rows[0].from || ''}：${rows[0].subject || ''}` : ''
     return `${head(w, name, ctx)}<div class="grow"></div>${big(n)}<div class="sub" style="margin-top:4px">${esc(t(ctx, 'card.unread'))}</div><div class="ter ell">${newest ? priv(w, newest, ctx) : priv(w, label, ctx)}</div>`
@@ -169,14 +171,14 @@ function mail(w, size, ctx) {
 }
 
 // --- Claude today (s, m, l), and today's tokens (s, m) ---------------------------------------
-function today(w, size, ctx) {
+function today(w: Widget, size: string, ctx: Ctx) {
   const v = varsOf(w)
   const tokens = varsOf((ctx.all || []).find(x => x.id === 'tokens'))
   const time = render(ctx.lang, v.time) || '—'
   const name = titleOf(w, ctx)
   if (size === 's') return `${head(w, name, ctx)}<div class="grow"></div>${big(v.turns ?? '—')}<div class="sub" style="margin-top:4px">${esc([t(ctx, 'card.turnsUnit'), time].join(' · '))}</div><div class="ter">${esc([t(ctx, 'card.approved', { n: v.approvals ?? '—' }), tokens.total ? `${tokens.total} token` : ''].filter(Boolean).join(' · '))}</div>`
-  const cell = (value, label, cls = '') => `<div><div class="${cls || 'num mid'}">${esc(value)}</div><div class="ter" style="margin-top:2px">${esc(label)}</div></div>`
-  const lit = Number.isFinite(ctx.hour) ? ctx.hour : new Date(ctx.now || Date.now()).getHours()
+  const cell = (value: unknown, label: string, cls = '') => `<div><div class="${cls || 'num mid'}">${esc(value)}</div><div class="ter" style="margin-top:2px">${esc(label)}</div></div>`
+  const lit = Number.isFinite(ctx.hour) ? ctx.hour! : new Date(ctx.now || Date.now()).getHours()
   const series = detailOf(w).series
   const color = colorOf(w, ctx)
   const right = esc(t(ctx, 'desk.today'))
@@ -192,7 +194,7 @@ function today(w, size, ctx) {
 // Today's tokens: small, the total over "token"; medium, the total and
 // the output larger, in the middle of it, or over their curve when the
 // hours come (the design session: not an empty half).
-function tokens(w, size, ctx) {
+function tokens(w: Widget, size: string, ctx: Ctx) {
   const v = varsOf(w)
   const said = Widgets.words(ctx.lang, w, true)
   const name = render(ctx.lang, w.label) || t(ctx, 'widget.tokens')
@@ -204,13 +206,13 @@ function tokens(w, size, ctx) {
 }
 
 // --- Pomodoro (s, m), countdown (s) ---------------------------------------------------------
-function pomodoro(w, size, ctx) {
+function pomodoro(w: Widget, size: string, ctx: Ctx) {
   const said = Widgets.words(ctx.lang, w, true)
   const s = detailOf(w).series
   const left = s && Number.isFinite(s.points?.[0]) && Number.isFinite(s.hi) && s.hi > 0 ? s.points[0] / s.hi : 0
   const color = colorOf(w, ctx)
   const name = titleOf(w, ctx)
-  const face = px => `<div class="ringbox" style="width:${px}px;height:${px}px">${ring(left, px, 6, color, track(ctx))}<span class="ringn tomato"><span>${esc(said.value)}</span><span class="ter">${esc(said.label)}</span></span></div>`
+  const face = (px: number) => `<div class="ringbox" style="width:${px}px;height:${px}px">${ring(left, px, 6, color, track(ctx))}<span class="ringn tomato"><span>${esc(said.value)}</span><span class="ter">${esc(said.label)}</span></span></div>`
   if (size === 's') return `${head(w, name, ctx)}<div class="grow"></div><div style="align-self:center">${face(84)}</div><div class="grow"></div>`
   const round = row(w, 'round')
   const n = Number(round?.value) || 0
@@ -220,7 +222,7 @@ function pomodoro(w, size, ctx) {
   const right = round ? esc(t(ctx, 'desk.nth', { n })) : ''
   return `${head(w, name, ctx, right)}<div class="row" style="margin-top:8px;gap:18px;flex:1">${face(96)}<div class="lines" style="gap:8px">${dots}<div class="sub">${esc(detailOf(w).extra || '')}</div><div class="btns"><button class="wbtn off" type="button" title="${why}">${esc(t(ctx, 'desk.pause'))}</button><button class="wbtn off" type="button" title="${why}">${esc(t(ctx, 'desk.skip'))}</button></div></div></div>`
 }
-function countdown(w, size, ctx) {
+function countdown(w: Widget, size: string, ctx: Ctx) {
   const said = Widgets.words(ctx.lang, w, true)
   const days = row(w, 'days')
   return `${head(w, titleOf(w, ctx), ctx)}<div class="grow"></div>${days ? big(days.value, days.unit || '') : big(said.value)}<div class="sub ell" style="margin-top:4px">${esc(said.label)}</div><div class="ter">${esc(detailOf(w).extra || '')}</div>`
@@ -231,7 +233,7 @@ function countdown(w, size, ctx) {
 // date (or the week). Medium: those on the left, the month's grid on the
 // right (wcards.ts monthGrid: today lit, a dot on a day with something
 // on). Large: and what is coming under them, a line each.
-function calendar(w, size, ctx) {
+function calendar(w: Widget, size: string, ctx: Ctx) {
   const d = detailOf(w)
   const date = row(w, 'date') || {}
   const day = date.value || String(new Date(ctx.now || Date.now()).getDate())
@@ -250,7 +252,7 @@ function calendar(w, size, ctx) {
   const block = `<div class="lines cal-date">${big(day, '', 'md')}<div class="sub">${monthWeekday}</div>${notes}</div>`
   const pair = `<div class="row cal-m">${block}${WCards.monthGrid(w, ctx, color)}</div>`
   if (size === 'm') return `${head(w, name, ctx)}${pair}`
-  const when = e => (e.unit ? `${e.when}–${e.unit}` : e.when || '')
+  const when = (e: any) => (e.unit ? `${e.when}–${e.unit}` : e.when || '')
   const list = events
     .slice(0, 4)
     .map(e => `<div class="row evrow"><span class="ter n">${esc(e.name || '')}</span><span class="sub ell">${esc([e.subject, e.text].filter(Boolean).join(' · '))}</span><span class="ter num">${esc(when(e))}</span></div>`)
@@ -264,7 +266,7 @@ function calendar(w, size, ctx) {
 // how far along as a bar with the times (paused said), and its buttons
 // (wcards.ts actionsHTML: previous, play or pause, next, pressed back to
 // its plugin). Nothing playing: said so, no buttons.
-function media(w, size, ctx) {
+function media(w: Widget, size: string, ctx: Ctx) {
   const said = Widgets.words(ctx.lang, w, true)
   const state = row(w, 'state')?.value || ''
   const name = titleOf(w, ctx)
@@ -288,7 +290,7 @@ function media(w, size, ctx) {
 // --- Anyone else's (s, m; l when it says so) ---------------------------------------------------
 // A script that gives only a label and a value (the spec's §1): medium in
 // two lines, its value over its name, left, in the middle; no empty block.
-function generic(w, size, ctx) {
+function generic(w: Widget, size: string, ctx: Ctx) {
   const said = Widgets.words(ctx.lang, w, ctx.detailed)
   const d = detailOf(w)
   const color = colorOf(w, ctx)
@@ -303,15 +305,15 @@ function generic(w, size, ctx) {
 // --- Names: never an id, never a bare "widget" (the design session) --------------------------
 // A plugin's own name ("天气"; someone else's, as its widgets say it:
 // widgets.ts pluginName), none for one she does not know.
-const pluginName = (plugin, ctx) => (plugin ? Widgets.pluginName(ctx.lang, plugin, ctx.all || []) : '')
+const pluginName = (plugin: string, ctx: Ctx) => (plugin ? Widgets.pluginName(ctx.lang, plugin, ctx.all || []) : '')
 // The plugin a widget comes from: its own say, else its id's first part
 // as plugins name theirs ("stock-aapl").
-const pluginOf = id => (/^([a-z]+)-/.exec(String(id || '')) || [])[1] || ''
-const BUILT_IN = { monitor: 'card.monitor', today: 'card.today', tokens: 'widget.tokens', weather: 'card.weather', pomodoro: 'card.pomodoro', countdown: 'card.countdown', calendar: 'card.calendar', media: 'card.media' }
+const pluginOf = (id: string) => (/^([a-z]+)-/.exec(String(id || '')) || [])[1] || ''
+const BUILT_IN: Record<string, string> = { monitor: 'card.monitor', today: 'card.today', tokens: 'widget.tokens', weather: 'card.weather', pomodoro: 'card.pomodoro', countdown: 'card.countdown', calendar: 'card.calendar', media: 'card.media' }
 // A widget's name: its own label; with none (or private, the specifics
 // hidden), its plugin's name and its number among that plugin's ("天气
 // 2"); else "小工具" and its number.
-function nameOf(w, ctx) {
+function nameOf(w: Widget, ctx: Ctx) {
   const label = Widgets.words(ctx.lang, w, ctx.detailed).label
   if (label) return label
   return baseName({ type: w.plugin ? 'plugin' : 'widget', of: w.plugin || w.id }, ctx, w.id)
@@ -319,12 +321,12 @@ function nameOf(w, ctx) {
 // A member put there (no words come yet): the name it was put there with,
 // a built-in one's, else its plugin's; n its number among the same name's
 // on the display (desk.ts), when more than one.
-function memberName(m, ctx, n = 0) {
+function memberName(m: Member, ctx: Ctx, n = 0) {
   if (m.name) return m.name
   const base = baseName(m, ctx, m.of)
   return n > 1 ? `${base} ${n}` : base
 }
-function baseName(m, ctx, id) {
+function baseName(m: Member, ctx: Ctx, id: string) {
   if (m.type === 'widget' && BUILT_IN[m.of]) {
     const said = t(ctx, BUILT_IN[m.of])
     if (said !== BUILT_IN[m.of]) return said
@@ -339,9 +341,9 @@ function baseName(m, ctx, id) {
   return t(ctx, 'desk.widget')
 }
 
-const BY_KIND = { weather, monitor, stock, mail, today, tokens, pomodoro, countdown, calendar, media }
+const BY_KIND: Record<string, (w: Widget, size: string, ctx: Ctx) => string> = { weather, monitor, stock, mail, today, tokens, pomodoro, countdown, calendar, media }
 // A widget's face at a size (one it has: desk.ts keeps to them).
-function faceHTML(w, size, ctx) {
+function faceHTML(w: Widget, size: string, ctx: Ctx) {
   const draw = BY_KIND[kindOf(w)] || generic
   return draw(w, size, ctx)
 }
@@ -349,7 +351,7 @@ function faceHTML(w, size, ctx) {
 // One with nothing to say (§8): greyed, its name and "no data"; loading,
 // a glint where its value goes (once, never endless); stopped, its glyph
 // amber and why.
-function emptyHTML(member, name, state, ctx) {
+function emptyHTML(member: Member, name: string, state: string, ctx: Ctx) {
   const glyph = state === 'error' ? '<span class="gl werr" aria-hidden="true">&#xE7BA;</span>' : WCards.memberGlyph(member)
   const what = state === 'loading' ? '<span class="wshim"></span>' : `<span class="nodata">${esc(t(ctx, state === 'needs' ? 'taskbar.w.needs' : state === 'error' ? 'card.stopped' : 'taskbar.w.none'))}</span>`
   return `<div class="hd">${glyph}<span class="hn">${esc(name)}</span></div><div class="grow"></div><div class="empty">${what}</div><div class="grow"></div>`

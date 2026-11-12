@@ -12,13 +12,29 @@
 import * as I18n from '../shared/i18n.ts'
 import { render } from '../shared/i18n.ts'
 import * as Widgets from './widgets.ts'
+import type { Member, Widget } from './widgets.ts'
 
-const t = (ctx, key, vars?) => I18n.t(ctx.lang, key, vars)
-const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+// That ctx, and all: the widgets there are (today's row and card read the
+// tokens widget's). A card's has its width.
+export interface Ctx {
+  lang: string
+  light?: boolean
+  detailed?: boolean
+  width?: number
+  hour?: number
+  now?: number
+  all?: Widget[]
+}
+export interface CardCtx extends Ctx {
+  width: number
+}
+
+const t = (ctx: Ctx, key: string, vars?: Record<string, unknown>) => I18n.t(ctx.lang, key, vars)
+const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c])
 
 // --- Who it is: its kind, colour and glyph ----------------------------------------
 const KINDS = ['weather', 'monitor', 'stock', 'mail', 'today', 'tokens', 'pomodoro', 'countdown', 'calendar', 'media']
-function kindOf(w) {
+function kindOf(w: Widget | null | undefined) {
   if (!w) return 'generic'
   if (w.id === 'monitor' || w.id === 'today' || w.id === 'tokens' || w.id === 'weather' || w.id === 'pomodoro' || w.id === 'countdown' || w.id === 'calendar' || w.id === 'media') return w.id
   if (w.plugin === 'stock' || /^stock-/.test(w.id)) return 'stock'
@@ -28,7 +44,7 @@ function kindOf(w) {
 
 // Each kind's colour, dark ground and light (the spec's table); today's
 // tokens as today. Ups and downs apart (their chip, their line).
-const COLORS = {
+const COLORS: Record<string, string[]> = {
   weather: ['#8cc8ff', '#1a78c2'],
   monitor: ['#34d27b', '#0f7b3f'],
   stock: ['#ffd36b', '#a46a00'],
@@ -43,9 +59,9 @@ const COLORS = {
 const UP = ['#34d27b', '#0f7b3f']
 const DOWN = ['#ff6b6b', '#c42b3c']
 const GREY = ['#a1a1a6', '#5d5d5d']
-const pick = (pair, ctx) => pair[ctx.light ? 1 : 0]
+const pick = (pair: string[], ctx: Ctx) => pair[ctx.light ? 1 : 0]
 // A script's own colour (deepened on a light ground, widgets.ts), else grey.
-function colorOf(w, ctx) {
+function colorOf(w: Widget | null | undefined, ctx: Ctx) {
   const kind = kindOf(w)
   if (COLORS[kind]) return pick(COLORS[kind], ctx)
   if (w?.color) return ctx.light ? Widgets.deepen(w.color) : w.color
@@ -60,40 +76,40 @@ function colorOf(w, ctx) {
 // until chosen, red up in Chinese as Chinese markets show them, green up
 // in any other language). Drawn in the design's two: its green UP's, its
 // red DOWN's.
-function trendOf(w) {
+function trendOf(w: Partial<Widget> | null | undefined) {
   const c = String(w?.color || '').toLowerCase()
   if (c === '#ff5c6c' || c === '#ff6b6b') return 'red'
   if (c === '#34d27b') return 'green'
   return ''
 }
-const trendColor = (trend, ctx) => (trend === 'red' ? pick(DOWN, ctx) : trend === 'green' ? pick(UP, ctx) : '')
+const trendColor = (trend: string | undefined, ctx: Ctx) => (trend === 'red' ? pick(DOWN, ctx) : trend === 'green' ? pick(UP, ctx) : '')
 
 // Windows' own glyphs (Segoe Fluent Icons): the weather's by the sky, the
 // rest by kind; a script's own drawn icon (widgets.ts), her face for today.
-const SKY = { sun: 'E706', moon: 'E708', partly: 'E753', cloud: 'E753', fog: 'E753', rain: 'EB42', snow: 'EA38', storm: 'E945' }
-const GLYPH = { monitor: 'E950', stock: 'E9D9', mail: 'E715', pomodoro: 'E916', countdown: 'E787', tokens: 'E943', calendar: 'E8BF', media: 'EC4F' }
-const rowsOf = w => (Array.isArray(Widgets.detailOf(w).rows) ? Widgets.detailOf(w).rows : [])
-const skyNow = w => rowsOf(w).find(r => r.kind === 'hour')?.icon
-function glyphOf(w) {
+const SKY: Record<string, string> = { sun: 'E706', moon: 'E708', partly: 'E753', cloud: 'E753', fog: 'E753', rain: 'EB42', snow: 'EA38', storm: 'E945' }
+const GLYPH: Record<string, string> = { monitor: 'E950', stock: 'E9D9', mail: 'E715', pomodoro: 'E916', countdown: 'E787', tokens: 'E943', calendar: 'E8BF', media: 'EC4F' }
+const rowsOf = (w: Widget | null | undefined) => (Array.isArray(Widgets.detailOf(w).rows) ? Widgets.detailOf(w).rows! : [])
+const skyNow = (w: Widget | null | undefined) => rowsOf(w).find(r => r.kind === 'hour')?.icon
+function glyphOf(w: Widget | null | undefined) {
   const kind = kindOf(w)
   if (kind === 'weather') return SKY[skyNow(w)] || 'E753'
   return GLYPH[kind] || ''
 }
 // As markup: a glyph, her face (island.ts puts her in .wher), or the
 // script's icon; `cls` for its place.
-function glyphHTML(w, cls = '') {
+function glyphHTML(w: Widget | null | undefined, cls = '') {
   if (kindOf(w) === 'today') return `<span class="wher ${cls}" aria-hidden="true"></span>`
   const g = glyphOf(w)
   if (g) return `<span class="wgl ${cls}" aria-hidden="true">&#x${g};</span>`
   // A plugin's own picture (widgets.ts maskHTML), drawn as her icons are.
-  if (Widgets.hasPicture(w)) return `<span class="wsvg ${cls}">${Widgets.maskHTML(w.iconUrl)}</span>`
+  if (Widgets.hasPicture(w)) return `<span class="wsvg ${cls}">${Widgets.maskHTML(w!.iconUrl)}</span>`
   // No icon of its own: its name's first character on its colour (widgets.ts markHTML).
   if (!Widgets.hasIcon(w?.icon)) return Widgets.markHTML(w?.markName ?? (typeof w?.label === 'string' ? w.label : w?.id), w?.color, cls)
-  return `<span class="wsvg ${cls}">${Widgets.icon(w.icon)}</span>`
+  return `<span class="wsvg ${cls}">${Widgets.icon(w!.icon!)}</span>`
 }
 // A member with nothing to say: its glyph as it was put there (its mark
 // by the name it was put there with).
-function memberGlyph(m) {
+function memberGlyph(m: Member) {
   const like = m.type === 'plugin' ? { id: m.of, plugin: m.of, icon: m.icon, markName: m.name || m.of } : { id: m.of, icon: m.icon, from: /^inbox-/.test(m.of) ? 'mail' : undefined, markName: m.name || m.of }
   return glyphHTML(like)
 }
@@ -102,18 +118,18 @@ function memberGlyph(m) {
 // Its name as a stack's line and its card say it: the kind's (天气, 系统
 // 监控, Claude 今天, 邮件, 番茄钟, 倒计时), else its label (a stock's
 // name).
-const TITLES = { weather: 'card.weather', monitor: 'card.monitor', today: 'card.today', mail: 'card.mail', pomodoro: 'card.pomodoro', countdown: 'card.countdown', calendar: 'card.calendar', media: 'card.media' }
-function titleOf(w, ctx) {
+const TITLES: Record<string, string> = { weather: 'card.weather', monitor: 'card.monitor', today: 'card.today', mail: 'card.mail', pomodoro: 'card.pomodoro', countdown: 'card.countdown', calendar: 'card.calendar', media: 'card.media' }
+function titleOf(w: Widget, ctx: Ctx) {
   const kind = kindOf(w)
   if (TITLES[kind]) return t(ctx, TITLES[kind])
   return Widgets.words(ctx.lang, w, ctx.detailed).label || Widgets.words(ctx.lang, w, true).value
 }
 // The monitor's readings by their glyph (widgets.rs: cpu, memory, down, up).
-const partText = (w, icon) => (Widgets.partsOf(w) || []).find(p => p.icon === icon)?.text || ''
-const varsOf = w => (w?.value && typeof w.value === 'object' ? w.value.vars || {} : {})
+const partText = (w: Widget, icon: string) => (Widgets.partsOf(w) || []).find(p => p.icon === icon)?.text || ''
+const varsOf = (w: Widget | null | undefined) => (w?.value && typeof w.value === 'object' ? w.value.vars || {} : {})
 // A private widget's words: as they are while the specifics may show;
 // else blurred until the pointer is on them (style.css .wpriv.hid).
-const priv = (w, text, ctx) => (w?.private && !ctx.detailed ? `<span class="wpriv hid">${esc(text)}</span>` : esc(text))
+const priv = (w: Widget, text: unknown, ctx: Ctx) => (w?.private && !ctx.detailed ? `<span class="wpriv hid">${esc(text)}</span>` : esc(text))
 
 // Its words for each place, by kind: value (small), top and line (medium:
 // its value over its name), big and unit (a stack's line, 18px), say (a
@@ -132,7 +148,7 @@ interface Brief {
   private: boolean
   trend?: string
 }
-function briefOf(w, ctx) {
+function briefOf(w: Widget, ctx: Ctx) {
   const said = Widgets.words(ctx.lang, w, true)
   const extra = Widgets.detailOf(w).extra || ''
   const kind = kindOf(w)
@@ -207,24 +223,24 @@ function briefOf(w, ctx) {
   return out
 }
 // Words cut to so many characters, "…" the last when cut (as widgets.rs cuts).
-function shorten(s, max) {
+function shorten(s: unknown, max: number) {
   const chars = Array.from(String(s ?? ''))
   return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : chars.join('')
 }
 
 // --- Drawing: a curve, a ring, bars, each to its own scale ----------------------------
 let uid = 0
-const num = v => (Math.round(v * 10) / 10).toString()
+const num = (v: number) => (Math.round(v * 10) / 10).toString()
 // A line through the points, w by h: its gradient fill under it and a dot
 // at its end (the spec's 1.6px line); lo and hi its scale (else its own
 // least and most).
-function spark(points, w, h, color, { fill = true, dot = true, pad = 3, lo, hi }: { fill?: boolean; dot?: boolean; pad?: number; lo?: number; hi?: number } = {}) {
+function spark(points: number[] | null | undefined, w: number, h: number, color: string, { fill = true, dot = true, pad = 3, lo, hi }: { fill?: boolean; dot?: boolean; pad?: number; lo?: number; hi?: number } = {}) {
   const data = (points || []).filter(Number.isFinite)
   if (data.length < 2) return ''
-  const min = Number.isFinite(lo) ? Math.min(lo, ...data) : Math.min(...data)
-  const max = Number.isFinite(hi) ? Math.max(hi, ...data) : Math.max(...data)
-  const x = i => pad + (i * (w - pad * 2)) / (data.length - 1)
-  const y = v => h - pad - ((v - min) / (max - min || 1)) * (h - pad * 2)
+  const min = Number.isFinite(lo) ? Math.min(lo!, ...data) : Math.min(...data)
+  const max = Number.isFinite(hi) ? Math.max(hi!, ...data) : Math.max(...data)
+  const x = (i: number) => pad + (i * (w - pad * 2)) / (data.length - 1)
+  const y = (v: number) => h - pad - ((v - min) / (max - min || 1)) * (h - pad * 2)
   const pts = data.map((v, i) => `${num(x(i))},${num(y(v))}`)
   const id = `wg${++uid}`
   const last = data.length - 1
@@ -235,7 +251,7 @@ function spark(points, w, h, color, { fill = true, dot = true, pad = 3, lo, hi }
 }
 
 // A ring filled to a share (0 to 1) from the top, clockwise.
-function ring(share, size, stroke, color, track) {
+function ring(share: number, size: number, stroke: number, color: string, track: string) {
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
   const s = Math.max(0, Math.min(1, share || 0))
@@ -243,7 +259,7 @@ function ring(share, size, stroke, color, track) {
 }
 
 // Bars, w by h, 3px apart: one lit (the hour it is), the rest the track.
-function bars(points, w, h, color, track, lit = -1) {
+function bars(points: number[] | null | undefined, w: number, h: number, color: string, track: string, lit = -1) {
   const data = (points || []).map(v => (Number.isFinite(v) ? v : 0))
   if (!data.length) return ''
   const gap = data.length > 16 ? 2 : 3
@@ -256,7 +272,7 @@ function bars(points, w, h, color, track, lit = -1) {
   return `<svg class="wbars" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${rects.join('')}</svg>`
 }
 
-const track = ctx => (ctx.light ? 'rgba(0,0,0,.09)' : 'rgba(255,255,255,.12)')
+const track = (ctx: Ctx) => (ctx.light ? 'rgba(0,0,0,.09)' : 'rgba(255,255,255,.12)')
 
 // Today's hours as slots (the design session, 2026-10-16): from the hour
 // of the first turn to the hour it is, twelve at least (earlier ones
@@ -264,7 +280,7 @@ const track = ctx => (ctx.light ? 'rgba(0,0,0,.09)' : 'rgba(255,255,255,.12)')
 // its slot allows but 18 px at most, at the slot's left; an hour without
 // a turn a 2 px line in the track's colour, the hour it is in its colour.
 // Gives the slots' first hour and last, for the labels under them.
-function hourSlots(points, lit) {
+function hourSlots(points: number[] | null | undefined, lit: number) {
   const hours = Array.isArray(points) ? points : []
   const first = hours.findIndex(n => n > 0)
   const start = first < 0 ? lit : Math.min(first, lit)
@@ -272,7 +288,7 @@ function hourSlots(points, lit) {
   const n = Math.max(12, lit - from + 1)
   return { from, to: from + n - 1, data: Array.from({ length: n }, (_, i) => (from + i <= lit ? Number(hours[from + i]) || 0 : 0)) }
 }
-function hourBars(points, lit, w, h, color, trackColor) {
+function hourBars(points: number[] | null | undefined, lit: number, w: number, h: number, color: string, trackColor: string) {
   const { from, to, data } = hourSlots(points, lit)
   const slot = w / data.length
   const bw = Math.min(18, Math.max(2, slot - 3))
@@ -285,14 +301,14 @@ function hourBars(points, lit, w, h, color, trackColor) {
   })
   return { svg: `<svg class="wbars" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${rects.join('')}</svg>`, from, to }
 }
-const seriesOf = w => Widgets.detailOf(w).series || null
+const seriesOf = (w: Widget) => Widgets.detailOf(w).series || null
 
 // --- On the taskbar: small and medium (the spec's §5) -------------------------------
 // Small: its glyph and value; medium: its value over its name, as the
 // clock has the date under the time. A stock's change in its own colour;
 // a private line "···" while the specifics may not show. The glyph white
 // (or black) as the tray's are: the text's colour (style.css .tw .wgl).
-function faceHTML(w, size, ctx) {
+function faceHTML(w: Widget, size: string, ctx: Ctx) {
   const b = briefOf(w, ctx)
   const glyph = glyphHTML(w, 'twg')
   if (size === 'S') return `${glyph}<b class="twv">${esc(b.value || '—')}</b>`
@@ -305,7 +321,7 @@ function faceHTML(w, size, ctx) {
 // name; loading (just put there, its plugin starting) a shimmer where its
 // value goes, for a few seconds (style.css .wshim: never endless); one
 // that stopped, its glyph amber and why.
-function emptyFaceHTML(member, name, size, state, ctx) {
+function emptyFaceHTML(member: Member, name: string, size: string, state: string, ctx: Ctx) {
   const glyph = state === 'error' ? `<span class="wgl twg werr" aria-hidden="true">&#xE7BA;</span>` : memberGlyph(member)
   const what = state === 'loading' ? '<span class="wshim"></span>' : esc(t(ctx, state === 'needs' ? 'taskbar.w.needs' : state === 'error' ? 'card.stopped' : 'taskbar.w.none'))
   if (size === 'S') return `${glyph}<b class="twv">${state === 'loading' ? what : '—'}</b>`
@@ -322,7 +338,7 @@ function emptyFaceHTML(member, name, size, state, ctx) {
 // value (short: the monitor's three readings, today's turns and time), and
 // medium its second line (the weather's sky, range and place; today's
 // approvals and tokens, the tokens widget's: ctx.all) with its value then.
-function rowWords(w, size, ctx) {
+function rowWords(w: Widget, size: string, ctx: Ctx) {
   const b = briefOf(w, ctx)
   const said = Widgets.words(ctx.lang, w, true)
   const kind = kindOf(w)
@@ -365,7 +381,7 @@ function rowWords(w, size, ctx) {
   return out
 }
 
-function rowHTML(w, size, ctx, { open = false, card = false } = {}) {
+function rowHTML(w: Widget, size: string, ctx: Ctx, { open = false, card = false } = {}) {
   const b = briefOf(w, ctx)
   const color = colorOf(w, ctx)
   const rw = rowWords(w, size, ctx)
@@ -389,7 +405,7 @@ function rowHTML(w, size, ctx, { open = false, card = false } = {}) {
 // --- A stack opened on the taskbar: a line each (the spec's §5) ---------------------
 // Its glyph in a block of its colour (15%), name, a sentence; its number
 // (18px) and what it counts on the right.
-function stackRowHTML(w, name, ctx) {
+function stackRowHTML(w: Widget, name: string, ctx: Ctx) {
   const b = briefOf(w, ctx)
   const color = colorOf(w, ctx)
   const say = b.private && !ctx.detailed ? priv(w, b.say, ctx) : esc(b.say)
@@ -400,10 +416,10 @@ function stackRowHTML(w, name, ctx) {
 // --- Cards: the large size in the open island (the spec's §4, §6) -------------------
 // As wide as the island's lines (ctx.width); simpler than the desktop's
 // large size. What is not read greys with "no data" (the spec's §8).
-const nodata = ctx => `<span class="wnone">${esc(t(ctx, 'taskbar.w.none'))}</span>`
-const meter = (pct, color) => `<span class="wmeter"><i style="width:${Math.max(0, Math.min(100, pct || 0))}%;background:${color}"></i></span>`
+const nodata = (ctx: Ctx) => `<span class="wnone">${esc(t(ctx, 'taskbar.w.none'))}</span>`
+const meter = (pct: number, color: string) => `<span class="wmeter"><i style="width:${Math.max(0, Math.min(100, pct || 0))}%;background:${color}"></i></span>`
 
-function weatherCard(w, ctx) {
+function weatherCard(w: Widget, ctx: CardCtx) {
   const said = Widgets.words(ctx.lang, w, true)
   const d = Widgets.detailOf(w)
   const [city, sky] = String(said.label).split(' · ')
@@ -419,16 +435,16 @@ function weatherCard(w, ctx) {
   return top + curve + strip + ahead
 }
 
-function monitorCard(w, ctx) {
+function monitorCard(w: Widget, ctx: CardCtx) {
   const d = Widgets.detailOf(w)
   const color = colorOf(w, ctx)
-  const row = kind => rowsOf(w).find(r => r.kind === kind)
+  const row = (kind: string) => rowsOf(w).find(r => r.kind === kind)
   const cpu = row('cpu')
-  const pct = r => parseFloat(r?.value) || 0
+  const pct = (r: any) => parseFloat(r?.value) || 0
   const about = cpu ? [cpu.name && cpu.unit ? t(ctx, 'card.cores', { cores: cpu.name, threads: cpu.unit }) : '', cpu.text || ''].filter(Boolean).join(' · ') : ''
   const top = `<div class="crow"><span class="cbig">${cpu ? esc(String(cpu.value).replace('%', '')) : '—'}<small>%</small></span><span class="cwords"><b>CPU</b><span>${esc(about)}</span></span></div>`
   const curve = d.series ? `<div class="ccurve">${spark(d.series.points, ctx.width, 40, color, { pad: 4, lo: 0, hi: 100 })}</div>` : ''
-  const line = (kind, name) => {
+  const line = (kind: string, name: string) => {
     const r = row(kind)
     if (!r) return `<div class="cline off"><span class="cn">${esc(name)}</span>${nodata(ctx)}</div>`
     const sub = [r.name, r.text].filter(Boolean).join(' · ')
@@ -444,7 +460,7 @@ function monitorCard(w, ctx) {
 // A stock's card: its price and change, the day's curve, its high and
 // low; the others of its plugin, a line each. Only the day's prices come
 // (plugins/stock.rs): the week, month and year greyed.
-function stockCard(w, ctx, all = []) {
+function stockCard(w: Widget, ctx: CardCtx, all: Widget[] = []) {
   const b = briefOf(w, ctx)
   const d = Widgets.detailOf(w)
   const row = rowsOf(w)[0] || {}
@@ -470,15 +486,15 @@ function stockCard(w, ctx, all = []) {
 // Today: its turns, the time worked, approvals and tokens (the tokens
 // widget's); the turns hour by hour, the hour it is lit. Tokens hour by
 // hour and the busiest session are not counted yet: greyed.
-function todayCard(w, ctx, all = []) {
+function todayCard(w: Widget, ctx: CardCtx, all: Widget[] = []) {
   const v = varsOf(w)
   const d = Widgets.detailOf(w)
   const color = colorOf(w, ctx)
   const tokens = all.find(x => x.id === 'tokens')
   const tv = varsOf(tokens)
-  const cell = (n, label) => `<span class="cnum"><b>${esc(n)}</b><span>${esc(label)}</span></span>`
+  const cell = (n: unknown, label: string) => `<span class="cnum"><b>${esc(n)}</b><span>${esc(label)}</span></span>`
   const top = `<div class="crow nums">${cell(v.turns ?? '—', t(ctx, 'card.turnsUnit'))}${cell(render(ctx.lang, v.time) || '—', t(ctx, 'card.worked'))}${cell(v.approvals ?? '—', t(ctx, 'card.approvals'))}${cell(tv.total || '—', 'token')}</div>`
-  const lit = Number.isFinite(ctx.hour) ? ctx.hour : new Date().getHours()
+  const lit = Number.isFinite(ctx.hour) ? ctx.hour! : new Date().getHours()
   const b = hourBars(d.series?.points, lit, ctx.width, 40, color, track(ctx))
   const chart = d.series ? `<div class="ccap">${esc(t(ctx, 'card.byHour'))}</div><div class="ccurve">${b.svg}</div><div class="cfoot"><span>${esc(t(ctx, 'card.hour', { h: b.from }))}</span><span>${esc(t(ctx, 'card.hour', { h: b.to }))}</span></div>` : ''
   const grey = `<div class="cline off"><span class="cn">${esc(t(ctx, 'card.tokenCurve'))}</span>${nodata(ctx)}</div><div class="cline off"><span class="cn">${esc(t(ctx, 'card.busiest'))}</span>${nodata(ctx)}</div>`
@@ -487,7 +503,7 @@ function todayCard(w, ctx, all = []) {
 
 // A mailbox: its newest unread, each who (bold), when, and what about (a
 // private line: blurred while the specifics may not show).
-function mailCard(w, ctx) {
+function mailCard(w: Widget, ctx: Ctx) {
   const rows = rowsOf(w).slice(0, 6)
   if (!rows.length) return `<div class="crow">${nodata(ctx)}</div>`
   return `<div class="cmails">${rows
@@ -496,7 +512,7 @@ function mailCard(w, ctx) {
 }
 
 // Anyone else's with a large size: its words, its curve, its list.
-function genericCard(w, ctx) {
+function genericCard(w: Widget, ctx: CardCtx) {
   const said = Widgets.words(ctx.lang, w, true)
   const d = Widgets.detailOf(w)
   const color = colorOf(w, ctx)
@@ -515,12 +531,18 @@ function genericCard(w, ctx) {
 // data-wact, data-widget; plugins.rs act); play or pause larger, in the
 // widget's colour; one the player has not, greyed. Any widget with
 // actions gets them, drawn the same wherever its card is.
-const ACTION_GLYPH = { play: 'E768', pause: 'E769', prev: 'E892', next: 'E893', stop: 'E71A' }
-const actionsOf = w => (Array.isArray(Widgets.detailOf(w).actions) ? Widgets.detailOf(w).actions.filter(a => a && typeof a.id === 'string' && a.icon in ACTION_GLYPH) : [])
-function actionsHTML(w, ctx, cls = '') {
+// One of them: what it does, its glyph's name, greyed (off).
+interface Action {
+  id: string
+  icon: string
+  off?: boolean
+}
+const ACTION_GLYPH: Record<string, string> = { play: 'E768', pause: 'E769', prev: 'E892', next: 'E893', stop: 'E71A' }
+const actionsOf = (w: Widget): Action[] => (Array.isArray(Widgets.detailOf(w).actions) ? Widgets.detailOf(w).actions.filter((a: any) => a && typeof a.id === 'string' && a.icon in ACTION_GLYPH) : [])
+function actionsHTML(w: Widget, ctx: Ctx, cls = '') {
   const acts = actionsOf(w)
   if (!acts.length) return ''
-  const button = a =>
+  const button = (a: Action) =>
     `<button type="button" class="wact${a.off ? ' off' : ''}${a.icon === 'play' || a.icon === 'pause' ? ' main' : ''}" data-wact="${esc(a.id)}" data-widget="${esc(w.id)}" title="${esc(t(ctx, `act.${a.icon}`))}"${a.off ? ' aria-disabled="true"' : ''}>&#x${ACTION_GLYPH[a.icon]};</button>`
   return `<span class="wacts${cls ? ` ${cls}` : ''}" style="--c:${colorOf(w, ctx)}">${acts.map(button).join('')}</span>`
 }
@@ -530,7 +552,7 @@ function actionsHTML(w, ctx, cls = '') {
 // in Chinese, Sunday first in English), then its days, today lit in the
 // widget's colour, a day with something on (the event rows' at) marked
 // with a dot; the other months' days left blank.
-function monthGrid(w, ctx, color) {
+function monthGrid(w: Widget, ctx: Ctx, color: string) {
   const now = new Date(ctx.now || Date.now())
   const [y, m, today] = [now.getFullYear(), now.getMonth(), now.getDate()]
   const mondayFirst = ctx.lang === 'zh'
@@ -560,13 +582,13 @@ function monthGrid(w, ctx, color) {
 // The calendar: the day of the month large, the month and weekday, the
 // lunar date (or the week) and the day's marks; the month's grid; what is
 // coming, a line each (its day, what, when).
-function calendarCard(w, ctx) {
+function calendarCard(w: Widget, ctx: Ctx) {
   const d = Widgets.detailOf(w)
   const date = rowsOf(w).find(r => r.kind === 'date') || {}
   const events = rowsOf(w).filter(r => r.kind === 'event').slice(0, 4)
   const color = colorOf(w, ctx)
   const top = `<div class="crow"><span class="cbig">${esc(date.value || new Date(ctx.now || Date.now()).getDate())}</span><span class="cwords"><b>${esc([date.name, date.unit].filter(Boolean).join(' · '))}</b><span>${esc(date.text || d.extra || '')}</span></span></div>`
-  const when = e => (e.unit ? `${e.when}–${e.unit}` : e.when || '')
+  const when = (e: any) => (e.unit ? `${e.when}–${e.unit}` : e.when || '')
   const lines = events.length
     ? `<div class="ccap">${esc(t(ctx, 'cal.coming'))}</div><div class="clines">${events.map(e => `<div class="cline st"><span class="cn">${esc(e.name || '')}</span><span class="cd">${esc([e.subject, e.text].filter(Boolean).join(' · '))}</span><span class="cv">${esc(when(e))}</span></div>`).join('')}</div>`
     : ''
@@ -576,7 +598,7 @@ function calendarCard(w, ctx) {
 // What is playing: its title and artist (the album after), the app on the
 // right, how far along as a bar with the times (paused said), and its
 // buttons. Nothing playing: said so.
-function mediaCard(w, ctx) {
+function mediaCard(w: Widget, ctx: Ctx) {
   const rows = rowsOf(w)
   const said = Widgets.words(ctx.lang, w, true)
   const state = rows.find(r => r.kind === 'state')?.value || ''
@@ -599,16 +621,16 @@ function mediaCard(w, ctx) {
   return top + bar + `<div class="crow cacts">${actionsHTML(w, ctx)}</div>`
 }
 // Seconds as a player shows them: m:ss, or h:mm:ss past an hour.
-function clockOf(secs) {
+function clockOf(secs: number) {
   const n = Math.max(0, Math.floor(secs || 0))
-  const two = v => String(v).padStart(2, '0')
+  const two = (v: number) => String(v).padStart(2, '0')
   return n >= 3600 ? `${Math.floor(n / 3600)}:${two(Math.floor((n % 3600) / 60))}:${two(n % 60)}` : `${Math.floor(n / 60)}:${two(n % 60)}`
 }
 
 // Whether it has a card (a large size).
-const hasCard = w => !!w && Widgets.sizesOf(w).includes('l')
+const hasCard = (w: Widget | null | undefined) => !!w && Widgets.sizesOf(w).includes('l')
 
-function cardHTML(w, ctx, all = []) {
+function cardHTML(w: Widget, ctx: CardCtx, all: Widget[] = []) {
   switch (kindOf(w)) {
     case 'weather':
       return weatherCard(w, ctx)
@@ -631,7 +653,7 @@ function cardHTML(w, ctx, all = []) {
 
 // --- Times ---------------------------------------------------------------------------
 // How long up: days and hours, or hours and minutes.
-function upFor(secs, ctx) {
+function upFor(secs: number, ctx: Ctx) {
   const s = Math.max(0, Math.floor(secs || 0))
   const days = Math.floor(s / 86400)
   const hours = Math.floor((s % 86400) / 3600)
@@ -641,11 +663,11 @@ function upFor(secs, ctx) {
 
 // When a letter came: its time today, yesterday, its weekday this week,
 // else its date.
-function whenOf(at, ctx) {
+function whenOf(at: number, ctx: Ctx) {
   if (!Number.isFinite(at) || at <= 0) return ''
   const now = new Date(ctx.now || Date.now())
   const d = new Date(at)
-  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const ago = Math.round((day(now) - day(d)) / 86400000)
   if (ago <= 0) return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   if (ago === 1) return t(ctx, 'card.yesterday')

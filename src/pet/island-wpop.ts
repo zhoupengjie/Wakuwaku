@@ -2,21 +2,23 @@
 // as the clock's opens Windows' calendar; a stack opened (the spec's §5),
 // its members side by side.
 // Made by island.ts in the section's place as the page starts
-// (wpopPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// (wpopPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
-import { Picker, Settings } from './pages.ts'
 import { pet } from './bridge.ts'
-import type { WpopCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function wpopPart(core: WpopCore) {
+export function wpopPart(core: IslandCore) {
   const {
-    Widgets, barRest, closePop, el, entryNodes, fillHer, home, isDetailed, isSide, memberName, needsSettings,
-    popCtx, t, tbLayout, update, watchPresses,
+    st, pieces, later, Widgets, el, home, isDetailed, isSide, newId, t, update,
   } = core
+  const { barRest } = pieces.right
+  const { entryNodes, fillHer, memberName, needsSettings, popCtx, tbLayout } = pieces.layout
+  const { closePop, watchPresses } = pieces.glide
 
   // A press on one opens its card above it, as the clock's opens Windows'
   // calendar: what it says (its large size, wcards.ts cardHTML, when it has
@@ -36,50 +38,50 @@ export function wpopPart(core: WpopCore) {
   const STACK_CARD_W = 276
 
   function openWidgetPop(id, pick = null) {
-    if (core.popFor) closePop()
-    if (core.imeOpen) core.closeImeList()
-    if (core.menuFor) core.closeMenu()
-    core.wgFor = id
-    core.wgPick = pick
+    if (st.popFor) closePop()
+    if (st.imeOpen) pieces.ime.closeImeList()
+    if (st.menuFor) pieces.wmenu.closeMenu()
+    st.wgFor = id
+    st.wgPick = pick
     drawWidgetPop()
     watchPresses()
   }
 
   function closeWidgetPop() {
-    core.wgFor = null
-    core.wgPick = null
+    st.wgFor = null
+    st.wgPick = null
     wgPop.hidden = true
     watchPresses()
   }
 
   function drawWidgetPop() {
-    const node = core.wgFor && entryNodes.get(core.wgFor)
+    const node = st.wgFor && entryNodes.get(st.wgFor)
     const e = node?._entry
-    if (!e || !node.isConnected || core.editLayout || home() !== 'taskbar') return closeWidgetPop()
+    if (!e || !node.isConnected || st.editLayout || home() !== 'taskbar') return closeWidgetPop()
     const detailed = isDetailed()
     const ctx = popCtx()
     // A group's: the one picked, or the one its carousel shows.
     const group = Widgets.isGroup(e)
-    const slides = group ? Widgets.slidesOf(e, core.allWidgets) : []
-    const shown = group ? (core.wgPick ? slides.find(s => s.w?.id === core.wgPick) : slides[node._at || 0]) : null
-    const from = group ? (shown?.w ? [shown.w] : []) : Widgets.sourcesOf(e, core.allWidgets)
+    const slides = group ? Widgets.slidesOf(e, st.allWidgets) : []
+    const shown = group ? (st.wgPick ? slides.find(s => s.w?.id === st.wgPick) : slides[node._at || 0]) : null
+    const from = group ? (shown?.w ? [shown.w] : []) : Widgets.sourcesOf(e, st.allWidgets)
     const first = from[0]
     const head = el('div', 'wghead')
     head.innerHTML = first ? WCards.glyphHTML(first, 'wghg') : WCards.memberGlyph(group ? shown?.member || e.items[0] : e)
     head.firstElementChild.style.color = first ? WCards.colorOf(first, ctx) : ''
     const kind = e.type === 'plugin' || first?.plugin ? 'plugin' : first?.from || 'widget'
-    const title = first ? WCards.titleOf(first, ctx) : group ? memberName(shown?.member || e.items[0]) : Widgets.nameOf(core.lang, e, core.allWidgets, detailed)
-    head.append(el('b', '', title), el('span', 'wgfrom', t(core.lang, `taskbar.w.from.${kind}`)))
+    const title = first ? WCards.titleOf(first, ctx) : group ? memberName(shown?.member || e.items[0]) : Widgets.nameOf(st.lang, e, st.allWidgets, detailed)
+    head.append(el('b', '', title), el('span', 'wgfrom', t(st.lang, `taskbar.w.from.${kind}`)))
     fillHer(head, 18)
     let rows
     if (from.length === 1 && WCards.hasCard(first)) {
       const card = el('div', 'wgcard')
-      card.innerHTML = WCards.cardHTML(first, ctx, core.allWidgets)
+      card.innerHTML = WCards.cardHTML(first, ctx, st.allWidgets)
       fillHer(card, 22)
       rows = [card]
     } else {
       rows = from.map(w => {
-        const said = Widgets.words(core.lang, w, detailed)
+        const said = Widgets.words(st.lang, w, detailed)
         const row = el('div', 'wgrow')
         const value = el('b', '', said.value)
         if (Widgets.partsOf(w)) value.innerHTML = Widgets.partsHTML(w)
@@ -88,7 +90,7 @@ export function wpopPart(core: WpopCore) {
         return row
       })
     }
-    if (!rows.length) rows.push(el('div', 'wgnone', t(core.lang, !group && needsSettings(e) ? 'taskbar.lib.needs' : 'taskbar.w.none')))
+    if (!rows.length) rows.push(el('div', 'wgnone', t(st.lang, !group && needsSettings(e) ? 'taskbar.lib.needs' : 'taskbar.w.none')))
     const acts = el('div', 'wgacts')
     const button = (what, label) => {
       const b = el('button', 'wgbtn', label)
@@ -96,12 +98,12 @@ export function wpopPart(core: WpopCore) {
       b.dataset.wg = what
       return b
     }
-    if (kind === 'mail') acts.append(button('mail', t(core.lang, 'taskbar.w.mail')))
-    if (kind === 'plugin' || kind === 'builtIn') acts.append(button('settings', t(core.lang, 'taskbar.w.settings')))
-    acts.append(button('remove', t(core.lang, 'taskbar.w.remove')))
+    if (kind === 'mail') acts.append(button('mail', t(st.lang, 'taskbar.w.mail')))
+    if (kind === 'plugin' || kind === 'builtIn') acts.append(button('settings', t(st.lang, 'taskbar.w.settings')))
+    acts.append(button('remove', t(st.lang, 'taskbar.w.remove')))
     // Drawn anew only when it changed (the monitor's every 2 s): a button
     // replaced under the pointer would not be pressed.
-    const drawn = JSON.stringify([core.wgFor, core.wgPick, from.map(w => [w.id, w.label, w.value, w.detail, w.private]), detailed, core.lang, ctx.light])
+    const drawn = JSON.stringify([st.wgFor, st.wgPick, from.map(w => [w.id, w.label, w.value, w.detail, w.private]), detailed, st.lang, ctx.light])
     if (drawn !== wgPop._drawn || wgPop.hidden) {
       wgPop._drawn = drawn
       wgPop.replaceChildren(head, ...rows, acts)
@@ -109,8 +111,8 @@ export function wpopPart(core: WpopCore) {
     wgPop.classList.toggle('carded', rows[0]?.classList.contains('wgcard'))
     wgPop.hidden = false
     // Over the stack it was picked from, else over it.
-    const over = core.stackFor === core.wgFor && !stackPop.hidden ? stackPop : node
-    const at = core.besideOrOver(over, wgPop, isSide() ? 8 : 4)
+    const over = st.stackFor === st.wgFor && !stackPop.hidden ? stackPop : node
+    const at = pieces.winlist.besideOrOver(over, wgPop, isSide() ? 8 : 4)
     wgPop.style.left = at.left === undefined ? '' : `${at.left}px`
     wgPop.style.top = at.top === undefined ? '' : `${at.top}px`
     wgPop.classList.toggle('above-stack', over === stackPop)
@@ -119,44 +121,44 @@ export function wpopPart(core: WpopCore) {
   // The layout changed by hand (a menu, a stack's line dragged): kept, or
   // into the one being edited.
   function keepLayout(layout) {
-    if (core.editLayout) core.editLayout = layout
+    if (st.editLayout) st.editLayout = layout
     else {
-      core.config.taskbarLayout = layout
+      st.config.taskbarLayout = layout
       pet.settings.set({ taskbarLayout: layout })
     }
-    core.arranged = ''
+    st.arranged = ''
     update()
     // picker.ts: its cards' "已放" anew.
-    Picker?.changed()
+    later.Picker?.changed()
   }
 
   // Off the taskbar, and kept so.
   function removeEntry(id) {
     const layout = tbLayout()
     for (const k of Object.keys(layout)) layout[k] = layout[k].filter(p => Widgets.keyOf(p) !== id)
-    if (core.wgFor === id) closeWidgetPop()
-    if (core.stackFor === id) closeStackPop()
+    if (st.wgFor === id) closeWidgetPop()
+    if (st.stackFor === id) closeStackPop()
     keepLayout(layout)
   }
 
   // One of a group's off the taskbar: the rest stay (one left, alone).
   function removeMember(id, index) {
     closeWidgetPop()
-    keepLayout(Widgets.dropMember(tbLayout(), id, index, core.newId))
+    keepLayout(Widgets.dropMember(tbLayout(), id, index, newId))
   }
 
   wgPop.addEventListener('click', e => {
     const what = e.target.closest('[data-wg]')?.dataset.wg
-    const entry = core.wgFor && entryNodes.get(core.wgFor)?._entry
+    const entry = st.wgFor && entryNodes.get(st.wgFor)?._entry
     if (!what || !entry) return
     const group = Widgets.isGroup(entry)
-    const w = group ? core.allWidgets.find(x => x.id === (core.wgPick || entryNodes.get(core.wgFor)._slides?.[entryNodes.get(core.wgFor)._at || 0]?.w?.id)) : null
+    const w = group ? st.allWidgets.find(x => x.id === (st.wgPick || entryNodes.get(st.wgFor)._slides?.[entryNodes.get(st.wgFor)._at || 0]?.w?.id)) : null
     if (what === 'remove') {
       // picker.ts: taken off with a way back (undo), off once it is nowhere.
-      const at = group && w ? entry.items.findIndex(m => Widgets.sourcesOf(m, core.allWidgets).includes(w)) : -1
-      if (Picker?.remove({ entry: entry.id, member: at })) return closeWidgetPop()
+      const at = group && w ? entry.items.findIndex(m => Widgets.sourcesOf(m, st.allWidgets).includes(w)) : -1
+      if (later.Picker?.remove({ entry: entry.id, member: at })) return closeWidgetPop()
       if (!group) return removeEntry(entry.id)
-      const index = w ? entry.items.findIndex(m => Widgets.sourcesOf(m, core.allWidgets).includes(w)) : -1
+      const index = w ? entry.items.findIndex(m => Widgets.sourcesOf(m, st.allWidgets).includes(w)) : -1
       return index >= 0 ? removeMember(entry.id, index) : removeEntry(entry.id)
     }
     closeWidgetPop()
@@ -170,7 +172,7 @@ export function wpopPart(core: WpopCore) {
   function openWidgetSettings(w) {
     if (w.from === 'mail') return pet.openSettings('mail')
     const key = w.plugin || w.id
-    if (w.plugin || key === 'monitor') Settings?.openPlugin?.(key)
+    if (w.plugin || key === 'monitor') later.Settings?.openPlugin?.(key)
     pet.openSettings(key ? `widgets:${key}` : 'widgets')
   }
   wgPop.addEventListener('contextmenu', e => {
@@ -194,11 +196,11 @@ export function wpopPart(core: WpopCore) {
   const STACK_OUT_PX = 28
 
   function openStackPop(id) {
-    if (core.popFor) closePop()
-    if (core.imeOpen) core.closeImeList()
-    if (core.wgFor) closeWidgetPop()
-    if (core.menuFor) core.closeMenu()
-    core.stackFor = id
+    if (st.popFor) closePop()
+    if (st.imeOpen) pieces.ime.closeImeList()
+    if (st.wgFor) closeWidgetPop()
+    if (st.menuFor) pieces.wmenu.closeMenu()
+    st.stackFor = id
     stackOpenedAt = Date.now()
     stackPop._drawn = ''
     drawStackPop()
@@ -207,32 +209,32 @@ export function wpopPart(core: WpopCore) {
   }
 
   function closeStackPop() {
-    core.stackFor = null
+    st.stackFor = null
     stackDrag = null
     stackPop.hidden = true
     for (const node of entryNodes.values()) node.classList.remove('open')
-    if (core.wgFor && core.wgPick) closeWidgetPop()
+    if (st.wgFor && st.wgPick) closeWidgetPop()
     watchPresses()
   }
 
   function drawStackPop() {
-    const node = core.stackFor && entryNodes.get(core.stackFor)
+    const node = st.stackFor && entryNodes.get(st.stackFor)
     const e = node?._entry
-    if (!e || e.type !== 'stack' || !node.isConnected || core.editLayout || home() !== 'taskbar') return closeStackPop()
+    if (!e || e.type !== 'stack' || !node.isConnected || st.editLayout || home() !== 'taskbar') return closeStackPop()
     if (stackDrag?.moved) return
     const ctx = popCtx()
-    const slides = Widgets.slidesOf(e, core.allWidgets)
-    const drawn = JSON.stringify([core.stackFor, slides.map(s => (s.w ? [s.w.id, s.w.label, s.w.value, s.w.detail, s.w.private] : Widgets.memberKey(s.member))), ctx.detailed, ctx.light, core.lang])
+    const slides = Widgets.slidesOf(e, st.allWidgets)
+    const drawn = JSON.stringify([st.stackFor, slides.map(s => (s.w ? [s.w.id, s.w.label, s.w.value, s.w.detail, s.w.private] : Widgets.memberKey(s.member))), ctx.detailed, ctx.light, st.lang])
     if (drawn !== stackPop._drawn || stackPop.hidden) {
       stackPop._drawn = drawn
       const rows = slides.map(s => {
         const index = e.items.indexOf(s.member)
         const body = s.w
           ? WCards.stackRowHTML(s.w, WCards.titleOf(s.w, ctx), ctx)
-          : `<span class="sgl">${WCards.memberGlyph(s.member)}</span><b class="sname">${WCards.esc(memberName(s.member))}</b><span class="sval"></span><span class="ssay">${WCards.esc(t(core.lang, 'taskbar.w.none'))}</span>`
+          : `<span class="sgl">${WCards.memberGlyph(s.member)}</span><b class="sname">${WCards.esc(memberName(s.member))}</b><span class="sval"></span><span class="ssay">${WCards.esc(t(st.lang, 'taskbar.w.none'))}</span>`
         return `<div class="srow${s.w ? '' : ' empty'}" data-member="${index}" data-widget="${s.w ? WCards.esc(s.w.id) : ''}">${body}</div>`
       })
-      stackPop.innerHTML = `<div class="shead"><b>${WCards.esc(t(core.lang, 'taskbar.stack.title'))}</b><span>${WCards.esc(t(core.lang, 'taskbar.stack.count', { n: slides.length }))}</span></div>${rows.join('')}`
+      stackPop.innerHTML = `<div class="shead"><b>${WCards.esc(t(st.lang, 'taskbar.stack.title'))}</b><span>${WCards.esc(t(st.lang, 'taskbar.stack.count', { n: slides.length }))}</span></div>${rows.join('')}`
       fillHer(stackPop, 16)
     }
     stackPop.hidden = false
@@ -243,7 +245,7 @@ export function wpopPart(core: WpopCore) {
       stackPop.style.animationDelay = `-${into}ms`
       for (const [i, row] of [...stackPop.querySelectorAll('.srow')].entries()) row.style.animationDelay = `${i * 40 - into}ms`
     }
-    const at = core.besideOrOver(node, stackPop, 8)
+    const at = pieces.winlist.besideOrOver(node, stackPop, 8)
     stackPop.style.left = at.left === undefined ? '' : `${at.left}px`
     stackPop.style.top = at.top === undefined ? '' : `${at.top}px`
   }
@@ -268,17 +270,17 @@ export function wpopPart(core: WpopCore) {
     const r = stackPop.getBoundingClientRect()
     d.out = e.clientX < r.left - STACK_OUT_PX || e.clientX > r.right + STACK_OUT_PX || e.clientY < r.top - STACK_OUT_PX || e.clientY > r.bottom + STACK_OUT_PX
     d.row.classList.toggle('out', d.out)
-    d.row.dataset.say = d.out ? t(core.lang, 'taskbar.stack.out') : ''
+    d.row.dataset.say = d.out ? t(st.lang, 'taskbar.stack.out') : ''
   })
   stackPop.addEventListener('pointerup', e => {
     const d = stackDrag
     stackDrag = null
     if (!d) return
-    const id = core.stackFor
+    const id = st.stackFor
     if (!d.moved) return d.widget ? openWidgetPop(id, d.widget) : undefined
     d.row.classList.remove('dragging', 'out')
     d.row.style.transform = ''
-    if (d.out) return keepLayout(Widgets.takeOut(tbLayout(), id, d.member, core.newId))
+    if (d.out) return keepLayout(Widgets.takeOut(tbLayout(), id, d.member, newId))
     // Before the line it is let go over (after it past its middle).
     const rows = [...stackPop.querySelectorAll('.srow')].filter(r => r !== d.row)
     const below = rows.find(r => {
@@ -305,7 +307,7 @@ export function wpopPart(core: WpopCore) {
     e.preventDefault()
     e.stopPropagation()
     const row = e.target.closest('.srow')
-    if (row && core.stackFor) core.openMenu({ where: 'bar', entry: core.stackFor, member: Number(row.dataset.member), widget: row.dataset.widget || null }, row)
+    if (row && st.stackFor) pieces.wmenu.openMenu({ where: 'bar', entry: st.stackFor, member: Number(row.dataset.member), widget: row.dataset.widget || null }, row)
   })
 
   return { STACK_CARD_W, closeStackPop, closeWidgetPop, drawStackPop, drawWidgetPop, imePop, keepLayout, openStackPop, openWidgetPop, openWidgetSettings, removeEntry, removeMember, stackPop, wgPop }

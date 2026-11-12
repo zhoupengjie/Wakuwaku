@@ -38,7 +38,7 @@ const SENDS = 10
 const SEND_MAX = 64 * 1024
 const LOGS = 20
 
-const json = v => {
+const json = (v: unknown) => {
   try {
     return JSON.stringify(v) ?? null
   } catch {
@@ -48,7 +48,15 @@ const json = v => {
 
 // Whether a widget is one a view draws at that size: a plugin's, its
 // plugin with a view, a view given (viewRev), medium or large.
-const viewable = (w, size) => !!w && w.from === 'addon' && typeof w.plugin === 'string' && Number.isFinite(w.viewRev) && (size === 'm' || size === 'l')
+// A widget as views read it (widgets.rs, a plugin's: its plugin, its view's revision).
+interface ViewWidget {
+  id: string
+  plugin?: string
+  from?: string
+  viewRev?: number
+}
+
+const viewable = (w: any, size: unknown): w is ViewWidget => !!w && w.from === 'addon' && typeof w.plugin === 'string' && Number.isFinite(w.viewRev) && (size === 'm' || size === 'l')
 
 // deps: ask(widget) → a promise of { page, data, rev } (or { error });
 // send(widget, message); make(name, src) → { el, win } a frame not yet
@@ -77,28 +85,55 @@ interface ViewDeps {
   clearTimer?: (timer: any) => void
   canShow?: boolean
 }
+// A frame of a card's view, and what is kept of it.
+interface Frame {
+  key: string
+  widget: string
+  plugin?: string
+  size: string
+  made: { el: any; win: any }
+  el: any
+  rev: unknown
+  ready: boolean
+  answered: number
+  misses: number
+  sends: number[]
+  logs: number[]
+  loadTimer: any
+  look: string | null
+  style: string | null
+  fetching: boolean
+  placed?: boolean
+}
+// What the view's page and data come back as (ask).
+interface Got {
+  page: string
+  data?: unknown
+  rev?: unknown
+  error?: unknown
+}
 function createViews({ ask, send, make, post, move, live = () => true, styleOf = () => ({}), look = () => ({ theme: 'dark', lang: 'zh' }), changed = () => {}, log = () => {}, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout, canShow = true }: ViewDeps) {
-  const frames = new Map()
+  const frames = new Map<string, Frame>()
   // The plugins whose view failed here, for the session.
-  const failed = new Set()
+  const failed = new Set<unknown>()
   // The view's page and data being asked for a card, by key.
-  const asking = new Map()
+  const asking = new Map<string, boolean>()
   const state = { on: true, reduced: false, paused: false }
   let stamp = 0
   let pings = 0
-  let pingTimer = 0
-  let checkTimer = 0
+  let pingTimer: any = 0
+  let checkTimer: any = 0
 
   // Whether views may show here now, and this one.
   const allowed = () => state.on && !state.reduced && !state.paused && canShow
-  const mayShow = (w, size) => allowed() && viewable(w, size) && !failed.has(w.plugin)
+  const mayShow = (w: ViewWidget | null | undefined, size: string): w is ViewWidget => allowed() && viewable(w, size) && !failed.has(w.plugin)
   const bump = () => {
     stamp++
     changed()
   }
-  const winOf = f => f.made.win
+  const winOf = (f: Frame) => f.made.win
 
-  function drop(f) {
+  function drop(f: Frame) {
     frames.delete(f.key)
     clearTimer(f.loadTimer)
     f.el.remove()
@@ -110,7 +145,7 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
   // widget's data (and any frame of it before goes). A frame is made once
   // the view's page and data are had (asked for here; the page drawn again
   // then: changed).
-  function place(card, key, w, size) {
+  function place(card: any, key: string, w: ViewWidget | null | undefined, size: string) {
     const f = frames.get(key)
     if (!mayShow(w, size)) {
       if (f) drop(f)
@@ -143,12 +178,12 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
   }
 
   // Its frame made: the page given in its name what it shows and how.
-  function open(key, w, size, got) {
+  function open(key: string, w: ViewWidget, size: string, got: Got) {
     const { theme, lang } = look()
     const style = styleOf(w)
     const name = json({ waku: 1, id: w.plugin, size, data: got.data ?? null, theme, lang, style }) || '{}'
     const made = make(name, got.page)
-    const f = { key, widget: w.id, plugin: w.plugin, size, made, el: made.el, rev: got.rev, ready: false, answered: 0, misses: 0, sends: [], logs: [], loadTimer: 0, look: json({ theme, lang }), style: json(style), fetching: false }
+    const f: Frame = { key, widget: w.id, plugin: w.plugin, size, made, el: made.el, rev: got.rev, ready: false, answered: 0, misses: 0, sends: [], logs: [], loadTimer: 0, look: json({ theme, lang }), style: json(style), fetching: false }
     f.loadTimer = setTimer(() => {
       if (frames.get(key) === f && !f.ready) fail(f, 'did not load')
     }, LOAD_MS)
@@ -157,7 +192,7 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
     return f
   }
 
-  function fail(f, why) {
+  function fail(f: Frame, why: string) {
     log(`plugin ${f.plugin}: its view ${why}: its data drawn instead`)
     failed.add(f.plugin)
     for (const x of [...frames.values()]) if (x.plugin === f.plugin) drop(x)
@@ -167,7 +202,7 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
   // Each frame's widget as the page has it now (each widgets' event): a
   // new revision of its view asked for and handed to it; its colour told
   // if it changed.
-  function widgets(all) {
+  function widgets(all: unknown) {
     const list = Array.isArray(all) ? all : []
     for (const f of frames.values()) {
       const w = list.find(x => x?.id === f.widget)
@@ -189,11 +224,11 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
 
   // Her theme and language as they are now (the cards' colours with
   // them), told the frames where they changed.
-  function relook(all = []) {
+  function relook(all: any[] = []) {
     const { theme, lang } = look()
     for (const f of frames.values()) {
       const w = (Array.isArray(all) ? all : []).find(x => x?.id === f.widget) || { id: f.widget, plugin: f.plugin, from: 'addon' }
-      const was = JSON.parse(f.look)
+      const was = JSON.parse(f.look!)
       const style = styleOf(w)
       if (was.theme !== theme) post(winOf(f), { waku: 1, t: 'event', what: 'theme', value: theme, style })
       else restyle(f, w)
@@ -202,7 +237,7 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
       f.style = json(style)
     }
   }
-  function restyle(f, w) {
+  function restyle(f: Frame, w: ViewWidget) {
     const style = styleOf(w)
     const styled = json(style)
     if (styled === f.style) return
@@ -213,11 +248,11 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
   // Shown here or not (desk:views; nobody about), Windows' animations,
   // the watchdog's while: on any change the cards drawn again (their
   // frames gone, or made).
-  function set(patch = {}) {
+  function set(patch: { on?: boolean; reduced?: boolean; paused?: boolean } = {}) {
     let any = false
-    for (const k of ['on', 'reduced', 'paused']) {
+    for (const k of ['on', 'reduced', 'paused'] as const) {
       if (typeof patch[k] !== 'boolean' || state[k] === patch[k]) continue
-      state[k] = patch[k]
+      state[k] = patch[k]!
       any = true
     }
     if (!any) return
@@ -227,7 +262,7 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
   }
 
   // A message from a frame: the card's view whose frame sent it, or nobody's.
-  function receive(source, data) {
+  function receive(source: unknown, data: any) {
     if (!source) return false
     const f = [...frames.values()].find(x => winOf(x) === source)
     if (!f || !data || typeof data !== 'object' || data.waku !== 1 || typeof data.t !== 'string') return false
@@ -300,7 +335,7 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
   }
 
   // Frames not kept (keep(frame): by default, still in the page).
-  function sweep(keep = f => live(f.el)) {
+  function sweep(keep = (f: Frame) => live(f.el)) {
     for (const f of [...frames.values()]) if (!keep(f)) drop(f)
   }
 
@@ -311,7 +346,7 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
     set,
     receive,
     sweep,
-    pause: paused => set({ paused }),
+    pause: (paused: boolean) => set({ paused }),
     frames,
     failed,
     state,
@@ -332,14 +367,14 @@ function createViews({ ask, send, make, post, move, live = () => true, styleOf =
 // before (park) and puts them in the new cards after (mount), and shows
 // none where it cannot so. opts: { ask, send, styleOf, look, changed,
 // log, redrawn: true for a page that draws its cards anew }.
-function boot(opts) {
+function boot(opts: Pick<ViewDeps, 'ask' | 'send' | 'styleOf' | 'look' | 'changed' | 'log'> & { redrawn?: boolean }) {
   const canMoveBefore = typeof Element.prototype.moveBefore === 'function'
   const holder = document.createElement('div')
   holder.hidden = true
   holder.className = 'wview-park'
   document.body.appendChild(holder)
   // Moves to make once their card is in the page.
-  const later = []
+  const later: [any, any][] = []
   const host: ReturnType<typeof createViews> & { park?: () => void; mount?: () => void } = createViews({
     ...opts,
     canShow: !opts.redrawn || canMoveBefore,

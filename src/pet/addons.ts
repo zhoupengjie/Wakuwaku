@@ -32,9 +32,10 @@
 // timer runs while no plugin does.
 //
 // The host itself (createHost) is plain logic over what it is given, for
-// the tests (test/addons.test.js); the page's part is boot().
+// the tests (test/addons.test.js); the page's part is addonsPage(), made
+// by main.ts on the island's page alone (the tests import this with no page).
 import { pet } from './bridge.ts'
-import { Island } from './pages.ts'
+import type { IslandFace } from './island.ts'
 
 const ORIGIN = 'http://wakuplugin.localhost'
 // A widget's words sent at most once in so long; requests on the web at
@@ -684,7 +685,7 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
 }
 
 // --- In her island's page -------------------------------------------------------------
-function boot() {
+export function addonsPage(Island: IslandFace | null) {
   // Their frames out of sight, off the page's left, never under the
   // pointer; not display: none, under which WebView2 tells a frame none of
   // its long tasks (the watchdog's budget: the SDK's PerformanceObserver).
@@ -736,8 +737,5 @@ function boot() {
   })
   pet.addons.running().then(list => host.apply(list))
 }
-
-// The island's page runs the plugins; the tests import this with no page.
-if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('role') === 'island' && pet?.addons) boot()
 
 export { createHost, agentsOf, pageOf, ORIGIN, PING_EVERY, ANSWER_MS, AGAIN_MS, BUSY_MS, STAGGER_MS, RELOAD_MS, GRACE_MS }

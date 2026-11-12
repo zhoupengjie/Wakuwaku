@@ -37,8 +37,26 @@ const REST_MS = 60
 const SLACK_PX = 6
 
 // p in the triangle a, b, c (on an edge counts).
-function inTriangle(p, a, b, c) {
-  const side = (u, v, w) => (v.x - u.x) * (w.y - u.y) - (v.y - u.y) * (w.x - u.x)
+// A point on the screen, and a list's box (a DOMRect's sides).
+interface Point {
+  x: number
+  y: number
+}
+interface Box {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+// The list shown: its button's key, its box, the strip's edge it opens from.
+interface List {
+  key: unknown
+  rect: Box
+  edge: string
+}
+
+function inTriangle(p: Point, a: Point, b: Point, c: Point) {
+  const side = (u: Point, v: Point, w: Point) => (v.x - u.x) * (w.y - u.y) - (v.y - u.y) * (w.x - u.x)
   const d1 = side(p, a, b)
   const d2 = side(p, b, c)
   const d3 = side(p, c, a)
@@ -50,7 +68,7 @@ function inTriangle(p, a, b, c) {
 // The two ends of the list's side that faces the strip ({ left, top,
 // right, bottom }), by the strip's edge of the screen: a bottom bar's
 // list stands above it, a left bar's to its right.
-function nearSide(list, edge, slack = SLACK_PX) {
+function nearSide(list: Box, edge: string, slack = SLACK_PX): [Point, Point] {
   if (edge === 'top') return [{ x: list.left - slack, y: list.top }, { x: list.right + slack, y: list.top }]
   if (edge === 'left') return [{ x: list.left, y: list.top - slack }, { x: list.left, y: list.bottom + slack }]
   if (edge === 'right') return [{ x: list.right, y: list.top - slack }, { x: list.right, y: list.bottom + slack }]
@@ -60,7 +78,7 @@ function nearSide(list, edge, slack = SLACK_PX) {
 // Gone from `from` to `to`, heading into the list: `to` in the triangle
 // from `from` to the ends of the list's near side. Along the strip, or
 // away from the list, is not; nor staying put.
-function heading(from, to, list, edge, slack = SLACK_PX) {
+function heading(from: Point | null | undefined, to: Point | null | undefined, list: Box | null | undefined, edge: string, slack = SLACK_PX) {
   if (!from || !to || !list || (from.x === to.x && from.y === to.y)) return false
   const [b, c] = nearSide(list, edge, slack)
   return inTriangle(to, from, b, c)
@@ -72,25 +90,25 @@ function heading(from, to, list, edge, slack = SLACK_PX) {
 function create({ openMs = OPEN_MS, switchMs = SWITCH_MS, trailMs = TRAIL_MS, restMs = REST_MS, slack = SLACK_PX } = {}) {
   // Where it was, oldest first: the newest point older than trailMs, and
   // all since.
-  const trail = []
+  const trail: (Point & { t: number })[] = []
   // The button it is on ({ key, since }), counted from when it came, or
   // from when it last headed into the list.
-  let on = null
+  let on: { key: unknown; since: number } | null = null
   const api = {
-    move(x, y, t) {
+    move(x: number, y: number, t: number) {
       const last = trail[trail.length - 1]
       if (last && last.x === x && last.y === y) return
       trail.push({ x, y, t })
       while (trail.length > 2 && trail[1].t <= t - trailMs) trail.shift()
     },
     // On a program's button (its key), or on none (null).
-    over(key, t) {
+    over(key: unknown, t: number) {
       if ((key ?? null) === (on?.key ?? null)) return
       on = key == null ? null : { key, since: t }
     },
     key: () => on?.key ?? null,
     // Heading into the list ({ key, rect, edge }) now, at t.
-    heading(list, t) {
+    heading(list: List | null | undefined, t: number) {
       const now = trail[trail.length - 1]
       if (!list || !now || t - now.t > restMs || trail.length < 2) return false
       return heading(trail[0], now, list.rect, list.edge, slack)
@@ -100,7 +118,7 @@ function create({ openMs = OPEN_MS, switchMs = SWITCH_MS, trailMs = TRAIL_MS, re
     // the list shown ({ key, rect: { left, top, right, bottom }, edge }),
     // or null. Heading into it, the time on the button counts from its
     // last move, and it is asked again in restMs.
-    due(list, t) {
+    due(list: List | null | undefined, t: number): number | null {
       if (!on) return null
       if (!list) return Math.max(0, openMs - (t - on.since))
       if (list.key === on.key) return null

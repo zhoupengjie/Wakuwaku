@@ -2,19 +2,23 @@
 // ring turning round the closed capsule in the colour of what happened, held
 // lit, faded, blended into the next; her reactions and the news dot.
 // Made by island.ts in the section's place as the page starts
-// (ringPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// (ringPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as Flow from './flow.ts'
-import type { RingCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function ringPart(core: RingCore) {
+export function ringPart(core: IslandCore) {
   const {
-    ANCHORED, CLIPS, Flow, REACTIONS, animateHer, body, compact, flow, her, herTalks, hintAccent, home, hue,
-    ink, isCapsule, isHinting, isHome, isNudging, isOn, isRinging, isSide, island, modeNow, newsDot, nudgeFor,
-    setStow, spins, stillMotionNow, taskHead, update,
+    st, pieces, go, ANCHORED, CLIPS, Flow, REACTIONS, animateHer, body, compact, flow, her, herTalks, hintAccent,
+    home, hue, ink, isCapsule, isHinting, isHome, isNudging, isOn, isRinging, isSide, island, newsDot,
+    nudgeFor, spins, taskHead, update,
   } = core
+  const { setStow } = pieces.plate
+  const { stillMotionNow } = pieces.layout
+  const { modeNow } = pieces.look
 
   // What opened the island by itself (a turn done, changes to review, an
   // error, a hello, a plugin's nudge) keeps it closed now: a ring of colour
@@ -46,25 +50,25 @@ export function ringPart(core: RingCore) {
   // screen, nobody at the computer, do not disturb, her window hidden, a
   // Mac's notch (nothing there moves by itself). The dot alone then, seen
   // once she is; no ring afterwards to catch up.
-  const flowBlocked = () => core.fullScreen || core.quiet || core.config.dnd === true || document.hidden || !!core.screenTop?.notch
+  const flowBlocked = () => st.fullScreen || st.quiet || st.config.dnd === true || document.hidden || !!st.screenTop?.notch
 
   // Something happened: kind (waiting, done, review, error, hello, plugin,
   // notice, process), and what the island would have opened with ({ clip,
   // text, ms, widget }; a reaction's name, react).
   function cue(kind, show) {
-    const how = Flow.cueFor(kind, { setting: Flow.endCue(core.config), view: core.view, blocked: flowBlocked(), herOut: herTalks() })
+    const how = Flow.cueFor(kind, { setting: Flow.endCue(st.config), view: st.view, blocked: flowBlocked(), herOut: herTalks() })
     // Inside a turn: her clip, and nothing kept, no ring, no dot.
     if (how === 'clip') return playReaction(show.react)
     // The newest wins: what is kept for the next look is this one's (an
     // ending's words are its session's: the open island has them), or none
     // when it shows now; a prompt leaves it for after.
-    if (kind !== 'waiting') core.pending = how && how !== 'open' && how !== 'show' && !Flow.isEnding(kind) ? { ...show, until: Date.now() + Flow.keepFor(kind, core.config.hold) } : null
+    if (kind !== 'waiting') st.pending = how && how !== 'open' && how !== 'show' && !Flow.isEnding(kind) ? { ...show, until: Date.now() + Flow.keepFor(kind, st.config.hold) } : null
     // Opened by itself: as long as the hold says (it stayed its few seconds
     // whatever was chosen, zhoupengjie/Wakuwaku#65). Already open (show):
     // it is being looked at, its own few seconds.
-    if (how === 'open' || how === 'show') return nudgeFor(show.clip, show.text, how === 'open' ? Flow.openFor(kind, core.config.hold, show.ms) : show.ms, show.widget, { kind, after: show.ms })
+    if (how === 'open' || how === 'show') return nudgeFor(show.clip, show.text, how === 'open' ? Flow.openFor(kind, st.config.hold, show.ms) : show.ms, show.widget, { kind, after: show.ms })
     if (!how || how === 'later') return update()
-    core.news = { kind, colour: show.widget?.color, shown: core.news?.shown === true }
+    st.news = { kind, colour: show.widget?.color, shown: st.news?.shown === true }
     if (how === 'dot') showNews('in')
     else ring(kind)
     update()
@@ -78,30 +82,30 @@ export function ringPart(core: RingCore) {
     const clip = r && CLIPS[r.clip]
     if (!clip) return
     const span = clip.frames * clip.ms * (r.times || 1)
-    core.reacting = { clip: r.clip, until: Date.now() + span }
-    clearTimeout(core.reactTimer)
-    core.reactTimer = setTimeout(() => {
-      core.reacting = null
-      core.herClip = null
+    st.reacting = { clip: r.clip, until: Date.now() + span }
+    clearTimeout(st.reactTimer)
+    st.reactTimer = setTimeout(() => {
+      st.reacting = null
+      st.herClip = null
       animateHer()
     }, span)
-    core.herClip = null
+    st.herClip = null
     animateHer()
   }
 
   // The colours for a kind, on Windows' mode now: a plugin's from its own.
-  const flowStops = kind => Flow.gradient(Flow.palette(kind, flowLight(), core.news?.colour, hintAccent()))
+  const flowStops = kind => Flow.gradient(Flow.palette(kind, flowLight(), st.news?.colour, hintAccent()))
 
   function ring(kind) {
     // Held lit after its turns for as long as the hold says (until seen: until
     // the island opens), zhoupengjie/Wakuwaku#65.
-    const step = Flow.play(core.flowState, kind, performance.now(), { still: stillMotionNow(), hold: Flow.holdMs(core.config.hold) })
-    core.flowState = step.state
+    const step = Flow.play(st.flowState, kind, performance.now(), { still: stillMotionNow(), hold: Flow.holdMs(st.config.hold) })
+    st.flowState = step.state
     if (step.act === 'start') {
       // A dot from before goes, and comes again in the new colour as it fades.
-      core.news.shown = false
-      for (const b of core.blends) b.anim.cancel()
-      core.blends = []
+      st.news.shown = false
+      for (const b of st.blends) b.anim.cancel()
+      st.blends = []
       for (const s of spins) (s.firstChild as HTMLElement).style.background = flowStops(kind)
       flow.classList.toggle('glow', Flow.glows(flowLight(), step.ring.still))
       flow.classList.add('on')
@@ -112,8 +116,8 @@ export function ringPart(core: RingCore) {
       // Taken on as it faded (its dot come already, its session at work
       // again a moment before): the dot goes again, and comes as it fades
       // this time.
-      if (step.retimed && core.news?.shown && step.ring.hold > 0 && step.ring.dotAt > performance.now()) {
-        core.news.shown = false
+      if (step.retimed && st.news?.shown && step.ring.hold > 0 && step.ring.dotAt > performance.now()) {
+        st.news.shown = false
         drawNews()
       }
       if (step.retimed) animateRing(step.ring)
@@ -131,16 +135,16 @@ export function ringPart(core: RingCore) {
   // (holdRing), down again at the hold's end (fadeRing); until seen, no end
   // of its own (the island opening ends it: stopRing).
   function animateRing(r) {
-    for (const a of core.flowAnims) a.cancel()
-    for (const t of core.flowTimers) clearTimeout(t)
-    core.flowAnims = []
-    core.flowTimers = []
+    for (const a of st.flowAnims) a.cancel()
+    for (const t of st.flowTimers) clearTimeout(t)
+    st.flowAnims = []
+    st.flowTimers = []
     stopStepping()
     unholdRing()
     const f = Flow.frames(r, performance.now())
-    const later = (fn, ms) => Number.isFinite(ms) && core.flowTimers.push(setTimeout(fn, Math.max(0, ms)))
+    const later = (fn, ms) => Number.isFinite(ms) && st.flowTimers.push(setTimeout(fn, Math.max(0, ms)))
     if (f.still == null || f.still > 0) {
-      core.flowAnims.push(flow.animate(f.light.keyframes, { delay: f.light.delay, duration: f.light.duration, fill: 'both' }))
+      st.flowAnims.push(flow.animate(f.light.keyframes, { delay: f.light.delay, duration: f.light.duration, fill: 'both' }))
       if (f.steps.length) stepRing(f.steps)
     }
     if (f.still != null) {
@@ -181,8 +185,8 @@ export function ringPart(core: RingCore) {
   // costs its frames): the ring left lit, its gradient where it stopped,
   // the glow under it the same, no will-change (held).
   function holdRing(rest) {
-    for (const a of core.flowAnims) a.cancel()
-    core.flowAnims = []
+    for (const a of st.flowAnims) a.cancel()
+    st.flowAnims = []
     stopStepping()
     flow.classList.add('held')
     flow.style.opacity = '1'
@@ -201,10 +205,10 @@ export function ringPart(core: RingCore) {
   function fadeRing(r) {
     const o = Flow.frames(r, performance.now()).out
     if (!o) return
-    for (const a of core.flowAnims) a.cancel()
+    for (const a of st.flowAnims) a.cancel()
     flow.classList.remove('held')
     flow.style.opacity = ''
-    core.flowAnims = [flow.animate(o.keyframes, { delay: o.delay, duration: o.duration, fill: 'both' })]
+    st.flowAnims = [flow.animate(o.keyframes, { delay: o.delay, duration: o.duration, fill: 'both' })]
   }
 
   // Into another kind's colours over BLEND_MS: the upper of each square's
@@ -212,8 +216,8 @@ export function ringPart(core: RingCore) {
   // upper goes again. One coming mid-way: the last finished at once.
   function blendTo(kind) {
     const stops = flowStops(kind)
-    for (const b of core.blends) settle(b)
-    core.blends = spins.map(s => {
+    for (const b of st.blends) settle(b)
+    st.blends = spins.map(s => {
       const [under, over] = s.children as HTMLCollectionOf<HTMLElement>
       over.style.background = stops
       const b = { under, stops, anim: over.animate([{ opacity: 0 }, { opacity: 1 }], { duration: stillMotionNow() ? 0 : Flow.BLEND_MS, fill: 'forwards' }) }
@@ -230,16 +234,16 @@ export function ringPart(core: RingCore) {
 
   // Played: nothing of it left running; the dot there if it has not come.
   function endRing() {
-    for (const b of core.blends) settle(b)
-    for (const a of core.flowAnims) a.cancel()
-    for (const t of core.flowTimers) clearTimeout(t)
-    core.flowAnims = []
-    core.blends = []
-    core.flowTimers = []
+    for (const b of st.blends) settle(b)
+    for (const a of st.flowAnims) a.cancel()
+    for (const t of st.flowTimers) clearTimeout(t)
+    st.flowAnims = []
+    st.blends = []
+    st.flowTimers = []
     stopStepping()
     unholdRing()
     flow.classList.remove('on', 'glow')
-    if (core.news && !core.news.shown) showNews('in')
+    if (st.news && !st.news.shown) showNews('in')
     // Back up out of the way, if a window under it had it there.
     setStow()
   }
@@ -247,7 +251,7 @@ export function ringPart(core: RingCore) {
   // The island opened as it played: gone at once (it would grow with the
   // island), and the next rings anew.
   function stopRing() {
-    core.flowState = Flow.stop(core.flowState)
+    st.flowState = Flow.stop(st.flowState)
     endRing()
   }
 
@@ -287,7 +291,7 @@ export function ringPart(core: RingCore) {
   // The dot over her portrait's top-right, as the hint's (placeHer): 2 px
   // out; 1 px in on an upright capsule, whose round top would cut it.
   function placeNews() {
-    if (core.view !== 'compact') return
+    if (st.view !== 'compact') return
     const a = avatarBox()
     const [dx, dy] = isSide() ? [a.px - 10, 1] : [a.px - 7, -2]
     Object.assign(newsDot.style, { left: `${a.x + dx}px`, top: `${a.y + dy}px` })
@@ -296,17 +300,17 @@ export function ringPart(core: RingCore) {
   // The dot's colour: a mood's as the island's words have it, a hello's and
   // a notice's Windows' accent, a plugin's its own (or the accent).
   function newsColour() {
-    if (Flow.isEnding(core.news.kind)) return hue()[core.news.kind]
-    if (core.news.kind === 'plugin') return ink(core.news.colour) || hintAccent()
+    if (Flow.isEnding(st.news.kind)) return hue()[st.news.kind]
+    if (st.news.kind === 'plugin') return ink(st.news.colour) || hintAccent()
     return hintAccent()
   }
 
   // It comes (in: grown from nothing, a little past full size and back),
   // hops in a new colour, or only takes it (swap, and with reduced motion).
   function showNews(how) {
-    if (!core.news) return
-    const was = core.news.shown
-    core.news.shown = true
+    if (!st.news) return
+    const was = st.news.shown
+    st.news.shown = true
     drawNews()
     const cls = !was ? 'pop' : how === 'hop' ? 'hop' : ''
     if (!cls || stillMotionNow()) return
@@ -316,7 +320,7 @@ export function ringPart(core: RingCore) {
   }
 
   function drawNews() {
-    const on = !!core.news?.shown && core.view === 'compact' && !isHinting()
+    const on = !!st.news?.shown && st.view === 'compact' && !isHinting()
     body.classList.toggle('has-news', on)
     if (on) newsDot.style.setProperty('--news', newsColour())
   }
@@ -324,22 +328,22 @@ export function ringPart(core: RingCore) {
   // Opened (by a hover, mostly) with something kept: it is what the island
   // shows, for as long as it would have by itself; gone if its time is up.
   function takePending() {
-    if (!core.pending || isNudging()) return
-    const p = core.pending
-    core.pending = null
+    if (!st.pending || isNudging()) return
+    const p = st.pending
+    st.pending = null
     if (Date.now() > p.until) return
-    core.nudge = { until: Date.now() + p.ms, clip: p.clip, text: p.text, widget: p.widget }
-    clearTimeout(core.nudgeTimer)
-    core.nudgeTimer = setTimeout(() => {
-      core.nudge = null
+    go({ type: 'nudge', nudge: { until: Date.now() + p.ms, clip: p.clip, text: p.text, widget: p.widget } })
+    clearTimeout(st.nudgeTimer)
+    st.nudgeTimer = setTimeout(() => {
+      go({ type: 'unnudge' })
       update()
     }, p.ms)
   }
 
   // Now and then a blink, as a class for a moment (no running animation).
   function blink() {
-    clearTimeout(core.blinkTimer)
-    core.blinkTimer = setTimeout(() => {
+    clearTimeout(st.blinkTimer)
+    st.blinkTimer = setTimeout(() => {
       if (isOn() && !document.hidden) {
         island.classList.add('blink')
         setTimeout(() => island.classList.remove('blink'), 140)

@@ -2,43 +2,18 @@
 // does (the address and password, the servers found or typed, its proxy),
 // and the inbox: letters by thread, who they are from, their talks with the
 // agents.
-// Made by settings.ts in the section's place as the page starts
-// (mailPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (mailPart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as Agents from './agents.ts'
+import type { SettingsCore } from './settings.ts'
 
-// What this part takes of the settings' core: the names it reads (and,
-// of its lets, writes); settings.ts's call is checked against them.
-export interface MailCore {
-  AGENTS: any
-  AGENT_NAMES: any
-  Agents: any
-  T: any
-  draft: any
-  esc: any
-  expanded: any
-  handNote: any
-  inbox: any
-  lang: any
-  mailDelete: any
-  mailForm: any
-  patch: any
-  proxySetting: any
-  reading: any
-  row: any
-  sec: any
-  seg: any
-  snap: any
-  tab: any
-  waySetting: any
-  writing: any
-}
-
-export function mailPart(core: MailCore) {
+export function mailPart(core: SettingsCore) {
   const {
-    AGENTS, AGENT_NAMES, Agents, T, esc, expanded, inbox, patch, row, sec, seg,
+    st, pieces, AGENTS, AGENT_NAMES, Agents, T, esc, expanded, inbox, patch, row, sec, seg,
   } = core
 
   // What went wrong with a mail account, in words: through a proxy, which
@@ -49,8 +24,8 @@ export function mailPart(core: MailCore) {
     if (why) return T(whyKey(why, server?.host))
     const where = server ? `${server.host}:${server.port}` : ''
     // The server's own words (or the proxy's), where they say why.
-    const detail = err?.text && ['login', 'refused', 'other', 'recipient', 'notProxy', 'proxyRefused', 'proxyServer'].includes(kind) ? (core.lang === 'zh' ? '：' : ': ') + err.text : ''
-    const hint = err?.hint ? (core.lang === 'zh' ? '。' : '. ') + T(`mail.err.${kind === 'notProxy' ? 'kind' : 'try'}.${err.hint}`) : ''
+    const detail = err?.text && ['login', 'refused', 'other', 'recipient', 'notProxy', 'proxyRefused', 'proxyServer'].includes(kind) ? (st.lang === 'zh' ? '：' : ': ') + err.text : ''
+    const hint = err?.hint ? (st.lang === 'zh' ? '。' : '. ') + T(`mail.err.${kind === 'notProxy' ? 'kind' : 'try'}.${err.hint}`) : ''
     // Gmail not reached with no proxy on the way: from China it takes one.
     const gmail = kind === 'connect' && providerOf(server?.host) === 'google' && straight(server?.proxy) ? ' ' + T('mail.err.gmailProxy') : ''
     return T(`mail.err.${kind}`, { where, proxy: err?.proxy || '' }) + detail + hint + gmail
@@ -80,21 +55,21 @@ export function mailPart(core: MailCore) {
   // Whether an account reaches its servers with no proxy on the way: its
   // own setting, else the Mail page's (Windows' proxy, while there is one).
   function straight(own) {
-    const mode = own?.mode || core.proxySetting().mode
-    return mode === 'none' || (mode === 'system' && !core.snap.mailSystemProxy)
+    const mode = own?.mode || pieces.letter.proxySetting().mode
+    return mode === 'none' || (mode === 'system' && !st.snap.mailSystemProxy)
   }
 
   // An account's line: how its inbox is, or why it is not.
   function mailNote(a) {
     if (!a.on) return { text: T('mail.off') }
-    const st = a.status || {}
+    const status = a.status || {}
     // How much is kept whole on this computer, while it is still coming down.
-    const off = st.offline || {}
+    const off = status.offline || {}
     const down = off.total && off.have < off.total ? ` · ${T('mail.offline', { have: off.have, total: off.total })}` : ''
     // Through a proxy: which.
-    const via = st.via ? ` · ${T('mail.via', { proxy: st.via })}` : ''
-    if (st.state === 'ok') return { text: (st.unread ? T('mail.unread', { n: st.unread }) : T('mail.none')) + down + via }
-    if (st.state === 'error') return { text: mailError(st.error, a), bad: true }
+    const via = status.via ? ` · ${T('mail.via', { proxy: status.via })}` : ''
+    if (status.state === 'ok') return { text: (status.unread ? T('mail.unread', { n: status.unread }) : T('mail.none')) + down + via }
+    if (status.state === 'error') return { text: mailError(status.error, a), bad: true }
     return { text: T('mail.connecting') }
   }
 
@@ -171,7 +146,7 @@ export function mailPart(core: MailCore) {
     ['socks5', 'SOCKS5'],
   ]
   const PROXY_MODES = () => [
-    ['', T('mail.proxy.page', { what: T(`mail.proxy.${core.waySetting('mailProxy').mode}Long`) })],
+    ['', T('mail.proxy.page', { what: T(`mail.proxy.${pieces.letter.waySetting('mailProxy').mode}Long`) })],
     ['system', T('mail.proxy.systemLong')],
     ['manual', T('mail.proxy.manualLong')],
     ['none', T('mail.proxy.noneLong')],
@@ -182,7 +157,7 @@ export function mailPart(core: MailCore) {
   // wants for a password; and, folded as Thunderbird's manual setup, the
   // incoming and the outgoing server's every setting, with Re-test.
   function mailFormHTML() {
-    const f = core.mailForm
+    const f = st.mailForm
     const field = (key, label, attrs = '') =>
       `<label class="fr"><span class="fl">${esc(label)}</span><input class="in" data-mf="${key}" value="${esc(f[key] ?? '')}" spellcheck="false" ${attrs}></label>`
     // Gmail (found, or typed in): its app password asked for by name, and how to make one.
@@ -212,7 +187,7 @@ export function mailPart(core: MailCore) {
     const go = f.step === 'start' ? `<button class="pbtn al" data-mail-find ${off}>${esc(T('mail.continue'))}</button>` : `<button class="pbtn al" data-mail-save ${off}>${esc(T('mail.done'))}</button>`
     const again = f.step === 'manual' && !f.id ? `<button class="pbtn" data-mail-find ${off}>${esc(T('mail.findAgain'))}</button>` : ''
     const retest = f.step !== 'start' && f.advanced ? `<button class="pbtn" data-mail-probe ${off}>${esc(T('mail.adv.retest'))}</button>` : ''
-    const remove = f.id ? `<button class="pbtn" data-mail-remove="${esc(f.id)}">${esc(T(core.mailDelete === f.id ? 'mail.removeSure' : 'mail.remove'))}</button>` : ''
+    const remove = f.id ? `<button class="pbtn" data-mail-remove="${esc(f.id)}">${esc(T(st.mailDelete === f.id ? 'mail.removeSure' : 'mail.remove'))}</button>` : ''
     return `${sec(T(f.id ? 'mail.change' : 'mail.add'))}<div class="grp mail-form">${head}${found}${notFound}${adv}${busy}${result}
       <div class="r">${remove}<span class="grow"></span><button class="pbtn" data-mail-cancel>${esc(T('mail.cancel'))}</button>${again}${retest}${go}</div></div>`
   }
@@ -221,7 +196,7 @@ export function mailPart(core: MailCore) {
   // outgoing one (protocol, host name, port, connection security,
   // authentication method, user name), what Re-test found of each.
   function advancedHTML(field) {
-    const f = core.mailForm
+    const f = st.mailForm
     const toggle = `<button class="adv-h${f.advanced ? ' on' : ''}" data-mail-adv><span class="chev">›</span>${esc(T('mail.adv'))}</button>`
     if (!f.advanced) return `<div class="adv">${toggle}</div>`
     const pick = (key, list) => `<button class="pick" data-mfpick="${key}">${esc(labelOf(list, f[key] || 'auto'))} ▾</button>`
@@ -263,7 +238,7 @@ export function mailPart(core: MailCore) {
       return off ? `${label}${T('mail.unsupported')}` : label
     })
     const how = T('mail.adv.found', { how: labelOf(SECURITIES(), p.security), port: p.port })
-    const auths = p.auths.some(a => a === 'plain' || a === 'login') ? T('mail.adv.auths', { list: names.join(core.lang === 'zh' ? '、' : ', ') }) : T('mail.adv.noAuth')
+    const auths = p.auths.some(a => a === 'plain' || a === 'login') ? T('mail.adv.auths', { list: names.join(st.lang === 'zh' ? '、' : ', ') }) : T('mail.adv.noAuth')
     const domain = p.auths.some(a => a === 'ntlm' || a === 'gssapi') ? `<div class="note">${esc(T('mail.adv.domain'))}</div>` : ''
     return `<div class="note ok">✓ ${esc(how)} ${esc(auths)}</div>${domain}`
   }
@@ -276,18 +251,18 @@ export function mailPart(core: MailCore) {
   // then, greyed, with a line on why (zhoupengjie/Wakuwaku#42). agent.rs
   // looks for agy again while the settings are open, and once installed it
   // can be picked.
-  const firstAgent = () => (AGENTS[core.snap.settings.mailAgent] ? core.snap.settings.mailAgent : 'claude')
-  const mailList = () => Agents.mailAgents(core.snap, firstAgent())
+  const firstAgent = () => (AGENTS[st.snap.settings.mailAgent] ? st.snap.settings.mailAgent : 'claude')
+  const mailList = () => Agents.mailAgents(st.snap, firstAgent())
   const agyWanted = () => mailList().some(a => a.id === 'agy' && !a.found)
   // A letter's talk going on now, by its key (agent.rs).
-  const talkOf = key => (key && (core.snap.mailTalks || {})[key]) || null
+  const talkOf = key => (key && (st.snap.mailTalks || {})[key]) || null
   const letterKey = l => l.messageId || `${l.account}:${l.uid}`
-  const accountOf = id => (core.snap.mail || []).find(a => a.id === id) || null
+  const accountOf = id => (st.snap.mail || []).find(a => a.id === id) || null
 
   // The inbox shown: "*" (every account's as one) where there are several,
   // else the one; one picked before stays while it is there.
   function inboxId() {
-    const all = core.snap.mail || []
+    const all = st.snap.mail || []
     if (inbox.id === '*' && all.length > 1) return '*'
     if (all.some(a => a.id === inbox.id)) return inbox.id
     return all.length > 1 ? '*' : all[0]?.id || ''
@@ -299,7 +274,7 @@ export function mailPart(core: MailCore) {
     if (!ms) return ''
     const d = new Date(ms)
     const now = new Date()
-    const locale = core.lang === 'zh' ? 'zh-CN' : 'en-US'
+    const locale = st.lang === 'zh' ? 'zh-CN' : 'en-US'
     const time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hour12: false })
     if (full) return `${d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })} ${time}`
     if (d.toDateString() === now.toDateString()) return time
@@ -316,7 +291,7 @@ export function mailPart(core: MailCore) {
   // A letter by where it is: its account, its folder (inbox, sent), its UID
   // there (the inbox's and Sent's UIDs are their own).
   const isLetter = (l, account, folder, uid) => !!l && l.account === account && (l.folder || 'inbox') === (folder || 'inbox') && l.uid === uid
-  const isReading = (account, folder, uid) => isLetter(core.reading, account, folder, uid)
+  const isReading = (account, folder, uid) => isLetter(st.reading, account, folder, uid)
   const listed = (account, folder, uid) => inbox.threads.flatMap(t => t.letters).find(l => isLetter(l, account, folder, uid)) || null
   const where = l => `data-letter="${l.uid}" data-folder="${l.folder || 'inbox'}" data-account="${esc(l.account)}"`
   const whoOf = l => (l.me ? T('mail.me') : l.from || l.address || '?')
@@ -367,7 +342,7 @@ export function mailPart(core: MailCore) {
   // Which inbox, as the picker names it: every account's (with all their
   // unread), or one (with its).
   function boxName(id) {
-    const all = core.snap.mail || []
+    const all = st.snap.mail || []
     if (id === '*') return T('mail.box.all', { n: all.reduce((n, a) => n + unreadOf(a), 0) })
     const a = accountOf(id)
     return a ? T('mail.box.one', { address: a.address, n: unreadOf(a) }) : ''
@@ -378,12 +353,12 @@ export function mailPart(core: MailCore) {
   // room; the settings as wide as that then (island.ts measures them).
   const WIDE_W = 960
   const roomForTwo = () => screen.availWidth >= 820
-  const twoPanes = () => core.tab === 'mail' && core.snap?.settings?.mailPanes !== 'one' && roomForTwo()
+  const twoPanes = () => st.tab === 'mail' && st.snap?.settings?.mailPanes !== 'one' && roomForTwo()
 
   // The inbox: which (every account's, or one), all, unread or starred, its
   // newest letters, more on asking; one pane or two.
   function inboxHTML(id) {
-    const all = core.snap.mail || []
+    const all = st.snap.mail || []
     const every = id === '*'
     const two = twoPanes()
     const pick = all.length > 1 ? `<button class="pick" data-mail-box>${esc(boxName(id))} ▾</button>` : ''
@@ -395,10 +370,10 @@ export function mailPart(core: MailCore) {
     const head = `<div class="sec row-sec"><span class="ellip">${esc(T('mail.inbox'))}${inbox.letters ? ` · ${inbox.letters}` : ''}</span><span class="grow"></span><span class="link" data-w-new>${esc(T('mail.write'))}</span><span class="link" data-mail-refresh>${esc(T(inbox.busy ? 'mail.loading' : 'mail.refresh'))}</span>${setup}${panes}</div>`
     const tools = `<div class="r mail-tools">${pick}<span class="grow"></span>${filters}</div>`
     // The letter put aside, to go on with (not while it is written beside the list).
-    const kept = core.draft && !(two && core.writing)
-      ? `<div class="r draft-row" data-w-open><span class="chip">${esc(T('mail.w.draft'))}</span><div class="grow ellip">${esc(core.draft.subject || T('mail.noSubject'))}${core.draft.to ? ` · ${esc(core.draft.to)}` : ''}</div><span class="link">${esc(T('mail.w.goOn'))}</span></div>`
+    const kept = st.draft && !(two && st.writing)
+      ? `<div class="r draft-row" data-w-open><span class="chip">${esc(T('mail.w.draft'))}</span><div class="grow ellip">${esc(st.draft.subject || T('mail.noSubject'))}${st.draft.to ? ` · ${esc(st.draft.to)}` : ''}</div><span class="link">${esc(T('mail.w.goOn'))}</span></div>`
       : ''
-    const note = core.handNote && !two ? `<div class="note${core.handNote.bad ? ' err' : ''}">${esc(core.handNote.text)}</div>` : ''
+    const note = st.handNote && !two ? `<div class="note${st.handNote.bad ? ' err' : ''}">${esc(st.handNote.text)}</div>` : ''
     // Accounts that could not be asked, in every account's.
     const missed = (inbox.errors || []).map(e => `<div class="note err">${esc(`${accountOf(e.account)?.address || ''}: ${mailError(e.error, accountOf(e.account))}`)}</div>`).join('')
     let list
@@ -419,7 +394,7 @@ export function mailPart(core: MailCore) {
   // greyed with why (agentChoices).
   function agentsHTML() {
     const ag = firstAgent()
-    const found = core.snap.mailAgents || {}
+    const found = st.snap.mailAgents || {}
     const agent = row(esc(T('mail.agent')), esc(T('mail.agentNote')), `<button class="pick" data-mail-agent>${esc(AGENT_NAMES[ag])} ▾</button>`)
     const why = agyWanted() ? `<div class="note">${esc(T('mail.agyCli'))} <span class="link" data-site="agyCli">${esc(T('mail.agyCliHow'))}</span></div>` : ''
     const note = found[ag] ? T(`mail.conf.note.${ag}`) : T('mail.err.noAgent', { agent: AGENT_NAMES[ag] })
@@ -430,8 +405,8 @@ export function mailPart(core: MailCore) {
 
   // How a letter goes to an agent (mailAgentConf, agent.rs): its model and
   // effort; empty is the agent's own setting.
-  const confOf = ag => ((core.snap.settings.mailAgentConf || {})[ag] || {})
-  const modelsOf = ag => (core.snap.mailModels || {})[ag] || []
+  const confOf = ag => ((st.snap.settings.mailAgentConf || {})[ag] || {})
+  const modelsOf = ag => (st.snap.mailModels || {})[ag] || []
 
   // The efforts a model takes (all of them while it is the agent's own).
   function effortsOf(ag, model) {
@@ -460,7 +435,7 @@ export function mailPart(core: MailCore) {
   // One of them changed; an effort the new model does not take goes back
   // to the agent's own.
   function setConf(ag, key, value) {
-    const all = core.snap.settings.mailAgentConf || {}
+    const all = st.snap.settings.mailAgentConf || {}
     const next = { ...(all[ag] || {}), [key]: value }
     if (key === 'model' && next.effort && !effortsOf(ag, value).includes(next.effort)) next.effort = ''
     patch({ mailAgentConf: { ...all, [ag]: next } })
@@ -534,7 +509,7 @@ export function mailPart(core: MailCore) {
   // for this letter only, or that one made the first (handMenu).
   function handButtons(l, talk) {
     const ag = firstAgent()
-    const off = !(core.snap.mailAgents || {})[ag] ? 'disabled' : ''
+    const off = !(st.snap.mailAgents || {})[ag] ? 'disabled' : ''
     const others = mailList().filter(a => a.found && a.id !== ag)
     const more = others.length ? `<button class="pbtn sm al more" data-hand-more title="${esc(T('mail.hand.others'))}">▾</button>` : ''
     const give = talk ? '' : `<span class="split${more ? ' two' : ''}"><button class="pbtn sm al" data-hand="${ag}:talk" ${off}>${esc(T('mail.hand.talk', { agent: AGENTS[ag] }))}</button>${more}</span>`

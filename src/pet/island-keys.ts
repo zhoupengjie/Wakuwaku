@@ -2,21 +2,29 @@
 // programs' buttons and the tray's icons gone through with the arrow keys,
 // pressed with Enter or Space, their menus with Shift+F10.
 // Made by island.ts in the section's place as the page starts
-// (keysPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
-import { Picker, Settings } from './pages.ts'
+// (keysPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import { pet } from './bridge.ts'
-import type { KeysCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function keysPart(core: KeysCore) {
+export function keysPart(core: IslandCore) {
   const {
-    along, appOf, barRest, batMark, body, chevron, clockBox, closeImeList, closePop, closeStackPop,
-    closeWidgetPop, el, endEdit, flyout, hi, home, isOn, isOut, isSetting, isSide, lo, netMark, openImeList,
-    openMenu, openStackPop, openTray, openWidgetPop, orderedTray, outBox, pop, pressApp, quickBox, t, trayBox,
-    trayOrder, volMark, wgPop, windowsBox, wmenu,
+    st, pieces, later, along, body, el, endEdit, hi, home, isOn, isSetting, isSide, lo, t,
   } = core
+  const {
+    barRest, batMark, clockBox, netMark, quickBox, trayBox, volMark, windowsBox,
+  } = pieces.right
+  const { appOf, closePop, pop } = pieces.glide
+  const { closeStackPop, closeWidgetPop, openStackPop, openWidgetPop, wgPop } = pieces.wpop
+  const { openMenu, wmenu } = pieces.wmenu
+  const { pressApp } = pieces.winlist
+  const { closeImeList, openImeList } = pieces.ime
+  const {
+    chevron, flyout, isOut, openTray, orderedTray, outBox, trayOrder,
+  } = pieces.look
 
   // As on Windows' own taskbar: Win+T puts the keyboard on the programs'
   // buttons (the first; Win+Shift+T the last; again, the next one), Win+B
@@ -47,7 +55,7 @@ export function keysPart(core: KeysCore) {
     if (part === 'apps') return [...windowsBox.querySelectorAll('[data-app]')]
     if (part === 'tray') return [...(chevron.hidden ? [] : [chevron]), ...outBox.querySelectorAll('[data-tray]')]
     if (part === 'pop') return pop.hidden ? [] : [...pop.querySelectorAll('[data-win], [data-act]')]
-    if (part === 'fly') return core.trayOpen ? [...flyout.querySelectorAll('[data-tray]')] : []
+    if (part === 'fly') return st.trayOpen ? [...flyout.querySelectorAll('[data-tray]')] : []
     return []
   }
 
@@ -115,7 +123,7 @@ export function keysPart(core: KeysCore) {
     if (keyPart === 'apps') {
       const app = appOf(node.dataset.app)
       if (app) pressApp(app, 'press')
-      if (core.popFor?.app === node.dataset.app && !pop.hidden) keyInto('pop')
+      if (st.popFor?.app === node.dataset.app && !pop.hidden) keyInto('pop')
       return
     }
     if (keyPart === 'pop') {
@@ -123,8 +131,8 @@ export function keysPart(core: KeysCore) {
       return keyRing()
     }
     if (node === chevron) {
-      openTray(!core.trayOpen)
-      if (core.trayOpen) keyInto('fly')
+      openTray(!st.trayOpen)
+      if (st.trayOpen) keyInto('fly')
       return
     }
     pet.taskbar.tray(node.dataset.tray, 'leftDown')
@@ -141,7 +149,7 @@ export function keysPart(core: KeysCore) {
     if (keyPart === 'apps') {
       const app = appOf(node.dataset.app)
       if (app) pressApp(app, 'menu')
-      if (core.popFor?.kind === 'menu' && !pop.hidden) keyInto('pop')
+      if (st.popFor?.kind === 'menu' && !pop.hidden) keyInto('pop')
     } else if (node.dataset.tray) {
       pet.taskbar.tray(node.dataset.tray, 'rightDown')
       pet.taskbar.tray(node.dataset.tray, 'rightUp')
@@ -160,21 +168,21 @@ export function keysPart(core: KeysCore) {
     // Win let go after something else than Win+T or Win+B (winkeys.rs win_up).
     if (part === 'end') return keysOff()
     keyPaused = false
-    barRest.setAttribute('aria-label', t(core.lang, 'taskbar.aria'))
-    if (!isOn() || home() !== 'taskbar' || core.editLayout) return pet.keyboard(false)
+    barRest.setAttribute('aria-label', t(st.lang, 'taskbar.aria'))
+    if (!isOn() || home() !== 'taskbar' || st.editLayout) return pet.keyboard(false)
     // The settings open: closed (theirs went back to the window before as
     // they closed, which blurs this one); the keyboard comes once Win is let
     // go (winkeys.rs).
     keyedAt = 0
     if (isSetting()) {
       keyedAt = Date.now()
-      Settings?.close?.('keys')
+      later.Settings?.close?.('keys')
     }
     const want = part === 'tray' ? 'tray' : 'apps'
     // Win+T again with the keyboard on the buttons: the next one (Shift: the one before), as Windows' does.
     const again = keyPart === 'apps' && want === 'apps'
-    if (core.popFor) closePop()
-    if (core.trayOpen) openTray(false)
+    if (st.popFor) closePop()
+    if (st.trayOpen) openTray(false)
     keyPart = want
     keyFrom = null
     const nodes = keyNodes(want)
@@ -200,9 +208,9 @@ export function keysPart(core: KeysCore) {
       // Editing the taskbar's layout: Esc closes what the picker has open
       // (picker.ts: a drag, its popover, the search's words, the picker),
       // then ends it, as 完成: kept as it goes, there is no 取消 (#53).
-      if (core.editLayout && e.key === 'Escape') {
+      if (st.editLayout && e.key === 'Escape') {
         e.preventDefault()
-        if (Picker?.escape()) return
+        if (later.Picker?.escape()) return
         return endEdit(true)
       }
       if (!keyPart) return
@@ -285,7 +293,7 @@ export function keysPart(core: KeysCore) {
     press.ghost.remove()
     body.classList.remove('tray-dragging')
     markDrop(null)
-    const icon = core.trayIcons.find(i => String(i.key) === press.key)
+    const icon = st.trayIcons.find(i => String(i.key) === press.key)
     const drop = dropAt(e.clientX, e.clientY, press.name)
     if (!icon || !drop) return
     // Kept out or folded, and where among the others: before the icon
@@ -369,13 +377,13 @@ export function keysPart(core: KeysCore) {
   barRest.addEventListener('click', e => {
     const what = (e.target as HTMLElement).closest('[data-bar]')?.dataset.bar
     if (what && what !== 'settings') pet.taskbar.open(what)
-    if (what === 'ime' && core.imeOpen) closeImeList()
+    if (what === 'ime' && st.imeOpen) closeImeList()
     // A widget put there: its card, or closed again; a carousel's, the one
     // it shows; a stack: its others opened over it, or closed again.
     const widget = (e.target as HTMLElement).closest('.tw-widget, .tw-plugin, .tw-carousel')
-    if (widget) core.wgFor === widget.dataset.entry ? closeWidgetPop() : openWidgetPop(widget.dataset.entry)
+    if (widget) st.wgFor === widget.dataset.entry ? closeWidgetPop() : openWidgetPop(widget.dataset.entry)
     const stack = (e.target as HTMLElement).closest('.tw-stack')
-    if (stack) core.stackFor === stack.dataset.entry ? closeStackPop() : openStackPop(stack.dataset.entry)
+    if (stack) st.stackFor === stack.dataset.entry ? closeStackPop() : openStackPop(stack.dataset.entry)
   })
   // A right press: a tray icon's program has it; on the input method, the
   // input methods to pick from; on a widget put there, its card; on the
@@ -388,7 +396,7 @@ export function keysPart(core: KeysCore) {
     // A widget put there (one, or several in one place): its menu.
     const widget = (e.target as HTMLElement).closest('.tw-widget, .tw-plugin, .tw-group')
     if (widget) return openMenu({ where: 'bar', entry: widget.dataset.entry }, widget)
-    if ((e.target as HTMLElement).closest('[data-bar="ime"]')) return core.imeOpen ? closeImeList() : openImeList()
+    if ((e.target as HTMLElement).closest('[data-bar="ime"]')) return st.imeOpen ? closeImeList() : openImeList()
     const mark = quickBox.contains(e.target) ? quickMarkAt(e.clientX, e.clientY) : null
     pet.menu(mark === volMark ? 'volume' : mark === netMark ? 'network' : clockBox.contains(e.target) ? 'clock' : null)
   })

@@ -34,17 +34,31 @@ const MAX_PINS = 5
 const MAX_MEMBERS = 64
 const SPINS = [0, 5, 8, 15]
 
-const isKey = k => typeof k === 'string' && /^(widget|plugin):[a-z0-9_-]{1,40}$/.test(k)
-const keyOfWidget = w => (w.plugin ? `plugin:${w.plugin}` : `widget:${w.id}`)
-const idOfKey = key => key.slice(key.indexOf(':') + 1)
-const isMember = m => !!m && typeof m === 'object' && isKey(m.key) && MODES.includes(m.mode)
+// A member as the setting keeps it: its key and its mode (one of MODES).
+export interface Member {
+  key: string
+  mode: string
+}
+// A member as it is now (effective), with its widgets (the snapshot's).
+export interface LiveMember extends Member {
+  widgets: any[]
+}
+// One taken out (remove), to put it back where it stood (restore).
+export interface Removal extends Member {
+  index: number
+}
+
+const isKey = (k: unknown) => typeof k === 'string' && /^(widget|plugin):[a-z0-9_-]{1,40}$/.test(k)
+const keyOfWidget = (w: { id?: string; plugin?: string | null }) => (w.plugin ? `plugin:${w.plugin}` : `widget:${w.id}`)
+const idOfKey = (key: string) => key.slice(key.indexOf(':') + 1)
+const isMember = (m: any) => !!m && typeof m === 'object' && isKey(m.key) && MODES.includes(m.mode)
 
 // The setting's members as kept: each once, known keys and modes, 64 at most.
-function storedOf(capsule) {
+function storedOf(capsule: any): Member[] | null {
   const list = Array.isArray(capsule?.members) ? capsule.members : null
   if (!list) return null
-  const seen = new Set()
-  const out = []
+  const seen = new Set<string>()
+  const out: Member[] = []
   for (const m of list) {
     if (!isMember(m) || seen.has(m.key) || out.length >= MAX_MEMBERS) continue
     seen.add(m.key)
@@ -56,7 +70,7 @@ function storedOf(capsule) {
 // The monitor's mode in the island's home, its pin (the Plugins page's
 // switch, monitor.pin) saying pinned or taking turns; 'open' only by the
 // capsule's own setting.
-function monitorMode(stored, home, pin) {
+function monitorMode(stored: string | null, home: string, pin: boolean | undefined) {
   if (home !== 'island') return stored || 'turn'
   if (stored === 'open') return 'open'
   return pin !== false ? 'pin' : 'turn'
@@ -78,9 +92,9 @@ interface EffectiveOpts extends HomeOpts {
 
 // The members without the setting: in the widgets' order, each its key
 // once (a plugin's at its first widget).
-function derive(all = [], { home = 'island', pin }: HomeOpts = {}) {
-  const seen = new Set()
-  const out = []
+function derive(all: any[] = [], { home = 'island', pin }: HomeOpts = {}): Member[] {
+  const seen = new Set<string>()
+  const out: Member[] = []
   for (const w of all) {
     const key = keyOfWidget(w)
     if (seen.has(key)) continue
@@ -95,22 +109,22 @@ function derive(all = [], { home = 'island', pin }: HomeOpts = {}) {
 // those on and not listed, in the widgets' order. inCapsule(w): whether a
 // widget is (placement decides: on, not on the taskbar or the desktop).
 // Five pinned at most: a sixth (a list written by hand) takes turns.
-function effective({ capsule, all = [], home = 'island', pin, inCapsule = w => w.on !== false }: EffectiveOpts = {}) {
+function effective({ capsule, all = [], home = 'island', pin, inCapsule = w => w.on !== false }: EffectiveOpts = {}): LiveMember[] {
   const stored = storedOf(capsule)
   const list = stored || derive(all, { home, pin })
-  const widgetsOf = new Map()
+  const widgetsOf = new Map<string, any[]>()
   for (const w of all) {
     if (!inCapsule(w)) continue
     const key = keyOfWidget(w)
     if (!widgetsOf.has(key)) widgetsOf.set(key, [])
-    widgetsOf.get(key).push(w)
+    widgetsOf.get(key)!.push(w)
   }
-  const out = []
-  const seen = new Set()
-  const take = (key, mode) => {
+  const out: LiveMember[] = []
+  const seen = new Set<string>()
+  const take = (key: string, mode: string) => {
     if (seen.has(key) || !widgetsOf.has(key)) return
     seen.add(key)
-    out.push({ key, mode: key === 'widget:monitor' ? monitorMode(stored ? mode : null, home, pin) : mode, widgets: widgetsOf.get(key) })
+    out.push({ key, mode: key === 'widget:monitor' ? monitorMode(stored ? mode : null, home, pin) : mode, widgets: widgetsOf.get(key)! })
   }
   for (const m of list) take(m.key, m.mode)
   for (const key of widgetsOf.keys()) take(key, 'turn')
@@ -122,21 +136,21 @@ function effective({ capsule, all = [], home = 'island', pin, inCapsule = w => w
 // --- Changed by hand (the panel, the open island's menu, the picker) ---------------------
 // Each takes the list as it is (members, the effective ones or the
 // stored) and gives a new one, { key, mode } each.
-const plain = list => list.map(m => ({ key: m.key, mode: m.mode }))
-const pinsIn = (list, but) => list.filter(m => m.mode === 'pin' && m.key !== but).length
+const plain = (list: Member[]): Member[] => list.map(m => ({ key: m.key, mode: m.mode }))
+const pinsIn = (list: Member[], but: string) => list.filter(m => m.mode === 'pin' && m.key !== but).length
 
 // Whether one may be pinned: five others pinned already, not.
-const canPin = (list, key) => pinsIn(list, key) < MAX_PINS
+const canPin = (list: Member[], key: string) => pinsIn(list, key) < MAX_PINS
 
 // Its mode set; a sixth pinned refused (the list as it was).
-function setMode(list, key, mode) {
+function setMode(list: Member[], key: string, mode: string): Member[] {
   if (!MODES.includes(mode) || !list.some(m => m.key === key)) return plain(list)
   if (mode === 'pin' && !canPin(list, key)) return plain(list)
   return list.map(m => ({ key: m.key, mode: m.key === key ? mode : m.mode }))
 }
 
 // The one at `from` put at `to` (the rows dragged in the panel).
-function move(list, from, to) {
+function move(list: Member[], from: number, to: number): Member[] {
   const out = plain(list)
   if (from === to || !out[from] || to < 0 || to >= out.length) return out
   out.splice(to, 0, ...out.splice(from, 1))
@@ -145,24 +159,24 @@ function move(list, from, to) {
 
 // In it: at its end (or at an index), taking turns; one there already
 // keeps its place and mode.
-function add(list, key, at = -1, mode = 'turn') {
+function add(list: Member[], key: string, at = -1, mode = 'turn'): Member[] {
   const out = plain(list)
   if (!isKey(key) || out.some(m => m.key === key)) return out
-  const m = { key, mode: mode === 'pin' && !canPin(out, key) ? 'turn' : MODES.includes(mode) ? mode : 'turn' }
+  const m: Member = { key, mode: mode === 'pin' && !canPin(out, key) ? 'turn' : MODES.includes(mode) ? mode : 'turn' }
   if (at >= 0 && at <= out.length) out.splice(at, 0, m)
   else out.push(m)
   return out.slice(0, MAX_MEMBERS)
 }
 
 // Out of it, and what to put it back with (undo): its key, mode and place.
-function remove(list, key) {
+function remove(list: Member[], key: string): { list: Member[]; record: Removal | null } {
   const index = list.findIndex(m => m.key === key)
   if (index < 0) return { list: plain(list), record: null }
   return { list: plain(list.filter(m => m.key !== key)), record: { key, mode: list[index].mode, index } }
 }
 
 // Put back as it was (undo): where it stood, clamped to the list as it is now.
-function restore(list, record) {
+function restore(list: Member[], record: Removal | null): Member[] {
   if (!record || !isKey(record.key)) return plain(list)
   const without = plain(list).filter(m => m.key !== record.key)
   return add(without, record.key, Math.min(Math.max(0, record.index), without.length), record.mode)
@@ -173,7 +187,7 @@ function restore(list, record) {
 // the monitor), the order as widgetOrder (each member's widget or plugin
 // id) and, in the island's home, the monitor's pin as monitor.pin. spin:
 // kept, or as widgetSpin says.
-function patchFor(config: Config = {}, list, home = 'island') {
+function patchFor(config: Config = {}, list: Member[], home = 'island'): Config {
   const members = plain(list).slice(0, MAX_MEMBERS)
   const spinWas = config.capsule?.spin
   const spin = SPINS.includes(spinWas) ? spinWas : SPINS.includes(Number(config.widgetSpin)) ? Number(config.widgetSpin) : undefined
@@ -188,16 +202,25 @@ function patchFor(config: Config = {}, list, home = 'island') {
 
 // The turns' length: widgetSpin (the Plugins page and the panel both set
 // it; the panel the capsule's spin too, for when the page has it alone).
-const spinOf = config => {
+const spinOf = (config: Config | null | undefined) => {
   const s = Number(config?.widgetSpin ?? config?.capsule?.spin ?? 8)
   return SPINS.includes(s) ? s : 8
 }
-function spinPatch(config: Config = {}, sec) {
+function spinPatch(config: Config = {}, sec: number) {
   if (!SPINS.includes(sec)) return null
   return { widgetSpin: sec, capsule: { ...(config.capsule && typeof config.capsule === 'object' && !Array.isArray(config.capsule) ? config.capsule : {}), spin: sec } }
 }
 
 // --- Its pins in the room there is (island.ts, the closed capsule) ----------------------------
+// A pin's widths (px): with its value, as its icon alone; monitor: the
+// monitor's readings. How each is shown.
+export interface PinSize {
+  full: number
+  icon: number
+  monitor?: boolean
+}
+export type PinMode = 'full' | 'icon' | 'hidden'
+
 // Five pinned may not fit at its right end (the island at the top within
 // its window, the capsule on the strip before what stands beside it). Each
 // pin's width with its value and as its icon alone (px; the monitor's
@@ -207,8 +230,8 @@ function spinPatch(config: Config = {}, sec) {
 // the rightmost first), then the leftmost icons too, a "+k" before the rest
 // saying how many are not shown (none fits, not even that: none shown).
 // { modes: ['full' | 'icon' | 'hidden'], more }.
-function fitPins(pins, room, { gap = 8, plus = 24 } = {}) {
-  const modes = pins.map(() => 'full')
+function fitPins(pins: PinSize[], room: number, { gap = 8, plus = 24 } = {}): { modes: PinMode[]; more: number } {
+  const modes = pins.map((): PinMode => 'full')
   const width = () => {
     const shown = pins.filter((_, i) => modes[i] !== 'hidden')
     const hidden = pins.length - shown.length

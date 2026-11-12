@@ -3,28 +3,32 @@
 // draws them: taskbar_thumbs), pressed, dragged, and files dragged onto a
 // button bringing its window up.
 // Made by island.ts in the section's place as the page starts
-// (winlistPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// (winlistPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as Aim from './aim.ts'
 import * as Presses from './presses.ts'
 import { pet } from './bridge.ts'
-import type { WinlistCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function winlistPart(core: WinlistCore) {
+export function winlistPart(core: IslandCore) {
   const {
-    across, along, appOf, appOrder, barRest, body, closePop, crossHi, crossLo, el, hi, home, isExplorer, isOn,
-    isSide, island, len, lo, openPop, orderedApps, pop, popReach, t, tbEdge, windowsBox,
+    st, pieces, across, along, body, crossHi, crossLo, el, hi, home, isOn, isSide, island, len, lo, t, tbEdge,
   } = core
+  const { barRest, windowsBox } = pieces.right
+  const {
+    appOf, appOrder, closePop, isExplorer, openPop, orderedApps, pop, popReach,
+  } = pieces.glide
 
   function drawPop() {
-    const app = core.popFor && appOf(core.popFor.app)
+    const app = st.popFor && appOf(st.popFor.app)
     const button = app && windowsBox.querySelector(`[data-app="${CSS.escape(app.app)}"]`)
     if (!app || !button) return closePop()
     const windows = app.windows || []
     const rows = []
-    if (core.popFor.kind === 'list') {
+    if (st.popFor.kind === 'list') {
       // A card for each: its icon, title and ✕, and room under them for
       // its live picture (taskbar/mod.rs thumbs).
       for (const w of windows) {
@@ -53,33 +57,33 @@ export function winlistPart(core: WinlistCore) {
         return row
       }
       const head = el('div', 'whead', app.name)
-      rows.push(head, item(t(core.lang, windows.length ? 'taskbar.newWindow' : 'taskbar.open'), 'launch'), item(t(core.lang, app.pinned ? 'taskbar.unpin' : 'taskbar.pin'), app.pinned ? 'unpin' : 'pin'))
+      rows.push(head, item(t(st.lang, windows.length ? 'taskbar.newWindow' : 'taskbar.open'), 'launch'), item(t(st.lang, app.pinned ? 'taskbar.unpin' : 'taskbar.pin'), app.pinned ? 'unpin' : 'pin'))
       // Windows' End task while its setting is on (zhoupengjie/Wakuwaku#36),
       // over the close as on Windows' menu: the program's windows' processes
       // ended (tasks.rs end_task). None for File Explorer, as Windows offers
       // none: its windows are the shell's own (explorer.exe).
-      if (windows.length && core.look.endTask && !isExplorer(app.path)) rows.push(item(t(core.lang, windows.length > 1 ? 'taskbar.endAll' : 'taskbar.end'), 'end'))
-      if (windows.length) rows.push(item(t(core.lang, windows.length > 1 ? 'taskbar.closeAll' : 'taskbar.close'), 'close'))
+      if (windows.length && st.look.endTask && !isExplorer(app.path)) rows.push(item(t(st.lang, windows.length > 1 ? 'taskbar.endAll' : 'taskbar.end'), 'end'))
+      if (windows.length) rows.push(item(t(st.lang, windows.length > 1 ? 'taskbar.closeAll' : 'taskbar.close'), 'close'))
     }
     if (!rows.length) return closePop()
     // Another program's windows taking the place of the last's (the pointer
     // gone along the buttons): where the list was and how big, to slide from.
-    const isList = core.popFor.kind === 'list'
-    const from = isList && !pop.hidden && pop.classList.contains('list') && core.popShown && core.popShown !== app.app ? { [isSide() ? 'top' : 'left']: isSide() ? pop.offsetTop : pop.offsetLeft, width: pop.offsetWidth, height: pop.offsetHeight } : null
+    const isList = st.popFor.kind === 'list'
+    const from = isList && !pop.hidden && pop.classList.contains('list') && st.popShown && st.popShown !== app.app ? { [isSide() ? 'top' : 'left']: isSide() ? pop.offsetTop : pop.offsetLeft, width: pop.offsetWidth, height: pop.offsetHeight } : null
     const opening = pop.hidden
     // Drawn again only when what it shows changed: a card replaced under a
     // press is never clicked (the windows' list comes again often).
-    const drawn = JSON.stringify([core.popFor.app, core.popFor.kind, app.name, app.pinned, windows.map(w => [w.id, w.title, w.front, (w.png || '').length]), core.lang, core.look.endTask])
-    if (drawn !== core.popDrawn || pop.hidden) {
-      core.popDrawn = drawn
+    const drawn = JSON.stringify([st.popFor.app, st.popFor.kind, app.name, app.pinned, windows.map(w => [w.id, w.title, w.front, (w.png || '').length]), st.lang, st.look.endTask])
+    if (drawn !== st.popDrawn || pop.hidden) {
+      st.popDrawn = drawn
       pop.replaceChildren(...rows, popReach)
     }
-    pop.classList.toggle('menu', core.popFor.kind === 'menu')
+    pop.classList.toggle('menu', st.popFor.kind === 'menu')
     pop.classList.toggle('list', isList)
     pop.hidden = false
-    core.popShown = app.app
+    st.popShown = app.app
     // Mid-slide, the list keeps going where it was going.
-    if (core.popMoving && !from) return
+    if (st.popMoving && !from) return
     // Over its button (beside it on a side bar, 6 px off the bar), kept
     // within the screen, at its own size.
     pop.classList.remove('sliding', 'rising')
@@ -101,15 +105,15 @@ export function winlistPart(core: WinlistCore) {
   const POP_SLIDE_MS = 300
 
   function holdThumbs() {
-    core.popMoving = true
-    clearTimeout(core.popMoveTimer)
+    st.popMoving = true
+    clearTimeout(st.popMoveTimer)
     thumbsSent = '[]'
     pet.taskbar.thumbs([])
   }
 
   function settlePop(ms) {
-    core.popMoveTimer = setTimeout(() => {
-      core.popMoving = false
+    st.popMoveTimer = setTimeout(() => {
+      st.popMoving = false
       // A slide not quite done by now would hold the list at its old size.
       pop.getAnimations().forEach(a => a.id === 'slide' && a.cancel())
       pop.classList.remove('sliding', 'rising')
@@ -153,8 +157,8 @@ export function winlistPart(core: WinlistCore) {
   let thumbsSent = ''
   function sendThumbs() {
     // Not while the list slides or rises: they come once it is in place.
-    if (core.popMoving) return
-    const items = core.popFor?.kind === 'list' ? [...pop.querySelectorAll('[data-thumb]')].map(r => {
+    if (st.popMoving) return
+    const items = st.popFor?.kind === 'list' ? [...pop.querySelectorAll('[data-thumb]')].map(r => {
       const b = r.getBoundingClientRect()
       return [Number(r.dataset.thumb), b.left, b.top, b.width, b.height]
     }) : []
@@ -197,10 +201,10 @@ export function winlistPart(core: WinlistCore) {
     }
     if (!windows.length) return pet.taskbar.app(app.path, 'launch', app.id)
     if (windows.length > 1) {
-      const listed = core.popFor?.kind === 'list' && core.popFor.app === app.app && !pop.hidden
-      if (listed && core.popFor.pressed) return closePop()
+      const listed = st.popFor?.kind === 'list' && st.popFor.app === app.app && !pop.hidden
+      if (listed && st.popFor.pressed) return closePop()
       if (!listed) openPop(app.app, 'list')
-      core.popFor.pressed = true
+      st.popFor.pressed = true
       return
     }
     closePop()
@@ -280,7 +284,7 @@ export function winlistPart(core: WinlistCore) {
       if (from) winPress.ghost.src = from.src
       body.append(winPress.ghost)
       body.classList.add('win-dragging')
-      clearTimeout(core.popTimer)
+      clearTimeout(st.popTimer)
       closePop()
     }
     if (winPress.ghost) {
@@ -351,15 +355,15 @@ export function winlistPart(core: WinlistCore) {
   // the list (aim.ts, zhoupengjie/Wakuwaku#56): it changed at once to any
   // button crossed on the way to a card.
   const aim = Aim.create()
-  const aimList = () => (core.popFor?.kind === 'list' && !pop.hidden ? { key: core.popFor.app, rect: pop.getBoundingClientRect(), edge: tbEdge() } : null)
+  const aimList = () => (st.popFor?.kind === 'list' && !pop.hidden ? { key: st.popFor.app, rect: pop.getBoundingClientRect(), edge: tbEdge() } : null)
   function aimPop() {
-    clearTimeout(core.popTimer)
+    clearTimeout(st.popTimer)
     const app = appOf(aim.key())
-    if (!app || winPress?.ghost || menuUp || core.popFor?.kind === 'menu' || !(app.windows || []).length) return
+    if (!app || winPress?.ghost || menuUp || st.popFor?.kind === 'menu' || !(app.windows || []).length) return
     const wait = aim.due(aimList(), performance.now())
     if (wait === null) return
     if (wait === 0) return openPop(app.app, 'list')
-    core.popTimer = setTimeout(aimPop, wait)
+    st.popTimer = setTimeout(aimPop, wait)
   }
   windowsBox.addEventListener('mousemove', e => aim.move(e.clientX, e.clientY, performance.now()))
   windowsBox.addEventListener('mouseover', e => {
@@ -374,10 +378,10 @@ export function winlistPart(core: WinlistCore) {
   for (const node of [windowsBox, pop]) {
     node.addEventListener('mouseleave', () => {
       if (node === windowsBox) aim.over(null, performance.now())
-      clearTimeout(core.popTimer)
-      core.popTimer = setTimeout(closePop, Aim.CLOSE_MS)
+      clearTimeout(st.popTimer)
+      st.popTimer = setTimeout(closePop, Aim.CLOSE_MS)
     })
-    node.addEventListener('mouseenter', () => core.popFor && clearTimeout(core.popTimer))
+    node.addEventListener('mouseenter', () => st.popFor && clearTimeout(st.popTimer))
   }
 
   // A file dragged from another program and held over a running program's
@@ -393,11 +397,11 @@ export function winlistPart(core: WinlistCore) {
   pet.onFileDrag((type, at, paths) => {
     // Let go of over the strip: programs and shortcuts to them pinned, as
     // Windows' own taskbar pins one dropped on it (taskbar/mod.rs taskbar_pin_files).
-    if (type === 'drop' && at && paths?.length && isOn() && home() === 'taskbar' && !core.editLayout) {
+    if (type === 'drop' && at && paths?.length && isOn() && home() === 'taskbar' && !st.editLayout) {
       const on = document.elementFromPoint(at.x, at.y)
       if (on && (barRest.contains(on) || island.contains(on))) pet.taskbar.pinFiles(paths)
     }
-    const live = at && (type === 'enter' || type === 'over') && isOn() && home() === 'taskbar' && !core.editLayout
+    const live = at && (type === 'enter' || type === 'over') && isOn() && home() === 'taskbar' && !st.editLayout
     const node = live ? document.elementFromPoint(at.x, at.y) : null
     const card = node && pop.contains(node) ? node.closest('[data-win]') : null
     const button = !card && node && windowsBox.contains(node) ? node.closest('[data-app]') : null
@@ -413,7 +417,7 @@ export function winlistPart(core: WinlistCore) {
       if (windows.length === 1) {
         closePop()
         pet.taskbar.window(windows[0].id, 'drag')
-      } else if (windows.length > 1 && !(core.popFor?.kind === 'list' && core.popFor.app === app.app && !pop.hidden)) {
+      } else if (windows.length > 1 && !(st.popFor?.kind === 'list' && st.popFor.app === app.app && !pop.hidden)) {
         openPop(app.app, 'list')
       }
     }, Presses.DRAG_HOLD_MS)
@@ -425,7 +429,7 @@ export function winlistPart(core: WinlistCore) {
   pop.addEventListener('pointerdown', e => {
     if (e.button !== 0) return
     e.stopPropagation()
-    const app = core.popFor && appOf(core.popFor.app)
+    const app = st.popFor && appOf(st.popFor.app)
     if (!app) return
     const close = e.target.closest('[data-close]')
     if (close) return pet.taskbar.window(close.dataset.close, 'close')

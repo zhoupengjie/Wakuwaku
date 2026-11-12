@@ -1,57 +1,27 @@
 // Other people's plugins (addons.rs view; addonui.ts) and packs (packs.rs):
 // each one's row and its own page with what it may do, and the pages under
 // the Plugins page (SUBS).
-// Made by settings.ts in the section's place as the page starts
-// (addonsPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (addonsPart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as AddonUI from './addonui.ts'
 import * as Widgets from './widgets.ts'
+import type { SettingsCore } from './settings.ts'
 
-// What this part takes of the settings' core: the names it reads (and,
-// of its lets, writes); settings.ts's call is checked against them.
-export interface AddonsCore {
-  AddonUI: any
-  COLOR: any
-  T: any
-  Widgets: any
-  drafts: any
-  draw: any
-  esc: any
-  freshRows: any
-  lang: any
-  loadGallery: any
-  marketItem: any
-  marketItemPage: any
-  marketPage: any
-  nameList: any
-  openPlugin: any
-  part: any
-  partToShow: any
-  placeHTML: any
-  placeOf: any
-  relayout: any
-  sec: any
-  seg: any
-  showPart: any
-  snap: any
-  sub: any
-  sw: any
-  tab: any
-}
-
-export function addonsPart(core: AddonsCore) {
+export function addonsPart(core: SettingsCore) {
   const {
-    AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part, placeHTML, placeOf,
-    sec, seg, showPart, sw,
+    st, pieces, go, AddonUI, COLOR, T, Widgets, drafts, draw, esc, freshRows, loadGallery, nameList, part,
+    placeHTML, placeOf, sec, seg, showPart, sw,
   } = core
 
-  const addonsNow = () => (core.snap?.addons || []).filter(a => a.kind === 'plugin')
+  const addonsNow = () => (st.snap?.addons || []).filter(a => a.kind === 'plugin')
   const addonById = id => addonsNow().find(a => a.id === id) || null
   const addonField = (id, key) => (addonById(id)?.settings || []).find(f => f.key === key) || null
   // Names in a row as her language says them (「a、b 和 c」).
-  const andList = names => nameList(core.lang, names, 'and')
+  const andList = names => nameList(st.lang, names, 'and')
   // Its icon: its own picture (one colour, as hers are), one of hers, or
   // the first letter of its name on its colour.
   const addonIcon = a => (a.icon?.url ? Widgets.maskHTML(a.icon.url) : a.icon?.name && Widgets.hasIcon(a.icon.name) ? Widgets.icon(a.icon.name) : Widgets.markHTML(a.name, a.color))
@@ -66,15 +36,15 @@ export function addonsPart(core: AddonsCore) {
   // responding, 重新启用 there instead. Installed while the panel is open:
   // an accent edge at its left until it closes.
   function addonRow(a, mine) {
-    const detailed = core.snap.settings.details !== false
+    const detailed = st.snap.settings.details !== false
     const place = placeOf({ plugin: a.id }, a.on)
     const says = mine
-      .map(w => Widgets.words(core.lang, w, detailed))
+      .map(w => Widgets.words(st.lang, w, detailed))
       .map(({ label, value }) => [label !== a.name ? label : '', value].filter(Boolean).join(' '))
       .filter(Boolean)
       .join(' · ')
     const note = AddonUI.statusOf(a, { placed: !!place.at, mine, T })
-    const open = core.openPlugin === a.id
+    const open = st.openPlugin === a.id
     const more = a.settings?.length ? `<button class="pbtn sm" data-pexp="${esc(a.id)}">${esc(T(open ? 'pl.fold' : 'pl.settings'))}</button>` : ''
     const end = note.revive
       ? `<button class="pbtn sm" data-revive="${esc(a.id)}">${esc(T('addons.revive'))}</button>`
@@ -117,8 +87,8 @@ export function addonsPart(core: AddonsCore) {
   const SUBS = {
     addon: s => addonById(s.id) && addonPage(addonById(s.id)),
     pack: s => packById(s.kind, s.id) && packPage(packById(s.kind, s.id)),
-    market: () => core.marketPage(),
-    mkItem: s => core.marketItem(s.id) && core.marketItemPage(core.marketItem(s.id)),
+    market: () => pieces.market.marketPage(),
+    mkItem: s => pieces.market.marketItem(s.id) && pieces.market.marketItemPage(pieces.market.marketItem(s.id)),
   }
   function crumbHTML(path) {
     const last = path.length - 1
@@ -126,12 +96,12 @@ export function addonsPart(core: AddonsCore) {
     return `<div class="crumb"><button class="crumb-b" data-sub-back title="${esc(T('addons.back'))}" aria-label="${esc(T('addons.back'))}">&#xE76B;</button><span class="path ellip">${parts}</span></div>`
   }
   function openSub(next) {
-    core.sub = { ...next, back: core.sub }
+    go({ type: 'sub', sub: next })
     draw(true)
     core.relayout()
   }
   function backSub() {
-    core.sub = core.sub?.back || null
+    go({ type: 'back' })
     draw(true)
     core.relayout()
   }
@@ -143,7 +113,7 @@ export function addonsPart(core: AddonsCore) {
   // over the panel).
   const PERM_GLYPH = { net: 'E774', agents: 'E756', hardware: 'E950', notify: 'EA8F', none: 'EA18' }
   function addonPage(a) {
-    const mine = (core.snap.widgets || []).filter(w => w.plugin === a.id)
+    const mine = (st.snap.widgets || []).filter(w => w.plugin === a.id)
     const place = placeOf({ plugin: a.id }, a.on)
     const about = AddonUI.aboutOf(a, T)
     const top = `<div class="ad-head"><span class="ad-tile" style="--c:${esc(addonColor(a, mine))}">${addonIcon(a)}</span><div class="grow"><div class="ad-name ellip">${esc(a.name)}${unreviewedChip(a)}</div><div class="d ellip">${esc(about)}</div></div>${placeHTML(place, `plugin:${a.id}`)}</div>`
@@ -161,16 +131,14 @@ export function addonsPart(core: AddonsCore) {
 
   // --- Packs (packs.rs view; addonui.ts) ------------------------------------------------------
   // The pets and wallpapers installed as packs, each by its kind and id.
-  const packsNow = () => core.snap?.packs || []
+  const packsNow = () => st.snap?.packs || []
   const packById = (kind, id) => packsNow().find(p => p.kind === kind && p.id === id) || null
   // Its tile: its preview, else the first letter of its name.
   const packTile = (p, big = false) => `<span class="pk-tile${big ? ' big' : ''}">${p.preview ? `<img src="${esc(p.preview)}" alt="" loading="lazy">` : Widgets.markHTML(p.name, null)}</span>`
   // Its 在「外观」里选: the Look page, at its kind's part (her pets, the wallpaper).
   const toLookButton = kind => `<button class="pbtn sm" data-pack-look="${esc(kind)}">${esc(T('packs.toLook'))}</button>`
   function toLook(kind) {
-    core.tab = 'look'
-    core.sub = null
-    core.partToShow = AddonUI.lookPartOf(kind)
+    go({ type: 'page', tab: 'look', part: AddonUI.lookPartOf(kind) })
     draw(true)
     loadGallery(false)
     core.relayout()

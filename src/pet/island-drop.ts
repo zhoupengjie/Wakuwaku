@@ -3,26 +3,28 @@
 // own window taking her under the cursor; brought close again, it reaches
 // out a drop for her and takes her back in (reach, absorb).
 // Made by island.ts in the section's place as the page starts
-// (dropPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// (dropPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import { pet } from './bridge.ts'
-import type { DropCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function dropPart(core: DropCore) {
+export function dropPart(core: IslandCore) {
   const {
-    BODY_H, BODY_W, BREAK_PX, CLIPS, DROP_R, PULL_ROOM, REACH_R, REACH_SHARE, atBottom, body, dropHer,
-    dropSheet, gooDrop, gooIsland, gooNeck, her, hidePlate, home, isHome, isNudging, isOn, isSetting, isSide,
-    island, pressNudge, setRoom, setStow, sheetImage, showFrame, tbEdge, update,
+    st, pieces, go, BODY_H, BODY_W, BREAK_PX, CLIPS, DROP_R, PULL_ROOM, REACH_R, REACH_SHARE, atBottom, body,
+    dropHer, dropSheet, gooDrop, gooIsland, gooNeck, her, home, isHome, isNudging, isOn, isSetting, isSide,
+    island, pressNudge, setRoom, sheetImage, showFrame, tbEdge, update,
   } = core
+  const { hidePlate, setStow } = pieces.plate
 
   function pullDown(e) {
     console.log('pointerdown on her in the island, button', e.button)
-    if (e.button !== 0 || !isHome() || core.view === 'ask' || isSetting() || core.isAbsorbing) return
+    if (e.button !== 0 || !isHome() || st.view === 'ask' || isSetting() || st.isAbsorbing) return
     // No mouse events follow, so the island does not take this for a click.
     e.preventDefault()
-    core.pull = { x0: e.clientX, y0: e.clientY, started: false, broken: false, at: null, carrying: false }
+    go({ type: 'press', x: e.clientX, y: e.clientY })
     pet.holding(true)
     window.addEventListener('pointermove', pullMove)
     window.addEventListener('pointerup', pullUp)
@@ -37,22 +39,21 @@ export function dropPart(core: DropCore) {
   }
 
   function pullMove(e) {
-    if (core.pull?.started) core.pulledAt = Date.now()
-    if (!core.pull || core.pull.carrying) return
-    if (!core.pull.started) {
-      if (Math.hypot(e.clientX - core.pull.x0, e.clientY - core.pull.y0) < 5) return
+    if (st.pull?.started) st.pulledAt = Date.now()
+    if (!st.pull || st.pull.carrying) return
+    if (!st.pull.started) {
+      if (Math.hypot(e.clientX - st.pull.x0, e.clientY - st.pull.y0) < 5) return
       startPull()
     }
     stretch(e.clientX, e.clientY)
     // Pinched off: from here her own window carries her, anywhere on the screen.
-    if (core.pull.broken) handOff(e)
+    if (st.pull.broken) handOff(e)
   }
 
   function startPull() {
-    core.pull.started = true
-    core.nudge = null
-    clearTimeout(core.nudgeTimer)
-    clearInterval(core.clockTimer)
+    go({ type: 'pull' })
+    clearTimeout(st.nudgeTimer)
+    clearInterval(st.clockTimer)
     // Room to stretch in, then the drop: she hangs in it kicking her legs.
     setRoom(PULL_ROOM)
     startDropHer()
@@ -61,14 +62,14 @@ export function dropPart(core: DropCore) {
   }
 
   function startDropHer() {
-    clearTimeout(core.dropTimer)
-    sheetImage(dropSheet, core.spriteUrl)
+    clearTimeout(st.dropTimer)
+    sheetImage(dropSheet, st.spriteUrl)
     const { row, frames, ms } = CLIPS.jumping
     let frame = 0
     const step = () => {
       showFrame(dropSheet, row, frame)
       frame = (frame + 1) % frames
-      core.dropTimer = setTimeout(step, ms)
+      st.dropTimer = setTimeout(step, ms)
     }
     step()
   }
@@ -125,22 +126,21 @@ export function dropPart(core: DropCore) {
     const cy = edge === 'bottom' ? Math.min(y + 30, r.top + 10) : edge === 'top' ? Math.max(y + 30, r.bottom - 10) : y
     const [ax, ay] = edgeNear(r, cx, cy)
     const dist = Math.hypot(cx - ax, cy - ay)
-    core.pull.broken = dist > BREAK_PX
-    drawGoo(cx, cy, { neck: core.pull.broken ? 0 : Math.max(8, 34 - dist * 0.22) })
+    go({ type: 'stretch', broken: dist > BREAK_PX, at: { cx, cy } })
+    drawGoo(cx, cy, { neck: st.pull.broken ? 0 : Math.max(8, 34 - dist * 0.22) })
     Object.assign(dropHer.style, { left: `${cx - BODY_W / 2}px`, top: `${cy - BODY_H / 2}px` })
-    core.pull.at = { cx, cy }
   }
 
   // The drop let go of her: her window takes her where she is, and the island
   // wobbles back with her seat empty.
   function handOff(e) {
     console.log('hand-off')
-    core.pull.carrying = true
-    clearTimeout(core.dropTimer)
-    pet.releaseHer({ dx: core.pull.at.cx - e.clientX, dy: core.pull.at.cy - e.clientY })
+    go({ type: 'carry' })
+    clearTimeout(st.dropTimer)
+    pet.releaseHer({ dx: st.pull.at.cx - e.clientX, dy: st.pull.at.cy - e.clientY })
     body.classList.remove('pulling')
     wobble()
-    core.herClip = null
+    st.herClip = null
     update()
   }
 
@@ -152,32 +152,33 @@ export function dropPart(core: DropCore) {
   }
 
   function pullUp(e) {
-    console.log('pull up:', e?.type, core.pull ? (core.pull.carrying ? 'carrying' : core.pull.started ? 'pulling' : 'pressed') : 'no pull')
+    console.log('pull up:', e?.type, st.pull ? (st.pull.carrying ? 'carrying' : st.pull.started ? 'pulling' : 'pressed') : 'no pull')
     window.removeEventListener('pointermove', pullMove)
     window.removeEventListener('pointerup', pullUp)
     window.removeEventListener('pointercancel', pullUp)
     pet.holding(false)
-    if (!core.pull) return
-    const done = core.pull
-    core.pull = null
+    if (!st.pull) return
+    const done = st.pull
+    // A press that never moved, or her carried off, is over here; one let
+    // go in the drop stays until she is back in her seat (settleBack).
+    go({ type: 'release' })
     if (!done.started) {
       // A click on her, not a pull: the settings, as anywhere on the island;
       // open by itself, it closes instead, as anywhere on it (pressNudge).
       // The click the browser sends after, on the island that held the
       // pointer, is this press too: not one to open the settings.
-      if (core.view === 'ask') return
+      if (st.view === 'ask') return
       if (!isNudging()) return pet.openSettings()
-      core.pulledAt = Date.now()
+      st.pulledAt = Date.now()
       return pressNudge()
     }
-    core.pulledAt = Date.now()
+    st.pulledAt = Date.now()
     if (done.carrying) {
       // Let go: she lands there, or comes home if she was let go by the island.
       pet.dropHer()
       pet.hover(false)
       return
     }
-    core.pull = done
     settleBack(done.at)
   }
 
@@ -194,11 +195,10 @@ export function dropPart(core: DropCore) {
     })
     setTimeout(() => {
       body.classList.remove('pulling', 'settling', 'reaching')
-      clearTimeout(core.dropTimer)
+      clearTimeout(st.dropTimer)
       dropHer.style.transform = ''
-      core.pull = null
-      core.isAbsorbing = false
-      core.herClip = null
+      go({ type: 'settled' })
+      st.herClip = null
       pet.hover(island.matches(':hover'))
       update()
     }, 340)
@@ -223,28 +223,28 @@ export function dropPart(core: DropCore) {
   // Her middle on the screen as she is moved near (snap: let go now and she
   // is back), or null when she has gone off again.
   function reach(at) {
-    if (!isOn() || core.isAbsorbing) return
-    clearTimeout(core.retractTimer)
+    if (!isOn() || st.isAbsorbing) return
+    clearTimeout(st.retractTimer)
     if (!at) {
-      if (!core.isReaching) return
-      core.isReaching = false
+      if (!st.isReaching) return
+      go({ type: 'reach', on: false })
       // The drop draws back into the island.
       body.classList.add('settling')
       const r = island.getBoundingClientRect()
       const [sx, sy] = seatIn(r)
       drawGoo(sx, sy, { neck: 0, radius: 8 })
-      core.retractTimer = setTimeout(() => {
+      st.retractTimer = setTimeout(() => {
         body.classList.remove('reaching', 'settling')
         update()
       }, 320)
       return
     }
-    if (!core.isReaching) {
-      core.isReaching = true
+    if (!st.isReaching) {
+      go({ type: 'reach', on: true })
       // Down from out of the way, to reach for her.
       setStow()
       // The next call draws, once the window has grown.
-      return whenRoomy(() => core.isReaching && reach(at))
+      return whenRoomy(() => st.isReaching && reach(at))
     }
     body.classList.remove('settling')
     body.classList.add('reaching')
@@ -263,15 +263,13 @@ export function dropPart(core: DropCore) {
   // the drop back into the island.
   function absorb(at) {
     if (!isOn() || !at) return
-    clearTimeout(core.retractTimer)
-    core.isReaching = false
-    core.isAbsorbing = true
-    core.isComingHome = true
+    clearTimeout(st.retractTimer)
+    go({ type: 'absorb' })
     setStow()
-    clearTimeout(core.comingHomeTimer)
+    clearTimeout(st.comingHomeTimer)
     // Main says she is in a moment after; should it not, she is not.
-    core.comingHomeTimer = setTimeout(() => {
-      core.isComingHome = false
+    st.comingHomeTimer = setTimeout(() => {
+      go({ type: 'homecoming-over' })
       update()
     }, 3000)
     body.classList.remove('reaching', 'settling')
@@ -288,18 +286,18 @@ export function dropPart(core: DropCore) {
   pet.onAbsorb(absorb)
   // She landed but this page never heard the button go up: forget the pull.
   pet.onLanded(() => {
-    if (!core.pull?.carrying) return
+    if (!st.pull?.carrying) return
     console.log('landed without a pointerup here')
     window.removeEventListener('pointermove', pullMove)
     window.removeEventListener('pointerup', pullUp)
     window.removeEventListener('pointercancel', pullUp)
-    core.pull = null
+    go({ type: 'landed' })
     pet.hover(false)
     update()
   })
 
   her.addEventListener('pointerdown', pullDown)
-  island.addEventListener('lostpointercapture', () => console.log('lost pointer capture', core.pull ? (core.pull.carrying ? 'while carrying' : 'while pulling') : ''))
+  island.addEventListener('lostpointercapture', () => console.log('lost pointer capture', st.pull ? (st.pull.carrying ? 'while carrying' : 'while pulling') : ''))
 
   return { absorb, reach }
 }

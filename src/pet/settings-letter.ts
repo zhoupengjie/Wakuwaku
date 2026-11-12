@@ -2,85 +2,26 @@
 // read; the Mail page drawn, with its accounts and the codes come by mail;
 // the Network page (the proxy, how she reaches the web, its test); and the
 // menus a letter and a button open.
-// Made by settings.ts in the section's place as the page starts
-// (letterPart(core), imported by settings.ts): what it takes of the settings' core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// settings' again.
+// Made by settings.ts in the section's place as the settings are made
+// (letterPart(core), imported by settings.ts). The settings' core (SettingsCore):
+// their constants and functions as they are, what they remember in core.st
+// (settings-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the settings
+// are up). What it hands back is the settings' again.
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
+import type { SettingsCore } from './settings.ts'
 
-// What this part takes of the settings' core: the names it reads (and,
-// of its lets, writes); settings.ts's call is checked against them.
-export interface LetterCore {
-  AGENTS: any
-  COLOR: any
-  MOST_FILES: any
-  PROXY_KINDS: any
-  T: any
-  Widgets: any
-  accountOf: any
-  agentsHTML: any
-  body: any
-  choicesOf: any
-  confOf: any
-  draft: any
-  draw: any
-  dropSure: any
-  esc: any
-  expanded: any
-  firstAgent: any
-  handButtons: any
-  handNote: any
-  handNoteTimer: any
-  inbox: any
-  inboxHTML: any
-  inboxId: any
-  isLetter: any
-  isReading: any
-  keepDraft: any
-  labelOf: any
-  lang: any
-  layer: any
-  listed: any
-  loginWhy: any
-  mailDate: any
-  mailError: any
-  mailForm: any
-  mailFormHTML: any
-  mailList: any
-  mailNote: any
-  mailSize: any
-  menuPick: any
-  patch: any
-  people: any
-  picking: any
-  providerOf: any
-  proxyTyped: any
-  reading: any
-  redrawMail: any
-  relayout: any
-  row: any
-  sec: any
-  seg: any
-  setConf: any
-  snap: any
-  sw: any
-  tab: any
-  talkHTML: any
-  talkOf: any
-  twoPanes: any
-  where: any
-  writing: any
-}
-
-export function letterPart(core: LetterCore) {
+export function letterPart(core: SettingsCore) {
   const {
-    AGENTS, COLOR, MOST_FILES, PROXY_KINDS, T, Widgets, accountOf, agentsHTML, body, choicesOf, confOf, draw,
-    esc, expanded, firstAgent, handButtons, inbox, inboxHTML, inboxId, isLetter, isReading, keepDraft,
-    labelOf, layer, listed, loginWhy, mailDate, mailError, mailFormHTML, mailList, mailNote, mailSize, patch,
-    people, providerOf, redrawMail, row, sec, seg, setConf, sw, talkHTML, talkOf, twoPanes, where,
+    st, pieces, AGENTS, COLOR, MOST_FILES, T, Widgets, body, draw, esc, expanded, inbox, keepDraft, layer,
+    patch, redrawMail, row, sec, seg, sw,
   } = core
+  const {
+    PROXY_KINDS, accountOf, agentsHTML, choicesOf, confOf, firstAgent, handButtons, inboxHTML, inboxId,
+    isLetter, isReading, labelOf, listed, loginWhy, mailDate, mailError, mailFormHTML, mailList, mailNote,
+    mailSize, people, providerOf, setConf, talkHTML, talkOf, twoPanes, where,
+  } = pieces.mail
 
   const personLine = p => (p.name ? `${/[,;"<>]/.test(p.name) ? `"${p.name.replace(/"/g, '')}"` : p.name} <${p.address}>` : p.address)
   const peopleLine = list => list.map(personLine).join(', ')
@@ -105,7 +46,7 @@ export function letterPart(core: LetterCore) {
   // on; else the first that is on and has an outgoing server, the first on,
   // the first.
   function fromAccount() {
-    const all = core.snap.mail || []
+    const all = st.snap.mail || []
     const shown = accountOf(inboxId())
     if (shown?.on) return shown.id
     return (all.find(a => a.on && a.smtp) || all.find(a => a.on) || all[0])?.id
@@ -118,9 +59,9 @@ export function letterPart(core: LetterCore) {
   // it shows.
   function write(kind, l?, words?) {
     closeMenu()
-    if (core.draft && (core.draft.touched || core.draft.files.length)) {
-      core.draft.note = T('mail.w.unsent')
-      core.writing = true
+    if (st.draft && (st.draft.touched || st.draft.files.length)) {
+      st.draft.note = T('mail.w.unsent')
+      st.writing = true
       return redrawMail()
     }
     const account = accountOf(l?.account)?.id || fromAccount()
@@ -147,9 +88,9 @@ export function letterPart(core: LetterCore) {
       d.text = `\n\n${forwarded(l)}`
       d.forward = { account: l.account, folder: l.folder || 'inbox', uid: l.uid, files: (l.attachments || []).map((f, i) => ({ index: i, name: f.name, size: f.size })) }
     }
-    core.draft = d
-    core.writing = true
-    core.dropSure = false
+    st.draft = d
+    st.writing = true
+    st.dropSure = false
     keepDraft()
     draw(true)
     core.relayout()
@@ -166,8 +107,8 @@ export function letterPart(core: LetterCore) {
 
   // The same about a letter in the list: opened first (for its text).
   async function writeAbout(kind, account, uid, folder, words?) {
-    if (!(core.reading?.letter && isReading(account, folder, uid))) await openLetter(account, uid, folder)
-    if (core.reading?.letter && isReading(account, folder, uid)) write(kind, core.reading.letter, words)
+    if (!(st.reading?.letter && isReading(account, folder, uid))) await openLetter(account, uid, folder)
+    if (st.reading?.letter && isReading(account, folder, uid)) write(kind, st.reading.letter, words)
   }
 
   // The reply in an agent's words: the longest ``` block, if it wrote one; else all of it.
@@ -180,15 +121,15 @@ export function letterPart(core: LetterCore) {
   // (where there are several accounts), to, cc and bcc (when asked for),
   // the subject, the text; the files, each with ×, and more.
   function writeHTML(note = '') {
-    const d = core.draft
-    const all = core.snap.mail || []
+    const d = st.draft
+    const all = st.snap.mail || []
     const off = d.busy ? 'disabled' : ''
     const two = twoPanes()
     // Back: to the letter answered, or the inbox; beside the list (two
     // panes), put aside.
-    const back = two ? 'mail.w.aside' : d.reply || d.forward ? (core.reading?.letter ? 'mail.w.backLetter' : 'mail.inbox') : 'mail.inbox'
+    const back = two ? 'mail.w.aside' : d.reply || d.forward ? (st.reading?.letter ? 'mail.w.backLetter' : 'mail.inbox') : 'mail.inbox'
     const bar = `<div class="mail-bar"><span class="link" data-w-back>‹ ${esc(T(back))}</span><span class="grow"></span>
-      <button class="pbtn sm" data-w-drop ${off}>${esc(T(core.dropSure ? 'mail.w.dropSure' : 'mail.w.drop'))}</button>
+      <button class="pbtn sm" data-w-drop ${off}>${esc(T(st.dropSure ? 'mail.w.dropSure' : 'mail.w.drop'))}</button>
       <button class="pbtn sm al" data-w-send title="${esc(T('mail.w.ctrlEnter'))}" ${off}>${esc(T(d.busy ? 'mail.w.sending' : 'mail.w.send'))}</button></div>`
     const box = (key, label, extra = '') =>
       `<div class="fr"><span class="fl">${esc(label)}</span><input class="in" data-w="${key}" value="${esc(d[key] ?? '')}" spellcheck="false" autocomplete="off" ${off}>${extra}</div>`
@@ -226,8 +167,8 @@ export function letterPart(core: LetterCore) {
     })
 
   async function addFiles(input) {
-    core.picking = false
-    const d = core.draft
+    st.picking = false
+    const d = st.draft
     const list = [...(input.files || [])]
     input.value = ''
     if (!d || !list.length) return
@@ -255,7 +196,7 @@ export function letterPart(core: LetterCore) {
     const err = got.error || {}
     const own = ['address', 'noOne', 'tooMany', 'tooBig', 'tooLong', 'file', 'noSmtp', 'gone', 'noLetter']
     if (own.includes(err.kind)) return T(`mail.err.${err.kind}`, { what: err.text || '' })
-    const a = accountOf(core.draft?.account)
+    const a = accountOf(st.draft?.account)
     if (!got.out) return mailError(err, a)
     const hint = err.kind === 'login' && !loginWhy(err) && providerOf(a?.host) ? ` ${T(`mail.hint.${providerOf(a.host)}`)}` : ''
     return T('mail.w.outPrefix') + mailError(err, a?.smtp ? { ...a.smtp, proxy: a.proxy } : { host: '?', port: '' }) + hint
@@ -264,14 +205,14 @@ export function letterPart(core: LetterCore) {
   // Sent: the letter gone from here, back where one was, and what came of
   // the copy in Sent.
   async function sendDraft() {
-    const d = core.draft
+    const d = st.draft
     if (!d || d.busy) return
     if (!`${d.to}${d.cc}${d.bcc}`.trim()) {
       d.error = T('mail.err.noOne')
       return redrawMail('[data-w="to"]')
     }
     Object.assign(d, { busy: true, error: null, note: null })
-    core.dropSure = false
+    st.dropSure = false
     redrawMail()
     const letter = {
       account: d.account,
@@ -285,7 +226,7 @@ export function letterPart(core: LetterCore) {
       files: d.files.map(f => ({ name: f.name, type: f.type, data: f.data })),
     }
     const got = await pet.mail.send(letter)
-    if (core.draft !== d) return
+    if (st.draft !== d) return
     d.busy = false
     if (!got.ok) {
       d.error = sendError(got)
@@ -294,8 +235,8 @@ export function letterPart(core: LetterCore) {
     // The letter answered shows it (the list comes again with the reply in it).
     const answered = d.reply && listed(d.reply.account, d.reply.folder, d.reply.uid)
     if (answered) answered.answered = true
-    core.draft = null
-    core.writing = false
+    st.draft = null
+    st.writing = false
     keepDraft()
     draw(true)
     core.relayout()
@@ -319,14 +260,14 @@ export function letterPart(core: LetterCore) {
   // A letter open: back to the inbox, its star and the hand-off, who, when,
   // its attachments, the talk about it, the text or HTML.
   function readingHTML(note = '') {
-    const r = core.reading
+    const r = st.reading
     const l = r.letter
     const talk = l ? talkOf(l.key) || r.talk : null
     // Beside the list (two panes) there is no inbox to go back to.
     const two = twoPanes()
     const back = two ? '' : `<span class="link" data-mail-back>‹ ${esc(T('mail.inbox'))}</span>`
     const bar = `<div class="mail-bar">${back}<span class="grow"></span>${l ? handButtons(l, talk) : ''}</div>`
-    const hand = core.handNote && !two ? `<div class="note${core.handNote.bad ? ' err' : ''}">${esc(core.handNote.text)}</div>` : ''
+    const hand = st.handNote && !two ? `<div class="note${st.handNote.bad ? ' err' : ''}">${esc(st.handNote.text)}</div>` : ''
     // Two panes: the bar stays, the letter (and the note about its hand-off)
     // scrolls under it. One pane: the whole page scrolls, as it did.
     const wrap = inner => (two ? `${bar}<div class="pane-r-body">${note}${inner}</div>` : `${bar}${hand}${inner}`)
@@ -336,7 +277,7 @@ export function letterPart(core: LetterCore) {
     // Whose (several accounts), and one's own, from Sent.
     const address = accountOf(l.account)?.address || ''
     const inSent = l.folder === 'sent' ? T('mail.inSent', { address }) : ''
-    const whose = inSent || (core.snap.mail || []).length > 1 ? `<div class="d">${esc(inSent || T('mail.in', { address }))}</div>` : ''
+    const whose = inSent || (st.snap.mail || []).length > 1 ? `<div class="d">${esc(inSent || T('mail.in', { address }))}</div>` : ''
     return wrap(`<div class="grp mail-read" ${where(l)}>
       <div class="m-subj">${esc(l.subject || T('mail.noSubject'))}</div>
       <div class="from">${avatarHTML(l)}<div class="grow"><div class="who">${esc(people(l.from))}</div><div class="d">${esc(mailDate(l.date, true))}</div></div></div>
@@ -380,7 +321,7 @@ export function letterPart(core: LetterCore) {
   // of a letter whose pictures are not there yet, and a letter 3,000px tall
   // was left showing its first 160 (the user's letter, 2026-10-20).
   function fitFrames() {
-    for (const frame of body.querySelectorAll('iframe.m-html')) {
+    for (const frame of body.querySelectorAll<any>('iframe.m-html')) {
       const fitWidth = doc => {
         const w = doc.documentElement.clientWidth
         if (!w) return
@@ -450,13 +391,13 @@ export function letterPart(core: LetterCore) {
     if (twoPanes()) {
       if (id && inbox.for !== `${id}|${inbox.filter}` && !inbox.busy) setTimeout(() => loadInbox(false))
       const left = id ? inboxHTML(id) : `<div class="note">${esc(T('mail.noBox'))}</div>`
-      const note = core.handNote ? `<div class="note${core.handNote.bad ? ' err' : ''}">${esc(core.handNote.text)}</div>` : ''
+      const note = st.handNote ? `<div class="note${st.handNote.bad ? ' err' : ''}">${esc(st.handNote.text)}</div>` : ''
       const body = inner => `<div class="pane-r-body">${note}${inner}</div>`
-      const right = core.writing && core.draft ? writeHTML(note) : core.reading ? readingHTML(note) : body(`${accountsHTML()}${id ? agentsHTML() : ''}`)
+      const right = st.writing && st.draft ? writeHTML(note) : st.reading ? readingHTML(note) : body(`${accountsHTML()}${id ? agentsHTML() : ''}`)
       return `<div class="panes"><div class="pane-l">${left}</div><div class="pane-r">${right}</div></div>`
     }
-    if (core.writing && core.draft) return writeHTML()
-    if (core.reading) return readingHTML()
+    if (st.writing && st.draft) return writeHTML()
+    if (st.reading) return readingHTML()
     // The inbox comes in the first time it is shown (and for another one or filter).
     if (id && inbox.for !== `${id}|${inbox.filter}` && !inbox.busy) setTimeout(() => loadInbox(false))
     return `${accountsHTML()}${id ? inboxHTML(id) + agentsHTML() : ''}`
@@ -464,23 +405,23 @@ export function letterPart(core: LetterCore) {
 
   // The accounts: each with its switch and its settings; the form for one.
   function accountsHTML() {
-    const accounts = core.snap.mail || []
+    const accounts = st.snap.mail || []
     const rows = accounts
       .map(a => {
         const note = mailNote(a)
         return `<div class="r"><span class="wi" style="color:${a.on ? '#5e9bff' : COLOR.idle}">${Widgets.icon('mail')}</span><div class="grow"><div class="ellip">${esc(a.address)}</div><div class="d${note.bad ? ' bad' : ''}">${esc(note.text)}</div></div><button class="pbtn sm" data-mail-edit="${esc(a.id)}">${esc(T('pl.settings'))}</button>${sw('mail:' + a.id, a.on)}</div>`
       })
       .join('')
-    const add = core.mailForm ? '' : `<div class="r"><button class="pbtn wide" data-mail-add>${esc(T('mail.add'))}</button></div>`
+    const add = st.mailForm ? '' : `<div class="r"><button class="pbtn wide" data-mail-add>${esc(T('mail.add'))}</button></div>`
     return `${sec(T('mail.section'))}<div class="grp"><div class="note">${esc(T('mail.note'))}</div>${rows}${add}</div>
-      ${accounts.length ? offlineHTML() + codesHTML() : ''}${proxyHTML()}${core.mailForm ? mailFormHTML() : ''}`
+      ${accounts.length ? offlineHTML() + codesHTML() : ''}${proxyHTML()}${st.mailForm ? mailFormHTML() : ''}`
   }
 
   // How much is kept whole on this computer (the setting mailOffline: the
   // last year unless set), and the room every account's takes now.
   function offlineHTML() {
-    const value = ['90d', 'year', 'all', 'opened'].includes(core.snap.settings.mailOffline) ? core.snap.settings.mailOffline : 'year'
-    const used = (core.snap.mail || []).reduce((n, a) => n + (a.status?.offline?.bytes || 0), 0)
+    const value = ['90d', 'year', 'all', 'opened'].includes(st.snap.settings.mailOffline) ? st.snap.settings.mailOffline : 'year'
+    const used = (st.snap.mail || []).reduce((n, a) => n + (a.status?.offline?.bytes || 0), 0)
     const note = T(`mail.keep.${value}Note`) + (used ? ` ${T('mail.keep.used', { size: mailSize(used) })}` : '')
     const choices = ['90d', 'year', 'all', 'opened'].map(v => [v, T(`mail.keep.${v}`)])
     return `<div class="grp keep">${row(esc(T('mail.keep')), esc(note), seg('mailOffline', choices, value))}</div>`
@@ -489,7 +430,7 @@ export function letterPart(core: LetterCore) {
   // A code or a link to sign in with, in new mail, on the island (the
   // setting mailCodes, on unless turned off; mail/codes.rs).
   function codesHTML() {
-    return `<div class="grp">${row(esc(T('mail.codes')), esc(T('mail.codesNote')), sw('mailCodes', core.snap.settings.mailCodes !== false))}</div>`
+    return `<div class="grp">${row(esc(T('mail.codes')), esc(T('mail.codesNote')), sw('mailCodes', st.snap.settings.mailCodes !== false))}</div>`
   }
 
   // The ways out, as set: the General page's Network proxy (netProxy,
@@ -501,7 +442,7 @@ export function letterPart(core: LetterCore) {
   // kind and address are kept while another is on.
   const WAY_MODES = { netProxy: ['system', 'manual', 'none'], mailProxy: ['follow', 'system', 'manual', 'none'] }
   function waySetting(key) {
-    const p = core.snap.settings[key] || {}
+    const p = st.snap.settings[key] || {}
     const modes = WAY_MODES[key]
     return { mode: modes.includes(p.mode) ? p.mode : modes[0], kind: p.kind === 'socks5' ? 'socks5' : 'http', address: p.address || '' }
   }
@@ -516,7 +457,7 @@ export function letterPart(core: LetterCore) {
   // "跟随系统 · Windows 没有设代理，直连".
   function netNow() {
     const p = waySetting('netProxy')
-    const sys = core.snap.netSystemProxy
+    const sys = st.snap.netSystemProxy
     const at = x => T('s.net.at', { proxy: x.address, kind: labelOf(PROXY_KINDS, x.kind) })
     const how = p.mode === 'manual' ? at(p) : p.mode === 'none' ? T('s.net.straight') : sys ? at(sys) : T('s.net.noSystem')
     return `${T(`s.net.mode.${p.mode}`)} · ${how}`
@@ -524,14 +465,14 @@ export function letterPart(core: LetterCore) {
 
   // A manual one's kind and address (its box: data-proxy-at, the setting's key); `extra` after the box.
   function manualRow(key, p, extra = '') {
-    const typed = core.proxyTyped?.key === key ? core.proxyTyped.text : p.address
-    const bad = core.proxyTyped?.key === key && core.proxyTyped.bad ? `<div class="note err">${esc(T('mail.proxy.bad'))}</div>` : ''
+    const typed = st.proxyTyped?.key === key ? st.proxyTyped.text : p.address
+    const bad = st.proxyTyped?.key === key && st.proxyTyped.bad ? `<div class="note err">${esc(T('mail.proxy.bad'))}</div>` : ''
     return `<div class="r">${seg(`${key}.kind`, PROXY_KINDS, p.kind)}<input class="in grow" data-proxy-at="${key}" value="${esc(typed)}" placeholder="127.0.0.1:7890" spellcheck="false" autocomplete="off">${extra}</div>${bad}`
   }
 
   function proxyHTML() {
     const p = waySetting('mailProxy')
-    const sys = core.snap.mailSystemProxy
+    const sys = st.snap.mailSystemProxy
     const now =
       p.mode === 'follow'
         ? T('mail.proxy.followNote', { what: netNow() })
@@ -552,7 +493,7 @@ export function letterPart(core: LetterCore) {
   // address, the Test and what it found (Windows' way: on a row of its own).
   function pageNet() {
     const p = waySetting('netProxy')
-    const sys = core.snap.netSystemProxy
+    const sys = st.snap.netSystemProxy
     const note = p.mode === 'system' ? (sys ? T('s.net.systemNow', { proxy: sys.address, kind: labelOf(PROXY_KINDS, sys.kind) }) : T('s.net.systemNone')) : T(`s.net.${p.mode}Note`)
     const modes = WAY_MODES.netProxy.map(m => [m, T(`s.net.mode.${m}`)])
     const test = `<button class="pbtn sm" data-net-test ${netTest?.running ? 'disabled' : ''}>${esc(T('s.net.test'))}</button>`
@@ -579,10 +520,10 @@ export function letterPart(core: LetterCore) {
     const next = { ...waySetting(key), ...change }
     if (next.mode === 'manual' && !next.address) {
       const net = waySetting('netProxy')
-      const known = key === 'mailProxy' && net.address ? net : key === 'netProxy' ? core.snap.netSystemProxy : core.snap.mailSystemProxy
+      const known = key === 'mailProxy' && net.address ? net : key === 'netProxy' ? st.snap.netSystemProxy : st.snap.mailSystemProxy
       Object.assign(next, known ? { kind: known.kind, address: known.address } : { address: '127.0.0.1:7890' })
     }
-    if (core.proxyTyped?.key === key) core.proxyTyped = null
+    if (st.proxyTyped?.key === key) st.proxyTyped = null
     if (key === 'netProxy') netTest = null
     patch({ [key]: next })
   }
@@ -599,11 +540,11 @@ export function letterPart(core: LetterCore) {
     }
     const port = Number(address.split(':').pop())
     if (!/^(\[[0-9a-f:.]+\]|[a-z0-9._-]+):\d{1,5}$/i.test(address) || !(port > 0 && port < 65536)) {
-      core.proxyTyped = { key, text, bad: true }
+      st.proxyTyped = { key, text, bad: true }
       return draw()
     }
     if (address === waySetting(key).address && kind === waySetting(key).kind) {
-      core.proxyTyped = null
+      st.proxyTyped = null
       return draw()
     }
     setProxy(key, { kind, address })
@@ -614,7 +555,7 @@ export function letterPart(core: LetterCore) {
     netTest = { running: true }
     draw()
     const p = waySetting('netProxy')
-    const typed = core.proxyTyped?.key === 'netProxy' && !core.proxyTyped.bad ? core.proxyTyped.text.trim() : p.address
+    const typed = st.proxyTyped?.key === 'netProxy' && !st.proxyTyped.bad ? st.proxyTyped.text.trim() : p.address
     pet.settings
       .netTest(p.mode === 'manual' ? { ...p, address: typed } : { mode: p.mode })
       .then(got => ((netTest = got), draw()))
@@ -649,7 +590,7 @@ export function letterPart(core: LetterCore) {
     const which = `${id}|${inbox.filter}`
     if (inbox.for !== which) Object.assign(inbox, { threads: [], total: 0, letters: 0, count: 50, error: null, errors: [], rev: 0 })
     if (more) inbox.count += 50
-    const rev = core.snap?.mailRev || 0
+    const rev = st.snap?.mailRev || 0
     Object.assign(inbox, { id, for: which, busy: true, error: null })
     if (!quiet) redrawMail()
     const got = await pet.mail.letters(id, inbox.count, inbox.filter)
@@ -659,19 +600,19 @@ export function letterPart(core: LetterCore) {
     else inbox.error = got.error
     redrawMail()
     // It changed again meanwhile.
-    if (got.ok && (core.snap?.mailRev || 0) !== rev) loadInbox(false, true)
+    if (got.ok && (st.snap?.mailRev || 0) !== rev) loadInbox(false, true)
   }
 
   // A letter opened: read whole, from what is kept (or the server), and
   // marked read.
   async function openLetter(account, uid, folder = 'inbox') {
     if (!accountOf(account)) return
-    core.reading = { account, folder, uid, busy: true }
+    st.reading = { account, folder, uid, busy: true }
     draw(true)
     core.relayout()
     const got = await pet.mail.letter(account, uid, folder)
     if (!isReading(account, folder, uid)) return
-    core.reading = got.ok ? { account, folder, uid, letter: got.letter, talk: got.talk } : { account, folder, uid, error: got.error }
+    st.reading = got.ok ? { account, folder, uid, letter: got.letter, talk: got.talk } : { account, folder, uid, error: got.error }
     const l = listed(account, folder, uid)
     if (l && got.ok) Object.assign(l, { seen: true, flagged: got.letter.flagged })
     draw()
@@ -682,15 +623,15 @@ export function letterPart(core: LetterCore) {
   function handError(err, agent?) {
     const kind = err?.kind || 'other'
     const own = ['noAgent', 'start', 'save', 'noLetter', 'gone', 'busy', 'noTalk', 'noSession', 'empty']
-    if (!own.includes(kind)) return mailError(err, accountOf(core.reading?.account))
-    return T(`mail.err.${kind}`, { agent: AGENTS[agent] || err.text || '' }) + (kind === 'start' || kind === 'save' ? `${core.lang === 'zh' ? '：' : ': '}${err.text}` : '')
+    if (!own.includes(kind)) return mailError(err, accountOf(st.reading?.account))
+    return T(`mail.err.${kind}`, { agent: AGENTS[agent] || err.text || '' }) + (kind === 'start' || kind === 'save' ? `${st.lang === 'zh' ? '：' : ': '}${err.text}` : '')
   }
 
   function noteFor(note) {
-    clearTimeout(core.handNoteTimer)
-    core.handNote = note
+    clearTimeout(st.handNoteTimer)
+    st.handNote = note
     redrawMail()
-    if (note) core.handNoteTimer = setTimeout(() => noteFor(null), 10000)
+    if (note) st.handNoteTimer = setTimeout(() => noteFor(null), 10000)
   }
 
   // A letter handed to an agent: a talk about it under the letter (opened,
@@ -700,7 +641,7 @@ export function letterPart(core: LetterCore) {
     if (how === 'talk' && !isReading(account, folder, uid)) await openLetter(account, uid, folder)
     noteFor({ text: T('mail.hand.busy', { agent: AGENTS[agent] }) })
     const got = await pet.mail.hand(account, uid, agent, how, folder)
-    if (got.ok && how === 'talk' && core.reading?.letter && isReading(account, folder, uid)) core.reading.talk = null
+    if (got.ok && how === 'talk' && st.reading?.letter && isReading(account, folder, uid)) st.reading.talk = null
     noteFor(got.ok ? (how === 'open' ? { text: T('mail.hand.opened', { agent: AGENTS[agent] }) } : null) : { text: handError(got.error, agent), bad: true })
   }
 
@@ -720,7 +661,7 @@ export function letterPart(core: LetterCore) {
   // server (back as it was if that failed).
   async function star(account, uid, folder = 'inbox') {
     const inList = listed(account, folder, uid)
-    const open = core.reading?.letter && isReading(account, folder, uid) ? core.reading.letter : null
+    const open = st.reading?.letter && isReading(account, folder, uid) ? st.reading.letter : null
     const on = !(inList || open)?.flagged
     for (const l of [inList, open]) if (l) l.flagged = on
     redrawMail()
@@ -739,14 +680,14 @@ export function letterPart(core: LetterCore) {
   layer.append(menuEl)
 
   function openMenu(account, uid, folder, x, y) {
-    const found = core.snap.mailAgents || {}
+    const found = st.snap.mailAgents || {}
     const at = `data-account="${esc(account)}" data-folder="${folder || 'inbox'}" data-uid="${uid}"`
     const item = (ag, how, label) =>
       `<button class="mi" data-hand="${ag}:${how}" ${at} ${found[ag] ? '' : 'disabled'}>${esc(label)}${found[ag] ? '' : ` <span class="d">${esc(T('mail.hand.missing'))}</span>`}</button>`
     const ag = firstAgent()
     const talks = item(ag, 'talk', T('mail.hand.talk', { agent: AGENTS[ag] }))
     const terminals = item(ag, 'open', T('mail.hand.open', { agent: AGENTS[ag] }))
-    const l = listed(account, folder, uid) || (isReading(account, folder, uid) ? core.reading.letter : null)
+    const l = listed(account, folder, uid) || (isReading(account, folder, uid) ? st.reading.letter : null)
     const starItem = `<button class="mi" data-star="${esc(account)}" data-folder="${folder || 'inbox'}" data-uid="${uid}">${esc(T(l?.flagged ? 'mail.unstar' : 'mail.star'))}</button>`
     const replies = [
       ['reply', 'mail.reply'],
@@ -756,7 +697,7 @@ export function letterPart(core: LetterCore) {
       .map(([kind, key]) => `<button class="mi" data-w-reply="${kind}" ${at}>${esc(T(key))}</button>`)
       .join('')
     menuEl.innerHTML = `${replies}<div class="mi-sep"></div>${talks}<div class="mi-sep"></div>${terminals}<div class="mi-sep"></div>${starItem}`
-    core.menuPick = null
+    st.menuPick = null
     placeMenu(x, y)
   }
 
@@ -778,7 +719,7 @@ export function letterPart(core: LetterCore) {
           `${i === 1 && !together ? '<div class="mi-sep"></div>' : ''}<button class="mi${v === value ? ' on' : ''}" data-pick="${esc(v)}" ${off ? 'disabled' : ''}>${esc(label)}${off ? ` <span class="d">${esc(typeof off === 'string' ? off : T('mail.unsupported'))}</span>` : ''}</button>`,
       )
       .join('')
-    core.menuPick = onPick
+    st.menuPick = onPick
     const r = button.getBoundingClientRect()
     placeMenu(r.left, r.bottom + 4)
   }
@@ -792,10 +733,10 @@ export function letterPart(core: LetterCore) {
     menuEl.innerHTML = `${others.map(a => `<button class="mi" data-pick="hand:${a.id}">${esc(T('mail.hand.talk', { agent: a.short }))}</button>`).join('')}<div class="mi-sep"></div>${others
       .map(a => `<button class="mi" data-pick="first:${a.id}">${esc(T('mail.hand.makeFirst', { agent: a.short }))}</button>`)
       .join('')}`
-    core.menuPick = v => {
+    st.menuPick = v => {
       const [what, id] = v.split(':')
       if (what === 'first') return patch({ mailAgent: id })
-      if (core.reading) hand(core.reading.account, Number(core.reading.uid), id, 'talk', core.reading.folder || 'inbox')
+      if (st.reading) hand(st.reading.account, Number(st.reading.uid), id, 'talk', st.reading.folder || 'inbox')
     }
     const r = button.getBoundingClientRect()
     placeMenu(r.right - 220, r.bottom + 4)
@@ -808,12 +749,12 @@ export function letterPart(core: LetterCore) {
 
   function closeMenu() {
     menuEl.hidden = true
-    core.menuPick = null
+    st.menuPick = null
   }
 
   layer.addEventListener('contextmenu', e => {
-    const letter = core.tab === 'mail' && e.target.closest('[data-letter]')
-    if (!letter || e.target.closest('.talk')) return
+    const letter = st.tab === 'mail' && (e.target as HTMLElement).closest('[data-letter]')
+    if (!letter || (e.target as HTMLElement).closest('.talk')) return
     // Ours, not the island's menu.
     e.preventDefault()
     e.stopPropagation()

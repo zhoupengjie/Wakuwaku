@@ -35,9 +35,9 @@ const SIDE = 8
 const CAPSULE = 36
 
 // The setting as kept (settings.rs is_island_pos): anything else, the centre.
-const posOf = v => (POSITIONS.includes(v) ? v : 'center')
+const posOf = (v: unknown): string => (POSITIONS.includes(v as string) ? (v as string) : 'center')
 // The edge as kept (settings.rs is_island_edge): anything else, the top.
-const edgeOf = v => (v === 'bottom' ? 'bottom' : 'top')
+const edgeOf = (v: unknown) => (v === 'bottom' ? 'bottom' : 'top')
 
 // Where the island is (its home, the anchor and edge island.rs put its
 // window at, whether it rounds a Mac's notch): what anchorOf and edgeAt read.
@@ -68,15 +68,23 @@ function edgeAt({ home, edge, notch = false }: Placed = {}) {
 // closed island lies: centred in the strip of Windows' own taskbar under
 // it (strip: its thickness in the page's px; Windows 11's 48: 6), on the
 // foot itself under one thinner than the island; SIDE with none there.
-function foot(strip) {
+function foot(strip: number) {
   return strip > 0 ? Math.max(0, (strip - CAPSULE) / 2) : SIDE
+}
+
+// A box's left, top, width and height (a DOMRect's, or the like).
+interface Rect {
+  left: number
+  top: number
+  width: number
+  height: number
 }
 
 // Where the island lies at a new size (width, height) from where it lies
 // (r: a DOMRect's left, top, width, height): its top kept, or along the
 // foot of the screen its bottom; about its middle at the centre, its
 // anchored side kept at a corner (it grows toward the middle).
-function grown(r, width, height, anchor, edge = 'top') {
+function grown(r: Rect, width: number, height: number, anchor: string, edge = 'top') {
   const x = anchor === 'left' ? r.left : anchor === 'right' ? r.left + r.width - width : r.left + (r.width - width) / 2
   const y = edge === 'bottom' ? r.top + r.height - height : r.top
   return { x, y, width, height }
@@ -85,7 +93,7 @@ function grown(r, width, height, anchor, edge = 'top') {
 // The left of what is w wide hung under the island (r: its box; the
 // capsule's panel): under its middle at the centre, lined up with its
 // anchored side at a corner; kept within the window (vw) by margin.
-function under(r, w, anchor, vw, margin = SIDE) {
+function under(r: Pick<Rect, 'left' | 'width'>, w: number, anchor: string, vw: number, margin = SIDE) {
   const x = anchor === 'left' ? r.left : anchor === 'right' ? r.left + r.width - w : r.left + r.width / 2 - w / 2
   return Math.max(margin, Math.min(x, vw - w - margin))
 }
@@ -93,7 +101,7 @@ function under(r, w, anchor, vw, margin = SIDE) {
 // The window's left on the screen (logical px) for an anchor, as island.rs
 // puts it (fit): the work area's side at a corner, else its middle.
 // What the playground and the gallery place the island's page by.
-function windowLeft(anchor, area, winWidth) {
+function windowLeft(anchor: string, area: number[], winWidth: number) {
   const [x, , w] = area
   if (anchor === 'left') return x
   if (anchor === 'right') return x + w - winWidth
@@ -103,7 +111,7 @@ function windowLeft(anchor, area, winWidth) {
 // And its top: the work area's top, or along the foot of the screen its
 // foot on the screen's bottom edge, strip below the work area's foot
 // (Windows' taskbar there; 0 with none, the work area's foot).
-function windowTop(edge, area, winHeight, strip = 0) {
+function windowTop(edge: string, area: number[], winHeight: number, strip = 0) {
   const [, y, , h] = area
   return edge === 'bottom' ? y + h + strip - winHeight : y
 }
@@ -114,7 +122,7 @@ function windowTop(edge, area, winHeight, strip = 0) {
 // wide) while that fits; else the narrowest of widths; else 0, her
 // portrait alone in a round capsule (island.ts TIGHT_W). Whether even
 // that fits is embed.rs's call (the capsule hidden else).
-function capsuleWidth(set, room, widths: Record<string, number> = {}) {
+function capsuleWidth(set: number, room: number, widths: Record<string, number> = {}) {
   if (!(room > 0) || set <= room) return set
   const narrow = Math.min(set, ...Object.values(widths).filter(w => w > 0))
   return narrow <= room ? narrow : 0

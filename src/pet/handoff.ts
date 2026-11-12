@@ -9,12 +9,10 @@
 // same way and drifts off, Windows' shown again under it once hers is bare.
 // Never while the motion is to be kept down (Windows' animations off:
 // prefers-reduced-motion): then each step is answered at once.
-// On the island's page alone.
+// On the island's page alone: made there by main.ts.
 import { pet } from './bridge.ts'
 
-if (new URLSearchParams(location.search).get('role') === 'island') handoff()
-
-function handoff() {
+export function handoff() {
 
   // Her strip's parts that the dust becomes (and crumbles from).
   const PARTS = '#island, #bar-rest .start, #bar-rest .tview, #bar-rest .win, #bar-rest .tchev, #bar-rest .ticon, #bar-rest .kbd, #bar-rest .tquick, #bar-rest .tpriv, #bar-rest .face.mon, #bar-rest .tclock'

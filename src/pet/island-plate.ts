@@ -2,18 +2,19 @@
 // (backplate.rs), or a deeper ground of its own; and the island out of the
 // way of the window under it (zhoupengjie/Wakuwaku#49), its size told.
 // Made by island.ts in the section's place as the page starts
-// (platePart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// (platePart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as Anchor from './anchor.ts'
 import { pet } from './bridge.ts'
-import type { PlateCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function platePart(core: PlateCore) {
+export function platePart(core: IslandCore) {
   const {
-    Anchor, afterSpring, anchor, atBottom, body, home, inTopStrip, isCapsule, isEmbedded, isOn, isRinging,
-    isSide, island, sizeOf, stillMotion, tbEdge,
+    st, pieces, Anchor, afterSpring, anchor, atBottom, body, home, inTopStrip, isCapsule, isEmbedded, isOn,
+    isRinging, isSide, island, sizeOf, stillMotion, tbEdge,
   } = core
 
   // The page's own blur (--i-blur) blurs only what the page draws: open
@@ -51,17 +52,17 @@ export function platePart(core: PlateCore) {
   let overMaxTop = false
 
   function plateWanted() {
-    if (!isOn() || core.now.plate !== true || core.quiet || core.view === 'settings' || body.classList.contains('pulling') || body.classList.contains('isl-stowed')) return false
-    const { op, blur } = core.groundOf(core.lookNow())
+    if (!isOn() || st.now.plate !== true || st.quiet || st.view === 'settings' || body.classList.contains('pulling') || body.classList.contains('isl-stowed')) return false
+    const { op, blur } = pieces.look.groundOf(pieces.look.lookNow())
     if (!(op < 1 && blur > 0)) return false
-    return home() !== 'taskbar' || core.view !== 'compact'
+    return home() !== 'taskbar' || st.view !== 'compact'
   }
 
   // After the island is laid out; resized: from its box and corners then
   // (from, fromRadius) to its new size.
   function placePlate(resized, from?, fromRadius?) {
     if (!plateWanted()) return hidePlate(PLATE_OUT_MS)
-    if (!core.plateSent) {
+    if (!st.plateSent) {
       if (resized || !plateWait) {
         plateWait?.()
         // Opening from the capsule, the plate comes once the spring is
@@ -90,12 +91,12 @@ export function platePart(core: PlateCore) {
   function rectAt(r, width, height) {
     // About her capsule's middle in Windows' taskbar (isEmbedded, placeMid):
     // grown upward from a taskbar along the bottom, downward from one along the top.
-    if (isEmbedded() && core.slotMiddle != null) return { x: core.midLeft(width), y: atBottom() ? r.top + r.height - height : r.top, width, height }
+    if (isEmbedded() && st.slotMiddle != null) return { x: pieces.layout.midLeft(width), y: atBottom() ? r.top + r.height - height : r.top, width, height }
     if (home() !== 'taskbar') return Anchor.grown(r, width, height, anchor(), atBottom() ? 'bottom' : 'top')
     const fromRight = tbEdge() === 'right' || (!isSide() && body.classList.contains('isl-right'))
     const fromFoot = tbEdge() === 'bottom' || (isSide() && body.classList.contains('isl-low'))
-    const fromMid = !isSide() && core.slotMiddle != null && body.classList.contains('isl-mid')
-    return { x: fromMid ? core.midLeft(width) : fromRight ? r.right - width : r.left, y: fromFoot ? r.bottom - height : r.top, width, height }
+    const fromMid = !isSide() && st.slotMiddle != null && body.classList.contains('isl-mid')
+    return { x: fromMid ? pieces.layout.midLeft(width) : fromRight ? r.right - width : r.left, y: fromFoot ? r.bottom - height : r.top, width, height }
   }
 
   // Changing size: under the smaller of its two boxes (where they meet),
@@ -153,13 +154,13 @@ export function platePart(core: PlateCore) {
     const across = Math.min(1, (box.width - 2) / (sides[0] + sides[2]))
     const down = Math.min(1, (box.height - 2) / (sides[1] + sides[3]))
     const [left, top, right, bottom] = [sides[0] * across, sides[1] * down, sides[2] * across, sides[3] * down]
-    const rect = { x: box.x + left, y: box.y + top, width: box.width - left - right, height: box.height - top - bottom, vw: innerWidth, vh: innerHeight, dark: core.modeNow() !== 'light' }
+    const rect = { x: box.x + left, y: box.y + top, width: box.width - left - right, height: box.height - top - bottom, vw: innerWidth, vh: innerHeight, dark: pieces.look.modeNow() !== 'light' }
     island.style.setProperty('--rim', `${rim.toFixed(2)}px`)
     body.classList.add('plated')
     const sent = JSON.stringify(rect)
-    if (sent === core.plateSent) return
-    const first = !core.plateSent
-    core.plateSent = sent
+    if (sent === st.plateSent) return
+    const first = !st.plateSent
+    st.plateSent = sent
     pet.plate(rect, first && !stillMotion() ? fade : 0)
   }
 
@@ -169,28 +170,28 @@ export function platePart(core: PlateCore) {
     plateMove?.()
     plateMove = null
     body.classList.remove('plated', 'isl-firm')
-    if (!core.plateSent) return
-    core.plateSent = ''
+    if (!st.plateSent) return
+    st.plateSent = ''
     pet.plate(null, stillMotion() ? 0 : fade)
   }
 
   // Resized for its room, the window moves the island in the page.
-  window.addEventListener('resize', () => core.plateSent && !plateMove && showPlate(0))
+  window.addEventListener('resize', () => st.plateSent && !plateMove && showPlate(0))
 
   // Over a maximized window (one on her display, taskbar/ "max"), a
   // see-through ground the plate does not blur goes to DEEP_OP while open,
   // over DEEP_MS (at once as it opens), and back as it closes or the window
   // is no longer maximized.
-  const overMax = () => (home() === 'taskbar' ? core.taskWindows.some(a => (a.windows || []).some(w => w.max && !w.min)) : overMaxTop)
+  const overMax = () => (home() === 'taskbar' ? st.taskWindows.some(a => (a.windows || []).some(w => w.max && !w.min)) : overMaxTop)
   pet.onOverMax(({ on }: { on?: boolean } = {}) => {
     overMaxTop = on === true
     if (isOn()) setDeep(true)
   })
 
   function deepWanted() {
-    if (!isOn() || core.view === 'settings' || (home() === 'taskbar' && core.view === 'compact')) return false
-    const { op, blur } = core.groundOf(core.lookNow())
-    return op < DEEP_OP && !(core.now.plate === true && blur > 0) && overMax()
+    if (!isOn() || st.view === 'settings' || (home() === 'taskbar' && st.view === 'compact')) return false
+    const { op, blur } = pieces.look.groundOf(pieces.look.lookNow())
+    return op < DEEP_OP && !(st.now.plate === true && blur > 0) && overMax()
   }
 
   function setDeep(fades) {
@@ -220,10 +221,10 @@ export function platePart(core: PlateCore) {
 
   function stowWanted() {
     // Never over Windows' taskbar (#105): nothing's top lies under it there.
-    if (home() !== 'island' || core.screenTop || atBottom() || inTopStrip() || core.config.islandHideUnder === false || !underTop || calledDown) return false
-    if (core.view !== 'compact' || core.isHover || core.now.mood === 'waiting') return false
+    if (home() !== 'island' || st.screenTop || atBottom() || inTopStrip() || st.config.islandHideUnder === false || !underTop || calledDown) return false
+    if (st.view !== 'compact' || st.isHover || st.now.mood === 'waiting') return false
     // Down for a flow light's ring, as it came down when it opened by itself.
-    return !core.pull && !core.isReaching && !core.isAbsorbing && !core.isComingHome && !isRinging()
+    return !st.pull && !st.isReaching && !st.isAbsorbing && !st.isComingHome && !isRinging()
   }
 
   function setStow() {
@@ -233,7 +234,7 @@ export function platePart(core: PlateCore) {
     body.classList.toggle('isl-stowed', on)
     // Main told whether it is up, and the closed island's size, where a
     // window under it is looked for (none on the taskbar).
-    const { width, height } = home() === 'island' && !core.screenTop ? sizeOf('compact') : { width: 0, height: 0 }
+    const { width, height } = home() === 'island' && !st.screenTop ? sizeOf('compact') : { width: 0, height: 0 }
     const sent = JSON.stringify([on, width, height])
     if (sent !== stowSent) {
       stowSent = sent
@@ -256,7 +257,7 @@ export function platePart(core: PlateCore) {
   function setSize({ width, height }) {
     island.style.width = `${width}px`
     island.style.height = `${height}px`
-    if ((home() === 'taskbar' && !isSide()) || isEmbedded()) core.placeMid(width)
+    if ((home() === 'taskbar' && !isSide()) || isEmbedded()) pieces.layout.placeMid(width)
     // The taskbar's left end is square, and what grows up from it is rounded
     // above (on its Mica, her capsule and all it grows into round).
     // What grows from her end is flat where it meets the strip: the strip's
@@ -264,16 +265,16 @@ export function platePart(core: PlateCore) {
     const flat = { bottom: '22px 22px 0 0', top: '0 0 22px 22px', left: '0 22px 22px 0', right: '22px 0 0 22px' }
     island.style.borderRadius =
       home() === 'taskbar'
-        ? core.view === 'compact'
+        ? st.view === 'compact'
           ? isCapsule()
             ? `${(isSide() ? width : height) / 2}px`
             : '0'
-          : core.view === 'settings' || isCapsule()
+          : st.view === 'settings' || isCapsule()
             ? '22px'
             : flat[tbEdge()]
-        : core.screenTop
+        : st.screenTop
           ? // Hung from a Mac's screen top: square where it meets the edge.
-            `0 0 ${core.view === 'compact' ? 12 : 30}px ${core.view === 'compact' ? 12 : 30}px`
+            `0 0 ${st.view === 'compact' ? 12 : 30}px ${st.view === 'compact' ? 12 : 30}px`
           : `${height > 60 ? 30 : height / 2}px`
   }
 

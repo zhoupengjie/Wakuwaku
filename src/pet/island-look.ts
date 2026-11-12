@@ -2,22 +2,27 @@
 // light or dark and Windows' accent, the ink of its words on what is under
 // them; the clock, the tray drawn and opened, the peek at the desktop.
 // Made by island.ts in the section's place as the page starts
-// (lookPart(core), imported by island.ts): what it takes of the island's core
-// comes in core, its functions and constants as they are, its lets read
-// and written through core.<name> as they change; what it hands back is the
-// island's again.
+// (lookPart(core), imported by island.ts). The island's core (IslandCore):
+// its constants and functions as they are, what it remembers in core.st
+// (island-vars.ts, read and written as st.<name>), and the parts made
+// before this one in core.pieces (a later one's reached once the page is
+// up). What it hands back is the island's again.
 import * as Mica from './mica.ts'
-import { Settings } from './pages.ts'
 import { pet } from './bridge.ts'
-import type { LookCore } from './island.ts'
+import type { IslandCore } from './island.ts'
 
-export function lookPart(core: LookCore) {
+export function lookPart(core: IslandCore) {
   const {
-    DEEP_OP, PEEK_MS, TASKBAR_H, alignApps, barRest, body, clearWhen, clockBox, deskEdge, drawEntries,
-    drawWindows, el, endNudge, frontBox, frontIcon, frontName, glide, home, isCapsule, isClear, isFilled,
-    isLight, isMica, isOn, isSide, isSlim, isStripLight, island, islandViews, placeAnchor, sendSolid, setDeep,
-    snapStart, stripH, t, trayBox, update, watchPresses,
+    st, pieces, later, go, PEEK_MS, TASKBAR_H, body, clearWhen, el, endNudge, home, isCapsule, isClear, isFilled,
+    isLight, isMica, isOn, isSide, isSlim, isStripLight, island, islandViews, placeAnchor, sendSolid, stripH,
+    t, update,
   } = core
+  const { DEEP_OP, setDeep } = pieces.plate
+  const {
+    barRest, clockBox, deskEdge, frontBox, frontIcon, frontName, snapStart, trayBox,
+  } = pieces.right
+  const { alignApps, drawEntries } = pieces.layout
+  const { drawWindows, glide, watchPresses } = pieces.glide
 
   // Behind the strip's parts: the desktop's picture under it, blurred and
   // tinted (mica.ts) for Windows' mode, as taskbar/ sent it last; drawn
@@ -40,7 +45,7 @@ export function lookPart(core: LookCore) {
     fitPage()
     // A monitor's scale or Windows text scaling may have changed while the
     // settings are open; recompute their body height with the new CSS room.
-    if (Settings?.isOpen?.()) Settings.redraw()
+    if (later.Settings?.isOpen?.()) later.Settings.redraw()
     // Once laid out for it (its edge may have just changed too).
     setTimeout(() => {
       const r = island.parentElement.getBoundingClientRect()
@@ -52,22 +57,22 @@ export function lookPart(core: LookCore) {
   // goes back. Open, it goes back once the pointer has been in it and left,
   // or after a while if the pointer never comes.
   function setPeek(on) {
-    if (on !== core.peek) console.log(`island: peek ${on ? 'open' : 'closed'}`)
+    if (on !== st.peek) console.log(`island: peek ${on ? 'open' : 'closed'}`)
     if (!on) endNudge()
-    core.peek = on
-    clearTimeout(core.peekTimer)
-    if (core.peek) core.peekTimer = setTimeout(() => !core.isHover && setPeek(false), PEEK_MS)
+    go({ type: 'peek', on })
+    clearTimeout(st.peekTimer)
+    if (st.peek) st.peekTimer = setTimeout(() => !st.isHover && setPeek(false), PEEK_MS)
     update()
   }
   // Her tray icon toggles it; a double-click on her only opens it ({ open }).
-  pet.onPeek(p => setPeek(p?.open === true ? true : !core.peek))
+  pet.onPeek(p => setPeek(p?.open === true ? true : !st.peek))
   pet.onTop(({ height, notch }: { height?: number; notch?: number } = {}) => {
     const next = height > 0 ? { height, notch: notch > 0 ? notch : 0 } : null
-    if (JSON.stringify(next) === JSON.stringify(core.screenTop)) return
-    core.screenTop = next
-    body.classList.toggle('at-top', !!core.screenTop)
-    body.classList.toggle('notched', !!core.screenTop?.notch)
-    document.documentElement.style.setProperty('--top-h', `${core.screenTop ? core.screenTop.height : 36}px`)
+    if (JSON.stringify(next) === JSON.stringify(st.screenTop)) return
+    st.screenTop = next
+    body.classList.toggle('at-top', !!st.screenTop)
+    body.classList.toggle('notched', !!st.screenTop?.notch)
+    document.documentElement.style.setProperty('--top-h', `${st.screenTop ? st.screenTop.height : 36}px`)
     // Round a notch, only ever in the middle.
     placeAnchor()
     update()
@@ -91,7 +96,7 @@ export function lookPart(core: LookCore) {
   pet.onStrip(({ thick, win, sf }: { thick?: number; win?: number[]; sf?: number } = {}) => {
     if (!(thick > 0)) return
     stripThick = thick
-    if (Number.isFinite(sf) && sf > 0) core.stripScale = sf
+    if (Number.isFinite(sf) && sf > 0) st.stripScale = sf
     if (Array.isArray(win) && win[0] > 0 && win[1] > 0) winPx = win
     setStrip()
   })
@@ -99,7 +104,7 @@ export function lookPart(core: LookCore) {
     if (!stripThick) return
     document.documentElement.style.setProperty('--strip-h', `${stripThick / (devicePixelRatio || 1)}px`)
     fitPage()
-    if (Settings?.isOpen?.()) Settings.redraw()
+    if (later.Settings?.isOpen?.()) later.Settings.redraw()
     sendSolid()
   })
 
@@ -116,7 +121,7 @@ export function lookPart(core: LookCore) {
   // strip of mica, clear or light: two looks for the one page (the user,
   // 2026-11-08: 灵动岛设置不同模式都应该统一). The island's own look stays
   // its capsule's and what opens in it.
-  const isWinLight = () => isOn() && core.look.mode === 'light'
+  const isWinLight = () => isOn() && st.look.mode === 'light'
   function setSettingsLook() {
     body.classList.toggle('set-light', isWinLight())
     setInk()
@@ -128,13 +133,13 @@ export function lookPart(core: LookCore) {
     body.classList.toggle('tb-light', isLight())
     body.classList.toggle('set-light', isWinLight())
     body.classList.toggle('tb-ink-light', isStripLight())
-    setAccent('--strip-accent', Mica.accentShade(core.look.accent, isStripLight()))
+    setAccent('--strip-accent', Mica.accentShade(st.look.accent, isStripLight()))
     body.classList.toggle('tb-capsule', isCapsule())
     body.classList.toggle('tb-clear', isClear())
     body.classList.toggle('tb-clear-mica', clearMica)
     body.classList.toggle('tb-filled', isFilled())
     body.classList.toggle('tb-solid', isFilled() && clearWhen() === 'solid')
-    if (isMica() || clearMica) mica.set(paper, isSide() ? TASKBAR_H : innerWidth, isSide() ? innerHeight : stripH(), core.look.mode)
+    if (isMica() || clearMica) mica.set(paper, isSide() ? TASKBAR_H : innerWidth, isSide() ? innerHeight : stripH(), st.look.mode)
     else mica.clear()
     drawIslandLook()
     measureBackdrop()
@@ -162,15 +167,15 @@ export function lookPart(core: LookCore) {
   // part as it is.
   const stripParts = () => [...barRest.querySelectorAll(':scope > .tzone > [data-part]'), deskEdge]
   function partLight(node) {
-    if (!core.backdrop || !isClear() || isFilled()) return isStripLight()
+    if (!st.backdrop || !isClear() || isFilled()) return isStripLight()
     const strip = island.parentElement.getBoundingClientRect()
     const r = node.getBoundingClientRect()
     const [from, to] = isSide() ? [r.top - strip.top, r.bottom - strip.top] : [r.left - strip.left, r.right - strip.left]
-    return Mica.stripInkLight({ light: isLight(), clear: true, filled: false, backdrop: Mica.inkOn(core.backdrop, from, to) })
+    return Mica.stripInkLight({ light: isLight(), clear: true, filled: false, backdrop: Mica.inkOn(st.backdrop, from, to) })
   }
   const inkOf = node => (node.closest('[data-part]') || node).classList.contains('ink-light')
   function inkParts() {
-    if (!core.taskbarBuilt) return
+    if (!st.taskbarBuilt) return
     let turned = false
     for (const node of stripParts()) {
       const light = partLight(node)
@@ -179,9 +184,9 @@ export function lookPart(core: LookCore) {
         node._inked = true
         turned = true
       }
-      setAccent('--strip-accent', Mica.accentShade(core.look.accent, light), node)
+      setAccent('--strip-accent', Mica.accentShade(st.look.accent, light), node)
     }
-    if (core.glideOn) glide.classList.toggle('ink-light', inkOf(core.glideOn))
+    if (st.glideOn) glide.classList.toggle('ink-light', inkOf(st.glideOn))
     if (turned) drawEntries()
   }
 
@@ -201,7 +206,7 @@ export function lookPart(core: LookCore) {
         const ys = profile.ys
         console.log(`taskbar: the desktop under the clear strip ${profile.mean.toFixed(3)} light (${Math.min(...ys).toFixed(3)} to ${Math.max(...ys).toFixed(3)} along it), its words ${Mica.wantsDarkInk(profile.mean) ? 'dark' : 'light'} as a whole`)
       } else console.log('taskbar: the desktop under the clear strip not read')
-      core.backdrop = profile
+      st.backdrop = profile
       drawMica()
     })
   }
@@ -209,13 +214,13 @@ export function lookPart(core: LookCore) {
   // Windows' mode: as taskbar/ tells the taskbar (taskbar:look), and in
   // pet:update at the top of the screen (winLight), where there is no
   // taskbar to hear it from.
-  const modeNow = () => (home() === 'taskbar' ? core.look.mode : core.now.winLight === true ? 'light' : 'dark')
+  const modeNow = () => (home() === 'taskbar' ? st.look.mode : st.now.winLight === true ? 'light' : 'dark')
   // The look as the settings give it now (none: the defaults): on the
   // taskbar where her end is a capsule (islandLook), at the top of the
   // screen its own (islandTopLook, zhoupengjie/Wakuwaku#27); and its
   // ground's colour (null: none given), how solid (0.2 to 1; solid when no
   // colour is given) and blurred.
-  const lookNow = () => (home() === 'taskbar' ? (isCapsule() && core.config.islandLook?.[core.look.mode]) || {} : core.config.islandTopLook?.[modeNow()] || {})
+  const lookNow = () => (home() === 'taskbar' ? (isCapsule() && st.config.islandLook?.[st.look.mode]) || {} : st.config.islandTopLook?.[modeNow()] || {})
   function groundOf(mine) {
     const bg = /^#[0-9a-f]{6}$/i.test(mine.bg || '') ? parseInt(mine.bg.slice(1), 16) : null
     const op = bg !== null && Number.isFinite(mine.op) ? Math.min(100, Math.max(20, mine.op)) / 100 : 1
@@ -261,8 +266,8 @@ export function lookPart(core: LookCore) {
     else island.style.removeProperty('--i-edge')
     // Bare unless said otherwise in the dark mode (the default since
     // 2026-10-13, settings-look.ts ILOOK_DEFAULT), not in the light.
-    body.classList.toggle('island-bare', isCapsule() && (mine.bare ?? core.look.mode === 'dark') === true)
-    core.groundLight = bg === null ? null : lightness(bg) > 0.35
+    body.classList.toggle('island-bare', isCapsule() && (mine.bare ?? st.look.mode === 'dark') === true)
+    st.groundLight = bg === null ? null : lightness(bg) > 0.35
     setInk()
   }
 
@@ -280,12 +285,12 @@ export function lookPart(core: LookCore) {
   // (groundLight; null: none given); in the settings, theirs, as Windows'
   // mode in every home (setSettingsLook).
   function setInk() {
-    const own = core.view === 'settings' ? null : core.groundLight
-    const was = core.inkLight
-    core.inkLight = own === null ? (core.view === 'settings' ? isWinLight() : isLight()) : own
-    body.classList.toggle('isl-light', core.inkLight)
+    const own = st.view === 'settings' ? null : st.groundLight
+    const was = st.inkLight
+    st.inkLight = own === null ? (st.view === 'settings' ? isWinLight() : isLight()) : own
+    body.classList.toggle('isl-light', st.inkLight)
     // A card's plugin view told her theme, and its card's colours.
-    if (was !== core.inkLight) islandViews?.relook(core.allWidgets)
+    if (was !== st.inkLight) islandViews?.relook(st.allWidgets)
   }
 
   pet.onWallpaper(p => {
@@ -307,15 +312,15 @@ export function lookPart(core: LookCore) {
   }
 
   pet.onLook(l => {
-    const seconds = core.look.seconds
-    core.look = { mode: l?.mode === 'light' ? 'light' : 'dark', accent: l?.accent || null, endTask: l?.endTask === true, seconds: l?.seconds === true, taskView: l?.taskView === true }
-    if (core.look.seconds !== seconds) clockLoop()
+    const seconds = st.look.seconds
+    st.look = { mode: l?.mode === 'light' ? 'light' : 'dark', accent: l?.accent || null, endTask: l?.endTask === true, seconds: l?.seconds === true, taskView: l?.taskView === true }
+    if (st.look.seconds !== seconds) clockLoop()
     // The settings by Windows' mode in every home, now (setSettingsLook).
     setSettingsLook()
     // How many times a button flashes for attention (style.css .flash).
     if (l?.flashes !== undefined) barRest.style.setProperty('--flashes', l.flashes === 0 ? 'infinite' : String(l.flashes))
-    setAccent('--win-accent', Mica.accentShade(core.look.accent, core.look.mode === 'light'))
-    setAccent('--strip-accent', Mica.accentShade(core.look.accent, isStripLight()))
+    setAccent('--win-accent', Mica.accentShade(st.look.accent, st.look.mode === 'light'))
+    setAccent('--strip-accent', Mica.accentShade(st.look.accent, isStripLight()))
     if (isOn() && home() === 'taskbar') {
       drawMica()
       update()
@@ -327,10 +332,10 @@ export function lookPart(core: LookCore) {
   // (her own, the desktop, a window with no button), the last one while it
   // is still there, else the desktop.
   function drawFront() {
-    const app = core.taskWindows.find(a => (a.windows || []).some(w => w.front)) || core.taskWindows.find(a => a.app === core.frontWas)
-    core.frontWas = app?.app ?? null
+    const app = st.taskWindows.find(a => (a.windows || []).some(w => w.front)) || st.taskWindows.find(a => a.app === st.frontWas)
+    st.frontWas = app?.app ?? null
     const win = app && ((app.windows || []).find(w => w.front) || (app.windows || [])[0])
-    const name = app ? app.name || '' : t(core.lang, 'taskbar.frontDesktop')
+    const name = app ? app.name || '' : t(st.lang, 'taskbar.frontDesktop')
     if (frontName.textContent !== name) frontName.textContent = name
     frontIcon.hidden = !app?.png
     if (app?.png && frontIcon.getAttribute('src') !== app.png) frontIcon.src = app.png
@@ -338,7 +343,7 @@ export function lookPart(core: LookCore) {
   }
 
   pet.onWindows(list => {
-    core.taskWindows = Array.isArray(list) ? list : []
+    st.taskWindows = Array.isArray(list) ? list : []
     if (isOn() && home() === 'taskbar') {
       drawFront()
       drawWindows()
@@ -357,15 +362,15 @@ export function lookPart(core: LookCore) {
   let clockTick: Timer = 0
   function tickClock() {
     const d = new Date()
-    const time = d.toLocaleTimeString(core.lang === 'zh' ? 'zh-CN' : undefined, { hour: '2-digit', minute: '2-digit', second: core.look.seconds ? '2-digit' : undefined })
+    const time = d.toLocaleTimeString(st.lang === 'zh' ? 'zh-CN' : undefined, { hour: '2-digit', minute: '2-digit', second: st.look.seconds ? '2-digit' : undefined })
     // On the slim top bar one line, as a menu bar's: the date with its weekday, then the time.
     const slim = isSlim()
-    const date = d.toLocaleDateString(core.lang === 'zh' ? 'zh-CN' : undefined, slim ? { month: 'long', day: 'numeric', weekday: 'short' } : isSide() ? { month: 'numeric', day: 'numeric' } : { year: 'numeric', month: 'numeric', day: 'numeric' })
+    const date = d.toLocaleDateString(st.lang === 'zh' ? 'zh-CN' : undefined, slim ? { month: 'long', day: 'numeric', weekday: 'short' } : isSide() ? { month: 'numeric', day: 'numeric' } : { year: 'numeric', month: 'numeric', day: 'numeric' })
     if (clockBox.dataset.at !== time + date) {
       clockBox.dataset.at = time + date
       clockBox.replaceChildren(...(slim ? [el('i', '', date), el('b', '', time)] : [el('b', '', time), el('i', '', date)]))
     }
-    clockBox.classList.toggle('secs', core.look.seconds === true)
+    clockBox.classList.toggle('secs', st.look.seconds === true)
     // The tip each minute, not each second.
     const minute = `${date} ${d.getHours()}:${d.getMinutes()}`
     if (clockBox.dataset.tipAt !== minute) {
@@ -376,7 +381,7 @@ export function lookPart(core: LookCore) {
   function clockLoop() {
     clearTimeout(clockTick)
     if (isOn() && home() === 'taskbar') tickClock()
-    clockTick = setTimeout(clockLoop, core.look.seconds ? 1000 - (Date.now() % 1000) : 5000)
+    clockTick = setTimeout(clockLoop, st.look.seconds ? 1000 - (Date.now() % 1000) : 5000)
   }
   clockLoop()
   // Its tip as Windows' own (zhoupengjie/Wakuwaku#36, clock.rs): the date in
@@ -394,12 +399,12 @@ export function lookPart(core: LookCore) {
   // kept: the person's choice (dragged from one to the other, trayPinned),
   // else Windows' own (windowsOut). In what order: as dragged (trayOrder,
   // names, those not running kept too), the rest after, as they came.
-  const isOut = i => core.config.trayPinned?.[i.name] ?? i.windowsOut === true
-  const trayOrder = () => (Array.isArray(core.config.trayOrder) ? core.config.trayOrder.map(String) : [])
+  const isOut = i => st.config.trayPinned?.[i.name] ?? i.windowsOut === true
+  const trayOrder = () => (Array.isArray(st.config.trayOrder) ? st.config.trayOrder.map(String) : [])
   function orderedTray() {
     const order = trayOrder()
     const rank = i => (order.includes(i.name) ? order.indexOf(i.name) : Infinity)
-    return core.trayIcons
+    return st.trayIcons
       .map((i, n) => [i, n])
       .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
       .map(([i]) => i)
@@ -417,7 +422,7 @@ export function lookPart(core: LookCore) {
     const slot = el('span', 'ticon')
     slot.dataset.tray = i.key
     slot.dataset.name = i.name
-    const unreached = i.reach === false ? `\n${t(core.lang, 'taskbar.trayUnreached')}` : ''
+    const unreached = i.reach === false ? `\n${t(st.lang, 'taskbar.trayUnreached')}` : ''
     slot.title = (i.tip || i.exe) + unreached
     slot.setAttribute('role', 'button')
     slot.setAttribute('aria-label', (i.tip || i.name || i.exe || '') + unreached)
@@ -481,14 +486,14 @@ export function lookPart(core: LookCore) {
   } catch {}
   let trayKept = ''
   function holdTray() {
-    if (trayHold && (core.trayIcons.length >= trayHold.n || performance.now() > 8000)) trayHold = null
+    if (trayHold && (st.trayIcons.length >= trayHold.n || performance.now() > 8000)) trayHold = null
     trayBox.style.minWidth = trayHold ? `${trayHold.w}px` : ''
     trayBox.style.justifyContent = trayHold ? 'flex-end' : ''
     if (trayHold) return
     requestAnimationFrame(() => {
-      if (home() !== 'taskbar' || !core.trayIcons.length) return
+      if (home() !== 'taskbar' || !st.trayIcons.length) return
       const w = Math.round(trayBox.getBoundingClientRect().width)
-      const kept = JSON.stringify({ w, n: core.trayIcons.length })
+      const kept = JSON.stringify({ w, n: st.trayIcons.length })
       if (w <= 0 || kept === trayKept) return
       trayKept = kept
       try {
@@ -501,17 +506,17 @@ export function lookPart(core: LookCore) {
   function drawTray() {
     const icons = orderedTray()
     const folded = icons.filter(i => !isOut(i))
-    if (!folded.length) core.trayOpen = false
-    const drawn = JSON.stringify([icons.map(i => [i.key, i.png.length, i.png.slice(-24), i.tip, isOut(i), i.reach]), core.trayOpen])
-    if (drawn !== core.trayDrawn) {
-      core.trayDrawn = drawn
+    if (!folded.length) st.trayOpen = false
+    const drawn = JSON.stringify([icons.map(i => [i.key, i.png.length, i.png.slice(-24), i.tip, isOut(i), i.reach]), st.trayOpen])
+    if (drawn !== st.trayDrawn) {
+      st.trayDrawn = drawn
       chevron.hidden = !folded.length
-      chevron.classList.toggle('open', core.trayOpen)
-      chevron.setAttribute('aria-label', t(core.lang, 'taskbar.showHidden'))
-      chevron.setAttribute('aria-expanded', String(core.trayOpen))
+      chevron.classList.toggle('open', st.trayOpen)
+      chevron.setAttribute('aria-label', t(st.lang, 'taskbar.showHidden'))
+      chevron.setAttribute('aria-expanded', String(st.trayOpen))
       outBox.replaceChildren(...icons.filter(isOut).map(trayIcon))
       flyout.replaceChildren(...folded.map(trayIcon))
-      flyout.hidden = !core.trayOpen
+      flyout.hidden = !st.trayOpen
       if (trayBox.firstChild !== flyout) trayBox.replaceChildren(flyout, chevron, outBox)
     }
     holdTray()
@@ -519,13 +524,13 @@ export function lookPart(core: LookCore) {
   }
 
   function openTray(open) {
-    if (core.trayOpen === open) return
-    core.trayOpen = open
+    if (st.trayOpen === open) return
+    st.trayOpen = open
     trayBox.classList.toggle('upper', isSide() && trayBox.getBoundingClientRect().top < innerHeight / 2)
     drawTray()
     watchPresses()
   }
-  chevron.addEventListener('click', () => openTray(!core.trayOpen))
+  chevron.addEventListener('click', () => openTray(!st.trayOpen))
   // Folded away again once the pointer has been gone from it a moment.
   let trayCloseTimer
   trayBox.addEventListener('mouseleave', () => {
@@ -542,18 +547,18 @@ export function lookPart(core: LookCore) {
       const r = node.getBoundingClientRect()
       return [r.left, r.top, r.width, r.height]
     }
-    const rects = core.trayIcons.map(i => {
+    const rects = st.trayIcons.map(i => {
       const shown = trayBox.querySelector(`[data-tray="${i.key}"]`)
-      const visible = shown && (isOut(i) || core.trayOpen)
+      const visible = shown && (isOut(i) || st.trayOpen)
       return [Number(i.key), ...at(visible ? shown : chevron)]
     })
     const sent = JSON.stringify(rects)
-    if (sent === core.trayRectsSent) return
-    core.trayRectsSent = sent
+    if (sent === st.trayRectsSent) return
+    st.trayRectsSent = sent
     pet.taskbar.trayRects(rects)
   }
   window.addEventListener('resize', () => {
-    core.trayRectsSent = ''
+    st.trayRectsSent = ''
     requestAnimationFrame(sendTrayRects)
   })
 
@@ -562,12 +567,12 @@ export function lookPart(core: LookCore) {
   // one kept.
   const trayPngs = new Map()
   pet.onTray(list => {
-    core.trayIcons = (Array.isArray(list) ? list : []).map(i => {
+    st.trayIcons = (Array.isArray(list) ? list : []).map(i => {
       if (i.png === undefined) i.png = trayPngs.get(i.key) ?? ''
       trayPngs.set(i.key, i.png)
       return i
     })
-    for (const key of [...trayPngs.keys()]) if (!core.trayIcons.some(i => i.key === key)) trayPngs.delete(key)
+    for (const key of [...trayPngs.keys()]) if (!st.trayIcons.some(i => i.key === key)) trayPngs.delete(key)
     if (isOn() && home() === 'taskbar') drawTray()
   })
 

@@ -22,10 +22,13 @@
 //            omp, DeepSeek Harness, Reasonix)
 //   mail     can read a letter for the Mail page (mail/agent.rs: claude,
 //            codex, agy), when its command is found (snapshot mailAgents)
-const CAPS = ['status', 'approve', 'choose', 'stats', 'mail']
+type CapName = 'status' | 'approve' | 'choose' | 'stats' | 'mail'
+const CAPS: CapName[] = ['status', 'approve', 'choose', 'stats', 'mail']
 // Windows' own glyphs for them (Segoe Fluent Icons): View, Accept,
 // BulletedList, AreaChart, Mail.
-const CAP_GLYPH = { status: '\uE890', approve: '\uE8FB', choose: '\uE8FD', stats: '\uE9D2', mail: '\uE715' }
+const CAP_GLYPH: Record<CapName, string> = { status: '\uE890', approve: '\uE8FB', choose: '\uE8FD', stats: '\uE9D2', mail: '\uE715' }
+// One of them for one agent: its level, the words' key.
+type Cap = [level: 'yes' | 'part' | 'no', key: string]
 
 // Each one's own block of the snapshot (settings.rs): what of ours is
 // there (its status: absent when it is not on this computer), its file
@@ -34,9 +37,10 @@ const CAP_GLYPH = { status: '\uE890', approve: '\uE8FB', choose: '\uE8FD', stats
 // block, the others' where a file says it: agentVersions, connection/versions.rs
 // versions); whether it trusts ours as they are (Codex's, from its own
 // settings: true, false, null when not known). Each under the snapshot's
-// agents, by its id (settings.rs AgentRow).
-const own = (snap, key) => (snap.agents || {})[key] || {}
-const block = key => snap => {
+// agents, by its id (settings.rs AgentRow). The snapshot is the Rust
+// side's JSON (settings.rs snapshot): any.
+const own = (snap: any, key: string) => (snap.agents || {})[key] || {}
+const block = (key: string) => (snap: any) => {
   const b = own(snap, key)
   return { status: b.hooks, file: b.file || '', shown: b.fileShown || b.file || '', backup: !!b.backup, seen: !!b.seen, version: b.version || (snap.agentVersions || {})[key] || '', trusted: b.trusted ?? null }
 }
@@ -56,7 +60,25 @@ const block = key => snap => {
 //           they depend on more than its id (ag.st.set.<id>)
 //   caps    [level, the words' key] for each of CAPS
 //   mail    its name on the Mail page (agent.rs Agent::name), if it reads mail
-const TABLE = [
+//   wording its own words for how it stands, where they change (DSH's bridge)
+interface Agent {
+  id: string
+  name: string
+  aka?: string
+  via: string
+  site: string
+  read: (snap: any) => AgentRead
+  in: string[]
+  good: string[]
+  words: Record<string, string>
+  step?: string
+  stepNote?: string
+  setLine?: (r: Partial<AgentRead>) => string
+  wording?: (r: Partial<AgentRead>) => { what: string; note: string; caps: Partial<Record<CapName, Cap>> } | null
+  caps: Record<CapName, Cap>
+  mail?: string
+}
+const TABLE: Agent[] = [
   {
     id: 'claude',
     name: 'Claude Code',
@@ -201,7 +223,7 @@ const TABLE = [
       const d = own(snap, 'dsh')
       const load = d.load || {}
       const way = d.way === 'bridge' ? 'bridge' : 'plugin'
-      const bridgeWhy = { way: 'bridgeWay', hooks: 'bridgeHooks', packages: 'bridgePackages', version: 'bridgeVersion' }
+      const bridgeWhy: Record<string, string> = { way: 'bridgeWay', hooks: 'bridgeHooks', packages: 'bridgePackages', version: 'bridgeVersion' }
       const status = b.status !== 'stale' ? b.status : way === 'bridge' ? bridgeWhy[d.why] || 'stale' : d.why === 'bridge' ? 'bridge' : 'stale'
       // Connected: DSH runs her plugin, or the bridge's events came since
       // DSH started; or they came since she started and DSH is not
@@ -276,12 +298,12 @@ const TABLE = [
   },
 ]
 
-const byId = id => TABLE.find(a => a.id === id) || null
+const byId = (id: string) => TABLE.find(a => a.id === id) || null
 
 // The words for a status that wants something (to repair, unreadable),
 // its own where it has them (words), else these.
-const WORDS = { stale: 'settings.hooksStale', partial: 'settings.hooksPartial', unreadable: 'ag.st.unreadable', off: 'ag.st.off' }
-const wordOf = (id, status) => byId(id)?.words?.[status] || WORDS[status] || 'settings.hooksStale'
+const WORDS: Record<string, string> = { stale: 'settings.hooksStale', partial: 'settings.hooksPartial', unreadable: 'ag.st.unreadable', off: 'ag.st.off' }
+const wordOf = (id: string, status: string) => byId(id)?.words?.[status] || WORDS[status] || 'settings.hooksStale'
 
 // One's part of the snapshot as its read gives it: the block's fields, its
 // own besides, and whether it is on this computer where it says so.
@@ -293,7 +315,7 @@ interface AgentRead {
 
 // One's part of the snapshot, as each reads it; here unless its status
 // says it is absent (no folder of its own on this computer).
-function read(snap, id): AgentRead {
+function read(snap: any, id: string): AgentRead | null {
   const a = byId(id)
   if (!a || !snap) return null
   const r: AgentRead = a.read(snap)
@@ -301,9 +323,9 @@ function read(snap, id): AgentRead {
 }
 
 // Ours is there: connected, or there to repair.
-const isIn = (snap, id) => {
+const isIn = (snap: any, id: string) => {
   const r = read(snap, id)
-  return !!r && byId(id).in.includes(r.status)
+  return !!r && byId(id)!.in.includes(r.status)
 }
 
 // How one stands, for its dot and its button:
@@ -322,7 +344,11 @@ const isIn = (snap, id) => {
 //            whose hooks are not 2.x's): nothing to press, its row says why
 //   none     not connected
 // The page passes what it knows: { busy: id being written, failed: { id: why } }.
-function stateOf(snap, id, { busy = '', failed = {} } = {}) {
+interface Known {
+  busy?: string
+  failed?: Record<string, unknown>
+}
+function stateOf(snap: any, id: string, { busy = '', failed = {} }: Known = {}) {
   if (busy === id) return 'busy'
   const a = byId(id)
   const r = read(snap, id)
@@ -353,28 +379,28 @@ const MOOD = { on: 'done', set: 'working', busy: 'working', step: 'waiting', rep
 //   null      none: connected, written and waiting, being written, or its
 //             file unreadable (to be put right by hand: its details say so)
 // Reinstall and Remove are in the open row's details.
-function actionOf(snap, id, known?) {
+function actionOf(snap: any, id: string, known?: Known) {
   const state = stateOf(snap, id, known)
   if (state === 'none' || state === 'failed') return { act: 'install', label: state === 'failed' ? 'wc.toolRetry' : 'ag.do.install' }
-  if (state === 'repair') return id === 'claude' && read(snap, id).status === 'both' ? { act: 'remove', label: 'settings.repair' } : { act: 'install', label: 'settings.repair' }
-  if (state === 'step') return { act: 'open', label: byId(id).step }
+  if (state === 'repair') return id === 'claude' && read(snap, id)!.status === 'both' ? { act: 'remove', label: 'settings.repair' } : { act: 'install', label: 'settings.repair' }
+  if (state === 'step') return { act: 'open', label: byId(id)!.step }
   return null
 }
 
 // The ones on this computer, and the others, in the table's order.
-const here = snap => TABLE.filter(a => read(snap, a.id)?.here).map(a => a.id)
-const elsewhere = snap => TABLE.filter(a => !read(snap, a.id)?.here).map(a => a.id)
+const here = (snap: any) => TABLE.filter(a => read(snap, a.id)?.here).map(a => a.id)
+const elsewhere = (snap: any) => TABLE.filter(a => !read(snap, a.id)?.here).map(a => a.id)
 
 // Those on this computer and not connected, for Connect all.
-const toConnect = (snap, known?) => here(snap).filter(id => ['none', 'failed'].includes(stateOf(snap, id, known)))
+const toConnect = (snap: any, known?: Known) => here(snap).filter(id => ['none', 'failed'].includes(stateOf(snap, id, known)))
 
 // What she can do for one, each of CAPS: [cap, level, the words' key].
 // Mail where its command is found (agent.rs available): else no, and why.
-function capsOf(snap, id) {
+function capsOf(snap: any, id: string) {
   const a = byId(id)
-  const own = (snap && wordingOf(snap, id)?.caps) || {}
+  const own: Partial<Record<CapName, Cap>> = (snap && wordingOf(snap, id)?.caps) || {}
   return CAPS.map(cap => {
-    const [level, key] = own[cap] || a.caps[cap]
+    const [level, key] = own[cap] || a!.caps[cap]
     if (cap === 'mail' && level !== 'no' && snap && !(snap.mailAgents || {})[id]) return [cap, 'no', `ag.cap.mail.missing.${id}`]
     return [cap, level, key]
   })
@@ -395,7 +421,7 @@ interface Summary {
 // computer by how they stand. connected: written (Codex's still to be
 // trusted too); wants: those the person must act on (amber); none: those
 // still to connect (one of a version she cannot connect to is not).
-function summary(snap, known?) {
+function summary(snap: any, known?: Known) {
   const out: Summary = { here: here(snap), on: [], set: [], wants: [], none: [] }
   for (const id of out.here) {
     const state = stateOf(snap, id, known)
@@ -411,29 +437,29 @@ function summary(snap, known?) {
 // here) or not, and why not. Antigravity only where it is, or picked
 // already (few have it; zhoupengjie/Wakuwaku#42): its app alone brings no
 // agy, so it is listed then, greyed.
-function mailAgents(snap, current) {
+function mailAgents(snap: any, current: string) {
   const found = snap.mailAgents || {}
   return TABLE.filter(a => a.mail)
-    .filter(a => a.id !== 'agy' || found.agy || current === 'agy' || read(snap, 'agy').here)
+    .filter(a => a.id !== 'agy' || found.agy || current === 'agy' || read(snap, 'agy')!.here)
     .map(a => ({ id: a.id, name: a.name, short: a.mail, found: !!found[a.id] }))
 }
 
 // How many sessions of one are in sight now (state.rs: agent, none for Claude Code's).
-const sessionsOf = (snap, id) => (snap.sessions || []).filter(s => (s.agent || 'claude') === id).length
+const sessionsOf = (snap: any, id: string) => (snap.sessions || []).filter((s: { agent?: string }) => (s.agent || 'claude') === id).length
 
 // Words of its own for how it stands now (wording: DSH's bridge), or none.
-const wordingOf = (snap, id) => byId(id)?.wording?.(read(snap, id) || {}) || null
+const wordingOf = (snap: any, id: string) => byId(id)?.wording?.(read(snap, id) || {}) || null
 
 // The standing note at the foot of one's details (ag.note.<id>); while
 // its step shows in amber at their top, the part that does not say it
 // again; its own words for how it stands, given the snapshot.
-const noteOf = (id, state, snap?) => (state === 'step' && byId(id)?.stepNote) || (snap && wordingOf(snap, id)?.note) || `ag.note.${id}`
+const noteOf = (id: string, state: string, snap?: any) => (state === 'step' && byId(id)?.stepNote) || (snap && wordingOf(snap, id)?.note) || `ag.note.${id}`
 
 // What it can do and not, in a sentence (ag.what.<id>, or its own words for how it stands).
-const whatOf = (snap, id) => wordingOf(snap, id)?.what || `ag.what.${id}`
+const whatOf = (snap: any, id: string) => wordingOf(snap, id)?.what || `ag.what.${id}`
 
 // Its line's words while written and waiting for its first event (set, step).
-const setLineOf = (snap, id) => byId(id)?.setLine?.(read(snap, id) || {}) || `ag.st.set.${id}`
+const setLineOf = (snap: any, id: string) => byId(id)?.setLine?.(read(snap, id) || {}) || `ag.st.set.${id}`
 
 export {
   CAPS, CAP_GLYPH, TABLE, MOOD, WANTS, byId, noteOf, whatOf, setLineOf, wordOf, read, isIn, stateOf, actionOf,

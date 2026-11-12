@@ -14,7 +14,7 @@
 //   windowMenu  its window's own menu, or one for all its windows (Shift
 //               and a right press, while it has any)
 //   null        nothing (a right button's auxclick, say: its menu has it)
-function pressOf(e, keys, open) {
+function pressOf(e: { type: string; button: number }, keys: { shift?: boolean; ctrl?: boolean } | null | undefined, open: number) {
   const { shift = false, ctrl = false } = keys || {}
   if (e.type === 'contextmenu') return shift && open > 0 ? 'windowMenu' : 'menu'
   if (e.button === 1) return 'launch'
@@ -30,7 +30,7 @@ function pressOf(e, keys, open) {
 // CYCLED_MS (its mark in front may not have come yet); the first when
 // none of them is.
 const CYCLED_MS = 1500
-function nextWindow(windows, last?) {
+function nextWindow<W extends { id: unknown; front?: boolean }>(windows: W[] | null | undefined, last?: unknown): W | null {
   if (!windows?.length) return null
   let at = last == null ? -1 : windows.findIndex(w => String(w.id) === String(last))
   if (at < 0) at = windows.findIndex(w => w.front)
@@ -52,15 +52,15 @@ const DRAG_HOLD_MS = 500
 // a button its page draws anew in place (island.ts, bar.ts drawWindows).
 const PRESS_MIN_MS = 110
 const PRESS_MAX_MS = 900
-function pressIn(root, selector) {
+function pressIn(root: HTMLElement, selector: string) {
   const view = root.ownerDocument?.defaultView
   if (!view) return
-  let held = null
-  let leaving = null
+  let held: Element | null = null
+  let leaving: Element | null = null
   let at = 0
   let offTimer: Timer = 0
   let maxTimer: Timer = 0
-  const off = node => node?.classList.remove('pressing')
+  const off = (node: Element | null) => node?.classList.remove('pressing')
   const letGo = () => {
     clearTimeout(maxTimer)
     if (!held) return
@@ -75,7 +75,7 @@ function pressIn(root, selector) {
   root.addEventListener(
     'pointerdown',
     e => {
-      const node = e.target?.closest?.(selector)
+      const node = (e.target as Element | null)?.closest?.(selector)
       if (!node || !root.contains(node) || e.button > 2) return
       if (view.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
       clearTimeout(offTimer)

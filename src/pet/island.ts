@@ -611,10 +611,10 @@ export function islandPage(later: IslandLater) {
   // The clock: how long this turn has run, or how long the finished one took.
   const time = () => Status.time(st.now)
 
-  // any: picker.ts and capsule-panel.ts make theirs with it too (Isle.el),
-  // and read what they make as they please; the parts see its kind
-  // (IslandCore el).
-  function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): any {
+  // The element of its tag's kind, here, in the parts (IslandCore el) and
+  // in picker.ts and capsule-panel.ts, which make theirs with it too
+  // (Isle.el).
+  function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
     const node = document.createElement(tag)
     if (cls) node.className = cls
     if (text !== undefined) node.textContent = text
@@ -738,7 +738,7 @@ export function islandPage(later: IslandLater) {
       const said = Widgets.words(st.lang, widget, isDetailed())
       words = el('span', 'label wlabel')
       words.insertAdjacentHTML('afterbegin', Widgets.iconHTML(widget, st.lang))
-      words.firstChild.style.color = ink(widget.color) || hue().idle
+      ;(words.firstChild as HTMLElement).style.color = ink(widget.color) || hue().idle
       words.append(said.label)
       value = el('span', 'clock wvalue', said.value)
       value.style.color = ink(widget.color) || hue().idle
@@ -1037,7 +1037,7 @@ export function islandPage(later: IslandLater) {
       const card = el('span', 'me')
       const top = el('span', 'head')
       top.insertAdjacentHTML('afterbegin', Widgets.iconHTML(w, st.lang))
-      top.firstChild.style.color = ink(w.color) || hue().idle
+      ;(top.firstChild as HTMLElement).style.color = ink(w.color) || hue().idle
       top.append(el('span', 'title', words || label || value))
       card.append(top, el('span', 'sub', words ? [label, value].filter(Boolean).join(' · ') : label ? value : ''))
       lines.replaceChildren(card)

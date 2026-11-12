@@ -51,6 +51,7 @@ import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { t } from '../shared/i18n.ts'
 import { pet } from './bridge.ts'
+import type { Config } from '../shared/config.ts'
 import type { CapsulePanelFace } from './capsule-panel.ts'
 import type { IsleFace } from './island.ts'
 
@@ -72,11 +73,57 @@ interface Fit {
 // 'strip', 'desk', 'bare', 'none', 'setNo'); over the capsule's panel, at:
 // the row it would go before; over the strip, at: its slot ({ run, index })
 // and fit: the strip's room for it.
-interface Target {
+type Slot = ReturnType<typeof P.slotAt>
+type StripTarget = { kind: 'strip'; at: Slot; fit: Fit }
+type Target = StripTarget | { kind: 'capsule'; at?: number } | { kind: 'picker' | 'desk' | 'bare' | 'none' | 'setNo' }
+
+// A card (cardsOf): its key (a widget's or plugin's, a spacer's, a
+// combo's), what it is and its kind in the picker (cat); its widget as it
+// is now, her plugin or someone else's, a spacer's type or a combo; its
+// name and what it says.
+interface Card {
+  key: string
   kind: string
-  at?: any
-  fit?: Fit
+  cat: string
+  name: string
+  note: string
+  w?: Widgets.Widget | null
+  plugin?: Plugin
+  addon?: Addon
+  spacer?: string
+  set?: G.BoardSet
 }
+// What a card is read for elsewhere (its key and what else there is).
+type CardLike = Partial<Card> & { key: string }
+// Her plugins and someone else's, as settings_get has them (plugins.rs,
+// addons.rs): the fields read here.
+interface Plugin extends P.PluginParams {
+  id: string
+  icon?: string
+}
+interface Addon {
+  id: string
+  kind: string
+  name: string
+  color?: string
+  icon?: { name?: string; url?: string }
+  state?: string
+  description?: string
+  author?: string
+}
+// settings_get's answer: every widget (on or off), her plugins, the
+// others', the settings.
+interface Snap {
+  widgets?: Widgets.Widget[]
+  plugins?: Plugin[]
+  addons?: Addon[]
+  settings?: { boardSets?: unknown }
+}
+// A part or a widget on the strip as island.ts draws it, its entry with it
+// (the strip's JSON, a TbLayout's entries: any).
+type StripNode = HTMLElement & { _entry?: any }
+// The edge of the screen her taskbar is along (island.ts tbEdge).
+type Edge = 'bottom' | 'top' | 'left' | 'right'
 
 // A press not yet a drag: on a card or on the strip being edited, its key
 // (a card's, or a part's name), what was pressed, where and by which pointer.
@@ -94,32 +141,33 @@ interface Press {
 // card, or its entry on the strip (by id, or a part's name); its key or
 // keys, what it shows and says, how wide a gap it opens; where it may go;
 // a combo's set, or the member the desktop keeps and its size; the strip's
-// room for it.
+// room for it. (at and hot: null, not read.)
 interface Drag {
   src: string
   pid: number
-  at: any
+  at: null
   tgt: Target
   sig: string
-  hot: any
-  sent: { x: number; y: number; at: number }
-  card?: any
-  key?: string
+  hot: null
+  sent: { x: number; y: number; at: number } | null
+  card?: Card
+  key: string | null
   keys?: string[]
-  name?: string
-  mark?: string
-  color?: string
+  name: string
+  mark: string
+  color: string
   strip?: string
   node?: HTMLElement
+  // The strip's JSON, as StripNode's.
   entry?: any
-  part?: string
-  width?: number
-  stays?: boolean
-  anywhere?: boolean
-  desk?: boolean
-  capsuleKeys?: string[]
-  set?: any
-  item?: any
+  part?: string | null
+  width: number
+  stays: boolean
+  anywhere: boolean
+  desk: boolean
+  capsuleKeys: string[]
+  set?: G.BoardSet
+  item?: G.Member
   size?: string
   fit?: Fit
 }
@@ -127,21 +175,21 @@ interface Drag {
 // Only with the island on (main.ts, once island.ts has made Isle).
 export function pickerPage(Isle: IsleFace, later: PickerLater) {
   const el = Isle.el
-  const T = (key, vars?) => t(Isle.lang, key, vars)
+  const T = (key: string, vars?: Record<string, unknown>) => t(Isle.lang, key, vars)
   const esc = WCards.esc
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
-  const clone = v => JSON.parse(JSON.stringify(v))
-  const FI = code => `<span class="pk-fi" aria-hidden="true">&#x${code};</span>`
-  const inRect = (x, y, r) => !!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
-  const rectOf = node => (node && node.isConnected && !node.hidden ? node.getBoundingClientRect() : null)
+  const clone = <V,>(v: V): V => JSON.parse(JSON.stringify(v))
+  const FI = (code: string) => `<span class="pk-fi" aria-hidden="true">&#x${code};</span>`
+  const inRect = (x: number, y: number, r: { left: number; right: number; top: number; bottom: number } | null) => !!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
+  const rectOf = (node: HTMLElement | null | undefined) => (node && node.isConnected && !node.hidden ? node.getBoundingClientRect() : null)
 
   // Its kinds, and which a plugin she runs is (plugins.rs PLUGINS); 组合:
   // the boards kept as combos (settings boardSets, a board's 存为组合…).
   const CATS = ['all', 'system', 'work', 'info', 'mail', 'script', 'sets']
-  const PLUGIN_CAT = { weather: 'info', stock: 'info', pomodoro: 'work', countdown: 'work', stretch: 'work', calendar: 'work', media: 'system', ci: 'script', devserver: 'script' }
-  const BUILT_IN_CAT = { monitor: 'system', today: 'work', tokens: 'work' }
+  const PLUGIN_CAT: Record<string, string> = { weather: 'info', stock: 'info', pomodoro: 'work', countdown: 'work', stretch: 'work', calendar: 'work', media: 'system', ci: 'script', devserver: 'script' }
+  const BUILT_IN_CAT: Record<string, string> = { monitor: 'system', today: 'work', tokens: 'work' }
   // The spacers' marks (the layout's own parts, on the strip alone).
-  const SPACER_MARK = {
+  const SPACER_MARK: Record<string, string> = {
     flex: '<path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3"/>',
     gap: '<path d="M5 7v10M19 7v10M8 12h8"/>',
     sep: '<path d="M12 4v16"/>',
@@ -149,14 +197,14 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   // A combo's mark: a board's pane, its tiles in it.
   const SET_MARK = '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 8.5h18M7 12h4v4H7zM13 12h4v4h-4z"/>'
   // The gap a widget opens on the strip as it comes (its width, px).
-  const GAP_W = { M: 112, S: 64, part: 96, flex: 40, gap: 20, sep: 14, side: 44 }
+  const GAP_W: Record<string, number> = { M: 112, S: 64, part: 96, flex: 40, gap: 20, sep: 14, side: 44 }
   // Dragged this far above the strip (across it), a widget from it goes.
   const BAND_PX = 90
   const UNDO_MS = 5000
   const NOTE_MS = 3200
 
   // --- What it shows ---------------------------------------------------------------------
-  const pk = el('aside', 'pk')
+  const pk: HTMLElement = el('aside', 'pk')
   pk.setAttribute('aria-label', '')
   pk.hidden = true
   pk.innerHTML = `
@@ -167,24 +215,25 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     <p class="pk-hint"></p>
     <div class="pk-grid"></div>
     <div class="pk-foot"><button type="button" data-pk="more"></button><button type="button" data-pk="manage"></button></div>`
-  const $ = sel => pk.querySelector(sel)
-  const search = $('input')
+  // What pk has (above).
+  const $ = (sel: string) => pk.querySelector(sel)!
+  const search = $('input') as HTMLInputElement
   const grid = $('.pk-grid')
   const chips = $('.pk-chips')
   const menu = $('.pk-menu')
 
   // The popover over a widget on the strip, the toasts, the ghost under the
   // pointer, the band above the strip, the gap opened on the strip.
-  const pop = el('div', 'pk-pop')
+  const pop: HTMLElement = el('div', 'pk-pop')
   pop.hidden = true
-  const toasts = el('div', 'pk-toasts')
+  const toasts: HTMLElement = el('div', 'pk-toasts')
   toasts.setAttribute('aria-live', 'polite')
-  const ghost = el('div', 'pk-ghost')
+  const ghost: HTMLElement = el('div', 'pk-ghost')
   ghost.hidden = true
   ghost.innerHTML = '<span class="pk-gt"></span><span class="pk-gl"></span>'
-  const band = el('div', 'pk-band')
+  const band: HTMLElement = el('div', 'pk-band')
   band.hidden = true
-  const gapNode = el('span', 'pk-ph')
+  const gapNode: HTMLElement = el('span', 'pk-ph')
   for (const node of [pk, pop, toasts]) {
     node.addEventListener('mouseenter', () => pet.hover(true))
     node.addEventListener('mouseleave', () => pet.hover(false))
@@ -196,13 +245,19 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   let cat = 'all'
   let query = ''
   // settings_get: every widget (on or off) and the plugins she runs.
-  let snap = null
-  let cards = []
-  // A press not yet a drag; the drag; the desktop's last word on it.
-  let press: Press = null
-  let drag: Drag = null
-  let deskSaid = null
-  let pending = null
+  let snap: Snap | null = null
+  let cards: Card[] = []
+  // A press not yet a drag; the drag; the desktop's last word on it (the
+  // preview's: desk-drop.ts); a drop sent there, its word awaited.
+  let press: Press | null = null
+  let drag: Drag | null = null
+  let deskSaid: { ok: boolean; where?: string; why?: string; name?: string } | null = null
+  interface Pending {
+    ticket: string
+    was: { key: string; strip?: string | null; item?: G.Member; keys: string[]; fresh: boolean; set: G.BoardSet | null; sent: ReturnType<typeof setToSend> | null }
+    timer: Timer
+  }
+  let pending: Pending | null = null
   let tickets = 0
   let lastPointer = 'mouse'
 
@@ -221,21 +276,21 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   }
 
   // --- The cards -------------------------------------------------------------------------
-  const allNow = () => (snap?.widgets?.length ? snap.widgets : Isle.allWidgets)
+  const allNow = (): Widgets.Widget[] => (snap?.widgets?.length ? snap.widgets : Isle.allWidgets)
   // Other people's plugins installed (addons.rs view: plugins, not packs).
   const addonsNow = () => (snap?.addons || []).filter(a => a.kind === 'plugin')
-  const addonOf = id => addonsNow().find(a => a.id === id) || null
+  const addonOf = (id: string) => addonsNow().find(a => a.id === id) || null
   // One as a widget looks, while it has none up: its icon (its own
   // picture, one of hers, or its name's letter), its colour, its name.
-  const addonLook = a => ({ id: a.id, plugin: a.id, icon: a.icon?.name || 'dot', iconUrl: a.icon?.url, label: a.name, color: a.color || '' })
+  const addonLook = (a: Addon) => ({ id: a.id, plugin: a.id, icon: a.icon?.name || 'dot', iconUrl: a.icon?.url, label: a.name, color: a.color || '' })
   // Installed while this page has been up, and not put anywhere since: 新.
-  const isFresh = key => key.startsWith('plugin:') && !!AddonUI?.news.has(key.slice(7))
-  const clip = (s, n = 40) => [...String(s || '')].slice(0, n).join('')
+  const isFresh = (key: string) => key.startsWith('plugin:') && !!AddonUI?.news.has(key.slice(7))
+  const clip = (s: unknown, n = 40) => [...String(s || '')].slice(0, n).join('')
   function cardsOf() {
     const all = allNow()
     const detailed = Isle.isDetailed()
-    const out = []
-    const builtIn = { monitor: 'card.monitor', today: 'card.today', tokens: 'widget.tokens' }
+    const out: Card[] = []
+    const builtIn: Record<string, string> = { monitor: 'card.monitor', today: 'card.today', tokens: 'widget.tokens' }
     for (const w of all.filter(x => x.builtIn)) out.push({ key: `widget:${w.id}`, kind: 'builtIn', cat: BUILT_IN_CAT[w.id] || 'system', w, name: T(builtIn[w.id] || 'taskbar.w.widget'), note: T(`picker.d.${w.id in BUILT_IN_CAT ? w.id : 'builtIn'}`) })
     for (const p of snap?.plugins || []) out.push({ key: `plugin:${p.id}`, kind: 'plugin', cat: PLUGIN_CAT[p.id] || 'script', w: all.find(x => x.plugin === p.id) || null, plugin: p, name: T(`w.ex.${p.id}`), note: T(`w.ex.${p.id}.note`) })
     // Other people's (addons.rs): in their manifest's kind (addonui.ts
@@ -257,13 +312,13 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   }
 
   // The icon in its colour's tint (a spacer's: the strip's grey; a combo's: a board's tiles).
-  function markOf(card) {
+  function markOf(card: Card) {
     if (card.spacer) return `<svg class="wicon" viewBox="0 0 24 24" aria-hidden="true">${SPACER_MARK[card.spacer]}</svg>`
     if (card.set) return `<svg class="wicon" viewBox="0 0 24 24" aria-hidden="true">${SET_MARK}</svg>`
     const w = card.w || (card.addon ? addonLook(card.addon) : { id: card.key.split(':')[1], icon: card.plugin?.icon, label: card.name })
     return Widgets.iconHTML(w, Isle.lang)
   }
-  const colorOf = card => {
+  const colorOf = (card: Partial<Card>) => {
     const c = card.w?.color || card.addon?.color
     if (!c) return light() ? '#5d5d5d' : '#a1a1a6'
     return light() ? Widgets.deepen(c) : c
@@ -275,16 +330,16 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     const bar = P.placedKeys({ taskbar: strip, home: home() })
     const desk = P.placedKeys({ desk: Isle.config.deskLayout, home: 'island' })
     const cap = new Set(Isle.members.map(m => m.key))
-    const spacers = {}
+    const spacers: Record<string, number> = {}
     for (const run of P.RUNS) for (const p of strip?.[run] || []) if (p && ['flex', 'gap', 'sep'].includes(p.type)) spacers[p.type] = (spacers[p.type] || 0) + 1
     return { bar, desk, cap, spacers }
   }
-  const countOf = (card, at) => (card.spacer ? at.spacers[card.spacer] || 0 : (at.bar.has(card.key) ? 1 : 0) + (at.desk.has(card.key) ? 1 : 0) + (at.cap.has(card.key) ? 1 : 0))
+  const countOf = (card: CardLike, at: ReturnType<typeof placesOf>) => (card.spacer ? at.spacers[card.spacer] || 0 : (at.bar.has(card.key) ? 1 : 0) + (at.desk.has(card.key) ? 1 : 0) + (at.cap.has(card.key) ? 1 : 0))
 
   function drawChips() {
     chips.replaceChildren(
       ...CATS.map(c => {
-        const b = el('button', 'pk-chip', T(`picker.cat.${c}`))
+        const b = el('button', 'pk-chip', T(`picker.cat.${c}`)) as HTMLButtonElement
         b.type = 'button'
         b.dataset.cat = c
         b.setAttribute('aria-pressed', String(c === cat))
@@ -298,7 +353,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     const q = query.trim().toLowerCase()
     const at = placesOf()
     // One just installed and put nowhere yet first, marked 新 (spec §2).
-    const fresh = key => isFresh(key) && !countOf({ key }, at)
+    const fresh = (key: string) => isFresh(key) && !countOf({ key }, at)
     const shown = AddonUI.freshFirst(
       cards.filter(c => (cat === 'all' || c.cat === cat) && (!q || `${c.name} ${c.note} ${c.key} ${t('en', c.plugin ? `w.ex.${c.plugin.id}` : 'none')}`.toLowerCase().includes(q))),
       fresh,
@@ -309,7 +364,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     }
     grid.replaceChildren(
       ...shown.map(c => {
-        const b = el('button', c.set ? 'pk-card pk-setcard' : 'pk-card')
+        const b = el('button', c.set ? 'pk-card pk-setcard' : 'pk-card') as HTMLButtonElement
         b.type = 'button'
         b.dataset.key = c.key
         b.style.setProperty('--c', colorOf(c))
@@ -324,7 +379,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     showFocus()
   }
   // A combo's widgets as icons, each in its colour (one gone: its kind's glyph, grey).
-  function setIcons(set) {
+  function setIcons(set: G.BoardSet) {
     const icons = set.items.slice(0, 6).map(t => {
       const w = widgetOfKey(`${t.type}:${t.of}`)
       return `<span class="pk-mi" style="--c:${w ? colorOf({ w }) : 'currentColor'}">${w ? Widgets.iconHTML(w, Isle.lang) : WCards.memberGlyph(t)}</span>`
@@ -337,9 +392,10 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     for (const b of grid.querySelectorAll('.pk-card')) {
       const c = cards.find(x => x.key === b.dataset.key)
       const n = c ? countOf(c, at) : 0
-      if (n && c.addon) AddonUI.news.placed(c.addon.id)
+      // n: c is there.
+      if (n && c!.addon) AddonUI.news.placed(c!.addon.id)
       const badge = AddonUI.badgeOf(n, !!c && isFresh(c.key), T)
-      const bd = b.querySelector('.pk-bd')
+      const bd = b.querySelector('.pk-bd')!
       bd.textContent = badge.text
       bd.hidden = !badge.text
       b.classList.toggle('pk-new', badge.fresh)
@@ -419,10 +475,10 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   }
 
   pk.addEventListener('click', e => {
-    const b = e.target.closest('[data-pk], .pk-chip')
+    const b = (e.target as HTMLElement).closest('[data-pk], .pk-chip')
     if (!b) return
     if (b.classList.contains('pk-chip')) {
-      cat = b.dataset.cat
+      cat = b.dataset.cat!
       drawChips()
       drawHint()
       return drawGrid()
@@ -451,12 +507,13 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   // A card by the keyboard (Enter, Space): added as a press adds it. A
   // combo's ⋯: its menu.
   grid.addEventListener('click', e => {
-    const b = e.target.closest('.pk-card')
+    const b = (e.target as HTMLElement).closest('.pk-card')
     if (!b) return
-    if (e.target.closest('[data-cmore]')) {
+    if ((e.target as HTMLElement).closest('[data-cmore]')) {
       e.stopPropagation()
-      const r = e.target.closest('[data-cmore]').getBoundingClientRect()
-      return openSetMenu(b.dataset.key, r.right, r.bottom + 4)
+      const r = (e.target as HTMLElement).closest('[data-cmore]')!.getBoundingClientRect()
+      // Each card made with its key (drawGrid).
+      return openSetMenu(b.dataset.key!, r.right, r.bottom + 4)
     }
     if (e.detail !== 0) return
     const c = cards.find(x => x.key === b.dataset.key)
@@ -464,14 +521,14 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   })
   // A combo's card, a right press: its menu there.
   grid.addEventListener('contextmenu', e => {
-    const b = e.target.closest('.pk-setcard')
-    if (b) openSetMenu(b.dataset.key, e.clientX, e.clientY)
+    const b = (e.target as HTMLElement).closest('.pk-setcard')
+    if (b) openSetMenu(b.dataset.key!, e.clientX, e.clientY)
   })
 
   // --- Placing ---------------------------------------------------------------------------
   // The settings changed, here first (a second change before the Rust side
   // answers builds on it), then there.
-  function setConfig(patch) {
+  function setConfig(patch: Partial<Config> | null | undefined) {
     if (!patch) return
     Object.assign(Isle.config, clone(patch))
     pet.settings.set(patch)
@@ -479,7 +536,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   // On or off: the setting (placing.ts switchPatch), and the widgets as
   // this page has them, at once (the Rust side's word on them comes after:
   // her capsule is those on, and would show one just taken off meanwhile).
-  function setSwitch(keys, on) {
+  function setSwitch(keys: string[], on: boolean) {
     const list = keys.filter(k => !k.startsWith('spacer:'))
     if (!list.length) return
     for (const w of [...Isle.allWidgets, ...(snap?.widgets || [])]) if (list.includes(C.keyOfWidget(w)) || list.includes(`widget:${w.id}`)) w.on = on
@@ -487,34 +544,35 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     if (on) for (const k of list) if (k.startsWith('plugin:')) AddonUI.news.placed(k.slice(7))
     setConfig(P.switchesPatch(Isle.config, list, on))
   }
-  const switchOn = keys => setSwitch(keys, true)
+  const switchOn = (keys: string[]) => setSwitch(keys, true)
   // Off, those now nowhere: not on the strip nor on the desktop (her
   // capsule is those on that are nowhere else, so taken from there, or from
   // their last place elsewhere, they are off).
-  function offIfNowhere(keys) {
+  function offIfNowhere(keys: string[]) {
     const strip = home() === 'taskbar' ? Isle.tbLayout() : null
     const placed = P.placedKeys({ taskbar: strip, desk: Isle.config.deskLayout, home: home() })
     setSwitch(keys.filter(k => !placed.has(k)), false)
   }
 
   // The member a key is (what the desktop's layout keeps).
-  function memberOf(key, card = null) {
+  function memberOf(key: string, card: CardLike | null = null) {
     const item = P.itemOf(key)
     const w = card?.w || (item.plugin ? allNow().find(x => x.plugin === item.plugin) : allNow().find(x => x.id === item.id))
     // Someone else's plugin: its own name and icon kept with it (hers she knows by their ids).
     const addon = item.plugin ? addonOf(item.plugin) : null
     const iconName = w?.icon || card?.plugin?.icon || addon?.icon?.name
-    const icon = iconName in Widgets.ICONS && iconName !== 'dot' ? { icon: iconName } : {}
+    // None: in as 'undefined', not one of them.
+    const icon = (iconName as string) in Widgets.ICONS && iconName !== 'dot' ? { icon: iconName } : {}
     const name = !item.plugin && w && !w.private ? { name: clip(Widgets.words(Isle.lang, w).label) } : addon ? { name: clip(addon.name) } : {}
-    return { type: item.plugin ? 'plugin' : 'widget', of: item.plugin || item.id, ...icon, ...name }
+    return { type: item.plugin ? 'plugin' : 'widget', of: item.plugin || item.id!, ...icon, ...name }
   }
-  const widgetOfKey = key => {
+  const widgetOfKey = (key: string) => {
     const item = P.itemOf(key)
     return item.plugin ? allNow().find(x => x.plugin === item.plugin) : allNow().find(x => x.id === item.id)
   }
   // The entry a card puts on the strip: medium where it has it; the monitor
   // its part (#53); a spacer itself.
-  function entryFor(card) {
+  function entryFor(card: CardLike) {
     if (card.spacer) return { id: Isle.newId(), type: card.spacer }
     if (card.key === 'widget:monitor') return 'monitor'
     const m = memberOf(card.key, card)
@@ -523,7 +581,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   }
   // A widget's or plugin's name, as its card says it (a plugin's its own,
   // whatever its widgets are called now).
-  const nameOfKey = key => {
+  const nameOfKey = (key: string) => {
     if (key.startsWith('plugin:')) return addonOf(key.slice(7))?.name || Widgets.pluginName(Isle.lang, key.slice(7), allNow()) || T('taskbar.w.widget')
     const c = cards.find(x => x.key === key) || cardsOf().find(x => x.key === key)
     if (c) return c.name
@@ -533,7 +591,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
 
   // A widget or plugin (by key) off the strip: alone, or out of its group
   // (one left: alone); the monitor's part too.
-  function offStrip(layout, key) {
+  function offStrip(layout: Widgets.Layout, key: string) {
     let out = clone(layout)
     for (const run of P.RUNS)
       for (const p of [...out[run]]) {
@@ -547,7 +605,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     return out
   }
   // Its standalone entry on the strip (a widget alone, or the monitor's part).
-  function stripEntryOf(key) {
+  function stripEntryOf(key: string) {
     if (home() !== 'taskbar') return null
     const layout = Isle.tbLayout()
     for (const run of P.RUNS)
@@ -557,16 +615,16 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
       }
     return null
   }
-  const onDesk = key => G.has(Isle.config.deskLayout, P.itemOf(key))
+  const onDesk = (key: string) => G.has(Isle.config.deskLayout, P.itemOf(key))
 
   // Her capsule's members as they are now, and those turned on and kept in
   // its setting that have nothing to say yet (a plugin starting): where they stood.
-  const isOnKey = key => {
+  const isOnKey = (key: string) => {
     const it = P.itemOf(key)
     return it.plugin ? Isle.config.plugins?.[it.plugin]?.on === true : !(Isle.config.widgetsOff || []).includes(it.id)
   }
   function listNow() {
-    let out = Isle.members.map(m => ({ key: m.key, mode: m.mode }))
+    let out: C.Member[] = Isle.members.map(m => ({ key: m.key, mode: m.mode }))
     const have = new Set(out.map(m => m.key))
     const strip = home() === 'taskbar' ? Isle.tbLayout() : null
     const placed = P.placedKeys({ taskbar: strip, desk: Isle.config.deskLayout, home: home() })
@@ -575,7 +633,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     })
     return out
   }
-  function writeCapsule(list) {
+  function writeCapsule(list: C.Member[]) {
     setConfig(C.patchFor(Isle.config, list, home()))
     refresh()
   }
@@ -589,7 +647,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
 
   // Into the strip at a place (moved there from elsewhere on it, or new);
   // its medium ones made small first when it was full.
-  function putOnStrip(key, at, shrink = [], fromStrip = null, card = null) {
+  function putOnStrip(key: string, at: Slot, shrink: string[] = [], fromStrip: string | null = null, card: Card | null = null) {
     let layout = Isle.tbLayout()
     let entry
     if (fromStrip) {
@@ -612,12 +670,12 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
       askFirst([key])
     }
     if (shrink.length) note1(T('picker.shrunk'))
-    flash(typeof entry === 'string' ? Isle.PART_NODES[entry] : Isle.entryNodes.get(entry.id))
+    flash(typeof entry === 'string' ? Isle.PART_NODES[entry as keyof typeof Isle.PART_NODES] : Isle.entryNodes.get(entry.id))
     refresh()
   }
 
   // Into her capsule (at its end, or a place): off the strip and the desktop first (one place).
-  function putInCapsule(keys, at = -1) {
+  function putInCapsule(keys: string[], at = -1) {
     let layout = home() === 'taskbar' ? Isle.tbLayout() : null
     for (const key of keys) if (layout) layout = offStrip(layout, key)
     if (layout && JSON.stringify(layout) !== JSON.stringify(Isle.tbLayout())) Isle.keepLayout(layout)
@@ -639,16 +697,16 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   const setsNow = () => G.setsOf(Array.isArray(Isle.config.boardSets) ? Isle.config.boardSets : snap?.settings?.boardSets)
   // A member still there: a plugin she has (not yet asked: as if), a widget
   // with something to say (a mailbox gone, a script's widget gone: not).
-  const known = m => (m.type === 'plugin' ? !snap?.plugins || snap.plugins.some(p => p.id === m.of) || !!addonOf(m.of) : allNow().some(w => w.id === m.of))
+  const known = (m: G.Member) => (m.type === 'plugin' ? !snap?.plugins || snap.plugins.some(p => p.id === m.of) || !!addonOf(m.of) : allNow().some(w => w.id === m.of))
   // What goes over to the desktop's page: the combo with those still there.
-  function setToSend(set) {
+  function setToSend(set: G.BoardSet) {
     const items = set.items.filter(known)
     return { set: { id: set.id, name: set.name, items }, skipped: set.items.length - items.length }
   }
   // Up on the desktop (its page put it there, or this one did): its widgets
   // off the strip (one place each; out of her capsule as placement has it),
   // on, and those left out said.
-  function setUp(items, skipped) {
+  function setUp(items: G.Member[], skipped: number) {
     const keys = items.map(t => `${t.type}:${t.of}`)
     if (home() === 'taskbar') {
       let layout = Isle.tbLayout()
@@ -665,7 +723,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   // Pressed (or let go of over the desktop with no word from its page): up
   // on the main display, where its page finds room (no place of its own:
   // deskgrid.ts settle, from the top right, the next free one).
-  function putSet(set) {
+  function putSet(set: G.BoardSet) {
     const { board, skipped } = G.boardFromSet(set, { known, newId: Isle.newId })
     if (!board) return note1(T('picker.setGone'))
     Isle.keepDeskLayout(G.withBoard(Isle.config.deskLayout, board, { newId: Isle.newId }))
@@ -673,15 +731,15 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   }
 
   // Its menu (a right press on its card, or its ⋯): 改名, 删除.
-  const smenu = el('div', 'pk-menu pk-smenu')
+  const smenu: HTMLElement = el('div', 'pk-menu pk-smenu')
   smenu.hidden = true
   smenu.innerHTML = '<button type="button" data-sm="rename"></button><button type="button" data-sm="delete"></button>'
   pk.append(smenu)
   let smenuFor = ''
-  function openSetMenu(key, x, y) {
+  function openSetMenu(key: string, x: number, y: number) {
     smenuFor = key
-    smenu.querySelector('[data-sm="rename"]').textContent = T('desk.rename')
-    smenu.querySelector('[data-sm="delete"]').textContent = T('picker.setDelete')
+    smenu.querySelector('[data-sm="rename"]')!.textContent = T('desk.rename')
+    smenu.querySelector('[data-sm="delete"]')!.textContent = T('picker.setDelete')
     smenu.hidden = false
     const p = pk.getBoundingClientRect()
     smenu.style.left = `${Math.round(Math.max(8, Math.min(x - p.left, p.width - smenu.offsetWidth - 8)))}px`
@@ -693,7 +751,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     smenuFor = ''
   }
   smenu.addEventListener('click', e => {
-    const b = e.target.closest('[data-sm]')
+    const b = (e.target as HTMLElement).closest('[data-sm]')
     const id = smenuFor.slice(4)
     closeSetMenu()
     if (!b || !id) return
@@ -701,7 +759,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     deleteSet(id)
   })
   // Gone, with a way back for 5 s.
-  function deleteSet(id) {
+  function deleteSet(id: string) {
     const { list, record } = G.removeSet(setsNow(), id)
     if (!record) return
     setConfig({ boardSets: list })
@@ -713,14 +771,14 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   }
   // Its name typed over its card's: Enter or a press elsewhere keeps it (not
   // another's name), Esc leaves it.
-  let renaming = null
-  function renameSetCard(id) {
+  let renaming: { id: string; input: HTMLInputElement } | null = null
+  function renameSetCard(id: string) {
     const card = grid.querySelector(`[data-key="set:${CSS.escape(id)}"]`)
     const s = setsNow().find(x => x.id === id)
     if (!card || !s) return
-    const r = card.querySelector('.pk-n').getBoundingClientRect()
+    const r = card.querySelector('.pk-n')!.getBoundingClientRect()
     const p = pk.getBoundingClientRect()
-    const input = el('input', 'pk-rename')
+    const input = el('input', 'pk-rename') as HTMLInputElement
     input.value = s.name
     input.maxLength = G.BOARD_NAME
     input.spellcheck = false
@@ -738,7 +796,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     input.focus({ preventScroll: true })
     input.select()
   }
-  function endRenameSet(ok) {
+  function endRenameSet(ok: boolean) {
     const r = renaming
     if (!r) return
     renaming = null
@@ -754,7 +812,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
 
   // A press on a card: just before the tray (the island's home: into the
   // capsule). One on the strip already: shown where it is. A combo: up on the desktop.
-  function pressAdd(card, node) {
+  function pressAdd(card: Card, node: HTMLElement | null) {
     if (card.set) return putSet(card.set)
     if (home() !== 'taskbar') {
       if (card.spacer) return refuse(node, T('picker.onlyStrip'))
@@ -774,12 +832,12 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     if (!fit.ok) return refuse(node, T('picker.full'))
     putOnStrip(card.key, at, fit.shrink, null, card)
   }
-  const sizeOfCard = card => (card.key === 'widget:monitor' ? 'part' : card.w && !Widgets.sizesOf(card.w).includes('m') ? 'S' : 'M')
+  const sizeOfCard = (card: Card) => (card.key === 'widget:monitor' ? 'part' : card.w && !Widgets.sizesOf(card.w).includes('m') ? 'S' : 'M')
 
   // Room on the strip for one this wide more (placing.ts fitStrip): what
   // its runs take now, against its length less the show-desktop sliver.
-  function fitFor(width, except = null) {
-    const L = r => Isle.len(r)
+  function fitFor(width: number, except: HTMLElement | null = null) {
+    const L = (r: DOMRect) => Isle.len(r)
     const strip = Isle.barRest.getBoundingClientRect()
     const edge = Isle.barRest.querySelector('.tdesk')
     // The middle run stays where it is centred (island-layout.ts alignApps keeps
@@ -788,10 +846,10 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     // A side bar's: its programs scroll when crowded (two buttons' room kept), its middle run moves up.
     const side = Isle.isSide()
     let used = 12 + (edge ? L(edge.getBoundingClientRect()) : 0) + (side ? 0 : parseFloat(mid.marginLeft) || 0)
-    const shrinkable = []
+    const shrinkable: { id: string; width: number }[] = []
     for (const z of Object.values(Isle.zones)) {
       used += 8
-      for (const n of z.children) {
+      for (const n of z.children as HTMLCollectionOf<StripNode>) {
         if (n === gapNode || n === except || n.classList.contains('pk-lifted')) continue
         used += side && n === Isle.PART_NODES.apps ? Math.min(L(n.getBoundingClientRect()), 88) : L(n.getBoundingClientRect())
         const e = n._entry
@@ -808,7 +866,14 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   // group's by its index), { widget } (one listed in the open island: her
   // capsule's, as it lists those alone), { key } (her capsule's). True when
   // it was done here.
-  function remove(what) {
+  // What island.ts takes off (its menus, the widget's popover there).
+  interface Removing {
+    entry?: string
+    member?: number
+    widget?: { id?: string; plugin?: string | null }
+    key?: string
+  }
+  function remove(what: Removing | null | undefined) {
     if (what?.entry) return removeFromStrip(what.entry, what.member ?? -1)
     if (what?.key) return removeFromCapsule(what.key)
     const w = what?.widget
@@ -817,7 +882,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     return Isle.members.some(m => m.key === key) && removeFromCapsule(key)
   }
 
-  function removeFromStrip(id, member = -1) {
+  function removeFromStrip(id: string, member = -1) {
     const before = Isle.tbLayout()
     const rec = P.removalOf(before, id)
     if (!rec) return false
@@ -840,12 +905,12 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
       Isle.keepLayout(back)
       switchOn(gone)
       refresh()
-      flash(typeof e === 'string' ? Isle.PART_NODES[e] : Isle.entryNodes.get(e.id))
+      flash(typeof e === 'string' ? Isle.PART_NODES[e as keyof typeof Isle.PART_NODES] : Isle.entryNodes.get(e.id))
     })
     return true
   }
 
-  function removeFromCapsule(key) {
+  function removeFromCapsule(key: string) {
     const { list, record } = C.remove(listNow(), key)
     if (!record) return false
     offIfNowhere([key])
@@ -859,8 +924,8 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     return true
   }
 
-  function removeFromDesk(key) {
-    const before = Array.isArray(Isle.config.deskLayout) ? clone(Isle.config.deskLayout) : []
+  function removeFromDesk(key: string) {
+    const before: G.Entry[] = Array.isArray(Isle.config.deskLayout) ? clone(Isle.config.deskLayout) : []
     const holder = before.find(e => G.membersOf(e).some(m => `${m.type}:${m.of}` === key))
     if (!holder) return false
     Isle.deskOff([P.itemOf(key)])
@@ -880,9 +945,9 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   // --- Toasts ----------------------------------------------------------------------------
   // A word for a few seconds; with a way back (undo: 撤销, or what label
   // says) for 5 s.
-  function toast(text, undo = null, label = '') {
+  function toast(text: string, undo: (() => void) | null = null, label = '') {
     theme()
-    const node = el('div', undo ? 'pk-toast' : 'pk-toast pk-info')
+    const node: HTMLElement = el('div', undo ? 'pk-toast' : 'pk-toast pk-info')
     node.append(el('span', '', text))
     let timer: Timer = 0
     const gone = () => {
@@ -893,7 +958,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     }
     if (undo) {
       node.append(el('span', 'pk-dot', '·'))
-      const b = el('button', 'pk-undo', label || T('picker.undo'))
+      const b = el('button', 'pk-undo', label || T('picker.undo')) as HTMLButtonElement
       b.type = 'button'
       b.addEventListener('click', () => {
         gone()
@@ -902,25 +967,26 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
       node.append(b)
     }
     // The same word again: the old one goes.
-    if (!undo) for (const x of [...toasts.children]) if (x.classList.contains('pk-info') && x.firstChild.textContent === text) x.remove()
+    // Each toast's words first (above).
+    if (!undo) for (const x of [...toasts.children]) if (x.classList.contains('pk-info') && x.firstChild!.textContent === text) x.remove()
     toasts.append(node)
-    while (toasts.children.length > 3) toasts.firstChild.remove()
+    while (toasts.children.length > 3) toasts.firstChild!.remove()
     toasts.hidden = false
     timer = setTimeout(gone, undo ? UNDO_MS : NOTE_MS)
     after()
   }
-  const undoToast = (name, undo) => toast(T('picker.removed', { name }), undo)
-  const note1 = text => toast(text)
+  const undoToast = (name: string, undo: () => void) => toast(T('picker.removed', { name }), undo)
+  const note1 = (text: string) => toast(text)
 
   // A plugin just put somewhere that wants a parameter first (the CI's
   // repo, the countdown's day: plugins.rs runs it only then, and until then
   // it shows nothing there): it says so, with the way to it, its row on the
   // Plugins page with its settings folded out.
-  function askFirst(keys) {
+  function askFirst(keys: string[]) {
     const ids = keys.filter(k => k.startsWith('plugin:')).map(k => k.slice(7))
     if (!ids.length) return
     // Hers by her words for them; someone else's by its own (addonui.ts labelOf).
-    const check = got => {
+    const check = (got: Snap | null) => {
       const addons = (got?.addons || []).filter(a => a.kind === 'plugin')
       for (const id of ids) {
         const addon = addons.find(a => a.id === id)
@@ -934,27 +1000,27 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     else pet.settings.get().then(check)
   }
   // Its settings: editing done first (the settings come over her island), the picker closed.
-  function settingsOf(plugin) {
+  function settingsOf(plugin: string) {
     if (editing()) Isle.endEdit(true)
     hide()
     Isle.openWidgetSettings({ plugin })
   }
 
-  function flash(node) {
+  function flash(node: HTMLElement | null | undefined) {
     if (!node?.isConnected) return
     node.classList.remove('pk-flash')
     void node.offsetWidth
     node.classList.add('pk-flash')
     setTimeout(() => node.classList.remove('pk-flash'), 1300)
   }
-  function shake(node) {
+  function shake(node: HTMLElement | null | undefined) {
     if (!node?.isConnected) return
     node.classList.remove('pk-shake')
     void node.offsetWidth
     node.classList.add('pk-shake')
     setTimeout(() => node.classList.remove('pk-shake'), 420)
   }
-  function refuse(node, text) {
+  function refuse(node: HTMLElement | null | undefined, text: string) {
     if (home() === 'taskbar') shake(Isle.barRest)
     shake(node)
     note1(text)
@@ -971,12 +1037,12 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   }
 
   // --- The popover over a widget on the strip (editing) ------------------------------------
-  let popFor = null
+  let popFor: StripNode | null = null
   let popSticky = false
   let popTimer: Timer = 0
   let popHide: Timer = 0
-  const popEntryOf = node => node?._entry || (node?.dataset.part === 'monitor' ? 'monitor' : null)
-  function openPop(node, sticky) {
+  const popEntryOf = (node: StripNode | null) => node?._entry || (node?.dataset.part === 'monitor' ? 'monitor' : null)
+  function openPop(node: StripNode, sticky: boolean) {
     const e = popEntryOf(node)
     if (!e || !editing()) return
     clearTimeout(popTimer)
@@ -988,15 +1054,16 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     const group = !part && Widgets.isGroup(e)
     const w = part ? allNow().find(x => x.id === 'monitor') : !group && Widgets.sourcesOf(e, Isle.allWidgets)[0]
     const name = part ? T('card.monitor') : node.dataset.label || Widgets.nameOf(Isle.lang, e, Isle.allWidgets, Isle.isDetailed())
-    const seg = (act, v, label, on, why = '') => `<button type="button" class="pk-seg${on ? ' on' : ''}" data-pop="${act}" data-v="${v}"${why ? ` aria-disabled="true" title="${esc(why)}"` : ''}>${esc(label)}</button>`
-    const rows = []
+    const seg = (act: string, v: string, label: string, on: boolean, why = '') => `<button type="button" class="pk-seg${on ? ' on' : ''}" data-pop="${act}" data-v="${v}"${why ? ` aria-disabled="true" title="${esc(why)}"` : ''}>${esc(label)}</button>`
+    const rows: string[] = []
     if (!part && Widgets.isSource(e)) {
       const noM = w && !Widgets.sizesOf(w).includes('m')
       const now = node.dataset.size === 'S' || noM ? 'S' : 'M'
       rows.push(`<div class="pk-row"><span>${esc(T('menu.size'))}</span><span class="pk-segs">${seg('size', 'S', T('menu.s'), now === 'S')}${seg('size', 'M', T('menu.m'), now === 'M', noM ? T('menu.noMedium') : '')}</span></div>`)
     }
     if (group) rows.push(`<div class="pk-row"><span>${esc(T('menu.group'))}</span><span class="pk-segs">${seg('group', 'carousel', T('menu.carousel'), e.type === 'carousel')}${seg('group', 'stack', T('menu.stack'), e.type === 'stack')}${seg('group', 'apart', T('menu.ungroup'), false)}</span></div>`)
-    const settable = part || (!group && (e.type === 'plugin' || w?.builtIn || w?.from === 'mail'))
+    // w: false for a group, not read then.
+    const settable = part || (!group && (e.type === 'plugin' || (w as Widgets.Widget | undefined)?.builtIn || (w as Widgets.Widget | undefined)?.from === 'mail'))
     pop.innerHTML = `<div class="pk-pt"><span class="pk-wi" style="--c:${w ? colorOf({ w }) : 'currentColor'}">${w ? Widgets.iconHTML(w, Isle.lang) : group ? FI('E8FD') : ''}</span><b>${esc(name)}</b></div>${rows.join('')}<div class="pk-pb">${settable ? `<button type="button" data-pop="settings">${FI('E713')}${esc(T('taskbar.w.settings'))}</button>` : ''}<button type="button" data-pop="remove">${FI('E74D')}${esc(T('taskbar.w.remove'))}</button></div>`
     pop.hidden = false
     placePop()
@@ -1028,7 +1095,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     Isle.watchPresses()
     after()
   }
-  const isWidgetNode = n => !!n && (!!n._entry && (Widgets.isSource(n._entry) || Widgets.isGroup(n._entry)) || n.dataset.part === 'monitor')
+  const isWidgetNode = (n: StripNode | null | undefined): n is StripNode => !!n && (!!n._entry && (Widgets.isSource(n._entry) || Widgets.isGroup(n._entry)) || n.dataset.part === 'monitor')
   Isle.barRest.addEventListener('pointerover', e => {
     if (!editing() || drag || press || e.pointerType !== 'mouse') return
     const node = (e.target as HTMLElement).closest('[data-part]')
@@ -1049,7 +1116,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     if (popFor && !popSticky) popHide = setTimeout(closePop, 260)
   })
   pop.addEventListener('click', e => {
-    const b = e.target.closest('[data-pop]')
+    const b = (e.target as HTMLElement).closest('[data-pop]')
     const node = popFor
     const entry = popEntryOf(node)
     if (!b || !entry || b.getAttribute('aria-disabled') === 'true') return
@@ -1066,7 +1133,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     if (what === 'size') {
       const at = Widgets.findEntry(layout, entry.id)
       if (at) layout[at.run][at.at] = { ...at.entry, size: v }
-    } else if (what === 'group') layout = v === 'apart' ? Widgets.ungroup(layout, entry.id, Isle.newId) : Widgets.regroup(layout, entry.id, v)
+    } else if (what === 'group') layout = v === 'apart' ? Widgets.ungroup(layout, entry.id, Isle.newId) : Widgets.regroup(layout, entry.id, v!)
     Isle.keepLayout(layout)
     if (what === 'group' && v === 'apart') return closePop()
     const fresh = Isle.entryNodes.get(entry.id)
@@ -1079,20 +1146,21 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   // it was, a press (a card added, a widget's popover, her capsule's panel).
   grid.addEventListener('pointerdown', e => {
     lastPointer = e.pointerType
-    const b = e.target.closest('.pk-card')
-    if (!b || e.button !== 0 || drag || e.target.closest('[data-cmore]')) return
+    const b = (e.target as HTMLElement).closest('.pk-card')
+    if (!b || e.button !== 0 || drag || (e.target as HTMLElement).closest('[data-cmore]')) return
     e.preventDefault()
     menu.hidden = true
-    press = { src: 'card', key: b.dataset.key, node: b, x: e.clientX, y: e.clientY, id: e.pointerId }
+    press = { src: 'card', key: b.dataset.key!, node: b, x: e.clientX, y: e.clientY, id: e.pointerId }
     try {
       grid.setPointerCapture(e.pointerId)
     } catch {}
   })
-  function pressStrip(e, node) {
+  function pressStrip(e: PointerEvent, node: HTMLElement | null) {
     lastPointer = e.pointerType
     if (drag) return
     if (!node) return closePop()
-    press = { src: 'strip', key: node.dataset.part, node, x: e.clientX, y: e.clientY, id: e.pointerId }
+    // closest('[data-part]') (island.ts).
+    press = { src: 'strip', key: node.dataset.part!, node, x: e.clientX, y: e.clientY, id: e.pointerId }
     try {
       Isle.barRest.setPointerCapture(e.pointerId)
     } catch {}
@@ -1102,7 +1170,8 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   // entry on the strip (by id, or a part), the member the desktop keeps,
   // what it shows and says, how wide a gap it opens.
   function begin(p: Press) {
-    const d: Drag = { src: p.src, pid: p.id, at: null, tgt: { kind: 'none' }, sig: '', hot: null, sent: null }
+    // The rest given below, before it is the drag.
+    const d = { src: p.src, pid: p.id, at: null, tgt: { kind: 'none' }, sig: '', hot: null, sent: null } as Drag
     if (p.src === 'card') {
       const card = cards.find(c => c.key === p.key)
       if (!card) return
@@ -1146,8 +1215,9 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
       d.set = d.card.set
       d.capsuleKeys = []
     } else if (d.desk) {
-      const w = widgetOfKey(d.key)
-      d.item = memberOf(d.key, d.card)
+      // desk: it has its key (above).
+      const w = widgetOfKey(d.key!)
+      d.item = memberOf(d.key!, d.card)
       d.size = !w || Widgets.sizesOf(w).includes('m') ? 'm' : 's'
     }
     drag = d
@@ -1156,7 +1226,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     theme()
     if (d.node) d.node.classList.add('pk-lifted')
     gapNode.style.cssText = ''
-    ghost.querySelector('.pk-gt').innerHTML = `<span class="pk-wi" style="--c:${d.color}">${d.mark}</span>`
+    ghost.querySelector('.pk-gt')!.innerHTML = `<span class="pk-wi" style="--c:${d.color}">${d.mark}</span>`
     ghost.hidden = false
     ghost.style.transition = 'none'
     ghost.style.opacity = ''
@@ -1171,19 +1241,20 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   }
 
   // Where the pointer is, as a place to let go.
-  function hit(x, y): Target {
-    const d = drag
+  // These while a drag is on (drag!).
+  function hit(x: number, y: number): Target {
+    const d = drag!
     const pr = open ? rectOf(pk) : null
     if (pr && inRect(x, y, pr)) return { kind: 'picker' }
     const panel = later.CapsulePanel?.isOpen() ? rectOf(later.CapsulePanel.el) : null
-    if (panel && inRect(x, y, panel)) return { kind: 'capsule', at: later.CapsulePanel.indexAt(y) }
+    if (panel && inRect(x, y, panel)) return { kind: 'capsule', at: later.CapsulePanel!.indexAt(y) }
     if (home() !== 'taskbar') {
-      const r = Isle.island.getBoundingClientRect()
+      const r = Isle.island!.getBoundingClientRect()
       if (inRect(x, y, { left: r.left - 14, right: r.right + 14, top: r.top - 14, bottom: r.bottom + 14 })) return { kind: 'capsule' }
       return { kind: 'desk' }
     }
     const s = Isle.barRest.getBoundingClientRect()
-    const edge = Isle.tbEdge()
+    const edge = Isle.tbEdge() as Edge
     const off = { bottom: s.top - y, top: y - s.bottom, left: x - s.right, right: s.left - x }[edge]
     if (off <= 2) return stripHit(x, y)
     if (d.src === 'strip' && !d.stays && off <= BAND_PX) return { kind: 'bare' }
@@ -1193,8 +1264,8 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     return { kind: 'desk' }
   }
 
-  function stripHit(x, y): Target {
-    const d = drag
+  function stripHit(x: number, y: number): Target {
+    const d = drag!
     const a = Isle.along(x, y)
     // Her capsule: the middle half of her slot.
     const her = Isle.herSlot.getBoundingClientRect()
@@ -1211,8 +1282,8 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   }
 
   // Ghost's words, and whether it is a no (amber) or a taking-off.
-  function labelOf(tg) {
-    const d = drag
+  function labelOf(tg: Target) {
+    const d = drag!
     const moving = d.src === 'strip' || !!d.strip || (d.key && (onDesk(d.key) || Isle.members.some(m => m.key === d.key)))
     switch (tg.kind) {
       case 'strip':
@@ -1238,8 +1309,8 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     }
   }
 
-  function moveTo(x, y) {
-    const d = drag
+  function moveTo(x: number, y: number) {
+    const d = drag!
     let tg = hit(x, y)
     // A combo over the strip or her capsule: not there (no gap opens).
     if (d.set && (tg.kind === 'strip' || tg.kind === 'capsule')) tg = { kind: 'setNo' }
@@ -1251,7 +1322,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     }
     // Her capsule lit, the picker, the band.
     const capsuleHot = tg.kind === 'capsule'
-    Isle.island.classList.toggle('pk-hot', capsuleHot)
+    Isle.island!.classList.toggle('pk-hot', capsuleHot)
     later.CapsulePanel?.hot(capsuleHot)
     pk.classList.toggle('pk-hot', tg.kind === 'picker')
     pk.dataset.drop = tg.kind === 'picker' ? labelOf(tg)[0] : ''
@@ -1271,24 +1342,24 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
       pet.deskPreview(null)
     }
     const [words, tone] = labelOf(tg)
-    ghost.querySelector('.pk-gl').textContent = `${d.name} · ${words}`
+    ghost.querySelector('.pk-gl')!.textContent = `${d.name} · ${words}`
     ghost.className = `pk-ghost${tone ? ` pk-${tone}` : ''}${light() ? ' pk-l' : ''}${nearStrip(x, y) ? ' pk-up' : ''}`
     ghost.style.left = `${x}px`
     ghost.style.top = `${y}px`
   }
   // Why not on the desktop: a part that stays, a spacer, several in one place.
-  const noDeskWhy = d => (d.stays ? 'taskbar.edit.fixed' : d.entry && typeof d.entry === 'object' && Widgets.isGroup(d.entry) ? 'picker.noGroupDesk' : 'picker.onlyStrip')
-  const nearStrip = (x, y) => home() === 'taskbar' && Isle.tbEdge() === 'bottom' && y > Isle.barRest.getBoundingClientRect().top - 70
+  const noDeskWhy = (d: Drag) => (d.stays ? 'taskbar.edit.fixed' : d.entry && typeof d.entry === 'object' && Widgets.isGroup(d.entry) ? 'picker.noGroupDesk' : 'picker.onlyStrip')
+  const nearStrip = (x: number, y: number) => home() === 'taskbar' && Isle.tbEdge() === 'bottom' && y > Isle.barRest.getBoundingClientRect().top - 70
 
   // The gap where it would go, the others moved aside (FLIP: from where they
   // were, 160 ms); none, the gap closed.
-  function gapAt(tg) {
-    const d = drag
+  function gapAt(tg: StripTarget | null) {
+    const d = drag!
     const nodes = Object.values(Isle.zones).flatMap(z => [...z.children])
     const was = new Map(nodes.map(n => [n, n.getBoundingClientRect()]))
     if (!tg) gapNode.remove()
     else {
-      const z = Isle.zones[tg.at.run]
+      const z = Isle.zones[tg.at.run as P.Run]
       const list = [...z.children].filter(n => n !== gapNode && n !== d.node && !n.classList.contains('pk-lifted'))
       const ref = list[tg.at.index] || null
       gapNode.classList.toggle('pk-no', !tg.fit.ok)
@@ -1312,18 +1383,18 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
 
   function placeBand() {
     const s = Isle.barRest.getBoundingClientRect()
-    const edge = Isle.tbEdge()
+    const edge = Isle.tbEdge() as Edge
     const r = { bottom: [s.left, s.top - BAND_PX, s.width, BAND_PX], top: [s.left, s.bottom, s.width, BAND_PX], left: [s.right, s.top, BAND_PX, s.height], right: [s.left - BAND_PX, s.top, BAND_PX, s.height] }[edge]
     Object.assign(band.style, { left: `${r[0]}px`, top: `${r[1]}px`, width: `${r[2]}px`, height: `${r[3]}px` })
     band.dataset.edge = edge
   }
 
   // Let go: where it goes (or back where it was).
-  function end(ok, x?, y?) {
+  function end(ok: boolean, x?: number, y?: number) {
     const d = drag
     if (!d) return
     drag = null
-    const tg = ok ? d.tgt : { kind: 'none' }
+    const tg: Target = ok ? d.tgt : { kind: 'none' }
     const hadGap = gapNode.isConnected
     gapNode.remove()
     if (d.node) d.node.classList.remove('pk-lifted')
@@ -1335,17 +1406,18 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     pk.classList.remove('pk-thru', 'pk-hot')
     band.hidden = true
     band.classList.remove('pk-hot')
-    Isle.island.classList.remove('pk-hot')
+    Isle.island!.classList.remove('pk-hot')
     later.CapsulePanel?.hot(false)
     if (d.sent && tg.kind !== 'desk') pet.deskPreview(null)
     let landed = false
     switch (tg.kind) {
       case 'strip':
         if (!tg.fit.ok) {
-          refuse(d.src === 'card' ? d.card && grid.querySelector(`[data-key="${CSS.escape(d.key)}"]`) : null, T('picker.full'))
+          refuse(d.src === 'card' ? d.card && grid.querySelector(`[data-key="${CSS.escape(d.key!)}"]`) : null, T('picker.full'))
           break
         }
-        putOnStrip(d.key, tg.at, tg.fit.shrink, d.strip || null, d.card || null)
+        // A card's key; a part moved on the strip has none (fromStrip: not read).
+        putOnStrip(d.key!, tg.at, tg.fit.shrink, d.strip || null, d.card || null)
         landed = true
         break
       case 'capsule':
@@ -1359,7 +1431,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
       case 'picker':
       case 'bare':
         if (d.src === 'strip' && !d.stays) {
-          removeFromStrip(d.strip)
+          removeFromStrip(d.strip!)
           landed = true
         } else if (d.stays && d.src === 'strip') note1(T('taskbar.edit.fixed'))
         break
@@ -1371,7 +1443,8 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
           note1(T(noDeskWhy(d)))
           break
         }
-        dropOnDesk(d, x, y)
+        // Let go of (end(true, x, y)).
+        dropOnDesk(d, x!, y!)
         landed = true
         break
     }
@@ -1382,8 +1455,8 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   }
 
   // Back where it came from: to its card, or its place on the strip.
-  function flyBack(d) {
-    const to = d.src === 'card' ? grid.querySelector(`[data-key="${CSS.escape(d.key)}"]`) : d.node
+  function flyBack(d: Drag) {
+    const to = d.src === 'card' ? grid.querySelector(`[data-key="${CSS.escape(d.key!)}"]`) : d.node
     if (!to?.isConnected || reduced() || (d.src === 'card' && !open)) return (ghost.hidden = true)
     const r = to.getBoundingClientRect()
     ghost.style.transition = 'left .22s cubic-bezier(.2,.8,.2,1), top .22s cubic-bezier(.2,.8,.2,1), opacity .22s'
@@ -1402,17 +1475,19 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   // in 2.5 s (a display's window made as the drag reached it still coming
   // up, its page gone): put on the desktop the island's own way, where the
   // desktop's page finds room (top right).
-  function dropOnDesk(d, x, y) {
+  function dropOnDesk(d: Drag, x: number, y: number) {
     const ticket = `t${++tickets}`
     const sent = d.set ? setToSend(d.set) : null
-    const was = { key: d.key, strip: d.src === 'strip' ? d.strip : d.strip || null, item: d.item, keys: d.capsuleKeys, fresh: d.src === 'card', set: d.set || null, sent }
+    // desk: it has its key (begin).
+    const was = { key: d.key!, strip: d.src === 'strip' ? d.strip : d.strip || null, item: d.item, keys: d.capsuleKeys, fresh: d.src === 'card', set: d.set || null, sent }
     clearTimeout(pending?.timer)
     pending = { ticket, was, timer: setTimeout(() => pending?.ticket === ticket && deskFallback(), 2500) }
     if (sent) pet.deskDrop({ x: Math.round(x), y: Math.round(y), set: sent.set, ticket })
     else pet.deskDrop({ x: Math.round(x), y: Math.round(y), item: d.item, size: d.size, ticket })
   }
+  // Its timer looks first.
   function deskFallback() {
-    const { was } = pending
+    const { was } = pending!
     pending = null
     if (was.set) return putSet(was.set)
     if (was.strip) Isle.keepLayout(P.without(Isle.tbLayout(), was.strip))
@@ -1428,7 +1503,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
       if (!drag || drag.tgt.kind !== 'desk') return
       deskSaid = a
       const [words, tone] = labelOf(drag.tgt)
-      ghost.querySelector('.pk-gl').textContent = `${drag.name} · ${words}`
+      ghost.querySelector('.pk-gl')!.textContent = `${drag.name} · ${words}`
       ghost.classList.toggle('pk-no', tone === 'no')
       return
     }
@@ -1438,7 +1513,8 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     pending = null
     if (!a.ok) return note1(T(a.why === 'boardFull' ? 'desk.boardFull' : a.why === 'none' && was.set ? 'picker.setGone' : 'picker.deskFull'))
     // A combo up there (the desktop's page put its board there): its widgets on.
-    if (was.set) return setUp(was.sent.set.items, was.sent.skipped)
+    // A combo's: sent, so sent.
+    if (was.set) return setUp(was.sent!.set.items, was.sent!.skipped)
     // There now (the desktop's page kept it): off the strip and the capsule (one place), on.
     if (was.strip) Isle.keepLayout(P.without(Isle.tbLayout(), was.strip))
     else if (home() === 'taskbar' && stripEntryOf(was.key) == null) {
@@ -1560,9 +1636,9 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   document.addEventListener(
     'pointerdown',
     e => {
-      if (!menu.hidden && !menu.contains(e.target) && !(e.target as HTMLElement).closest('[data-pk="menu"]')) menu.hidden = true
-      if (!smenu.hidden && !smenu.contains(e.target) && !(e.target as HTMLElement).closest('[data-cmore]')) closeSetMenu()
-      if (popFor && !pop.contains(e.target) && !popFor.contains(e.target) && !Isle.barRest.contains(e.target as Node)) closePop()
+      if (!menu.hidden && !menu.contains(e.target as Node) && !(e.target as HTMLElement).closest('[data-pk="menu"]')) menu.hidden = true
+      if (!smenu.hidden && !smenu.contains(e.target as Node) && !(e.target as HTMLElement).closest('[data-cmore]')) closeSetMenu()
+      if (popFor && !pop.contains(e.target as Node) && !popFor.contains(e.target as Node) && !Isle.barRest.contains(e.target as Node)) closePop()
     },
     true,
   )
@@ -1578,7 +1654,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
   // page's 添加小工具… (settings.ts, in this page) the same.
   // focus: the card to bring into sight (the Plugins page's, a key), shown
   // among all of them.
-  function fromMenu(p) {
+  function fromMenu(p: { open?: string; focus?: unknown } | null | undefined) {
     const what = p?.open === 'capsule' ? 'capsule' : 'picker'
     if (what === 'capsule') {
       if (home() === 'island') hide()
@@ -1632,7 +1708,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     escape,
     remove,
     fromMenu,
-    setMode(w, mode) {
+    setMode(w: { id?: string; plugin?: string | null }, mode: string) {
       const key = C.keyOfWidget(w)
       const list = listNow()
       if (!list.some(m => m.key === key)) return
@@ -1642,7 +1718,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     // The open island's menu for one listed there (a member of her
     // capsule, as it lists those alone): its way of showing in her capsule,
     // and 移出胶囊.
-    isleMenu(w, { opt, line }) {
+    isleMenu(w: { id?: string; plugin?: string | null }, { opt, line }: { opt: (act: string, v: string, label: string, on: boolean, why?: string) => string; line: (label: string, html: string) => string }) {
       const key = C.keyOfWidget(w)
       const list = listNow()
       const m = list.find(x => x.key === key)
@@ -1687,7 +1763,7 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     solids: () => [...(open ? [pk] : []), ...(pop.hidden ? [] : [pop]), ...(toasts.children.length ? [toasts] : []), ...(later.CapsulePanel?.isOpen() ? [later.CapsulePanel.el] : [])],
     watches: () => (!!popFor && popSticky) || !!later.CapsulePanel?.isOpen(),
     // The island's home: room in the window for the picker, the panel, a toast under her island.
-    roomOver(room, base) {
+    roomOver(room: { width: number; height: number } | null, base: { width: number; height: number }) {
       if (home() !== 'island') return room
       const want = open ? 640 : later.CapsulePanel?.isOpen() ? later.CapsulePanel.height() + 72 : toasts.children.length ? 120 : 0
       if (!want) return room
@@ -1703,6 +1779,6 @@ export function pickerPage(Isle: IsleFace, later: PickerLater) {
     toast,
     theme: light,
     nameOfKey,
-    colorOf: w => colorOf({ w }),
+    colorOf: (w: Widgets.Widget) => colorOf({ w }),
   }
 }

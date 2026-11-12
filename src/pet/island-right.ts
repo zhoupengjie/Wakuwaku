@@ -41,7 +41,7 @@ export function rightPart(core: IslandCore) {
       const { label, value } = Widgets.words(st.lang, w, isDetailed())
       const face = el('span', 'face')
       face.insertAdjacentHTML('afterbegin', Widgets.iconHTML(w, st.lang))
-      face.firstChild.style.color = stripInk(w.color) || stripHue().idle
+      ;(face.firstChild as HTMLElement).style.color = stripInk(w.color) || stripHue().idle
       const v = el('span', 'v', value)
       v.style.color = stripInk(w.color) || stripHue().idle
       if (Widgets.partsOf(w)) v.innerHTML = Widgets.partsHTML(w)
@@ -93,7 +93,7 @@ export function rightPart(core: IslandCore) {
   // live taskbar). The part of the taskbar it is in starts on the grid too
   // (onPixels in fillTaskbar).
   function snapStart() {
-    const mark = startButton.firstElementChild
+    const mark = startButton.firstElementChild as SVGSVGElement | null
     if (!mark || !mark.isConnected || startButton.classList.contains('down')) return
     const dpr = devicePixelRatio || 1
     mark.style.left = '0px'

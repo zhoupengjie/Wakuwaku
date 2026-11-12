@@ -148,7 +148,7 @@ export function glidePart(core: IslandCore) {
     // the front (style.css #bar-rest .win::after), a press on it plays out
     // (presses.ts pressIn) though the windows change under it; a new one's
     // line grows in (fresh). Drawn anew each time, none of it could move.
-    const old = new Map([...windowsBox.children].filter(b => b.dataset.app != null).map(b => [b.dataset.app, b]))
+    const old = new Map([...windowsBox.children as HTMLCollectionOf<HTMLElement>].filter(b => b.dataset.app != null).map(b => [b.dataset.app, b]))
     const fresh = []
     const buttons = apps.map(app => {
       const windows = app.windows || []

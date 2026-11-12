@@ -116,7 +116,7 @@ export function imePart(core: IslandCore) {
   }
 
   imePop.addEventListener('click', e => {
-    const row = e.target.closest('[data-input]')
+    const row = (e.target as HTMLElement).closest('[data-input]')
     if (!row) return
     closeImeList()
     if (row.dataset.input) pet.taskbar.input(row.dataset.input)

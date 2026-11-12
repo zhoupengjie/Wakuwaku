@@ -206,7 +206,7 @@ export function wmenuPart(core: IslandCore) {
   // A greyed one under the pointer: why, at the menu's foot.
   wmenu.addEventListener('mouseover', e => {
     const why = wmenu.querySelector('.wmwhy')
-    const off = e.target.closest('[data-why]')
+    const off = (e.target as HTMLElement).closest('[data-why]')
     if (!why) return
     why.hidden = !off
     if (off) why.textContent = off.dataset.why
@@ -217,7 +217,7 @@ export function wmenuPart(core: IslandCore) {
   })
   wmenu.addEventListener('click', e => {
     e.stopPropagation()
-    const b = e.target.closest('[data-act]')
+    const b = (e.target as HTMLElement).closest('[data-act]')
     if (!b || b.classList.contains('off') || !st.menuFor) return
     const m = st.menuFor
     const { entry, w, member } = menuTarget(m)

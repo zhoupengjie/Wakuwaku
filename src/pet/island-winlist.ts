@@ -222,10 +222,10 @@ export function winlistPart(core: IslandCore) {
   // when it could not say.
   let heldAtPress = null
   windowsBox.addEventListener('pointerdown', e => {
-    if (e.target.closest('[data-app]')) heldAtPress = pet.taskbar.held()
+    if ((e.target as HTMLElement).closest('[data-app]')) heldAtPress = pet.taskbar.held()
   })
   function pressAt(e) {
-    const key = e.target.closest('[data-app]')?.dataset.app
+    const key = (e.target as HTMLElement).closest('[data-app]')?.dataset.app
     const press = { type: e.type, button: e.button }
     const own = { shift: e.shiftKey, ctrl: e.ctrlKey }
     const held = heldAtPress
@@ -236,7 +236,7 @@ export function winlistPart(core: IslandCore) {
     })
   }
   windowsBox.addEventListener('click', e => {
-    if (!appOf(e.target.closest('[data-app]')?.dataset.app)) return
+    if (!appOf((e.target as HTMLElement).closest('[data-app]')?.dataset.app)) return
     e.stopPropagation()
     // The end of a drag, not a press.
     if (winDragged) {
@@ -246,7 +246,7 @@ export function winlistPart(core: IslandCore) {
     pressAt(e)
   })
   windowsBox.addEventListener('auxclick', e => {
-    if (e.button !== 1 || !appOf(e.target.closest('[data-app]')?.dataset.app)) return
+    if (e.button !== 1 || !appOf((e.target as HTMLElement).closest('[data-app]')?.dataset.app)) return
     e.stopPropagation()
     pressAt(e)
   })
@@ -254,7 +254,7 @@ export function winlistPart(core: IslandCore) {
   // a side bar's column of buttons.
   windowsBox.addEventListener('mousedown', e => e.button === 1 && e.preventDefault())
   windowsBox.addEventListener('contextmenu', e => {
-    if (!appOf(e.target.closest('[data-app]')?.dataset.app)) return
+    if (!appOf((e.target as HTMLElement).closest('[data-app]')?.dataset.app)) return
     e.preventDefault()
     e.stopPropagation()
     pressAt(e)
@@ -265,7 +265,7 @@ export function winlistPart(core: IslandCore) {
   let winPress = null
   let winDragged = false
   windowsBox.addEventListener('pointerdown', e => {
-    const key = e.target.closest('[data-app]')?.dataset.app
+    const key = (e.target as HTMLElement).closest('[data-app]')?.dataset.app
     if (e.button !== 0 || !key) return
     winPress = { app: key, x: e.clientX, y: e.clientY, ghost: null }
   })
@@ -279,7 +279,7 @@ export function winlistPart(core: IslandCore) {
       try {
         windowsBox.setPointerCapture(e.pointerId)
       } catch {}
-      const from = windowsBox.querySelector(`[data-app="${CSS.escape(winPress.app)}"] img`)
+      const from = windowsBox.querySelector<HTMLImageElement>(`[data-app="${CSS.escape(winPress.app)}"] img`)
       winPress.ghost = el('img', 'tghost')
       if (from) winPress.ghost.src = from.src
       body.append(winPress.ghost)
@@ -369,7 +369,7 @@ export function winlistPart(core: IslandCore) {
   windowsBox.addEventListener('mouseover', e => {
     const at = performance.now()
     aim.move(e.clientX, e.clientY, at)
-    aim.over(e.target.closest('[data-app]')?.dataset.app ?? null, at)
+    aim.over((e.target as HTMLElement).closest('[data-app]')?.dataset.app ?? null, at)
     aimPop()
   })
   // Gone from the button and the list a moment: it closes. Between them it
@@ -431,15 +431,15 @@ export function winlistPart(core: IslandCore) {
     e.stopPropagation()
     const app = st.popFor && appOf(st.popFor.app)
     if (!app) return
-    const close = e.target.closest('[data-close]')
+    const close = (e.target as HTMLElement).closest('[data-close]')
     if (close) return pet.taskbar.window(close.dataset.close, 'close')
-    const row = e.target.closest('[data-win]')
+    const row = (e.target as HTMLElement).closest('[data-win]')
     // A window picked: to the front, never minimized (taskbar/ 'front').
     if (row) {
       closePop()
       return pet.taskbar.window(row.dataset.win, 'front')
     }
-    const act = e.target.closest('[data-act]')?.dataset.act
+    const act = (e.target as HTMLElement).closest('[data-act]')?.dataset.act
     if (!act) return
     closePop()
     if (act === 'close' || act === 'end') for (const w of app.windows || []) pet.taskbar.window(w.id, act)

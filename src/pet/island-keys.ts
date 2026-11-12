@@ -250,7 +250,7 @@ export function keysPart(core: IslandCore) {
   // is let go, for it may be a drag instead: an icon dragged onto ^ or into
   // the folded ones is folded away, one dragged onto the taskbar kept out,
   // either put where it is let go among the others there.
-  const trayKey = e => e.target.closest('[data-tray]')?.dataset.tray
+  const trayKey = e => (e.target as HTMLElement).closest('[data-tray]')?.dataset.tray
   let trayOver = null
   let trayMovedAt = 0
   // A left press on an icon not yet let go: { key, name, x, y, ghost }.
@@ -272,7 +272,7 @@ export function keysPart(core: IslandCore) {
       trayPress = null
       return pet.taskbar.tray(key, 'double')
     }
-    trayPress = { key, name: e.target.closest('[data-tray]').dataset.name, x: e.clientX, y: e.clientY, ghost: null }
+    trayPress = { key, name: (e.target as HTMLElement).closest('[data-tray]').dataset.name, x: e.clientX, y: e.clientY, ghost: null }
   })
   trayBox.addEventListener('mouseup', e => {
     const key = trayKey(e)
@@ -287,7 +287,7 @@ export function keysPart(core: IslandCore) {
     if (!press.ghost) {
       pet.taskbar.tray(press.key, 'leftDown')
       pet.taskbar.tray(press.key, 'leftUp')
-      if (flyout.contains(e.target)) openTray(false)
+      if (flyout.contains(e.target as Node)) openTray(false)
       return
     }
     press.ghost.remove()
@@ -342,7 +342,7 @@ export function keysPart(core: IslandCore) {
   window.addEventListener('mousemove', e => {
     if (!trayPress) return
     if (!trayPress.ghost && Math.hypot(e.clientX - trayPress.x, e.clientY - trayPress.y) > 6) {
-      const from = trayBox.querySelector(`[data-tray="${trayPress.key}"] img`)
+      const from = trayBox.querySelector<HTMLImageElement>(`[data-tray="${trayPress.key}"] img`)
       trayPress.ghost = el('img', 'tghost')
       if (from) trayPress.ghost.src = from.src
       body.append(trayPress.ghost)
@@ -392,13 +392,13 @@ export function keysPart(core: IslandCore) {
   barRest.addEventListener('contextmenu', e => {
     e.preventDefault()
     if (trayKey(e)) return
-    if (wgPop.contains(e.target) || wmenu.contains(e.target)) return
+    if (wgPop.contains(e.target as Node) || wmenu.contains(e.target as Node)) return
     // A widget put there (one, or several in one place): its menu.
     const widget = (e.target as HTMLElement).closest('.tw-widget, .tw-plugin, .tw-group')
     if (widget) return openMenu({ where: 'bar', entry: widget.dataset.entry }, widget)
     if ((e.target as HTMLElement).closest('[data-bar="ime"]')) return st.imeOpen ? closeImeList() : openImeList()
-    const mark = quickBox.contains(e.target) ? quickMarkAt(e.clientX, e.clientY) : null
-    pet.menu(mark === volMark ? 'volume' : mark === netMark ? 'network' : clockBox.contains(e.target) ? 'clock' : null)
+    const mark = quickBox.contains(e.target as Node) ? quickMarkAt(e.clientX, e.clientY) : null
+    pet.menu(mark === volMark ? 'volume' : mark === netMark ? 'network' : clockBox.contains(e.target as Node) ? 'clock' : null)
   })
   // Which of the quick settings' marks a press on its button is for: the
   // nearest along the strip, each having the button's height (its width

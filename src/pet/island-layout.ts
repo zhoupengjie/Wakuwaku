@@ -12,9 +12,31 @@ import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
 import type { TbLayout } from './island-vars.ts'
+import type { Slide, Widget } from './widgets.ts'
 
 // A carousel's node on the strip, held while the pointer is on it.
 type CarouselNode = HTMLElement & { _held?: boolean }
+
+// A part's node on the strip, and what it carries: a widget's (entryNode)
+// its entry as laid out (as loose as the layout's runs, TbLayout) and its
+// kind, its face as last drawn (its words, a group's slides, the one
+// shown, its settling), held under the pointer; any part's ink once set
+// (island-look.ts inkParts).
+export interface PartNode extends HTMLElement {
+  _type?: string
+  _entry?: any
+  _drawn?: string
+  _words?: Map<string, Widget>
+  _slides?: Slide[]
+  _at?: number
+  _settle?: Timer
+  _held?: boolean
+  _inked?: boolean
+}
+// A run of the strip: its parts' nodes.
+export interface Zone extends HTMLSpanElement {
+  readonly children: HTMLCollectionOf<PartNode>
+}
 
 export function layoutPart(core: IslandCore) {
   const {
@@ -56,9 +78,9 @@ export function layoutPart(core: IslandCore) {
   // location: one part.
   const trayPart = el('span', 'tpair')
   trayPart.append(trayBox, privBox)
-  const PART_NODES = { her: herSlot, start: startPart, apps: windowsBox, monitor: facesBox, tray: trayPart, keys: keysBox, quick: quickBox, clock: clockBox, front: frontBox }
+  const PART_NODES: Record<string, HTMLElement> = { her: herSlot, start: startPart, apps: windowsBox, monitor: facesBox, tray: trayPart, keys: keysBox, quick: quickBox, clock: clockBox, front: frontBox }
   for (const [part, node] of Object.entries(PART_NODES)) node.dataset.part = part
-  const zones = { left: el('span', 'tzone tz-left'), center: el('span', 'tzone tz-center'), right: el('span', 'tzone tz-right') }
+  const zones = { left: el('span', 'tzone tz-left') as Zone, center: el('span', 'tzone tz-center') as Zone, right: el('span', 'tzone tz-right') as Zone }
   let seatSent = null
 
   // The layout: the one being edited, or as kept, or before any as
@@ -93,7 +115,7 @@ export function layoutPart(core: IslandCore) {
 
   // The widgets put there, each its node, kept while it stays there (by its
   // id); dragged by its id as a part by its name while the layout is edited.
-  const entryNodes = new Map()
+  const entryNodes = new Map<string, PartNode>()
   function entryNode(e) {
     let node = entryNodes.get(e.id)
     if (node && node._type !== e.type) {
@@ -580,7 +602,7 @@ export function layoutPart(core: IslandCore) {
       // what everything wants, not from what it has been squeezed to.
       if (isSide()) {
         // Its programs' column scrolls: its whole height, not what it shows.
-        const natural = [...middle.children].reduce((a, n) => {
+        const natural = [...middle.children].reduce((a: number, n) => {
           const cs = getComputedStyle(n)
           return a + (n === windowsBox ? n.scrollHeight : n.offsetHeight) + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0)
         }, 0)

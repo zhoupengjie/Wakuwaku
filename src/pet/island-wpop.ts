@@ -26,7 +26,7 @@ export function wpopPart(core: IslandCore) {
   // settings, its mail, or taking it off the taskbar. A carousel's: the one
   // shown; a stack's line pressed: that one's. A press anywhere else closes
   // it (watchPresses). A right press: its menu (openMenu).
-  const wgPop = el('div', 'wgpop')
+  const wgPop: HTMLDivElement & { _drawn?: string } = el('div', 'wgpop')
   wgPop.hidden = true
   barRest.append(wgPop)
   // The input methods to pick from (openImeList), as a menu of the windows' kind.
@@ -68,7 +68,7 @@ export function wpopPart(core: IslandCore) {
     const first = from[0]
     const head = el('div', 'wghead')
     head.innerHTML = first ? WCards.glyphHTML(first, 'wghg') : WCards.memberGlyph(group ? shown?.member || e.items[0] : e)
-    head.firstElementChild.style.color = first ? WCards.colorOf(first, ctx) : ''
+    ;(head.firstElementChild as HTMLElement).style.color = first ? WCards.colorOf(first, ctx) : ''
     const kind = e.type === 'plugin' || first?.plugin ? 'plugin' : first?.from || 'widget'
     const title = first ? WCards.titleOf(first, ctx) : group ? memberName(shown?.member || e.items[0]) : Widgets.nameOf(st.lang, e, st.allWidgets, detailed)
     head.append(el('b', '', title), el('span', 'wgfrom', t(st.lang, `taskbar.w.from.${kind}`)))
@@ -148,7 +148,7 @@ export function wpopPart(core: IslandCore) {
   }
 
   wgPop.addEventListener('click', e => {
-    const what = e.target.closest('[data-wg]')?.dataset.wg
+    const what = (e.target as HTMLElement).closest('[data-wg]')?.dataset.wg
     const entry = st.wgFor && entryNodes.get(st.wgFor)?._entry
     if (!what || !entry) return
     const group = Widgets.isGroup(entry)
@@ -188,7 +188,7 @@ export function wpopPart(core: IslandCore) {
   // up or down goes there; dragged out of it, out of the stack (just after
   // it); pressed, its card. A press on its place again, or anywhere else,
   // closes it.
-  const stackPop = el('div', 'wstk')
+  const stackPop: HTMLDivElement & { _drawn?: string } = el('div', 'wstk')
   stackPop.hidden = true
   barRest.append(stackPop)
   let stackOpenedAt = 0
@@ -253,7 +253,7 @@ export function wpopPart(core: IslandCore) {
   // A line held: { row, member, x, y, moved, out }.
   let stackDrag = null
   stackPop.addEventListener('pointerdown', e => {
-    const row = e.target.closest('.srow')
+    const row = (e.target as HTMLElement).closest('.srow')
     if (!row || e.button !== 0) return
     stackDrag = { row, member: Number(row.dataset.member), widget: row.dataset.widget, x: e.clientX, y: e.clientY, moved: false, out: false }
     try {
@@ -306,7 +306,7 @@ export function wpopPart(core: IslandCore) {
   stackPop.addEventListener('contextmenu', e => {
     e.preventDefault()
     e.stopPropagation()
-    const row = e.target.closest('.srow')
+    const row = (e.target as HTMLElement).closest('.srow')
     if (row && st.stackFor) pieces.wmenu.openMenu({ where: 'bar', entry: st.stackFor, member: Number(row.dataset.member), widget: row.dataset.widget || null }, row)
   })
 

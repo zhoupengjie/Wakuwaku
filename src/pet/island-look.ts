@@ -10,6 +10,7 @@
 import * as Mica from './mica.ts'
 import { pet } from './bridge.ts'
 import type { IslandCore } from './island.ts'
+import type { PartNode } from './island-layout.ts'
 
 export function lookPart(core: IslandCore) {
   const {
@@ -165,7 +166,7 @@ export function lookPart(core: IslandCore) {
   // or the picture is known; a widget's face is drawn in its part's
   // (drawEntries), so it is drawn again when that turns. The glide over a
   // part as it is.
-  const stripParts = () => [...barRest.querySelectorAll(':scope > .tzone > [data-part]'), deskEdge]
+  const stripParts = (): PartNode[] => [...barRest.querySelectorAll(':scope > .tzone > [data-part]'), deskEdge]
   function partLight(node) {
     if (!st.backdrop || !isClear() || isFilled()) return isStripLight()
     const strip = island.parentElement.getBoundingClientRect()

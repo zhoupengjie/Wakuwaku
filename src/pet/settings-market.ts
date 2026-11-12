@@ -11,7 +11,11 @@ import * as AddonUI from './addonui.ts'
 import * as WCards from './wcards.ts'
 import * as Widgets from './widgets.ts'
 import { pet } from './bridge.ts'
-import type { SettingsCore } from './settings.ts'
+import type { MarketItem, SettingsCore } from './settings.ts'
+import type * as WDeskPage from './wdesk.ts'
+
+// A step of installing from a file (addonui.ts next).
+type FileEvent = Parameters<typeof AddonUI.next>[1]
 
 export function marketPart(core: SettingsCore) {
   const {
@@ -21,18 +25,18 @@ export function marketPart(core: SettingsCore) {
   const { addonById, andList, canDoHTML, crumbHTML, packById } = pieces.addons
 
   // One of the index's, by its id; the version of it here (null: none).
-  const marketItem = id => (market.items || []).find(i => i.id === id) || null
+  const marketItem = (id: string | undefined) => (market.items || []).find(i => i.id === id) || null
   // The version of it here: a plugin's, a pack's of its kind (null: none).
-  const installedOf = id => AddonUI.installedOf(marketItem(id), st.snap || {})
+  const installedOf = (id: string) => AddonUI.installedOf(marketItem(id), st.snap || {})
   // Its icon in the list and on its page: its own .svg as a picture in one
   // colour (as her pages draw a plugin's: a mask, never its markup), one of
   // hers by name, else its name's first letter on its colour.
-  const marketTile = item => (item.icon ? Widgets.maskHTML(item.icon) : item.glyph && Widgets.hasIcon(item.glyph) ? Widgets.icon(item.glyph) : Widgets.markHTML(AddonUI.wordsIn(item.name, st.lang), item.color))
-  const marketColor = item => item.color || COLOR.idle
+  const marketTile = (item: MarketItem) => (item.icon ? Widgets.maskHTML(item.icon) : item.glyph && Widgets.hasIcon(item.glyph) ? Widgets.icon(item.glyph) : Widgets.markHTML(AddonUI.wordsIn(item.name, st.lang), item.color))
+  const marketColor = (item: MarketItem) => item.color || COLOR.idle
 
   // The index read (market.rs index: again when asked, or an hour old);
   // what it says kept, the page drawn again.
-  async function loadMarket(force) {
+  async function loadMarket(force: boolean) {
     if (market.loading) return
     market.loading = true
     draw()
@@ -64,17 +68,17 @@ export function marketPart(core: SettingsCore) {
     const rows = shown.map(marketRow).join('') || `<div class="note">${esc(q ? T('mk.none', { q }) : T('mk.empty'))}</div>`
     return `${head}${trouble ? marketTrouble(trouble) : ''}<div class="grp mk-list">${rows}</div><div class="note mk-foot">${esc(T('mk.foot'))}</div>`
   }
-  function marketTrouble(t) {
+  function marketTrouble(t: NonNullable<ReturnType<typeof AddonUI.marketTroubleOf>>) {
     if (t.closed) return `<div class="grp mk-closed"><div class="mk-closed-t">${esc(t.text)}</div><div class="d">${esc(t.note)}</div></div>`
     const way = t.proxy ? `<div class="r"><div class="grow d">${esc(T('s.net.now', { what: pieces.letter.netNow() }))}</div><span class="link" data-mk-net>${esc(T('s.netProxy'))} ›</span></div>` : ''
     return `<div class="grp"><div class="r"><div class="grow"><div class="d bad mk-bad">${esc(t.text)}</div>${t.note ? `<div class="d">${esc(t.note)}</div>` : ''}</div><button class="pbtn sm" data-mk-retry${market.loading ? ' disabled' : ''}>${esc(T('mk.retry'))}</button></div>${way}</div>`
   }
-  function marketRow(item) {
+  function marketRow(item: MarketItem) {
     const b = AddonUI.marketButton(item, { installed: installedOf(item.id), job: market.jobs[item.id], T })
     return `<div class="r jumps mk-row" data-mk-item="${esc(item.id)}" role="button" tabindex="0"><span class="wi" style="color:${esc(marketColor(item))}">${marketTile(item)}</span><div class="grow"><div class="ellip">${esc(AddonUI.wordsIn(item.name, st.lang))}${item.author ? `<span class="d"> @${esc(item.author)}</span>` : ''}</div><div class="d ellip">${esc(AddonUI.marketAbout(item, T, st.lang))}</div></div>${marketButtonHTML(item, b)}</div>`
   }
   // Its button (addonui.ts marketButton); a download under way, how far, filling.
-  function marketButtonHTML(item, b) {
+  function marketButtonHTML(item: MarketItem, b: ReturnType<typeof AddonUI.marketButton>) {
     if (b.what === 'busy') return `<span class="mk-prog" style="--p:${b.pct}%"><span>${esc(b.label)}</span></span>`
     return `<button class="pbtn sm${b.primary ? ' al' : ''}" data-mk-do="${b.what}" data-id="${esc(item.id)}"${b.disabled ? ' disabled' : ''}>${esc(b.label)}</button>`
   }
@@ -84,7 +88,7 @@ export function marketPart(core: SettingsCore) {
   // its cards as she would draw them from what it says it shows (its
   // index's sample, her own templates: wdesk.ts), a pack's picture, or
   // neither; what it is; what it can do.
-  function marketItemPage(item) {
+  function marketItemPage(item: MarketItem) {
     const name = AddonUI.wordsIn(item.name, st.lang)
     const b = AddonUI.marketButton(item, { installed: installedOf(item.id), job: market.jobs[item.id], detail: true, T })
     const top = `<div class="ad-head"><span class="ad-tile" style="--c:${esc(marketColor(item))}">${marketTile(item)}</span><div class="grow"><div class="ad-name ellip">${esc(name)} <span class="chip mk-ok">${esc(T('mk.reviewed'))}</span></div><div class="d ellip">${esc(AddonUI.marketByline(item, T))}</div></div>${marketButtonHTML(item, b)}</div>`
@@ -92,7 +96,7 @@ export function marketPart(core: SettingsCore) {
     const said = about ? `${sec(T('addons.about'))}<div class="grp"><div class="ad-text">${esc(about)}</div></div>` : ''
     return `${crumbHTML([T('mk.title'), name])}${top}${marketLooks(item)}${said}${sec(T('addons.canDo'))}<div class="grp">${canDoHTML(item.perms, item.kind)}</div>`
   }
-  function marketLooks(item) {
+  function marketLooks(item: MarketItem) {
     if (item.preview) return `${sec(T('mk.picture'))}<div class="mk-preview"><img src="${esc(item.preview)}" alt=""></div>`
     if (!AddonUI.sampleWidget(item, st.lang)) return ''
     const note = item.view ? `<div class="note mk-cap">${esc(T('mk.viewNote'))}</div>` : ''
@@ -108,8 +112,8 @@ export function marketPart(core: SettingsCore) {
   // (the preview writes the page into one of its own, so location is not
   // where these files are).
   const PAGE_BASE = import.meta.url
-  let WDesk = null
-  let deskCards = null
+  let WDesk: typeof WDeskPage | null = null
+  let deskCards: Promise<unknown> | null = null
   function loadDeskCards() {
     if (WDesk) return Promise.resolve()
     deskCards ||= import('./wdesk.ts')
@@ -134,21 +138,21 @@ export function marketPart(core: SettingsCore) {
       host._drawn = key
       const ctx = { lang: st.lang, light, detailed: true, now: Date.now(), hour: new Date().getHours(), all: [w] }
       const color = WCards.colorOf(w, ctx)
-      const cards = AddonUI.sampleSizes(item).map(size => `<div class="wd ${size}" style="--c:${esc(color)}"><div class="wtint"></div><div class="wbody">${WDesk.faceHTML(w, size, ctx)}</div></div>`)
+      const cards = AddonUI.sampleSizes(item).map(size => `<div class="wd ${size}" style="--c:${esc(color)}"><div class="wtint"></div><div class="wbody">${WDesk!.faceHTML(w, size, ctx)}</div></div>`)
       root.innerHTML = `<link rel="stylesheet" href="${esc(new URL('desk.css', PAGE_BASE).href)}"><style>:host { color: var(--w-fg); font: 12px/1.35 var(--font-ui); user-select: none; }</style>${cards.join('')}`
     }
   }
 
   // What is asked before one goes in (addonui.ts marketAskOf): installing,
   // what it may do beyond the web; updating one here, what more it asks for.
-  const marketAsk = id => AddonUI.marketAskOf(marketItem(id), T, andList, st.lang, (st.snap?.addons || []).find(a => a.id === id)?.perms || null)
+  const marketAsk = (id: string) => AddonUI.marketAskOf(marketItem(id), T, andList, st.lang, (st.snap?.addons || []).find(a => a.id === id)?.perms || null)
 
   // 安装 (spec §2): one asking for more than the web asked first over the
   // panel; else, or once asked, downloaded and put in (market.rs install,
   // its steps told meanwhile: market:progress); then the word at the foot,
   // its row on the Plugins page edged, 新 in the picker until it is put
   // somewhere; or why it did not go in.
-  function marketInstall(id, asked = false) {
+  function marketInstall(id: string, asked = false) {
     const item = marketItem(id)
     if (!item || (market.jobs[id] && !['done', 'failed'].includes(market.jobs[id].stage))) return
     if (!asked && marketAsk(id)) {
@@ -196,8 +200,8 @@ export function marketPart(core: SettingsCore) {
       .then(got => {
         market.updating = false
         if (got?.snapshot) st.snap = got.snapshot
-        const names = (got?.done || []).map(id => ups.find(u => u.id === id)?.name || id)
-        const failed = (got?.failed || []).map(f => T('mk.updateFailed', { name: f.name || f.id || '', why: AddonUI.marketFailOf(f.error, T) }))
+        const names = (got?.done || []).map((id: string) => ups.find(u => u.id === id)?.name || id)
+        const failed = (got?.failed || []).map((f: { id?: string; name?: string; error?: Parameters<typeof AddonUI.marketFailOf>[0] }) => T('mk.updateFailed', { name: f.name || f.id || '', why: AddonUI.marketFailOf(f.error, T) }))
         toast([names.length ? T('mk.updated', { names: andList(names) }) : '', ...failed].filter(Boolean).join(' · '))
         draw()
       })
@@ -219,7 +223,7 @@ export function marketPart(core: SettingsCore) {
     const out =
       st.gone &&
       (st.gone.del
-        ? AddonUI.petDeleteLayerOf((st.snap.pets || []).find(p => p.id === st.gone.id) || { id: st.gone.id }, T, st.gone.busy)
+        ? AddonUI.petDeleteLayerOf((st.snap.pets || []).find(p => p.id === st.gone!.id) || { id: st.gone.id }, T, st.gone.busy)
         : st.gone.kind
           ? AddonUI.packUninstallLayerOf(packById(st.gone.kind, st.gone.id) || { id: st.gone.id, kind: st.gone.kind }, T, st.gone.busy)
           : AddonUI.uninstallLayerOf(addonById(st.gone.id) || { id: st.gone.id }, T, st.gone.busy))
@@ -247,7 +251,7 @@ export function marketPart(core: SettingsCore) {
   // dialog for a .zip, the .zip looked at, asked about (or why it cannot
   // go in), installed; then a word, its row edged until the panel closes,
   // 新 in the picker until it is put somewhere, the page at its row.
-  function flowStep(e) {
+  function flowStep(e: FileEvent) {
     st.flow = AddonUI.next(st.flow, e)
     drawSheet()
   }
@@ -255,17 +259,17 @@ export function marketPart(core: SettingsCore) {
     if (st.flow.step !== 'idle' || st.gone) return
     flowStep({ type: 'pick' })
     st.pickingZip = true
-    let path = null
+    let path: string | null = null
     try {
       path = await pet.addons.pickZip()
     } finally {
       st.pickingZip = false
     }
     flowStep({ type: 'picked', path })
-    // flowStep moved it on: not the 'idle' found above.
+    // flowStep moved it on: not the 'idle' found above. Looking, a path was picked.
     if ((st.flow.step as string) !== 'looking') return
     const summary = await pet.addons.inspect(path).catch(() => null)
-    flowStep({ type: 'looked', path, summary })
+    flowStep({ type: 'looked', path, summary } as FileEvent)
   }
   async function installGo() {
     if (st.flow.step !== 'ask') return
@@ -334,8 +338,8 @@ export function marketPart(core: SettingsCore) {
   }
 
   // A word for a few seconds, at the panel's foot.
-  let toastTimer
-  function toast(text) {
+  let toastTimer: Timer | undefined
+  function toast(text: string) {
     clearTimeout(toastTimer)
     toastEl.textContent = text
     toastEl.hidden = false

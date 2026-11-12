@@ -91,7 +91,7 @@ export function addonsPart(core: SettingsCore) {
     addon: s => addonById(s.id) && addonPage(addonById(s.id)!),
     pack: s => packById(s.kind, s.id) && packPage(packById(s.kind, s.id)!),
     market: () => pieces.market.marketPage(),
-    mkItem: s => pieces.market.marketItem(s.id) && pieces.market.marketItemPage(pieces.market.marketItem(s.id)),
+    mkItem: s => pieces.market.marketItem(s.id) && pieces.market.marketItemPage(pieces.market.marketItem(s.id)!),
   }
   function crumbHTML(path: string[]) {
     const last = path.length - 1

@@ -89,10 +89,17 @@ export interface MarketJob {
   total?: number
 }
 
-// The plugin market (settingsPage market): its index's items and what went
-// wrong reading it are the Rust side's JSON.
+// One of the market's index (market.rs): the Rust side's JSON, its id
+// read by name.
+export interface MarketItem {
+  id: string
+  [field: string]: any
+}
+
+// The plugin market (settingsPage market): what went wrong reading its
+// index is the Rust side's JSON.
 export interface Market {
-  items: any[] | null
+  items: MarketItem[] | null
   at: number
   error: any
   loading: boolean

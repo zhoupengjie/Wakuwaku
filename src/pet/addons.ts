@@ -347,7 +347,9 @@ function createHost({ invoke, make, drop, post, log = () => {}, now = () => Date
           rec.fetches--
           return reply(rec, m.n, false, 'a body over 1 MB')
         }
-        return ask(rec, m.n, 'fetch', { url: str(m.url, 8192), method: str(m.method, 16), headers, body }).finally(() => rec.fetches--)
+        // Refused at once (INFLIGHT asks out already), ask gives no promise:
+        // the count comes back down all the same.
+        return Promise.resolve(ask(rec, m.n, 'fetch', { url: str(m.url, 8192), method: str(m.method, 16), headers, body })).finally(() => rec.fetches--)
       }
       case 'storage': {
         const op = ['get', 'set', 'remove', 'all'].includes(m.op) ? m.op : 'get'

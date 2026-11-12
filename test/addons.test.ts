@@ -583,6 +583,34 @@ test('requests of every kind at once are capped per plugin, not only fetch', asy
   assert.equal(s.asked.filter(a => a.cmd === 'storage').length, 8)
 })
 
+test('a fetch refused for the eight requests already out gives its place back', async () => {
+  let release
+  const pending = new Promise(r => (release = r))
+  const s = setup({ storage: () => pending, fetch: { status: 200, ok: true, headers: {}, text: '' } })
+  s.host.setEnv({ lang: 'zh' })
+  s.host.apply([item('busy')])
+  s.host.receive(s.win('busy'), { waku: 1, t: 'ready' })
+  const win = s.win('busy')
+  for (let i = 1; i <= 8; i++) s.host.receive(win, { waku: 1, t: 'storage', op: 'get', key: 'k', n: i })
+  // Five fetches, one after another, each refused for the eight out (ask
+  // answered at once, with no promise: its .finally threw, and each kept
+  // one of the four places for fetches for good).
+  for (let n = 11; n <= 15; n++) {
+    s.host.receive(win, { waku: 1, t: 'fetch', n, url: 'https://example.com/' })
+    await s.flush()
+  }
+  assert.deepEqual(
+    s.posted.filter(p => p.t === 'reply' && p.n > 10).map(p => p.error),
+    Array(5).fill('8 requests at once at most'),
+  )
+  release({ value: 1 })
+  await s.flush()
+  // The eight answered: a fetch goes through again.
+  s.host.receive(win, { waku: 1, t: 'fetch', n: 20, url: 'https://example.com/' })
+  await s.flush()
+  assert.equal(s.posted.find(p => p.t === 'reply' && p.n === 20)?.ok, true)
+})
+
 test('a plugin cannot keep more widget entries than her side holds', () => {
   const s = setup()
   s.host.setEnv({ lang: 'zh' })

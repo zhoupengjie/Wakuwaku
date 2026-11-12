@@ -1,4 +1,4 @@
-// The tray taken over (systray.rs): its icons drawn into PNGs and sent to
+// The tray taken over (systray/): its icons drawn into PNGs and sent to
 // the page (taskbar:tray), what Windows keeps out on its taskbar, a press on
 // one handed to its program, programs asked again for their icons (claim,
 // ask_soon).
@@ -87,7 +87,7 @@ pub fn press(sh: &Shared, key: u64, press: &str, home_hwnd: isize) -> bool {
 }
 
 // An app bar's place asked of Explorer itself, ours set aside for it
-// (systray.rs explorer_first): its own (island.rs, bars.rs) never
+// (systray/ explorer_first): its own (island.rs, bars.rs) never
 // reached it by ours. The programs asked for their icons soon after,
 // should one have spoken to Explorer's alone meanwhile.
 pub fn claim<R>(f: impl FnOnce() -> R) -> R {

@@ -10,7 +10,7 @@ pub(super) static EXPLORER: AtomicIsize = AtomicIsize::new(0);
 pub(super) static CREATED_MSG: AtomicU32 = AtomicU32::new(0);
 pub(super) static TICKS: AtomicU32 = AtomicU32::new(0);
 // From this tick, the icons only Explorer's tray holds are looked for
-// again (systray.rs scan_held): some seconds after each asking, else
+// again (systray/ scan_held): some seconds after each asking, else
 // every half minute.
 pub(super) static HELD_AT: AtomicU32 = AtomicU32::new(0);
 pub(super) static SHELL_MSG: AtomicU32 = AtomicU32::new(0);

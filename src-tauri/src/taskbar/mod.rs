@@ -1,6 +1,6 @@
 // The taskbar home's side of Windows (display 'taskbar'): Windows' own
 // taskbar put away while hers is up (shell.rs), and the tray's icons taken
-// over from Explorer (systray.rs). On a thread of their own, which runs the
+// over from Explorer (systray/). On a thread of their own, which runs the
 // message loop the tray's window needs, with a hidden window of its own that
 // hears:
 //   - Explorer started again (TaskbarCreated, from a new taskbar window):
@@ -238,7 +238,7 @@ mod tests {
 pub fn recover(sh: &Shared) {
     if crate::shell::recover(&sh.dir.join("taskbar.json")) {
         // Every window told, as the run killed holding it never did
-        // (systray.rs handed_back), and whose the shell's windows are now.
+        // (systray/ handed_back), and whose the shell's windows are now.
         crate::systray::handed_back();
         sh.log(&format!("taskbar: Windows' taskbar was left put away: given back, every window told; {}", crate::shell::lone_win().said()));
     }
@@ -469,7 +469,7 @@ pub async fn taskbar_pin_files(app: tauri::AppHandle, paths: Vec<String>) -> usi
 }
 
 // A tray icon kept out on the taskbar or folded away (dragged there), by
-// its name (systray.rs Shown), in the settings (trayPinned); Windows' own
+// its name (systray/ Shown), in the settings (trayPinned); Windows' own
 // choice until the person makes one. And the tray's order as dragged
 // (trayOrder, names), the two in one change.
 #[tauri::command]

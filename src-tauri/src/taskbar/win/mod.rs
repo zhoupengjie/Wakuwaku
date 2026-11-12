@@ -225,7 +225,7 @@ const DWM_TNP_VISIBLE: u32 = 0x8;
 
 const WM_TIMER: u32 = 0x0113;
 // Explorer's taskbar seen shown (the hook), lParam its window; the tray's
-// icons changed (systray.rs); the thread asked to end.
+// icons changed (systray/); the thread asked to end.
 const WM_TASKBAR_SHOWN: u32 = 0x8001;
 const WM_TRAY_CHANGED: u32 = 0x8002;
 const WM_STOP: u32 = 0x8003;

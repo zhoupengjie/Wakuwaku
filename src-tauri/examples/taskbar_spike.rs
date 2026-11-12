@@ -7,7 +7,7 @@
 //
 //   taskbar_spike            take the taskbar's place (Ctrl+Alt+Shift+R, or
 //                            the bar's last button: give it back and quit),
-//                            and the tray's icons (systray.rs; their list in
+//                            and the tray's icons (systray/; their list in
 //                            tray.txt); --no-tray leaves the tray to Explorer
 //   taskbar_spike --probe    with one running: press Win, Win+S, Win+A, ...
 //                            one at a time and note what opened, where, and
@@ -39,7 +39,7 @@ mod data {
 #[path = "../src/lock.rs"]
 #[allow(dead_code)]
 mod lock;
-#[path = "../src/systray.rs"]
+#[path = "../src/systray/mod.rs"]
 #[allow(dead_code)]
 mod systray;
 
@@ -302,7 +302,7 @@ mod win {
     const WM_HOTKEY: u32 = 0x0312;
     // The taskbar seen shown (from the event hook), lParam its window.
     const WM_TASKBAR_SHOWN: u32 = 0x8001;
-    // The tray's icons changed (from systray.rs).
+    // The tray's icons changed (from systray/).
     const WM_TRAY_CHANGED: u32 = 0x8002;
     const WM_MOUSEMOVE: u32 = 0x0200;
     const WM_LBUTTONDOWN: u32 = 0x0201;
@@ -843,7 +843,7 @@ mod win {
             appbar::remove(bar);
         }
         let ok = shell::restore(&file());
-        // Every window told, once ours is gone, as the pet does (systray.rs handed_back).
+        // Every window told, once ours is gone, as the pet does (systray/ handed_back).
         let told = TRAY.load(Ordering::SeqCst) && systray::handed_back();
         log(&format!("given back ({why}): {ok}; {}; windows told: {told}; {}", state_now(), shell::lone_win().said()));
     }

@@ -504,7 +504,7 @@ pub fn give_back(sh: &Shared) {
         sh.log(&format!("taskbar: Windows' given back: {}", shell::restore(&file)));
     }
     // Explorer's the taskbar again, shown: every window told so
-    // (systray.rs handed_back), then whose the shell's windows are now.
+    // (systray/ handed_back), then whose the shell's windows are now.
     if had_host {
         let told = systray::handed_back();
         sh.log(&format!("taskbar: {}; {}", if told { "every window told Explorer's is the taskbar again" } else { "the tray's window still there: no window told" }, shell::lone_win().said()));

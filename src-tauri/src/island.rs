@@ -936,7 +936,7 @@ pub fn take_strip_again(sh: &Shared) {
 // Explorer says the bars moved (ABN_POSCHANGED, which her home's window, a
 // webview's, does not hear). Explorer had the bar registered but left it
 // out of every work area it worked out: its place, asked by the taskbar's
-// window of ours, never reached it (systray.rs explorer_first), and its own
+// window of ours, never reached it (systray/ explorer_first), and its own
 // taskbar shown again (a right-click's menu, Win+Shift+S, Click to Do, an
 // app full screen going) set the work area to the whole display each time,
 // the maximized windows going up under the top bar. Told its place from

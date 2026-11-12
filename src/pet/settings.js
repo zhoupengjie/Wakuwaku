@@ -237,6 +237,11 @@
 
   function morph(from, to) {
     if (from.nodeType !== to.nodeType || from.nodeName !== to.nodeName) return from.replaceWith(to.cloneNode(true))
+    // A letter's frame with the same letter in it (settings-letter.js
+    // mailBodyHTML) is left as it is: its height and scrolling are
+    // fitFrames', which the markup has not, and would be taken away at every
+    // redraw of the page and set again.
+    if (from.nodeName === 'IFRAME' && from.getAttribute('srcdoc') === to.getAttribute('srcdoc')) return
     if (from.nodeType !== Node.ELEMENT_NODE) {
       if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue
       return
@@ -782,8 +787,10 @@
     const changed = setHTML(body, PAGES[tab]())
     if (reset) {
       body.scrollTop = 0
-      // Two panes: what is on the right from its top; the list stays where it was.
-      const right = body.querySelector('.pane-r')
+      // Two panes: what is on the right from its top; the list stays where it
+      // was. What scrolls there is the part under the letter's bar
+      // (.pane-r-body, zhoupengjie/Wakuwaku#114), the bar staying put.
+      const right = body.querySelector('.pane-r-body') || body.querySelector('.pane-r')
       if (right) right.scrollTop = 0
     }
     if (!changed) return

@@ -4,6 +4,15 @@
 // (keys_loop) and sent to the page as it changes (taskbar:keys).
 use super::*;
 
+// The IME's mark and the volume read at the next look, not the next
+// second: the input method was just switched from our button.
+pub(super) static KEYS_NOW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+// The keys' thread woken from its nap (keys_loop): asked to stop, the
+// IME button pressed, the quiet over.
+pub(super) static KEYS_WAKE: (Lock<bool>, std::sync::Condvar) = (Lock::new("taskbar::win::keys::KEYS_WAKE", false), std::sync::Condvar::new());
+// What the keys' thread sent last.
+pub(super) static SENT_KEYS: Lock<Value> = Lock::new("taskbar::win::keys::SENT_KEYS", Value::Null);
+
 // A small icon's size on her display (physical px), as Windows' taskbar draws its tray's.
 pub(super) fn icon_px(sh: &Shared) -> i32 {
     (16.0 * crate::island::scale(sh)).round() as i32

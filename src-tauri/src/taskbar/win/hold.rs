@@ -8,6 +8,17 @@
 use super::*;
 use crate::lock::Lock;
 
+pub(super) struct Host {
+    pub(super) hwnd: isize,
+    pub(super) thread: JoinHandle<()>,
+}
+
+pub(super) static HOST: Lock<Option<Host>> = Lock::new("taskbar::win::hold::HOST", None);
+// The buttons' thread (buttons.rs tasks_loop).
+pub(super) static TASKS: Lock<Option<JoinHandle<()>>> = Lock::new("taskbar::win::hold::TASKS", None);
+// The keyboard's thread (keys.rs keys_loop).
+pub(super) static KEYS: Lock<Option<JoinHandle<()>>> = Lock::new("taskbar::win::hold::KEYS", None);
+
 // The edge her strip is along: Windows' own taskbar keeps its room along
 // the bottom for a bottom strip to lie over, and hides itself (keeping
 // none) for another edge, where an empty band would be left at the

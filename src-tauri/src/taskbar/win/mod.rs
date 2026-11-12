@@ -297,114 +297,19 @@ const DI_NORMAL: u32 = 3;
 // The ticks (half seconds) to wait before asking programs for their icons.
 const SETTLE_TICKS: u32 = 3;
 
-struct Host {
-    hwnd: isize,
-    thread: JoinHandle<()>,
-}
-
-static HOST: Lock<Option<Host>> = Lock::new("taskbar::win::HOST", None);
+// The state each part keeps is in its own file, beside the code that
+// keeps it; named here for the others (each file has `use super::*`).
+use buttons::{TASKS_STOP, ORDER, FLASHING, WIN_PNGS, MARKS, TITLES, REDRAWN, SENT_WINDOWS};
+use flyouts::START_OPEN;
+use keys::{KEYS_NOW, SENT_KEYS};
+use look::{PAPER, LOOK, LOOKS_LEFT};
+use thread::{OURS, TICKS};
+use thumbs::THUMB_HOST;
+use tray::{ASK_AT, LAST_ASK, PNGS, SENT};
+use work::{EDGE, WORK_EDGE, STRIP, WORK_SIDE};
 // Her Shared, for the threads here: only ever cloned out (sh()), so taken
 // inside any lock and nothing inside it.
 static SH: Lock<Option<Arc<Shared>>> = Lock::ranked("taskbar::win::SH", crate::lock::LEAF, None);
-static OURS: AtomicIsize = AtomicIsize::new(0);
-// Explorer's taskbar window: a new one means Explorer started again.
-static EXPLORER: AtomicIsize = AtomicIsize::new(0);
-static CREATED_MSG: AtomicU32 = AtomicU32::new(0);
-static TICKS: AtomicU32 = AtomicU32::new(0);
-static WORK_BOTTOM: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
-// The screen's edge the strip is along (island.rs, taskbarEdge), and the
-// one the work area was last made whole for (strip_moved), with whether
-// Windows' own kept its room along the foot then (split, the dock in it).
-static EDGE: Lock<Edge> = Lock::new("taskbar::win::EDGE", Edge::Bottom);
-static WORK_EDGE: Lock<Option<(Edge, bool)>> = Lock::new("taskbar::win::WORK_EDGE", None);
-// The strip as granted (physical); since when (tick) the work area has
-// reached into it, and when it was last taken again for that.
-static STRIP: Lock<Option<(i32, i32, i32, i32)>> = Lock::new("taskbar::win::STRIP", None);
-// The work area's side on the strip's edge as she last set it (tick,
-// strip_moved): left there as the strip moves, it follows the strip
-// (appbar.rs work_fix). Whether the strip as told lies off its display's
-// edge (the display changed), said once.
-static WORK_SIDE: Lock<Option<(Edge, i32)>> = Lock::new("taskbar::win::WORK_SIDE", None);
-static STRIP_OFF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static LOST_SINCE: AtomicU32 = AtomicU32::new(0);
-static LAST_TAKEN: AtomicU32 = AtomicU32::new(0);
-// Asking programs for their icons: from this tick (0: asked), the last
-// time, and how many times right after one.
-static ASK_AT: AtomicU32 = AtomicU32::new(0);
-static LAST_ASK: AtomicU32 = AtomicU32::new(0);
-static QUICK_ASKS: AtomicU32 = AtomicU32::new(0);
-// From this tick, the icons only Explorer's tray holds are looked for
-// again (systray.rs scan_held): some seconds after each asking, else
-// every half minute.
-static HELD_AT: AtomicU32 = AtomicU32::new(0);
-// Each icon drawn: (key, its handle) to its PNG; the list sent last.
-static PNGS: Lock<Option<HashMap<u64, (isize, String)>>> = Lock::new("taskbar::win::PNGS", None);
-static SENT: Lock<Value> = Lock::new("taskbar::win::SENT", Value::Null);
-// Which picture (its handle) the page has for each icon: sent again
-// only when it is another one (send_icons).
-static PNG_SENT: Lock<Option<HashMap<u64, isize>>> = Lock::new("taskbar::win::PNG_SENT", None);
-// The buttons: their thread, woken when windows change; their order (as
-// they came); the windows flashing; each window's icon drawn (its
-// handle, its PNG); the sessions in each window; the list sent last.
-static TASKS: Lock<Option<JoinHandle<()>>> = Lock::new("taskbar::win::TASKS", None);
-static WAKE: (Lock<bool>, std::sync::Condvar) = (Lock::new("taskbar::win::WAKE", false), std::sync::Condvar::new());
-static TASKS_STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static ORDER: Lock<Vec<isize>> = Lock::new("taskbar::win::ORDER", Vec::new());
-static FLASHING: Lock<Vec<isize>> = Lock::new("taskbar::win::FLASHING", Vec::new());
-static WIN_PNGS: Lock<Option<HashMap<isize, (isize, String)>>> = Lock::new("taskbar::win::WIN_PNGS", None);
-static MARKS: Lock<Option<HashMap<isize, Vec<Value>>>> = Lock::new("taskbar::win::MARKS", None);
-// Each session's window as found (mark_sessions): its handle and
-// process, and when; looked for again only when gone or after a while.
-// Sessions without one, when they were last looked for.
-static SESSION_WINDOWS: Lock<Option<HashMap<String, (isize, u32, Instant)>>> = Lock::new("taskbar::win::SESSION_WINDOWS", None);
-static SESSION_LOOKED: Lock<Option<HashMap<String, Instant>>> = Lock::new("taskbar::win::SESSION_LOOKED", None);
-// Per window, kept while it has a button (send_windows): the app it
-// says it is (never changes), its icon's handle and when it was asked
-// (asked again when the shell says the window was redrawn, else every
-// ten seconds), and its title as shown (on_shell: a redraw with the
-// same title wakes nothing).
-static APP_IDS: Lock<Option<HashMap<isize, Option<String>>>> = Lock::new("taskbar::win::APP_IDS", None);
-static ICONS: Lock<Option<HashMap<isize, (isize, Instant)>>> = Lock::new("taskbar::win::ICONS", None);
-static TITLES: Lock<Option<HashMap<isize, String>>> = Lock::new("taskbar::win::TITLES", None);
-static REDRAWN: Lock<Vec<isize>> = Lock::new("taskbar::win::REDRAWN", Vec::new());
-static SENT_WINDOWS: Lock<Value> = Lock::new("taskbar::win::SENT_WINDOWS", Value::Null);
-// Each program's name (tasks::app_name), and its file's icon drawn, by its path.
-static APP_NAMES: Lock<Option<HashMap<String, String>>> = Lock::new("taskbar::win::APP_NAMES", None);
-static FILE_PNGS: Lock<Option<HashMap<String, String>>> = Lock::new("taskbar::win::FILE_PNGS", None);
-// The live pictures shown (window, thumbnail), over the windows listed above a button.
-static THUMBS: Lock<Vec<(isize, isize)>> = Lock::new("taskbar::win::THUMBS", Vec::new());
-static THUMB_HOST: AtomicIsize = AtomicIsize::new(0);
-// The same for the windows minimized into the dock (split, bars.rs
-// show_mins): a window of their own, there as long as the dock is up.
-static DOCK_THUMBS: Lock<Vec<(isize, isize)>> = Lock::new("taskbar::win::DOCK_THUMBS", Vec::new());
-static DOCK_HOST: AtomicIsize = AtomicIsize::new(0);
-static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
-// The keyboard's thread, and what it sent last.
-static KEYS: Lock<Option<JoinHandle<()>>> = Lock::new("taskbar::win::KEYS", None);
-// The IME's mark and the volume read at the next look, not the next
-// second: the input method was just switched from our button.
-static KEYS_NOW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-// The keys' thread woken from its nap (keys_loop): asked to stop, the
-// IME button pressed, the quiet over.
-static KEYS_WAKE: (Lock<bool>, std::sync::Condvar) = (Lock::new("taskbar::win::KEYS_WAKE", false), std::sync::Condvar::new());
-static SENT_KEYS: Lock<Value> = Lock::new("taskbar::win::SENT_KEYS", Value::Null);
-// Windows' own record of the tray icons it keeps out (windows_kept), read once.
-static KEPT: Lock<Option<Vec<Kept>>> = Lock::new("taskbar::win::KEPT", None);
-// The desktop's picture under the strip and Windows' look, as
-// sent last (send_look), whether they are being looked at, and whether
-// asked again meanwhile; the looks left after Windows' word (settle).
-static PAPER: Lock<Value> = Lock::new("taskbar::win::PAPER", Value::Null);
-static LOOK: Lock<Value> = Lock::new("taskbar::win::LOOK", Value::Null);
-static LOOK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static LOOK_AGAIN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static LOOKS_LEFT: AtomicU32 = AtomicU32::new(0);
-// The live pictures' window's ground (COLORREF), as set last (thumbs_ground).
-static THUMBS_GROUND: AtomicU32 = AtomicU32::new(0x001E_1C1C);
-// Windows' Start menu open, as told to the page last (start_seen).
-static START_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-// The windows over a display (fills_display), each with that display, as
-// last seen moving (on_event).
-static OVER: Lock<Vec<(isize, isize)>> = Lock::new("taskbar::win::OVER", Vec::new());
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()

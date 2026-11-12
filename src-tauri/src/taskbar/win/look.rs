@@ -4,6 +4,15 @@
 // page as they change (taskbar:wallpaper, taskbar:look).
 use super::*;
 
+// The desktop's picture under the strip and Windows' look, as
+// sent last (send_look), whether they are being looked at, and whether
+// asked again meanwhile; the looks left after Windows' word (settle).
+pub(super) static PAPER: Lock<Value> = Lock::new("taskbar::win::look::PAPER", Value::Null);
+pub(super) static LOOK: Lock<Value> = Lock::new("taskbar::win::look::LOOK", Value::Null);
+pub(super) static LOOK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(super) static LOOK_AGAIN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(super) static LOOKS_LEFT: AtomicU32 = AtomicU32::new(0);
+
 // Windows' look as last sent: light or dark, the accent (bars.rs).
 pub fn look_value() -> Value {
     LOOK.lock().unwrap().clone()

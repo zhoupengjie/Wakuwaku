@@ -4,6 +4,16 @@
 use super::*;
 use crate::lock::Lock;
 
+// The live pictures shown (window, thumbnail), over the windows listed above a button.
+pub(super) static THUMBS: Lock<Vec<(isize, isize)>> = Lock::new("taskbar::win::thumbs::THUMBS", Vec::new());
+pub(super) static THUMB_HOST: AtomicIsize = AtomicIsize::new(0);
+// The same for the windows minimized into the dock (split, bars.rs
+// show_mins): a window of their own, there as long as the dock is up.
+pub(super) static DOCK_THUMBS: Lock<Vec<(isize, isize)>> = Lock::new("taskbar::win::thumbs::DOCK_THUMBS", Vec::new());
+pub(super) static DOCK_HOST: AtomicIsize = AtomicIsize::new(0);
+// The live pictures' window's ground (COLORREF), as set last (thumbs_ground).
+pub(super) static THUMBS_GROUND: AtomicU32 = AtomicU32::new(0x001E_1C1C);
+
 // The live pictures' window as the cards round it are: dark, or light in
 // Windows' light mode (style.css .wpop, its ground #1c1c1e or #f9f9f9).
 pub(super) fn thumbs_ground(light: bool) {

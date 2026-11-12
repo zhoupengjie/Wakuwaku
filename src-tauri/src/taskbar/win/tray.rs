@@ -4,6 +4,20 @@
 // ask_soon).
 use super::*;
 
+// Asking programs for their icons: from this tick (0: asked), the last
+// time, and how many times right after one.
+pub(super) static ASK_AT: AtomicU32 = AtomicU32::new(0);
+pub(super) static LAST_ASK: AtomicU32 = AtomicU32::new(0);
+pub(super) static QUICK_ASKS: AtomicU32 = AtomicU32::new(0);
+// Each icon drawn: (key, its handle) to its PNG; the list sent last.
+pub(super) static PNGS: Lock<Option<HashMap<u64, (isize, String)>>> = Lock::new("taskbar::win::tray::PNGS", None);
+pub(super) static SENT: Lock<Value> = Lock::new("taskbar::win::tray::SENT", Value::Null);
+// Which picture (its handle) the page has for each icon: sent again
+// only when it is another one (send_icons).
+pub(super) static PNG_SENT: Lock<Option<HashMap<u64, isize>>> = Lock::new("taskbar::win::tray::PNG_SENT", None);
+// Windows' own record of the tray icons it keeps out (windows_kept), read once.
+pub(super) static KEPT: Lock<Option<Vec<Kept>>> = Lock::new("taskbar::win::tray::KEPT", None);
+
 // The tray's icons and the buttons as last sent, for a page that has just come up.
 pub fn resend(sh: &Shared) {
     let sent = SENT.lock().unwrap().clone();

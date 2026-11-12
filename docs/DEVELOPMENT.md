@@ -70,7 +70,7 @@ src-tauri/
     desk.rs               桌面小工具的窗口：每块有小工具的屏一个，压在别的窗口下面、桌面图标上面（显示桌面后也在），点击只在小工具上被接住，每块屏的壁纸
     backplate.rs          垫在岛的窗口正下面的亚克力：一个自己的原生窗口，DWM 模糊它后面的别的窗口（#20）
     appbar.rs             任务栏占住的那条空间（Windows 的 AppBar），以及 Windows 任务栏的自动隐藏状态
-    taskbar/              任务栏模式的 Windows 一侧：mod.rs 是对外的函数、页面能调的 taskbar_* 命令、启动时补还（recover），非 Windows 上什么都不做（imp）；Windows 上的各部分在 win/，共用的 Win32 声明、常量、状态和日志在 win/mod.rs：
+    taskbar/              任务栏模式的 Windows 一侧：mod.rs 是对外的函数、页面能调的 taskbar_* 命令、启动时补还（recover），非 Windows 上什么都不做（imp）；Windows 上的各部分在 win/，共用的 Win32 声明、常量和日志在 win/mod.rs，各部分的状态在各自的文件里（mod.rs 用 use 引回来给别的文件用）：
       win/thread.rs       自己的线程：隐藏窗口和消息循环（run、wndproc）、WinEvent 和 shell 钩子（on_event、on_shell）、每半秒的 tick、资源管理器重启（on_created）
       win/hold.rs         把 Windows 的任务栏藏起来、还回去（take、give_back）；另一份她拿着时等它放手；资源管理器启动完才接管（#85）；被别的程序反复叫出来时让开（#69 的拉锯）；交接用的截图（strip_picture）
       win/work.rs         工作区自愈：条带的位置、工作区贴着条带设（set_work_area、keep_work）、桌面图标让开、重新占条带、顶栏下面的窗口挪开（keep_under_bar）

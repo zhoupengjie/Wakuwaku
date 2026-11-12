@@ -4,6 +4,20 @@
 // (on_created).
 use super::*;
 
+pub(super) static OURS: AtomicIsize = AtomicIsize::new(0);
+// Explorer's taskbar window: a new one means Explorer started again.
+pub(super) static EXPLORER: AtomicIsize = AtomicIsize::new(0);
+pub(super) static CREATED_MSG: AtomicU32 = AtomicU32::new(0);
+pub(super) static TICKS: AtomicU32 = AtomicU32::new(0);
+// From this tick, the icons only Explorer's tray holds are looked for
+// again (systray.rs scan_held): some seconds after each asking, else
+// every half minute.
+pub(super) static HELD_AT: AtomicU32 = AtomicU32::new(0);
+pub(super) static SHELL_MSG: AtomicU32 = AtomicU32::new(0);
+// The windows over a display (fills_display), each with that display, as
+// last seen moving (on_event).
+pub(super) static OVER: Lock<Vec<(isize, isize)>> = Lock::new("taskbar::win::thread::OVER", Vec::new());
+
 pub(super) fn run(strip: (i32, i32, i32, i32), ready: std::sync::mpsc::Sender<isize>) {
     // SAFETY: our own class and window, on this thread, which runs its loop.
     unsafe {

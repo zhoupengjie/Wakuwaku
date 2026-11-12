@@ -5,6 +5,34 @@
 use super::*;
 use crate::lock::Lock;
 
+// The buttons: woken when windows change; their order (as they came);
+// the windows flashing; each window's icon drawn (its handle, its PNG);
+// the sessions in each window.
+pub(super) static WAKE: (Lock<bool>, std::sync::Condvar) = (Lock::new("taskbar::win::buttons::WAKE", false), std::sync::Condvar::new());
+pub(super) static TASKS_STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(super) static ORDER: Lock<Vec<isize>> = Lock::new("taskbar::win::buttons::ORDER", Vec::new());
+pub(super) static FLASHING: Lock<Vec<isize>> = Lock::new("taskbar::win::buttons::FLASHING", Vec::new());
+pub(super) static WIN_PNGS: Lock<Option<HashMap<isize, (isize, String)>>> = Lock::new("taskbar::win::buttons::WIN_PNGS", None);
+pub(super) static MARKS: Lock<Option<HashMap<isize, Vec<Value>>>> = Lock::new("taskbar::win::buttons::MARKS", None);
+// Each session's window as found (mark_sessions): its handle and
+// process, and when; looked for again only when gone or after a while.
+// Sessions without one, when they were last looked for.
+pub(super) static SESSION_WINDOWS: Lock<Option<HashMap<String, (isize, u32, Instant)>>> = Lock::new("taskbar::win::buttons::SESSION_WINDOWS", None);
+pub(super) static SESSION_LOOKED: Lock<Option<HashMap<String, Instant>>> = Lock::new("taskbar::win::buttons::SESSION_LOOKED", None);
+// Per window, kept while it has a button (send_windows): the app it
+// says it is (never changes), its icon's handle and when it was asked
+// (asked again when the shell says the window was redrawn, else every
+// ten seconds), and its title as shown (on_shell: a redraw with the
+// same title wakes nothing).
+pub(super) static APP_IDS: Lock<Option<HashMap<isize, Option<String>>>> = Lock::new("taskbar::win::buttons::APP_IDS", None);
+pub(super) static ICONS: Lock<Option<HashMap<isize, (isize, Instant)>>> = Lock::new("taskbar::win::buttons::ICONS", None);
+pub(super) static TITLES: Lock<Option<HashMap<isize, String>>> = Lock::new("taskbar::win::buttons::TITLES", None);
+pub(super) static REDRAWN: Lock<Vec<isize>> = Lock::new("taskbar::win::buttons::REDRAWN", Vec::new());
+pub(super) static SENT_WINDOWS: Lock<Value> = Lock::new("taskbar::win::buttons::SENT_WINDOWS", Value::Null);
+// Each program's name (tasks::app_name), and its file's icon drawn, by its path.
+pub(super) static APP_NAMES: Lock<Option<HashMap<String, String>>> = Lock::new("taskbar::win::buttons::APP_NAMES", None);
+pub(super) static FILE_PNGS: Lock<Option<HashMap<String, String>>> = Lock::new("taskbar::win::buttons::FILE_PNGS", None);
+
 pub(super) fn wake_tasks() {
     let (dirty, cv) = &WAKE;
     *dirty.lock().unwrap() = true;

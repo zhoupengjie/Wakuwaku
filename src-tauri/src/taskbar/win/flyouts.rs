@@ -5,6 +5,9 @@
 use super::*;
 use crate::lock::Lock;
 
+// Windows' Start menu open, as told to the page last (start_seen).
+pub(super) static START_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 // Windows' own Start (or search, the notifications, the quick settings)
 // in front: closed first, as a press on Windows' taskbar closes it. Ours
 // takes no focus away from it, and the window pressed for could not come

@@ -5,6 +5,24 @@
 use super::*;
 use crate::lock::Lock;
 
+pub(super) static WORK_BOTTOM: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+// The screen's edge the strip is along (island.rs, taskbarEdge), and the
+// one the work area was last made whole for (strip_moved), with whether
+// Windows' own kept its room along the foot then (split, the dock in it).
+pub(super) static EDGE: Lock<Edge> = Lock::new("taskbar::win::work::EDGE", Edge::Bottom);
+pub(super) static WORK_EDGE: Lock<Option<(Edge, bool)>> = Lock::new("taskbar::win::work::WORK_EDGE", None);
+// The strip as granted (physical); since when (tick) the work area has
+// reached into it, and when it was last taken again for that.
+pub(super) static STRIP: Lock<Option<(i32, i32, i32, i32)>> = Lock::new("taskbar::win::work::STRIP", None);
+// The work area's side on the strip's edge as she last set it (tick,
+// strip_moved): left there as the strip moves, it follows the strip
+// (appbar.rs work_fix). Whether the strip as told lies off its display's
+// edge (the display changed), said once.
+pub(super) static WORK_SIDE: Lock<Option<(Edge, i32)>> = Lock::new("taskbar::win::work::WORK_SIDE", None);
+pub(super) static STRIP_OFF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub(super) static LOST_SINCE: AtomicU32 = AtomicU32::new(0);
+pub(super) static LAST_TAKEN: AtomicU32 = AtomicU32::new(0);
+
 // Where the strip is now (physical): ours of the taskbar's class goes
 // there too, for those who ask the taskbar's window where it is.
 pub fn strip_moved(strip: (i32, i32, i32, i32)) {

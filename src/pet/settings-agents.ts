@@ -10,6 +10,7 @@
 import * as Agents from './agents.ts'
 import { pet } from './bridge.ts'
 import type { SettingsCore } from './settings.ts'
+import type { Config } from '../shared/config.ts'
 
 // Why one could not be written: the error, its kind, and the folder it was
 // for, or DeepSeek Harness's way it was switching to.
@@ -69,7 +70,7 @@ export function agentsPart(core: SettingsCore) {
   async function dshSwitch(via: string, registry?: string) {
     if (st.connecting) return
     const r: any = Agents.read(st.snap, 'dsh') || {}
-    if (!registry && !Agents.isIn(st.snap, 'dsh')) return (r.via || 'plugin') === via ? undefined : patch({ dshVia: via })
+    if (!registry && !Agents.isIn(st.snap, 'dsh')) return (r.via || 'plugin') === via ? undefined : patch({ dshVia: via as Config['dshVia'] })
     if (!registry && r.way === via && r.status === 'ok') return
     st.connecting = 'dsh'
     dshSwitching = via

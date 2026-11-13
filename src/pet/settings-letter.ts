@@ -13,6 +13,7 @@ import { pet } from './bridge.ts'
 import type { SettingsCore } from './settings.ts'
 import type { Choices } from './settings-mail.ts'
 import type { Draft, DraftBox, Letter, Note } from './settings-vars.ts'
+import type { Config } from '../shared/config.ts'
 
 // Someone a letter is from or to: a name, and the address.
 interface Person {
@@ -812,7 +813,7 @@ export function letterPart(core: SettingsCore) {
   // How much is kept whole on this computer (the setting mailOffline: the
   // last year unless set), and the room every account's takes now.
   function offlineHTML() {
-    const value = ['90d', 'year', 'all', 'opened'].includes(st.snap.settings.mailOffline) ? st.snap.settings.mailOffline : 'year'
+    const value = ['90d', 'year', 'all', 'opened'].includes(st.snap.settings.mailOffline ?? '') ? st.snap.settings.mailOffline : 'year'
     const used = (st.snap.mail || []).reduce((n, a) => n + (a.status?.offline?.bytes || 0), 0)
     const note = T(`mail.keep.${value}Note`) + (used ? ` ${T('mail.keep.used', { size: mailSize(used) })}` : '')
     const choices = ['90d', 'year', 'all', 'opened'].map(v => [v, T(`mail.keep.${v}`)])
@@ -1133,7 +1134,7 @@ export function letterPart(core: SettingsCore) {
       .join('')}`
     st.menuPick = v => {
       const [what, id] = v.split(':')
-      if (what === 'first') return patch({ mailAgent: id })
+      if (what === 'first') return patch({ mailAgent: id as Config['mailAgent'] })
       if (st.reading) hand(st.reading.account, Number(st.reading.uid), id, 'talk', st.reading.folder || 'inbox')
     }
     const r = button.getBoundingClientRect()

@@ -3,34 +3,35 @@
 // declared in src-tauri/src/config.rs, each with its kind and default, and
 // their lines here are written from there (its test the_pages_config_is_
 // written_from_here; test/config.test.ts looks too): the type its kind
-// reads (a switch is boolean), else by its default. Then the keys the pages
-// alone keep. Every key may be missing (a config from before it): optional.
+// reads (a switch is boolean), the words it may be set to where they are a
+// few (its check there: 'auto' | 'zh' | 'en'), else by its default. Then
+// the keys the pages alone keep and set by other ways than a patch. Every key may be missing (a config from before it): optional.
 // Types alone: nothing of this is in the built page.
 export interface Config {
   // --- Declared in config.rs (written from it: cargo test config, CONFIG_TS_BLESS=1) ---
-  lang?: string
+  lang?: 'auto' | 'zh' | 'en'
   pet?: string
   scale?: number
   display?: string
   out?: boolean
-  islandWidth?: string
+  islandWidth?: 'narrow' | 'normal' | 'wide'
   islandPos?: string
   islandEdge?: string
   islandEmbed?: boolean
   islandHideUnder?: boolean
-  taskbarMaterial?: string
+  taskbarMaterial?: 'mica' | 'black' | 'clear'
   homeDisplay?: string
-  taskbarDisplays?: string
-  taskbarClearWhen?: string
-  taskbarButtons?: string
-  taskbarAlign?: string
-  taskbarEdge?: string
+  taskbarDisplays?: 'main' | 'all'
+  taskbarClearWhen?: 'mica' | 'solid' | 'always'
+  taskbarButtons?: 'icons' | 'labels'
+  taskbarAlign?: 'center' | 'left'
+  taskbarEdge?: 'bottom' | 'top' | 'left' | 'right'
   splitBar?: number
-  splitDock?: string
-  splitKeys?: string
+  splitDock?: 'hide' | 'room'
+  splitKeys?: 'top' | 'dock'
   oledShift?: boolean
   autoUpdateCheck?: boolean
-  updateFrom?: string
+  updateFrom?: 'auto' | 'github' | 'gitee'
   details?: boolean
   widgetsOff?: any[]
   monitor?: Record<string, any>
@@ -43,7 +44,7 @@ export interface Config {
   walk?: boolean
   look?: boolean
   hold?: number | 'seen'
-  endCue?: string
+  endCue?: 'open' | 'ring' | 'none'
   idleHideMin?: number
   notify?: Record<string, any>
   sound?: boolean
@@ -59,13 +60,13 @@ export interface Config {
   lookDefaults?: number
   connectHintOff?: boolean
   crashTold?: string
-  crashReports?: string
+  crashReports?: 'auto' | 'off' | 'ask'
   deskLayout?: any
-  dshVia?: any
+  dshVia?: 'plugin' | 'bridge'
   islandLook?: any
   islandTopLook?: any
   mailAgentConf?: any
-  mailOffline?: any
+  mailOffline?: '90d' | 'year' | 'all' | 'opened'
   mailProxy?: any
   monitorSource?: any
   netProxy?: any
@@ -81,14 +82,13 @@ export interface Config {
   welcomeOpened?: boolean
   x?: number
   y?: number
-  // --- The pages' own ---
-  // Her capsule's members and how each turns (capsule.ts).
   capsule?: any
-  // The boards' combos kept to put up again (deskgrid.ts setsOf).
   boardSets?: any
+  widgetSize?: Record<string, string>
+  mailAgent?: 'claude' | 'codex' | 'agy'
+  mailPanes?: 'one' | 'two'
+  mailPictures?: string[]
+  // --- The pages' own ---
   // The tray's icons in the order she shows them (island-look.ts trayOrder).
   trayOrder?: any
-  // Each widget's size where its person set it, by id (island.ts; addons.rs
-  // drops a plugin's when it goes).
-  widgetSize?: Record<string, string>
 }

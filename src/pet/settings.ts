@@ -1511,7 +1511,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     // Which agent letters go to: the dropdown; an open letter's ▾.
     const agentPick = at('[data-mail-agent]')
     if (agentPick) {
-      openChoices(agentPick, agentChoices(), firstAgent(), v => v !== firstAgent() && patch({ mailAgent: v }), true)
+      openChoices(agentPick, agentChoices(), firstAgent(), v => v !== firstAgent() && patch({ mailAgent: v as Config['mailAgent'] }), true)
       return true
     }
     const handMore = at('[data-hand-more]')
@@ -1598,7 +1598,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
     }
     const panes = at('[data-mail-panes]')
     if (panes) {
-      patch({ mailPanes: panes.dataset.mailPanes })
+      patch({ mailPanes: panes.dataset.mailPanes as Config['mailPanes'] })
       relayout()
       return true
     }

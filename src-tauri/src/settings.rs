@@ -543,7 +543,7 @@ fn is_taskbar_layout(v: &Value) -> bool {
 // any other (#59; flow.ts holdSecs keeps what is typed within).
 const HOLD_SECS: std::ops::RangeInclusive<u64> = 3..=600;
 
-fn is_hold(v: &Value) -> bool {
+pub(crate) fn is_hold(v: &Value) -> bool {
     v.as_str() == Some("seen") || v.as_u64().is_some_and(|s| HOLD_SECS.contains(&s))
 }
 
@@ -551,7 +551,7 @@ fn is_hold(v: &Value) -> bool {
 // a top corner, or the top centre (the default). Kept here; placing the
 // window by it is island/'s (fit, side_changed), and the page lays the
 // island out at the side it is told (anchor.ts, pet:update islandAt).
-fn is_island_pos(v: &Value) -> bool {
+pub(crate) fn is_island_pos(v: &Value) -> bool {
     matches!(v.as_str(), Some("left" | "center" | "right"))
 }
 
@@ -561,7 +561,7 @@ fn is_island_pos(v: &Value) -> bool {
 // data.rs adopt_island_edge). Placing the window by it is island/'s (fit)
 // too, and the page lays the island out along the edge of the screen it is
 // told (anchor.ts, pet:update islandEdge).
-fn is_island_edge(v: &Value) -> bool {
+pub(crate) fn is_island_edge(v: &Value) -> bool {
     matches!(v.as_str(), Some("top" | "taskbar"))
 }
 
@@ -588,122 +588,94 @@ fn is_shortcut_spec(sh: &Shared, key: &str, s: &str) -> bool {
     !crate::shortcuts::has_duplicates(&refs)
 }
 
-// What a settings patch may hold, checked: anything else is dropped.
+// What a settings patch may hold, checked: anything else is dropped. Each
+// key's check is said where the key is declared (config.rs keys!, `set`);
+// a key with none there is not the pages' to set. Those of more than a
+// word or a number are below and above (With, Asking).
 fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
-    let is_bool = v.is_boolean();
-    match key {
-        "lang" => matches!(v.as_str(), Some("auto" | "zh" | "en")),
-        "pet" => v.as_str().is_some_and(|id| data::pets(&sh.dir).iter().any(|p| p.id == id)),
-        "scale" => v.as_f64().is_some_and(|s| data::SCALES.iter().any(|(_, x)| (x - s).abs() < 1e-9)),
-        "details" | "walk" | "look" | "sound" | "dnd" | "hideInFullscreen" | "onboarded" | "out" | "settingsPin" | "settingsTop" | "oledShift" | "autoUpdateCheck" | "shortcutsEnabled" => is_bool,
-        "shortcutApprove" | "shortcutDeny" | "shortcutIsland" => v.as_str().is_some_and(|s| is_shortcut_spec(sh, key, s)),
-        // Where an update is downloaded from first (updates.rs gitee_first).
-        "updateFrom" => matches!(v.as_str(), Some("auto" | "github" | "gitee")),
-        // Crash reports sent by themselves, never, or asked about (crash.rs).
-        "crashReports" => matches!(v.as_str(), Some("auto" | "off" | "ask")),
-        // The taskbar home stands in for Windows' own: elsewhere, only the island.
-        // The top bar and the dock (split) stand in for Windows' taskbar too.
-        "display" => v.as_str() == Some("island") || (cfg!(windows) && matches!(v.as_str(), Some("taskbar" | "split"))),
-        "islandWidth" => matches!(v.as_str(), Some("narrow" | "normal" | "wide")),
-        // Where her island sits at the top of the screen (anchor.ts, #59).
-        "islandPos" => is_island_pos(v),
-        // Where it is: at the top of the screen, or in Windows' taskbar (#105).
-        "islandEdge" => is_island_edge(v),
-        // In the taskbar, the capsule inside it, taking its end (embed.rs), or laid over it.
-        "islandEmbed" => is_bool,
-        // At the top of the screen, up out of the way of a window under it (island/ look_under).
-        "islandHideUnder" => is_bool,
-        "taskbarMaterial" => matches!(v.as_str(), Some("mica" | "black" | "clear")),
-        "taskbarClearWhen" => matches!(v.as_str(), Some("mica" | "solid" | "always")),
-        "taskbarButtons" => matches!(v.as_str(), Some("icons" | "labels")),
-        "taskbarAlign" => matches!(v.as_str(), Some("center" | "left")),
-        "taskbarEdge" => matches!(v.as_str(), Some("bottom" | "top" | "left" | "right")),
-        // The top bar and the dock (display split,
-        // docs/design/specs/dock-topbar.md): the top bar's thickness, the
-        // dock out of the way of windows or kept in the room Windows' own
-        // keeps, quick settings and the clock in the top bar or the dock.
-        "splitBar" => matches!(v.as_u64(), Some(32 | 48)),
-        "splitDock" => matches!(v.as_str(), Some("hide" | "room")),
-        "splitKeys" => matches!(v.as_str(), Some("top" | "dock")),
-        "taskbarDisplays" => matches!(v.as_str(), Some("main" | "all")),
-        // The display her home is on (#104): a display's key (screen.rs,
-        // desk/ key_for), kept while that display is unplugged so she goes
-        // back to it; "" for Windows' main display.
-        "homeDisplay" => v.as_str().is_some_and(|k| k.len() <= 64 && !k.chars().any(char::is_control)),
-        // The taskbar's parts in three runs (island-layout.ts tbLayout), each once.
-        "taskbarLayout" => v.is_null() || is_taskbar_layout(v),
-        // The desktop's widgets (desk/, deskgrid.ts).
-        "deskLayout" => is_desk_layout(v),
-        // Boards kept as combos, to be put up again from the picker's 组合.
-        "boardSets" => is_board_sets(v),
-        // Her capsule's members, their order and how each shows there.
-        "capsule" => is_capsule(v),
-        // The programs' buttons in the order dragged: their keys (paths).
-        "taskbarOrder" => v.as_array().is_some_and(|keys| keys.len() <= 200 && keys.iter().all(|k| k.as_str().is_some_and(|s| s.len() <= 1024))),
-        "hold" => is_hold(v),
-        // When she has something to tell that needs no answer (a turn's end,
-        // a hello, a plugin's nudge): the island open by itself, a ring round
-        // it (the flow light), or only the dot (island-ring.ts cue).
-        "endCue" => matches!(v.as_str(), Some("open" | "ring" | "none")),
-        // Minutes a session at rest stays in sight, or 0: always (state.rs is_shown).
-        "idleHideMin" => matches!(v.as_u64(), Some(0 | 15 | 30 | 60 | 120)),
-        "promptWaitSec" => matches!(v.as_u64(), Some(30 | 60 | 120 | 290)),
-        // Other programs' approvals on her prompt panel (app_asks.rs).
-        "appAsks" => is_bool,
-        "notify" => ["waiting", "done", "error"].iter().all(|k| v.get(k).is_some_and(Value::is_boolean)),
-        "widgetsOff" | "widgetOrder" => v.as_array().is_some_and(|ids| ids.len() <= 64 && ids.iter().all(|id| id.as_str().is_some_and(crate::widgets::is_id))),
-        "widgetSpin" => matches!(v.as_u64(), Some(0 | 5 | 8 | 15)),
-        // Each widget's row in the open island, small or medium, by its id
-        // (island.ts rowSize).
-        "widgetSize" => v.as_object().is_some_and(|m| m.len() <= 64 && m.iter().all(|(id, s)| crate::widgets::is_id(id) && matches!(s.as_str(), Some("S" | "M")))),
-        "plugins" => plugins::is_ok(v),
-        "monitor" => v.as_object().is_some_and(|m| {
-            m.iter().all(|(k, v)| match k.as_str() {
-                "cpu" | "mem" | "net" | "battery" | "pin" => v.is_boolean(),
-                "every" => v.as_u64().is_some_and(|s| (1..=10).contains(&s)),
-                // The hardware's sensors: the built-in ones picked, and
-                // LibreHardwareMonitor's.
-                _ => crate::hw::is_setting(k, v).or_else(|| crate::lhm::is_setting(k, v)).unwrap_or(false),
-            })
-        }),
-        // Where the monitor's sensors come from (hw.rs Source).
-        "monitorSource" => crate::hw::is_source(v),
-        "widgetNudge" => is_bool,
-        // The market's plugins updated by themselves when they ask for no more (market.rs).
-        "pluginAutoUpdate" => is_bool,
-        // Not to be reminded that nothing is connected (island.ts isHinting).
-        "connectHintOff" => is_bool,
-        // Her island's look on the taskbar, by Windows' mode (island.ts
-        // drawIslandLook): none, or a mode's none, is Windows' own grey.
-        // And at the top of the screen (island-look.ts lookNow), kept apart:
-        // none is black, as it always was.
-        "islandLook" | "islandTopLook" => v.is_null() || v.as_object().is_some_and(|m| m.iter().all(|(mode, look)| matches!(mode.as_str(), "dark" | "light") && is_island_look(look))),
-        "mailAgent" => matches!(v.as_str(), Some("claude" | "codex" | "agy")),
-        // How DeepSeek Harness is followed: her own plugin, or its own hook
-        // bridge (connection/dsh.rs dsh_way); none: the plugin, or 0.3.2's rows as they are.
-        "dshVia" => matches!(v.as_str(), Some("plugin" | "bridge")),
-        // The Mail page in two panes (list, letter), or one.
-        "mailPanes" => matches!(v.as_str(), Some("one" | "two")),
-        // How much mail is kept whole offline (mail/store.rs Offline).
-        "mailOffline" => matches!(v.as_str(), Some("90d" | "year" | "all" | "opened")),
-        // New mail's codes and links to sign in with on the island (mail/codes.rs).
-        "mailCodes" => is_bool,
-        // The senders whose letters show their pictures from elsewhere
-        // (settings-letter.ts): their addresses, in lower case.
-        "mailPictures" => is_addresses(v),
-        "mailAgentConf" => mail::agent::is_conf_ok(v),
-        // How mail reaches its servers (mail/proxy.rs): its own way, or the General page's.
-        "mailProxy" => mail::proxy::is_page_way(v),
-        // How her requests to the web go (proxy.rs web_ways), mail's too unless it has its own.
-        "netProxy" => crate::proxy::Via::of(v).is_some(),
-        _ => false,
-    }
+    config::check_of(key).is_some_and(|check| check.passes(sh, key, v))
+}
+
+// A pet there is (hers, a pack's, Codex's).
+pub(crate) fn is_pet(sh: &Shared, _key: &str, v: &Value) -> bool {
+    v.as_str().is_some_and(|id| data::pets(&sh.dir).iter().any(|p| p.id == id))
+}
+
+pub(crate) fn is_shortcut(sh: &Shared, key: &str, v: &Value) -> bool {
+    v.as_str().is_some_and(|s| is_shortcut_spec(sh, key, s))
+}
+
+pub(crate) fn is_scale(v: &Value) -> bool {
+    v.as_f64().is_some_and(|s| data::SCALES.iter().any(|(_, x)| (x - s).abs() < 1e-9))
+}
+
+// The taskbar home stands in for Windows' own: elsewhere, only the island.
+// The top bar and the dock (split) stand in for Windows' taskbar too.
+pub(crate) fn is_display(v: &Value) -> bool {
+    v.as_str() == Some("island") || (cfg!(windows) && matches!(v.as_str(), Some("taskbar" | "split")))
+}
+
+// The display her home is on (#104): a display's key (screen.rs,
+// desk/ key_for), kept while that display is unplugged so she goes
+// back to it; "" for Windows' main display.
+pub(crate) fn is_home_display(v: &Value) -> bool {
+    v.as_str().is_some_and(|k| k.len() <= 64 && !k.chars().any(char::is_control))
+}
+
+// The taskbar's parts in three runs (island-layout.ts tbLayout), each once; or none (the default's).
+pub(crate) fn is_taskbar_layout_or_none(v: &Value) -> bool {
+    v.is_null() || is_taskbar_layout(v)
+}
+
+// The programs' buttons in the order dragged: their keys (paths).
+pub(crate) fn is_taskbar_order(v: &Value) -> bool {
+    v.as_array().is_some_and(|keys| keys.len() <= 200 && keys.iter().all(|k| k.as_str().is_some_and(|s| s.len() <= 1024)))
+}
+
+pub(crate) fn is_notify(v: &Value) -> bool {
+    ["waiting", "done", "error"].iter().all(|k| v.get(k).is_some_and(Value::is_boolean))
+}
+
+// Widgets by their ids: those off, their order.
+pub(crate) fn is_widget_ids(v: &Value) -> bool {
+    v.as_array().is_some_and(|ids| ids.len() <= 64 && ids.iter().all(|id| id.as_str().is_some_and(crate::widgets::is_id)))
+}
+
+// Each widget's row in the open island, small or medium, by its id
+// (island.ts rowSize).
+pub(crate) fn is_widget_sizes(v: &Value) -> bool {
+    v.as_object().is_some_and(|m| m.len() <= 64 && m.iter().all(|(id, s)| crate::widgets::is_id(id) && matches!(s.as_str(), Some("S" | "M"))))
+}
+
+pub(crate) fn is_monitor(v: &Value) -> bool {
+    v.as_object().is_some_and(|m| {
+        m.iter().all(|(k, v)| match k.as_str() {
+            "cpu" | "mem" | "net" | "battery" | "pin" => v.is_boolean(),
+            "every" => v.as_u64().is_some_and(|s| (1..=10).contains(&s)),
+            // The hardware's sensors: the built-in ones picked, and
+            // LibreHardwareMonitor's.
+            _ => crate::hw::is_setting(k, v).or_else(|| crate::lhm::is_setting(k, v)).unwrap_or(false),
+        })
+    })
+}
+
+// Her island's look on the taskbar, by Windows' mode (island.ts
+// drawIslandLook): none, or a mode's none, is Windows' own grey.
+// And at the top of the screen (island-look.ts lookNow), kept apart:
+// none is black, as it always was.
+pub(crate) fn is_island_looks(v: &Value) -> bool {
+    v.is_null() || v.as_object().is_some_and(|m| m.iter().all(|(mode, look)| matches!(mode.as_str(), "dark" | "light") && is_island_look(look)))
+}
+
+// How her requests to the web go (proxy.rs web_ways), mail's too unless it has its own.
+pub(crate) fn is_net_proxy(v: &Value) -> bool {
+    crate::proxy::Via::of(v).is_some()
 }
 
 // A list of mail addresses as the Mail page keeps them (mailPictures): in
 // lower case, each with an @, no more than an address may be long, and no
 // more than a few thousand of them.
-fn is_addresses(v: &Value) -> bool {
+pub(crate) fn is_addresses(v: &Value) -> bool {
     v.as_array().is_some_and(|all| {
         all.len() <= 5000 && all.iter().all(|a| a.as_str().is_some_and(|s| s.len() <= 320 && s.contains('@') && !s.chars().any(|c| c.is_uppercase() || c.is_whitespace() || c.is_control())))
     })

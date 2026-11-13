@@ -28,6 +28,48 @@ impl Key {
     }
 }
 
+// What the pages may set a key to (a settings patch: settings.rs
+// apply_patch), said with the key below. Until 2026-11-14 a match on the
+// keys' names in settings.rs, apart from where the keys are declared.
+pub enum Check {
+    // true or false.
+    Bool,
+    // One of these words.
+    OneOf(&'static [&'static str]),
+    // One of these whole numbers.
+    UIntOf(&'static [u64]),
+    // Whatever this passes: a layout, a list, a thing with parts.
+    With(fn(&Value) -> bool),
+    // One that has to ask her (the pets there are, the shortcuts taken):
+    // her, the key, the value.
+    Asking(fn(&crate::Shared, &str, &Value) -> bool),
+}
+
+impl Check {
+    // Whether a value passes, for one that need not ask her (None: it must).
+    pub fn passes_alone(&self, v: &Value) -> Option<bool> {
+        Some(match self {
+            Check::Bool => v.is_boolean(),
+            Check::OneOf(words) => v.as_str().is_some_and(|s| words.contains(&s)),
+            Check::UIntOf(numbers) => v.as_u64().is_some_and(|n| numbers.contains(&n)),
+            Check::With(passes) => passes(v),
+            Check::Asking(_) => return None,
+        })
+    }
+
+    pub fn passes(&self, sh: &crate::Shared, key: &str, v: &Value) -> bool {
+        match self {
+            Check::Asking(passes) => passes(sh, key, v),
+            _ => self.passes_alone(v).unwrap_or(false),
+        }
+    }
+}
+
+// A key's check, if the pages may set it.
+pub fn check_of(key: &str) -> Option<&'static Check> {
+    CHECKS.iter().find(|(name, _)| *name == key).map(|(_, check)| check)
+}
+
 // A switch's value as a Flag reads it.
 pub fn is_on(value: &Value) -> bool {
     value.as_bool().unwrap_or(false)
@@ -136,9 +178,10 @@ impl Kind for Raw {
 // default), `NAME field: Kind = "key"` (read here, none: unset till the
 // pages or she set it), `"key" => default` (a default for the pages, never
 // read here). `; "ts type"` after one gives its TypeScript type, where its
-// kind's is not the pages'.
+// kind's is not the pages'. `set <Check>` last says what the pages may set
+// it to (settings.rs apply_patch); a key with none is not theirs to set.
 macro_rules! keys {
-    ($( $($name:ident $field:ident: $kind:ident =)? $key:literal $(=> $default:tt)? $(; $ts:literal)?, )*) => {
+    ($( $($name:ident $field:ident: $kind:ident =)? $key:literal $(=> $default:tt)? $(; $ts:literal)? $(set $check:expr)?, )*) => {
         $( $( #[allow(dead_code)] pub const $name: Key = Key($key); )? )*
 
         // Every setting with a default, as a new config starts (data.rs load).
@@ -165,6 +208,14 @@ macro_rules! keys {
             }
         }
 
+        // What the pages may set each key to (Check): those said with a
+        // key (`set ...`), in the order declared. A key not among them
+        // is not theirs to set.
+        pub const CHECKS: &[(&str, Check)] = {
+            use Check::*;
+            &[$( $( ($key, $check), )? )*]
+        };
+
         // Every key declared, with a default or not.
         #[cfg(test)]
         pub const NAMES: &[&str] = &[$($key),*];
@@ -182,7 +233,9 @@ macro_rules! keys {
                 $( let default = Some(json!($default)); )?
                 let ts: Option<&str> = None;
                 $( let ts = Some($ts); )?
-                lines.push(format!("  {}?: {}", $key, ts_type(kind, default.as_ref(), ts)));
+                let check: Option<Check> = None;
+                $( let check = Some({ use Check::*; $check }); )?
+                lines.push(format!("  {}?: {}", $key, ts_type(kind, default.as_ref(), ts, check.as_ref())));
             })*
             lines
         }
@@ -190,9 +243,13 @@ macro_rules! keys {
 }
 
 #[cfg(test)]
-fn ts_type(kind: &str, default: Option<&Value>, ts: Option<&str>) -> String {
+fn ts_type(kind: &str, default: Option<&Value>, ts: Option<&str>, check: Option<&Check>) -> String {
     if let Some(ts) = ts {
         return ts.to_string();
+    }
+    // One of a few words: those words.
+    if let Some(Check::OneOf(words)) = check {
+        return words.iter().map(|w| format!("'{w}'")).collect::<Vec<_>>().join(" | ");
     }
     if !kind.is_empty() {
         return kind.to_string();
@@ -236,133 +293,133 @@ impl Default for Config {
 }
 
 keys! {
-    LANG lang: Text = "lang" => "auto",
-    PET pet: Raw = "pet" => "claude-chan",
-    SCALE scale: Num = "scale" => 0.55,
+    LANG lang: Text = "lang" => "auto" set OneOf(&["auto", "zh", "en"]),
+    PET pet: Raw = "pet" => "claude-chan" set Asking(crate::settings::is_pet),
+    SCALE scale: Num = "scale" => 0.55 set With(crate::settings::is_scale),
     // Her home: island or taskbar (the taskbar from the first start, on
     // Windows; elsewhere there is no taskbar of hers, only the island);
     // out, she is on the desktop.
-    DISPLAY display: Text = "display" => (if cfg!(windows) { "taskbar" } else { "island" }),
-    OUT out: Flag = "out" => false,
+    DISPLAY display: Text = "display" => (if cfg!(windows) { "taskbar" } else { "island" }) set With(crate::settings::is_display),
+    OUT out: Flag = "out" => false set Bool,
     // The compact island's width: narrow, normal or wide (island.ts WIDTHS).
-    "islandWidth" => "normal",
+    "islandWidth" => "normal" set OneOf(&["narrow", "normal", "wide"]),
     // Where it sits at the top of the screen: left, center or right
     // (anchor.ts, zhoupengjie/Wakuwaku#59); the top centre as ever.
-    ISLAND_POS island_pos: Text = "islandPos" => "center",
+    ISLAND_POS island_pos: Text = "islandPos" => "center" set With(crate::settings::is_island_pos),
     // Where it is: top (the top of the screen, as ever), or taskbar, in
     // Windows' own taskbar along whichever edge that is, which stays as
     // it is (island/ fit, zhoupengjie/Wakuwaku#105).
-    ISLAND_EDGE island_edge: Text = "islandEdge" => "top",
+    ISLAND_EDGE island_edge: Text = "islandEdge" => "top" set With(crate::settings::is_island_edge),
     // In the taskbar, her capsule inside it, taking one end of it
     // (embed.rs), unless turned off: laid over it then.
-    ISLAND_EMBED island_embed: YesNo = "islandEmbed" => true,
+    ISLAND_EMBED island_embed: YesNo = "islandEmbed" => true set Bool,
     // At the top of the screen, slid up out of the way while a window
     // lies under it (island-plate.ts setStow, zhoupengjie/Wakuwaku#49).
-    ISLAND_HIDE_UNDER island_hide_under: Flag = "islandHideUnder" => true,
+    ISLAND_HIDE_UNDER island_hide_under: Flag = "islandHideUnder" => true set Bool,
     // The taskbar's strip: mica (the desktop's picture through it, mica.ts),
     // black (solid: black, or light in Windows' light mode) or clear (the
     // desktop itself through it, a new user's since 2026-10-13); clear,
     // Mica or solid while a window is maximized or full screen on its
     // display (mica, solid), or clear always.
-    TASKBAR_MATERIAL taskbar_material: Text = "taskbarMaterial" => "clear",
+    TASKBAR_MATERIAL taskbar_material: Text = "taskbarMaterial" => "clear" set OneOf(&["mica", "black", "clear"]),
     // The display her home is on (zhoupengjie/Wakuwaku#104): a display's
     // key (screen.rs), or "" for Windows' main display, as ever.
-    HOME_DISPLAY home_display: Raw = "homeDisplay" => "",
+    HOME_DISPLAY home_display: Raw = "homeDisplay" => "" set With(crate::settings::is_home_display),
     // Her taskbar on her display alone (no taskbar on the others)
     // or on all of them (bars.rs).
-    TASKBAR_DISPLAYS taskbar_displays: Text = "taskbarDisplays" => "main",
-    TASKBAR_CLEAR_WHEN taskbar_clear_when: Raw = "taskbarClearWhen" => "mica",
+    TASKBAR_DISPLAYS taskbar_displays: Text = "taskbarDisplays" => "main" set OneOf(&["main", "all"]),
+    TASKBAR_CLEAR_WHEN taskbar_clear_when: Raw = "taskbarClearWhen" => "mica" set OneOf(&["mica", "solid", "always"]),
     // Its programs' buttons: icons alone or with their titles; in the
     // middle of the screen or after her end (island-layout.ts alignApps).
-    "taskbarButtons" => "icons",
-    TASKBAR_ALIGN taskbar_align: Raw = "taskbarAlign" => "center",
+    "taskbarButtons" => "icons" set OneOf(&["icons", "labels"]),
+    TASKBAR_ALIGN taskbar_align: Raw = "taskbarAlign" => "center" set OneOf(&["center", "left"]),
     // The screen's edge it is along: bottom (Windows' own place), top,
     // left or right (side bars: an upright capsule, icons alone).
-    TASKBAR_EDGE taskbar_edge: Text = "taskbarEdge" => "bottom",
+    TASKBAR_EDGE taskbar_edge: Text = "taskbarEdge" => "bottom" set OneOf(&["bottom", "top", "left", "right"]),
     // The top bar and the dock (display split, island/ is_split): the
     // top bar 32 px or 48, the dock out of the way of a window touching
     // it or kept in the room Windows' own keeps, quick settings and the
     // clock in the top bar or the dock.
-    SPLIT_BAR split_bar: UInt = "splitBar" => 32,
-    SPLIT_DOCK split_dock: Text = "splitDock" => "hide",
-    SPLIT_KEYS split_keys: Text = "splitKeys" => "top",
+    SPLIT_BAR split_bar: UInt = "splitBar" => 32 set UIntOf(&[32, 48]),
+    SPLIT_DOCK split_dock: Text = "splitDock" => "hide" set OneOf(&["hide", "room"]),
+    SPLIT_KEYS split_keys: Text = "splitKeys" => "top" set OneOf(&["top", "dock"]),
     // OLED's guard, on unless turned off: the island's and the taskbar's
     // icons and words a screen pixel off by turns (island.ts oledShift).
-    "oledShift" => true,
+    "oledShift" => true set Bool,
     // Her updates looked for as she starts and once a day (updates.rs;
     // a downloaded exe only); downloaded from Gitee first in China and
     // GitHub first elsewhere, or as set.
-    AUTO_UPDATE_CHECK auto_update_check: On = "autoUpdateCheck" => true,
-    UPDATE_FROM update_from: Text = "updateFrom" => "auto",
-    DETAILS details: On = "details" => true,
+    AUTO_UPDATE_CHECK auto_update_check: On = "autoUpdateCheck" => true set Bool,
+    UPDATE_FROM update_from: Text = "updateFrom" => "auto" set OneOf(&["auto", "github", "gitee"]),
+    DETAILS details: On = "details" => true set Bool,
     // Widgets (plugins in the island): which are off, their order, how
     // often the island turns to the next, whether they may open it.
-    WIDGETS_OFF widgets_off: List = "widgetsOff" => ["monitor"],
+    WIDGETS_OFF widgets_off: List = "widgetsOff" => ["monitor"] set With(crate::settings::is_widget_ids),
     // The monitor's parts, and how often it reads (seconds, 1 to 10):
     // the CPU, memory and network's up and down by default, nothing more
     // (the user, 2026-10-16; Windows' own taskbar has the battery).
-    MONITOR monitor: Raw = "monitor" => { "cpu": true, "mem": true, "net": true, "battery": false, "every": 2, "pin": true },
-    WIDGET_ORDER widget_order: List = "widgetOrder" => [],
-    "widgetSpin" => 8,
-    WIDGET_NUDGE widget_nudge: On = "widgetNudge" => true,
+    MONITOR monitor: Raw = "monitor" => { "cpu": true, "mem": true, "net": true, "battery": false, "every": 2, "pin": true } set With(crate::settings::is_monitor),
+    WIDGET_ORDER widget_order: List = "widgetOrder" => [] set With(crate::settings::is_widget_ids),
+    "widgetSpin" => 8 set UIntOf(&[0, 5, 8, 15]),
+    WIDGET_NUDGE widget_nudge: On = "widgetNudge" => true set Bool,
     // The plugins she runs (scripts.rs): { id: { on, <Param>: value } }.
-    PLUGINS plugins: Raw = "plugins" => {},
+    PLUGINS plugins: Raw = "plugins" => {} set With(crate::plugins::is_ok),
     // Mail accounts (mail.rs); their passwords are in the Credential Manager.
     MAIL mail: Raw = "mail" => [],
     // A code or a link to sign in with, come by mail, on the island (mail/codes.rs).
-    MAIL_CODES mail_codes: On = "mailCodes" => true,
-    WALK walk: Flag = "walk" => true,
-    LOOK look: Flag = "look" => true,
+    MAIL_CODES mail_codes: On = "mailCodes" => true set Bool,
+    WALK walk: Flag = "walk" => true set Bool,
+    LOOK look: Flag = "look" => true set Bool,
     // Done, changed or failed: shown 8 s, or until seen ("seen"); 30 and
     // 120 the other quick choices, any whole seconds from 3 to 600 too
     // (settings.rs is_hold, #59).
-    HOLD hold: UInt = "hold" => 8; "number | 'seen'",
+    HOLD hold: UInt = "hold" => 8; "number | 'seen'" set With(crate::settings::is_hold),
     // At each, and whenever she has something to tell that needs no
     // answer (a hello, a plugin's nudge): round her closed island a ring
     // of colour, then a dot until seen (ring, the flow light: island.ts
     // cue); the island open by itself for a moment (open, all as before
     // 2026-10-16); or the dot alone (none). A session waiting on you
     // opens it whatever this says.
-    "endCue" => "ring",
+    "endCue" => "ring" set OneOf(&["open", "ring", "none"]),
     // A session at rest out of sight after this many minutes with nothing
     // new from it (15, 30, 60, 120; 0 never: state.rs is_shown).
-    IDLE_HIDE_MIN idle_hide_min: UInt = "idleHideMin" => (crate::state::IDLE_HIDE_MIN),
-    NOTIFY notify: Raw = "notify" => { "waiting": false, "done": false, "error": false },
-    "sound" => false,
-    PROMPT_WAIT_SEC prompt_wait_sec: UInt = "promptWaitSec" => 290,
+    IDLE_HIDE_MIN idle_hide_min: UInt = "idleHideMin" => (crate::state::IDLE_HIDE_MIN) set UIntOf(&[0, 15, 30, 60, 120]),
+    NOTIFY notify: Raw = "notify" => { "waiting": false, "done": false, "error": false } set With(crate::settings::is_notify),
+    "sound" => false set Bool,
+    PROMPT_WAIT_SEC prompt_wait_sec: UInt = "promptWaitSec" => 290 set UIntOf(&[30, 60, 120, 290]),
     // Approvals other programs on this computer ask for, on her prompt
     // panel (app_asks.rs, POST /ask); off, they are told so at once.
-    APP_ASKS app_asks: On = "appAsks" => true,
-    DND dnd: Flag = "dnd" => false,
-    HIDE_IN_FULLSCREEN hide_in_fullscreen: Flag = "hideInFullscreen" => true,
-    ONBOARDED onboarded: Flag = "onboarded" => false,
+    APP_ASKS app_asks: On = "appAsks" => true set Bool,
+    DND dnd: Flag = "dnd" => false set Bool,
+    HIDE_IN_FULLSCREEN hide_in_fullscreen: Flag = "hideInFullscreen" => true set Bool,
+    ONBOARDED onboarded: Flag = "onboarded" => false set Bool,
     // Global shortcuts for prompt approval and island toggle (shortcuts.rs)
-    SHORTCUTS_ENABLED shortcuts_enabled: Flag = "shortcutsEnabled" => false,
-    SHORTCUT_APPROVE shortcut_approve: Text = "shortcutApprove" => "Alt+Y",
-    SHORTCUT_DENY shortcut_deny: Text = "shortcutDeny" => "Alt+N",
-    SHORTCUT_ISLAND shortcut_island: Text = "shortcutIsland" => "Alt+W",
+    SHORTCUTS_ENABLED shortcuts_enabled: Flag = "shortcutsEnabled" => false set Bool,
+    SHORTCUT_APPROVE shortcut_approve: Text = "shortcutApprove" => "Alt+Y" set Asking(crate::settings::is_shortcut),
+    SHORTCUT_DENY shortcut_deny: Text = "shortcutDeny" => "Alt+N" set Asking(crate::settings::is_shortcut),
+    SHORTCUT_ISLAND shortcut_island: Text = "shortcutIsland" => "Alt+W" set Asking(crate::settings::is_shortcut),
     // Which defaults a config was written under (load: one from before
     // 2026-10-13 keeps the look it had).
     "lookDefaults" => 2,
     // Read here, with no default: set by the pages or by her as she goes.
-    CONNECT_HINT_OFF connect_hint_off: Flag = "connectHintOff",
+    CONNECT_HINT_OFF connect_hint_off: Flag = "connectHintOff" set Bool,
     CRASH_TOLD crash_told: Text = "crashTold",
     // Crash reports sent: "ask" (as she first is), "auto" or "off" (crash.rs).
-    CRASH_REPORTS crash_reports: Text = "crashReports",
-    DESK_LAYOUT desk_layout: Raw = "deskLayout",
-    DSH_VIA dsh_via: Raw = "dshVia",
-    ISLAND_LOOK island_look: Raw = "islandLook",
-    ISLAND_TOP_LOOK island_top_look: Raw = "islandTopLook",
-    MAIL_AGENT_CONF mail_agent_conf: Raw = "mailAgentConf",
-    MAIL_OFFLINE mail_offline: Raw = "mailOffline",
-    MAIL_PROXY mail_proxy: Raw = "mailProxy",
-    MONITOR_SOURCE monitor_source: Raw = "monitorSource",
-    NET_PROXY net_proxy: Raw = "netProxy",
-    PLUGIN_AUTO_UPDATE plugin_auto_update: On = "pluginAutoUpdate",
-    SETTINGS_PIN settings_pin: Flag = "settingsPin",
-    SETTINGS_TOP settings_top: Flag = "settingsTop",
-    TASKBAR_LAYOUT taskbar_layout: Raw = "taskbarLayout",
-    TASKBAR_ORDER taskbar_order: List = "taskbarOrder"; "any",
+    CRASH_REPORTS crash_reports: Text = "crashReports" set OneOf(&["auto", "off", "ask"]),
+    DESK_LAYOUT desk_layout: Raw = "deskLayout" set With(crate::settings::is_desk_layout),
+    DSH_VIA dsh_via: Raw = "dshVia" set OneOf(&["plugin", "bridge"]),
+    ISLAND_LOOK island_look: Raw = "islandLook" set With(crate::settings::is_island_looks),
+    ISLAND_TOP_LOOK island_top_look: Raw = "islandTopLook" set With(crate::settings::is_island_looks),
+    MAIL_AGENT_CONF mail_agent_conf: Raw = "mailAgentConf" set With(crate::mail::agent::is_conf_ok),
+    MAIL_OFFLINE mail_offline: Raw = "mailOffline" set OneOf(&["90d", "year", "all", "opened"]),
+    MAIL_PROXY mail_proxy: Raw = "mailProxy" set With(crate::mail::proxy::is_page_way),
+    MONITOR_SOURCE monitor_source: Raw = "monitorSource" set With(crate::hw::is_source),
+    NET_PROXY net_proxy: Raw = "netProxy" set With(crate::settings::is_net_proxy),
+    PLUGIN_AUTO_UPDATE plugin_auto_update: On = "pluginAutoUpdate" set Bool,
+    SETTINGS_PIN settings_pin: Flag = "settingsPin" set Bool,
+    SETTINGS_TOP settings_top: Flag = "settingsTop" set Bool,
+    TASKBAR_LAYOUT taskbar_layout: Raw = "taskbarLayout" set With(crate::settings::is_taskbar_layout_or_none),
+    TASKBAR_ORDER taskbar_order: List = "taskbarOrder"; "any" set With(crate::settings::is_taskbar_order),
     TASKBAR_PINNED taskbar_pinned: Raw = "taskbarPinned",
     TASKBAR_PINS_IMPORTED taskbar_pins_imported: Flag = "taskbarPinsImported",
     TRAY_PINNED tray_pinned: Raw = "trayPinned",
@@ -370,6 +427,23 @@ keys! {
     WELCOME_OPENED welcome_opened: Flag = "welcomeOpened",
     X x: Int = "x",
     Y y: Int = "y",
+    // Set by the pages and never read here: declared for what they may be
+    // set to. Her capsule's members, their order and how each shows there
+    // (capsule.ts).
+    "capsule" set With(crate::settings::is_capsule),
+    // Boards kept as combos, to be put up again from the picker's 组合
+    // (deskgrid.ts setsOf).
+    "boardSets" set With(crate::settings::is_board_sets),
+    // Each widget's row in the open island, small or medium, by its id
+    // (island.ts rowSize; addons/ drops a plugin's when it goes).
+    "widgetSize"; "Record<string, string>" set With(crate::settings::is_widget_sizes),
+    // The agent a letter is handed to (mail/agent.rs).
+    "mailAgent" set OneOf(&["claude", "codex", "agy"]),
+    // The Mail page in two panes (list, letter), or one.
+    "mailPanes" set OneOf(&["one", "two"]),
+    // The senders whose letters show their pictures from elsewhere
+    // (settings-letter.ts): their addresses, in lower case.
+    "mailPictures"; "string[]" set With(crate::settings::is_addresses),
 }
 
 #[cfg(test)]
@@ -560,6 +634,52 @@ mod tests {
         assert_eq!(config.widgets_off, vec!["monitor".to_string()]);
         assert_eq!(config.raw(Key("nothing")), &Value::Null);
         assert_eq!(Config::default().home(), if cfg!(windows) { "taskbar" } else { "island" });
+    }
+
+    // The keys declared that the pages may not set: hers alone to write
+    // (where she is, what she has told, what she took from Windows), or
+    // set by a command of their own (the mail accounts: mail_save). One
+    // more here is a key that lost its check, or a new one without.
+    #[test]
+    fn the_keys_the_pages_may_not_set() {
+        let mut none: Vec<&str> = NAMES.iter().copied().filter(|key| check_of(key).is_none()).collect();
+        none.sort_unstable();
+        assert_eq!(none, ["crashTold", "lookDefaults", "mail", "taskbarPinned", "taskbarPinsImported", "trayPinned", "updateTold", "welcomeOpened", "x", "y"]);
+        assert!(check_of("nothing").is_none());
+        // Each check is a declared key's, once.
+        assert_eq!(CHECKS.len() + none.len(), NAMES.len());
+    }
+
+    // Each kind of check passes what it says, and nothing near it. (That
+    // they pass what settings.rs's match on the keys' names passed was
+    // seen once, key by key over a hundred values, before that match went:
+    // 2026-11-14.)
+    #[test]
+    fn the_checks_pass_what_they_say() {
+        let passes = |key: &str, v: Value| check_of(key).unwrap().passes_alone(&v);
+        assert_eq!(passes("dnd", json!(true)), Some(true));
+        assert_eq!(passes("dnd", json!(false)), Some(true));
+        for no in [json!("true"), json!(1), Value::Null] {
+            assert_eq!(passes("dnd", no.clone()), Some(false), "{no}");
+        }
+        assert_eq!(passes("lang", json!("zh")), Some(true));
+        for no in [json!("fr"), json!("ZH"), json!(""), json!(1), json!(["zh"])] {
+            assert_eq!(passes("lang", no.clone()), Some(false), "{no}");
+        }
+        assert_eq!(passes("splitBar", json!(48)), Some(true));
+        for no in [json!(40), json!(48.0), json!("48"), json!(-32)] {
+            assert_eq!(passes("splitBar", no.clone()), Some(false), "{no}");
+        }
+        // One of its own (settings.rs is_hold).
+        assert_eq!(passes("hold", json!("seen")), Some(true));
+        assert_eq!(passes("hold", json!(2)), Some(false));
+        // One that asks her: not to be said without her.
+        assert_eq!(passes("pet", json!("claude-chan")), None);
+        assert_eq!(passes("shortcutDeny", json!("Alt+N")), None);
+        // A few words are the pages' type for it.
+        assert_eq!(ts_type("string", None, None, Some(&Check::OneOf(&["a", "b"]))), "'a' | 'b'");
+        assert_eq!(ts_type("string", None, Some("any"), Some(&Check::OneOf(&["a", "b"]))), "any");
+        assert_eq!(ts_type("boolean", None, None, Some(&Check::Bool)), "boolean");
     }
 
     // src/shared/config.ts's declared keys are these, a line each, written

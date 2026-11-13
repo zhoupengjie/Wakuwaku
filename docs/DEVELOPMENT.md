@@ -99,8 +99,8 @@ src-tauri/
     crash.rs, crash/      崩溃报告：panic 钩子、未处理异常过滤器、守护进程看退出码、WebView2 进程挂掉；常开的尾日志、脱敏（redact.rs）、问一次、发到中转
     proxy.rs              网络代理（通用页，netProxy）：她联网（更新、崩溃报告、LHM 下载、插件、市场、宠物图库）怎么走（web_ways）、自己跟跳转的 GET（get，更新和市场共用）、「测试」；Windows 的系统代理、手填的代理地址（邮件也用）
     wallpaper.rs          每块显示器的桌面壁纸：文件、摆法、底色（IDesktopWallpaper），给任务栏的云母用
-    config.rs             她的设置（数据目录的 config.json）在 Rust 这边的每个键：常量、字段名、种类、默认值，各声明一次（keys! 宏）；由它生成设置的快照 Config：文件的整个对象（map），加上每个键按种类读出的字段。读设置是 `sh.config().dnd`、`sh.config().display.as_deref()`，拼错了编译不过；也由它写出 src/shared/config.ts 里声明的那些键
-    settings.rs           设置看到的快照、校验后的设置补丁、设置的各个命令
+    config.rs             她的设置（数据目录的 config.json）在 Rust 这边的每个键：常量、字段名、种类、默认值，各声明一次（keys! 宏）；由它生成设置的快照 Config：文件的整个对象（map），加上每个键按种类读出的字段。读设置是 `sh.config().dnd`、`sh.config().display.as_deref()`，拼错了编译不过；页面能把每个键设成什么（`set`，Check）也写在声明里；也由它写出 src/shared/config.ts 里声明的那些键
+    settings.rs           设置看到的快照、校验后的设置补丁（每个键的校验在 config.rs 的声明里，这里是其中有结构的那些校验函数）、设置的各个命令
     pointer.rs            两个窗口共用的点击穿透
     screen.rs             各个显示器的工作区、设备名（\\.\DISPLAY1）和标识（设置 homeDisplay 用它记她在哪块屏）
     asks.rs               确认请求：交还 DeepSeek Harness 自己窗口后，那个会话改成等你去 DSH 里答（handed_event，一个 AgentEvent，也发给 /v1 的订阅者）；确认请求本身（显示什么、每个选择回给各家 hook 什么、什么时候算在别处答过、排队和超时）在 agent-core 的 asks.rs，拒绝时说的话由她传进去
@@ -960,8 +960,8 @@ zhoupengjie/Wakuwaku#44：exe 改名后 Run 还指着旧文件，开机什么也
 - **焦点**：只有设置会拿键盘。页面打开设置时调 `pet_keyboard(true)`，Rust 先记下当前前台窗口（`focus.rs`），再让岛的窗口可获得焦点并聚焦。悬停展开、自动展开、来了确认请求都不碰焦点，所以终端里打的字不会被吃掉。
 - **收起**：Esc、点 ✕、点面板头部，或窗口失去焦点（点岛外面：`WindowEvent::Focused(false)` → `island:blur`）。鼠标移开不收起。收起时页面发 `settings_closed`，Rust 让窗口变回不可获得焦点；如果前台还是岛（Esc、✕ 的情况），把焦点还给记下的窗口。
 - **只有宠物时**：打开设置会临时升起一颗岛（`Island.temp`，`payload.islandTemp` 让页面把自己当成"岛开着"），收起后等岛缩回（620ms）再藏起来。设置里切成灵动岛模式，岛就留下来。
-- **数据**：页面打开时取一次快照（`settings_get`），之后 Rust 在状态、确认请求、设置变化时推 `settings:changed`（每秒最多 4 次）。改动先在页面上显示，再发 `settings_set` 补丁，Rust 按白名单校验（`settings.rs` 的 `is_ok`），大小、显示方式、出门通过窗口去改，她的位置不跳。
-- **键在 Rust 这边**（`config.rs`）：Rust 读的每个设置都在 `config.rs` 里声明一次：常量名、字段名、种类、默认值（新配置从这些默认值开始，`data.rs` 的 `defaults`），比如 `DND dnd: Flag = "dnd" => false`。种类决定字段的类型：`Flag` 只有 `true` 算开、`On` 只有 `false` 算关（都是 `bool`），`Text`、`Num`、`UInt`、`Int`、`YesNo` 是 `Option<String/f64/u64/i64/bool>`（不是这个类型就是 `None`，调用处自己给缺省值，和以前 `as_str().unwrap_or(..)` 一样），`List` 是字符串列表，`Raw` 是原样的 JSON（没有就是 `Null`）。只有页面用、Rust 不读的键只登记默认值，不生成常量和字段。加一个 Rust 要读的设置：在 `config.rs` 里加一行，读的地方用 `sh.config().字段`；`CONFIG_TS_BLESS=1 cargo test config` 把它写进 `src/shared/config.ts`；`settings.rs` 的 `is_ok` 照旧要放行它。
+- **数据**：页面打开时取一次快照（`settings_get`），之后 Rust 在状态、确认请求、设置变化时推 `settings:changed`（每秒最多 4 次）。改动先在页面上显示，再发 `settings_set` 补丁，Rust 按白名单校验（每个键能设成什么写在 `config.rs` 的声明里，见下一条；`settings.rs` 的 `is_ok` 查它），大小、显示方式、出门通过窗口去改，她的位置不跳。
+- **键在 Rust 这边**（`config.rs`）：Rust 读的每个设置都在 `config.rs` 里声明一次：常量名、字段名、种类、默认值（新配置从这些默认值开始，`data.rs` 的 `defaults`），比如 `DND dnd: Flag = "dnd" => false`。种类决定字段的类型：`Flag` 只有 `true` 算开、`On` 只有 `false` 算关（都是 `bool`），`Text`、`Num`、`UInt`、`Int`、`YesNo` 是 `Option<String/f64/u64/i64/bool>`（不是这个类型就是 `None`，调用处自己给缺省值，和以前 `as_str().unwrap_or(..)` 一样），`List` 是字符串列表，`Raw` 是原样的 JSON（没有就是 `Null`）。只有页面用、Rust 不读的键只登记默认值，不生成常量和字段。加一个 Rust 要读的设置：在 `config.rs` 里加一行，读的地方用 `sh.config().字段`；`CONFIG_TS_BLESS=1 cargo test config` 把它写进 `src/shared/config.ts`。**页面能把它设成什么也写在这一行**（2026-11-14 起；之前是 `settings.rs` 里按键名写的一个大 `match`，和声明不在一处）：行尾的 `set <Check>`，`Bool`（true / false）、`OneOf(&["auto", "zh", "en"])`（这几个词之一，`config.ts` 里的类型也跟着是 `'auto' | 'zh' | 'en'`）、`UIntOf(&[32, 48])`（这几个整数之一）、`With(函数)`（布局、列表这类有结构的，函数在 `settings.rs` 或它所属的模块里）、`Asking(函数)`（要问她才知道的：有哪些宠物、快捷键有没有重复）。没写 `set` 的键页面改不了（`config.rs` 的测试 `the_keys_the_pages_may_not_set` 列着是哪几个，多出一个就失败）。只有页面用、Rust 不读、但要经补丁设置的键（`capsule`、`boardSets`、`widgetSize`、`mailAgent`……）也在这里声明一行，只为它的 `set`。
 - **快照**（2026-11-12 起）：`Shared::settings` 是 `Lock<Arc<Config>>`。`sh.config()` 只在锁里拿走一个 Arc 就放锁，之后怎么读都不再碰锁；一处要读几个键时先 `let config = sh.config();`，读到的是同一时刻的。改设置（`Shared::change`、`keep_settings`）在锁里复制一份对象、改、写文件、换上新的快照，旧快照留给还拿着它的人。`config.json` 的格式没变：快照里存着文件的整个对象，页面写进来、`config.rs` 没声明的键，和类型不对的值（比如手改过的文件），都照样原样读进、写回、发给页面（`data.rs` 的测试 `a_key_not_declared_is_kept`，`config.rs` 的测试 `the_snapshot_keeps_the_object_whole`），新旧版本互相兼容。
 - **高度**：面板宽 520px，正文高度不超过屏幕（`screen.availHeight` 减去头、页签、脚），超出的在正文里滚动；页签切换时岛的高度用弹簧过渡。
 

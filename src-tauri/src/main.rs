@@ -375,6 +375,7 @@ fn main() {
             mail::mail_switch,
             mail::letters::mail_letters,
             mail::letters::mail_letter,
+            mail::letters::mail_open_link,
             mail::agent::mail_hand,
             mail::agent::mail_say,
             mail::letters::mail_flag,

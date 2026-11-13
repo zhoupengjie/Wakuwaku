@@ -364,6 +364,8 @@ function bridge() {
       flag: (id: unknown, uid: unknown, on: boolean, folder?: unknown) => invoke('mail_flag', { id: String(id), uid: Number(uid), on: on === true, folder: String(folder || 'inbox') }),
       say: (key: unknown, text: unknown) => invoke('mail_say', { key: String(key), text: String(text || '') }),
       letter: (id: unknown, uid: unknown, folder?: unknown) => invoke('mail_letter', { id: String(id), uid: Number(uid), folder: String(folder || 'inbox') }),
+      // A letter's link in the default browser: a web address alone (letters.rs web_address); whether it was.
+      openLink: (url: unknown) => invoke('mail_open_link', { url: String(url || '') }),
       // An account's sync (or every one's, '*') to look at the server now.
       kick: (id: unknown) => invoke('mail_kick', { id: String(id) }),
       // The letter being written, as kept in the data folder (null: none).

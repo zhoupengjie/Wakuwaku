@@ -1597,6 +1597,80 @@
   background: var(--g3);
 }
 
+/* A letter's link's menu (settings-letter.ts linkMenu): why it is asked
+   about, and where it goes, over its buttons; never wider than a column. */
+#island-settings .mi-warn,
+#island-settings .mi-url {
+  max-width: 320px;
+  padding: 4px 10px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+#island-settings .mi-warn {
+  color: #ffb340;
+}
+
+#island-settings .mi-url {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--g4);
+  user-select: text;
+}
+
+.set-light #island-settings .mi-warn,
+.set-light #island-settings .mtip.warn {
+  color: #b25e00;
+}
+
+/* Where a link pointed at goes, at the foot of the letter as a browser shows
+   it (settings-letter.ts showTip): one line, cut at its end. */
+#island-settings .mtip {
+  position: absolute;
+  z-index: 9;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: var(--g2);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: var(--g5);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+#island-settings .mtip[hidden] {
+  display: none;
+}
+
+#island-settings .mtip.warn {
+  color: #ffb340;
+}
+
+.set-light #island-settings .mtip {
+  background: #ffffff;
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.14),
+    0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+/* A web address in a letter's plain text, a link (textWithLinks). */
+#island-settings .m-link {
+  color: #5e9eff;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.set-light #island-settings .m-link {
+  color: #005fb8;
+}
+
 #island-settings .cmd {
   flex: 1;
   min-width: 0;

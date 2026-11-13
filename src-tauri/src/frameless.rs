@@ -45,8 +45,8 @@
 // kept so the same way (keep_layered), as tao writes its style back.
 use std::ffi::c_void;
 use crate::lock::Lock;
+use crate::win32::{Hwnd, Rect, GetWindowLongPtrW, GetWindowRect, IsIconic, RegisterWindowMessageW, SetWindowLongPtrW, SetWindowPos};
 
-type Hwnd = *mut c_void;
 type Subclass = unsafe extern "system" fn(Hwnd, u32, usize, isize, usize, usize) -> isize;
 
 const GWL_STYLE: i32 = -16;
@@ -93,13 +93,7 @@ extern "system" {
 
 #[link(name = "user32")]
 extern "system" {
-    fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
-    fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
-    fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
-    fn IsIconic(hwnd: Hwnd) -> i32;
-    fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
     fn RedrawWindow(hwnd: Hwnd, rect: *const c_void, region: isize, flags: u32) -> i32;
-    fn RegisterWindowMessageW(name: *const u16) -> u32;
     fn SendMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
 }
 
@@ -241,15 +235,6 @@ pub fn wipe(hwnd: isize) {
 pub fn minimized(hwnd: isize) -> bool {
     // SAFETY: a plain call about a window; a stale handle answers no.
     unsafe { IsIconic(hwnd as Hwnd) != 0 }
-}
-
-#[repr(C)]
-#[derive(Default)]
-struct Rect {
-    left: i32,
-    top: i32,
-    right: i32,
-    bottom: i32,
 }
 
 // Where a window of hers is and how big (physical: x, y, w, h), asked of

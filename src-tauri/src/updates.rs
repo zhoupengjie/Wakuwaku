@@ -953,12 +953,8 @@ pub fn wait_after_update(args: &[String], port: u16) {
     let Some(pid) = args.iter().position(|a| a == AFTER_UPDATE).and_then(|i| args.get(i + 1)).and_then(|p| p.parse::<u32>().ok()) else { return };
     #[cfg(windows)]
     {
-        #[link(name = "kernel32")]
-        extern "system" {
-            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
-            fn WaitForSingleObject(handle: isize, ms: u32) -> u32;
-            fn CloseHandle(handle: isize) -> i32;
-        }
+        use crate::win32::{CloseHandle, OpenProcess, WaitForSingleObject};
+
         const SYNCHRONIZE: u32 = 0x0010_0000;
         // SAFETY: a handle we close; waits on it alone.
         unsafe {

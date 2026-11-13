@@ -1,6 +1,7 @@
 // Presses anywhere, watched while a list or flyout of the strip is open (a
 // low-level mouse hook on the taskbar's thread): one outside closes it.
 use super::*;
+use crate::win32::{CallNextHookEx, SetWindowsHookExW, UnhookWindowsHookEx};
 
 // A press anywhere, told to the page while it has something open (the
 // windows listed above a button, the folded tray icons) that closes on
@@ -21,15 +22,6 @@ pub(super) struct MouseLl {
     flags: u32,
     time: u32,
     extra: usize,
-}
-
-pub(super) type HookProc = extern "system" fn(i32, usize, isize) -> isize;
-
-#[link(name = "user32")]
-extern "system" {
-    pub(super) fn SetWindowsHookExW(id: i32, proc_: HookProc, module: isize, thread: u32) -> isize;
-    pub(super) fn UnhookWindowsHookEx(hook: isize) -> i32;
-    pub(super) fn CallNextHookEx(hook: isize, code: i32, wparam: usize, lparam: isize) -> isize;
 }
 
 pub fn watch_presses(on: bool) {

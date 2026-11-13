@@ -83,6 +83,7 @@ pub fn parse(hex: &str) -> Option<[u8; 3]> {
 mod imp {
     use winreg::enums::{HKEY_CURRENT_USER, KEY_SET_VALUE};
     use winreg::{RegKey, RegValue};
+    use crate::win32::{GetProcAddress, LoadLibraryW, SendMessageTimeoutW};
 
     // Its two colours, 0x00bbggrr each (the top byte as Windows keeps it, 0xff).
     #[repr(C)]
@@ -110,17 +111,6 @@ mod imp {
 
     type GetColorization = extern "system" fn(*mut Colorization) -> i32;
     type SetColorization = extern "system" fn(*const Colorization, u32) -> i32;
-
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn LoadLibraryW(name: *const u16) -> isize;
-        fn GetProcAddress(module: isize, name: *const u8) -> *const ();
-    }
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn SendMessageTimeoutW(hwnd: *mut std::ffi::c_void, msg: u32, wparam: usize, lparam: isize, flags: u32, ms: u32, result: *mut usize) -> isize;
-    }
 
     // A system library's export that has no name, by its number; null
     // should it be missing.

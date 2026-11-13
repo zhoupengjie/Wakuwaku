@@ -230,19 +230,8 @@ pub(super) fn draw_scaled(canvas: &mut [u8], cw: i32, (x, y, w, h): (i32, i32, i
 // A layered window of ours shown at (x, y, w, h) with this picture
 // (premultiplied BGRA, top-down, w x h).
 pub(super) fn show_layered(host: Hwnd, (x, y, w, h): (i32, i32, i32, i32), canvas: &[u8]) {
-    #[repr(C)]
-    struct Blend {
-        op: u8,
-        flags: u8,
-        alpha: u8,
-        format: u8,
-    }
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetDC(hwnd: Hwnd) -> isize;
-        fn ReleaseDC(hwnd: Hwnd, dc: isize) -> i32;
-        fn UpdateLayeredWindow(hwnd: Hwnd, dst: isize, at: *const Point, size: *const Point, src: isize, from: *const Point, key: u32, blend: *const Blend, flags: u32) -> i32;
-    }
+    use crate::win32::{Blend, GetDC, ReleaseDC, UpdateLayeredWindow};
+
     const ULW_ALPHA: u32 = 0x2;
     const SWP_NOSIZE: u32 = 0x1;
     const SWP_NOMOVE: u32 = 0x2;
@@ -386,10 +375,8 @@ pub fn thumbs_on_top() {
 // the dock lies above its pictures' window, walking up from that
 // window through the windows over it; only then raised, not waiting.
 pub fn dock_thumbs_over(dock: isize) {
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetWindow(hwnd: Hwnd, cmd: u32) -> Hwnd;
-    }
+    use crate::win32::GetWindow;
+
     const GW_HWNDPREV: u32 = 3;
     const SWP_NOSIZE: u32 = 0x1;
     const SWP_NOMOVE: u32 = 0x2;

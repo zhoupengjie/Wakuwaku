@@ -123,28 +123,13 @@ pub mod kmt {
 
 #[cfg(windows)]
 mod imp {
-    use std::ffi::c_void;
+    use crate::win32::{MonitorInfo, Point, Rect, GetMonitorInfoW, MonitorFromPoint};
 
-    #[repr(C)]
-    #[derive(Clone, Copy, Default)]
-    struct Point {
-        x: i32,
-        y: i32,
-    }
-
+    // MONITORINFOEXW: MONITORINFO with the display's name after it, which
+    // GetMonitorInfoW fills as well when the size says so.
     #[repr(C)]
     #[derive(Default)]
-    struct Rect {
-        left: i32,
-        top: i32,
-        right: i32,
-        bottom: i32,
-    }
-
-    // MONITORINFOEXW.
-    #[repr(C)]
-    #[derive(Default)]
-    struct MonitorInfo {
+    struct MonitorInfoEx {
         size: u32,
         monitor: Rect,
         work: Rect,
@@ -169,15 +154,6 @@ mod imp {
         source: u32,
     }
 
-    // GetMonitorInfoW given the longer MONITORINFOEXW here (the display's
-    // name), the plain MONITORINFO elsewhere: the same call.
-    #[allow(clashing_extern_declarations)]
-    #[link(name = "user32")]
-    extern "system" {
-        fn MonitorFromPoint(pt: Point, flags: u32) -> *mut c_void;
-        fn GetMonitorInfoW(monitor: *mut c_void, info: *mut MonitorInfo) -> i32;
-    }
-
     #[link(name = "gdi32")]
     extern "system" {
         fn D3DKMTOpenAdapterFromGdiDisplayName(open: *mut OpenFromName) -> i32;
@@ -191,8 +167,8 @@ mod imp {
         // SAFETY: our own structs, sized as the calls ask; the adapter opened is closed.
         unsafe {
             let monitor = MonitorFromPoint(Point { x, y }, MONITOR_DEFAULTTONEAREST);
-            let mut info = MonitorInfo { size: std::mem::size_of::<MonitorInfo>() as u32, ..Default::default() };
-            if monitor.is_null() || GetMonitorInfoW(monitor, &mut info) == 0 {
+            let mut info = MonitorInfoEx { size: std::mem::size_of::<MonitorInfoEx>() as u32, ..Default::default() };
+            if monitor.is_null() || GetMonitorInfoW(monitor, &mut info as *mut MonitorInfoEx as *mut MonitorInfo) == 0 {
                 return None;
             }
             let mut open = OpenFromName { device: info.device, ..Default::default() };

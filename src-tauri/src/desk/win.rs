@@ -1,13 +1,11 @@
 // Windows' side of the desktop's windows (desk/mod.rs imp).
-// Windows' calls declared as the other modules declare them (taskbar/,
-// backplate.rs, fullscreen.rs: the same shapes, or Rust warns).
-use std::ffi::c_void;
+// Windows' calls other parts make too are win32.rs's; those below are
+// the desktop's alone.
 use std::sync::Arc;
 
 use super::desks;
 use crate::Shared;
-
-type Hwnd = *mut c_void;
+use crate::win32::{Hwnd, Msg, WndClassExW, CallNextHookEx, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, FindWindowExW, FindWindowW, GetAsyncKeyState, GetClassNameW, GetCurrentThreadId, GetMessageW, GetModuleHandleW, GetTickCount, GetWindow, GetWindowLongPtrW, IsIconic, IsWindowVisible, KillTimer, PostMessageW, PostQuitMessage, PostThreadMessageW, RegisterClassExW, SetTimer, SetWinEventHook, SetWindowLongPtrW, SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage, UnhookWinEvent, UnhookWindowsHookEx};
 
 #[repr(C)]
 struct DisplayDevice {
@@ -19,79 +17,9 @@ struct DisplayDevice {
     key: [u16; 128],
 }
 
-#[repr(C)]
-struct Point {
-    x: i32,
-    y: i32,
-}
-
-#[repr(C)]
-struct Msg {
-    hwnd: Hwnd,
-    message: u32,
-    wparam: usize,
-    lparam: isize,
-    time: u32,
-    pt: Point,
-    private: u32,
-}
-
-#[repr(C)]
-struct WndClassExW {
-    size: u32,
-    style: u32,
-    wndproc: extern "system" fn(Hwnd, u32, usize, isize) -> isize,
-    cls_extra: i32,
-    wnd_extra: i32,
-    instance: isize,
-    icon: isize,
-    cursor: isize,
-    background: isize,
-    menu_name: *const u16,
-    class_name: *const u16,
-    icon_sm: isize,
-}
-
-type WinEventProc = extern "system" fn(isize, u32, Hwnd, i32, i32, u32, u32);
-
 #[link(name = "user32")]
 extern "system" {
     fn EnumDisplayDevicesW(device: *const u16, index: u32, dd: *mut DisplayDevice, flags: u32) -> i32;
-    fn FindWindowW(class: *const u16, title: *const u16) -> Hwnd;
-    fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
-    fn GetWindow(hwnd: Hwnd, cmd: u32) -> Hwnd;
-    fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
-    fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
-    fn IsWindowVisible(hwnd: Hwnd) -> i32;
-    fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
-    fn SetWinEventHook(min: u32, max: u32, module: isize, func: WinEventProc, pid: u32, tid: u32, flags: u32) -> isize;
-    fn RegisterClassExW(wc: *const WndClassExW) -> u16;
-    fn CreateWindowExW(ex: u32, class: *const u16, name: *const u16, style: u32, x: i32, y: i32, w: i32, h: i32, parent: Hwnd, menu: isize, instance: isize, param: *mut c_void) -> Hwnd;
-    fn DefWindowProcW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
-    fn GetMessageW(msg: *mut Msg, hwnd: Hwnd, min: u32, max: u32) -> i32;
-    fn TranslateMessage(msg: *const Msg) -> i32;
-    fn DispatchMessageW(msg: *const Msg) -> isize;
-    fn SetTimer(hwnd: Hwnd, id: usize, ms: u32, f: *const c_void) -> usize;
-    fn PostMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> i32;
-    fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
-    fn KillTimer(hwnd: Hwnd, id: usize) -> i32;
-    fn SetWindowsHookExW(id: i32, proc_: HookProc, module: isize, thread: u32) -> isize;
-    fn CallNextHookEx(hook: isize, code: i32, wparam: usize, lparam: isize) -> isize;
-    fn UnhookWinEvent(hook: isize) -> i32;
-    fn PostQuitMessage(code: i32);
-    fn DestroyWindow(hwnd: Hwnd) -> i32;
-    fn IsIconic(hwnd: Hwnd) -> i32;
-    fn GetAsyncKeyState(key: i32) -> i16;
-    fn ShowWindow(hwnd: Hwnd, cmd: i32) -> i32;
-    fn UnhookWindowsHookEx(hook: isize) -> i32;
-    fn PostThreadMessageW(thread: u32, msg: u32, wparam: usize, lparam: isize) -> i32;
-}
-
-#[link(name = "kernel32")]
-extern "system" {
-    fn GetModuleHandleW(name: *const u16) -> isize;
-    fn GetCurrentThreadId() -> u32;
-    fn GetTickCount() -> u32;
 }
 
 const EDD_GET_DEVICE_INTERFACE_NAME: u32 = 1;
@@ -718,7 +646,6 @@ pub fn arm_stale() {
 
 // Debug only (WAKUWAKU_DESK_TRACE=1): every message the main thread
 // takes, counted by kind (desk/ minute): what wakes it.
-type HookProc = extern "system" fn(i32, usize, isize) -> isize;
 #[repr(C)]
 struct CwpStruct {
     lparam: isize,

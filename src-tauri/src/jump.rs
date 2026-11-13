@@ -39,10 +39,7 @@ mod imp {
     use std::path::{Path, PathBuf};
 
     use super::Chain;
-
-    type Hwnd = *mut c_void;
-    // As shared.rs declares them too (one signature per function).
-    type Handle = isize;
+    use crate::win32::{FileTime, Handle, Hwnd, ProcessEntry, CloseHandle, CreateToolhelp32Snapshot, EnumWindows, GetAncestor, GetCurrentThreadId, GetForegroundWindow, GetProcessTimes, GetWindow, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, OpenProcess, PostMessageW, Process32FirstW, Process32NextW, SetForegroundWindow, ShellExecuteW, ShowWindow};
 
     // Where a chain stops: the processes every program runs under.
     const ROOTS: [&str; 10] = [
@@ -63,36 +60,8 @@ mod imp {
     const CONSOLES: [&str; 2] = ["conhost.exe", "openconsole.exe"];
     const MAX_CHAIN: usize = 16;
 
-    #[repr(C)]
-    struct ProcessEntry {
-        size: u32,
-        usage: u32,
-        pid: u32,
-        heap: usize,
-        module: u32,
-        threads: u32,
-        parent: u32,
-        priority: i32,
-        flags: u32,
-        exe: [u16; 260],
-    }
-
-    #[repr(C)]
-    #[derive(Default)]
-    struct FileTime {
-        low: u32,
-        high: u32,
-    }
-
     #[link(name = "kernel32")]
     extern "system" {
-        fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> Handle;
-        fn Process32FirstW(snap: Handle, entry: *mut ProcessEntry) -> i32;
-        fn Process32NextW(snap: Handle, entry: *mut ProcessEntry) -> i32;
-        fn CloseHandle(handle: Handle) -> i32;
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
-        fn GetProcessTimes(process: Handle, created: *mut FileTime, exited: *mut FileTime, kernel: *mut FileTime, user: *mut FileTime) -> i32;
-        fn GetCurrentThreadId() -> u32;
         fn AttachConsole(pid: u32) -> i32;
         fn FreeConsole() -> i32;
         fn GetConsoleWindow() -> Hwnd;
@@ -128,26 +97,10 @@ mod imp {
 
     #[link(name = "user32")]
     extern "system" {
-        fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
-        fn IsWindowVisible(hwnd: Hwnd) -> i32;
-        fn IsIconic(hwnd: Hwnd) -> i32;
-        fn GetWindow(hwnd: Hwnd, cmd: u32) -> Hwnd;
-        fn GetWindowTextW(hwnd: Hwnd, text: *mut u16, max: i32) -> i32;
         fn GetWindowLongW(hwnd: Hwnd, index: i32) -> i32;
-        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
-        fn ShowWindow(hwnd: Hwnd, cmd: i32) -> i32;
-        fn SetForegroundWindow(hwnd: Hwnd) -> i32;
-        fn GetForegroundWindow() -> Hwnd;
         fn BringWindowToTop(hwnd: Hwnd) -> i32;
         fn AttachThreadInput(from: u32, to: u32, attach: i32) -> i32;
-        fn GetAncestor(hwnd: Hwnd, flags: u32) -> Hwnd;
         fn GetLastActivePopup(hwnd: Hwnd) -> Hwnd;
-        fn PostMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> i32;
-    }
-
-    #[link(name = "shell32")]
-    extern "system" {
-        fn ShellExecuteW(hwnd: Hwnd, op: *const u16, file: *const u16, params: *const u16, dir: *const u16, show: i32) -> isize;
     }
 
     const TH32CS_SNAPPROCESS: u32 = 0x2;

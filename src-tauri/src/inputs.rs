@@ -44,11 +44,7 @@ mod imp {
     use serde_json::{json, Value};
     use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
     use winreg::RegKey;
-
-    type Hwnd = *mut c_void;
-
-    #[repr(C)]
-    struct Guid(u32, u16, u16, [u8; 8]);
+    use crate::win32::{Guid, Msg, Point, CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, DestroyIcon, DispatchMessageW, GetCurrentThreadId, GetFileVersionInfoSizeW, GetFileVersionInfoW, GetForegroundWindow, GetLocaleInfoEx, GetMessageW, GetModuleHandleW, PeekMessageW, PostMessageW, PostThreadMessageW, VerQueryValueW};
 
     // Windows' input switcher: its class, IInputSwitchControl, and
     // IInputSwitchCallback (the one after it), which it calls.
@@ -151,23 +147,6 @@ mod imp {
     const LOCALE_SLOCALIZEDDISPLAYNAME: u32 = 0x2;
 
     #[repr(C)]
-    struct Point {
-        x: i32,
-        y: i32,
-    }
-
-    #[repr(C)]
-    struct Msg {
-        hwnd: Hwnd,
-        message: u32,
-        wparam: usize,
-        lparam: isize,
-        time: u32,
-        pt: Point,
-        private: u32,
-    }
-
-    #[repr(C)]
     struct OsVersion {
         size: u32,
         major: u32,
@@ -177,33 +156,11 @@ mod imp {
         service_pack: [u16; 128],
     }
 
-    #[link(name = "ole32")]
-    extern "system" {
-        fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
-        fn CoUninitialize();
-        fn CoCreateInstance(clsid: *const Guid, outer: *mut c_void, ctx: u32, iid: *const Guid, out: *mut *mut c_void) -> i32;
-        fn CoTaskMemFree(p: *mut c_void);
-    }
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetMessageW(msg: *mut Msg, hwnd: Hwnd, min: u32, max: u32) -> i32;
-        fn PeekMessageW(msg: *mut Msg, hwnd: Hwnd, min: u32, max: u32, remove: u32) -> i32;
-        fn DispatchMessageW(msg: *const Msg) -> isize;
-        fn PostThreadMessageW(thread: u32, msg: u32, wparam: usize, lparam: isize) -> i32;
-        fn PostMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> i32;
-        fn GetForegroundWindow() -> Hwnd;
-        fn DestroyIcon(icon: isize) -> i32;
-    }
-
     #[link(name = "kernel32")]
     extern "system" {
-        fn GetCurrentThreadId() -> u32;
-        fn GetModuleHandleW(name: *const u16) -> isize;
         fn GetProcessHeap() -> isize;
         fn HeapValidate(heap: isize, flags: u32, mem: *const c_void) -> i32;
         fn HeapSize(heap: isize, flags: u32, mem: *const c_void) -> usize;
-        fn GetLocaleInfoEx(name: *const u16, what: u32, out: *mut u16, len: i32) -> i32;
         fn ExpandEnvironmentStringsW(from: *const u16, to: *mut u16, len: u32) -> u32;
         fn GetWindowsDirectoryW(out: *mut u16, len: u32) -> u32;
     }
@@ -216,13 +173,6 @@ mod imp {
     #[link(name = "shlwapi")]
     extern "system" {
         fn SHLoadIndirectString(source: *const u16, out: *mut u16, len: u32, reserved: *mut c_void) -> i32;
-    }
-
-    #[link(name = "version")]
-    extern "system" {
-        fn GetFileVersionInfoSizeW(name: *const u16, handle: *mut u32) -> u32;
-        fn GetFileVersionInfoW(name: *const u16, handle: u32, len: u32, data: *mut c_void) -> i32;
-        fn VerQueryValueW(block: *const c_void, sub: *const u16, buffer: *mut *mut c_void, len: *mut u32) -> i32;
     }
 
     #[link(name = "shell32")]

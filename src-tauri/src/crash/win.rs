@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use crate::Shared;
+use crate::win32::{Hwnd, CloseHandle, CreateFileW, EnumWindows, GetClassNameW, GetCurrentProcess, GetCurrentThreadId, GetProcAddress, GetWindowThreadProcessId, LoadLibraryExW, OpenProcess, TerminateProcess};
 
 #[repr(C)]
 struct ExceptionRecord {
@@ -34,32 +35,19 @@ extern "system" {
     fn RtlCaptureStackBackTrace(skip: u32, count: u32, frames: *mut *mut c_void, hash: *mut u32) -> u16;
     fn GetModuleHandleExW(flags: u32, name: *const u16, module: *mut isize) -> i32;
     fn GetModuleFileNameW(module: isize, name: *mut u16, size: u32) -> u32;
-    fn CreateFileW(name: *const u16, access: u32, share: u32, security: *mut c_void, disposition: u32, flags: u32, template: isize) -> isize;
     fn WriteFile(file: isize, buf: *const u8, len: u32, written: *mut u32, overlapped: *mut c_void) -> i32;
-    fn CloseHandle(handle: isize) -> i32;
-    fn GetCurrentThreadId() -> u32;
-    fn GetCurrentProcess() -> isize;
-    fn TerminateProcess(process: isize, code: u32) -> i32;
-    fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
     fn OpenThread(access: u32, inherit: i32, thread: u32) -> isize;
     fn SuspendThread(thread: isize) -> u32;
     fn ResumeThread(thread: isize) -> u32;
     #[cfg(target_arch = "x86_64")]
     fn GetThreadContext(thread: isize, context: *mut Context) -> i32;
     fn K32GetModuleBaseNameW(process: isize, module: isize, name: *mut u16, size: u32) -> u32;
-    fn LoadLibraryExW(name: *const u16, file: isize, flags: u32) -> isize;
-    fn GetProcAddress(module: isize, name: *const u8) -> *const ();
 }
-
-type Hwnd = *mut c_void;
 
 #[link(name = "user32")]
 extern "system" {
     fn MessageBoxW(hwnd: isize, text: *const u16, caption: *const u16, kind: u32) -> i32;
-    fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
-    fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
     fn IsHungAppWindow(hwnd: Hwnd) -> i32;
-    fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
 }
 
 const FROM_ADDRESS: u32 = 0x4;

@@ -48,9 +48,7 @@ mod imp {
     use std::ffi::c_void;
 
     use super::{Keys, Task};
-
-    type Hwnd = *mut c_void;
-    type Handle = isize;
+    use crate::win32::{Guid, Handle, Hwnd, Point, Rect as WinRect, CloseHandle, CoInitializeEx, CreateWindowExW, DestroyIcon, DestroyWindow, DwmFlush, DwmSetWindowAttribute, EnumWindows, FindWindowExW, GetAsyncKeyState, GetClassNameW, GetCursorPos, GetFileVersionInfoSizeW, GetFileVersionInfoW, GetForegroundWindow, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible, IsZoomed, OpenProcess, PostMessageW, QueryFullProcessImageNameW, SendMessageTimeoutW, SetForegroundWindow, SetWindowPos, ShellExecuteW, ShowWindow, VerQueryValueW};
 
     #[link(name = "imm32")]
     extern "system" {
@@ -76,12 +74,8 @@ mod imp {
     #[link(name = "shell32")]
     extern "system" {
         fn SHGetFileInfoW(path: *const u16, attributes: u32, info: *mut ShFileInfo, size: u32, flags: u32) -> usize;
-        fn ShellExecuteW(hwnd: Hwnd, op: *const u16, file: *const u16, params: *const u16, dir: *const u16, show: i32) -> isize;
         fn SHGetPropertyStoreForWindow(hwnd: Hwnd, iid: *const Guid, out: *mut *mut c_void) -> i32;
     }
-
-    #[repr(C)]
-    struct Guid(u32, u16, u16, [u8; 8]);
 
     #[repr(C)]
     struct PropertyKey {
@@ -115,7 +109,6 @@ mod imp {
 
     #[link(name = "ole32")]
     extern "system" {
-        fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
         fn PropVariantClear(value: *mut PropVariant) -> i32;
     }
 
@@ -188,50 +181,17 @@ mod imp {
         }
     }
 
-    #[link(name = "version")]
-    extern "system" {
-        fn GetFileVersionInfoSizeW(name: *const u16, handle: *mut u32) -> u32;
-        fn GetFileVersionInfoW(name: *const u16, handle: u32, len: u32, data: *mut c_void) -> i32;
-        fn VerQueryValueW(block: *const c_void, sub: *const u16, buffer: *mut *mut c_void, len: *mut u32) -> i32;
-    }
-
     #[link(name = "user32")]
     extern "system" {
-        fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
-        fn IsWindowVisible(hwnd: Hwnd) -> i32;
-        fn IsIconic(hwnd: Hwnd) -> i32;
-        fn IsZoomed(hwnd: Hwnd) -> i32;
-        fn IsWindow(hwnd: Hwnd) -> i32;
-        fn GetWindow(hwnd: Hwnd, cmd: u32) -> Hwnd;
-        fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
-        fn GetWindowTextW(hwnd: Hwnd, text: *mut u16, max: i32) -> i32;
         fn InternalGetWindowText(hwnd: Hwnd, text: *mut u16, max: i32) -> i32;
-        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
-        fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
-        fn GetForegroundWindow() -> Hwnd;
-        fn ShowWindow(hwnd: Hwnd, cmd: i32) -> i32;
-        fn PostMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> i32;
-        fn SendMessageTimeoutW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize, flags: u32, ms: u32, result: *mut usize) -> isize;
         fn GetClassLongPtrW(hwnd: Hwnd, index: i32) -> usize;
-        fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
         fn GetKeyboardLayout(thread: u32) -> isize;
         fn GetKeyState(vk: i32) -> i16;
-        fn GetAsyncKeyState(vk: i32) -> i16;
-        fn DestroyIcon(icon: isize) -> i32;
     }
 
     #[link(name = "dwmapi")]
     extern "system" {
         fn DwmGetWindowAttribute(hwnd: Hwnd, attr: u32, value: *mut c_void, size: u32) -> i32;
-        fn DwmSetWindowAttribute(hwnd: Hwnd, attr: u32, value: *const c_void, size: u32) -> i32;
-        fn DwmFlush() -> i32;
-    }
-
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
-        fn CloseHandle(handle: Handle) -> i32;
-        fn QueryFullProcessImageNameW(process: Handle, flags: u32, name: *mut u16, size: *mut u32) -> i32;
     }
 
     const GW_OWNER: u32 = 4;
@@ -601,11 +561,6 @@ mod imp {
         crate::jump::bring_window(hwnd)
     }
 
-    #[link(name = "user32")]
-    extern "system" {
-        fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
-    }
-
     const SWP_NOSIZE: u32 = 0x1;
     const SWP_NOMOVE: u32 = 0x2;
     const SWP_NOACTIVATE: u32 = 0x10;
@@ -624,20 +579,6 @@ mod imp {
         // SAFETY: the callback only pushes onto the Vec, which outlives the call.
         unsafe { EnumWindows(stack, &mut all as *mut Vec<isize> as isize) };
         all.into_iter().filter(|h| hwnds.contains(h)).collect()
-    }
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetWindowRect(hwnd: Hwnd, rect: *mut WinRect) -> i32;
-    }
-
-    #[repr(C)]
-    #[derive(Default)]
-    struct WinRect {
-        left: i32,
-        top: i32,
-        right: i32,
-        bottom: i32,
     }
 
     const HWND_TOPMOST: isize = -1;
@@ -877,17 +818,6 @@ mod imp {
         fn AppendMenuW(menu: isize, flags: u32, id: usize, text: *const u16) -> i32;
         fn DestroyMenu(menu: isize) -> i32;
         fn TrackPopupMenuEx(menu: isize, flags: u32, x: i32, y: i32, hwnd: Hwnd, params: *const c_void) -> i32;
-        fn CreateWindowExW(ex: u32, class: *const u16, title: *const u16, style: u32, x: i32, y: i32, w: i32, h: i32, parent: Hwnd, menu: isize, instance: isize, param: *mut c_void) -> Hwnd;
-        fn DestroyWindow(hwnd: Hwnd) -> i32;
-        fn SetForegroundWindow(hwnd: Hwnd) -> i32;
-        fn GetCursorPos(at: *mut MenuAt) -> i32;
-    }
-
-    #[repr(C)]
-    #[derive(Default)]
-    struct MenuAt {
-        x: i32,
-        y: i32,
     }
 
     const GWL_STYLE: i32 = -16;
@@ -976,7 +906,7 @@ mod imp {
                 AppendMenuW(menu, MF_SEPARATOR, 0, std::ptr::null());
                 AppendMenuW(menu, MF_STRING, ALL_CLOSE, wide(words[2]).as_ptr());
             }
-            let mut at = MenuAt::default();
+            let mut at = Point::default();
             GetCursorPos(&mut at);
             let owner = CreateWindowExW(WS_EX_TOOLWINDOW as u32, wide("STATIC").as_ptr(), std::ptr::null(), WS_POPUP, at.x, at.y, 0, 0, std::ptr::null_mut(), 0, 0, std::ptr::null_mut());
             if owner.is_null() {

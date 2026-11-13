@@ -696,11 +696,7 @@ pub mod pdh {
     pub const NOCAP100: u32 = 0x8000;
     const MORE_DATA: u32 = 0x800007D2;
 
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn LoadLibraryExW(name: *const u16, file: isize, flags: u32) -> isize;
-        fn GetProcAddress(module: isize, name: *const u8) -> *const ();
-    }
+    use crate::win32::{GetProcAddress, LoadLibraryExW};
 
     // One of System32's libraries, and its functions by name.
     pub fn system_library(name: &str) -> Option<impl Fn(&std::ffi::CStr) -> Option<*const ()>> {
@@ -848,6 +844,7 @@ mod imp {
     use super::pdh::{self, Query};
     use super::*;
     use crate::gpu::kmt;
+    use crate::win32::{MemoryStatus, CloseHandle, CreateFileW, GlobalMemoryStatusEx};
 
     // A rate is not read from a collection this long after the last (it
     // would be the average since then).
@@ -934,28 +931,12 @@ mod imp {
         health_failed: bool,
     }
 
-    #[repr(C)]
-    struct MemoryStatus {
-        length: u32,
-        load: u32,
-        total_phys: u64,
-        avail_phys: u64,
-        total_page: u64,
-        avail_page: u64,
-        total_virtual: u64,
-        avail_virtual: u64,
-        avail_extended: u64,
-    }
-
     #[link(name = "kernel32")]
     extern "system" {
-        fn GlobalMemoryStatusEx(status: *mut MemoryStatus) -> i32;
         fn K32GetPerformanceInfo(info: *mut u8, size: u32) -> i32;
         fn GetLogicalProcessorInformationEx(relation: i32, buf: *mut u8, len: *mut u32) -> i32;
         fn GetActiveProcessorCount(group: u16) -> u32;
-        fn CreateFileW(name: *const u16, access: u32, share: u32, security: *mut std::ffi::c_void, disposition: u32, flags: u32, template: isize) -> isize;
         fn DeviceIoControl(device: isize, code: u32, input: *const u8, input_size: u32, output: *mut u8, output_size: u32, returned: *mut u32, overlapped: *mut u8) -> i32;
-        fn CloseHandle(handle: isize) -> i32;
     }
 
     const IOCTL_STORAGE_QUERY_PROPERTY: u32 = 0x002D_1400;

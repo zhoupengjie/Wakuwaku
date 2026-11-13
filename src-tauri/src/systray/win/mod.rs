@@ -7,9 +7,7 @@ use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, Ordering};
 
 use super::{asked, battery_said, explorers_battery, file_name, guid_bytes, holds, icon_name, nim_name, path_in, Holds, Press, Shown, EXPLORERS_BATTERY};
-
-type Hwnd = *mut c_void;
-type Handle = isize;
+use crate::win32::{Handle, Hwnd, ProcessEntry, WndClassExW, CloseHandle, CreateToolhelp32Snapshot, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow, EnumWindows, FindWindowExW, FindWindowW, GetClassNameW, GetForegroundWindow, GetLastError, GetModuleHandleW, GetWindowThreadProcessId, IsWindow, OpenProcess, PostMessageW, Process32FirstW, Process32NextW, QueryFullProcessImageNameW, RegisterClassExW, RegisterWindowMessageW, SendMessageTimeoutW, SetForegroundWindow, SetWindowPos};
 
 #[repr(C)]
 struct CopyData {
@@ -64,73 +62,12 @@ struct RectQuestion {
     guid: [u8; 16],
 }
 
-#[repr(C)]
-struct WndClassExW {
-    size: u32,
-    style: u32,
-    wndproc: extern "system" fn(Hwnd, u32, usize, isize) -> isize,
-    cls_extra: i32,
-    wnd_extra: i32,
-    instance: isize,
-    icon: isize,
-    cursor: isize,
-    background: isize,
-    menu_name: *const u16,
-    class_name: *const u16,
-    icon_sm: isize,
-}
-
 #[link(name = "user32")]
 extern "system" {
-    fn RegisterClassExW(class: *const WndClassExW) -> u16;
-    fn CreateWindowExW(ex: u32, class: *const u16, title: *const u16, style: u32, x: i32, y: i32, w: i32, h: i32, parent: Hwnd, menu: isize, instance: isize, param: *mut c_void) -> Hwnd;
-    fn DestroyWindow(hwnd: Hwnd) -> i32;
-    fn DefWindowProcW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
-    fn FindWindowW(class: *const u16, title: *const u16) -> Hwnd;
-    fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
-    fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
-    fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
-    fn SendMessageTimeoutW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize, flags: u32, ms: u32, result: *mut usize) -> isize;
     fn SendNotifyMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> i32;
-    fn PostMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> i32;
-    fn RegisterWindowMessageW(name: *const u16) -> u32;
-    fn IsWindow(hwnd: Hwnd) -> i32;
-    fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
-    fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
     fn CopyIcon(icon: isize) -> isize;
-    fn DestroyIcon(icon: isize) -> i32;
     fn AllowSetForegroundWindow(pid: u32) -> i32;
-    fn SetForegroundWindow(hwnd: Hwnd) -> i32;
-    fn GetForegroundWindow() -> Hwnd;
     fn InSendMessageEx(reserved: *mut c_void) -> u32;
-}
-
-#[link(name = "kernel32")]
-extern "system" {
-    fn GetModuleHandleW(name: *const u16) -> isize;
-    fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
-    fn CloseHandle(handle: Handle) -> i32;
-    fn QueryFullProcessImageNameW(process: Handle, flags: u32, name: *mut u16, size: *mut u32) -> i32;
-    fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> Handle;
-    fn Process32FirstW(snapshot: Handle, entry: *mut ProcessEntry) -> i32;
-    fn Process32NextW(snapshot: Handle, entry: *mut ProcessEntry) -> i32;
-    fn GetLastError() -> u32;
-}
-
-// PROCESSENTRY32W: every process's file name, SYSTEM's too, which
-// OpenProcess does not give a person's process (nvcontainer.exe's).
-#[repr(C)]
-struct ProcessEntry {
-    size: u32,
-    usage: u32,
-    pid: u32,
-    heap: usize,
-    module: u32,
-    threads: u32,
-    parent: u32,
-    priority: i32,
-    flags: u32,
-    exe: [u16; 260],
 }
 
 const WM_COMMAND: u32 = 0x0111;
@@ -881,10 +818,8 @@ mod tests {
 
     #[test]
     fn explorers_battery_is_known_by_its_window_and_uid() {
-        #[link(name = "user32")]
-        extern "system" {
-            fn GetDesktopWindow() -> Hwnd;
-        }
+        use crate::win32::GetDesktopWindow;
+
         // No window named, or one gone: not Explorer's.
         assert_eq!(explorers_battery_of(&nid(0, 1225, NIF_GUID, "")), None);
         assert_eq!(explorers_battery_of(&nid(0x7a05, 1225, NIF_GUID, "")), None);

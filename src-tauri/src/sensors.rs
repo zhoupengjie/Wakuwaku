@@ -478,6 +478,7 @@ mod imp {
     use sha2::{Digest, Sha256};
 
     use super::*;
+    use crate::win32::{CloseHandle, ConvertSecurityDescriptorToStringSecurityDescriptorW, ConvertStringSecurityDescriptorToSecurityDescriptorW, GetProcAddress, LoadLibraryExW, LocalFree, WaitForSingleObject};
 
     // The CPU's maker and its family/model, from CPUID.
     enum Vendor {
@@ -534,14 +535,9 @@ mod imp {
 
     #[link(name = "kernel32")]
     extern "system" {
-        fn LoadLibraryExW(name: *const u16, file: isize, flags: u32) -> isize;
-        fn GetProcAddress(module: isize, name: *const u8) -> *const ();
         fn SetDefaultDllDirectories(flags: u32) -> i32;
         fn CreateMutexW(attrs: *const core::ffi::c_void, owner: i32, name: *const u16) -> isize;
-        fn WaitForSingleObject(handle: isize, ms: u32) -> u32;
         fn ReleaseMutex(handle: isize) -> i32;
-        fn CloseHandle(handle: isize) -> i32;
-        fn LocalFree(mem: *mut core::ffi::c_void) -> *mut core::ffi::c_void;
     }
 
     // A program's DLL search, named so nothing is picked up from a folder a
@@ -557,10 +553,6 @@ mod imp {
 
     #[link(name = "advapi32")]
     extern "system" {
-        fn ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl: *const u16, revision: u32, sd: *mut *mut core::ffi::c_void, size: *mut u32) -> i32;
-        // PSECURITY_DESCRIPTOR, a PVOID, as lhm_setup.rs declares it too: two
-        // declarations that differ are a warning (clashing_extern_declarations).
-        fn ConvertSecurityDescriptorToStringSecurityDescriptorW(sd: *mut core::ffi::c_void, revision: u32, info: u32, sddl: *mut *mut u16, len: *mut u32) -> i32;
         fn SetFileSecurityW(file: *const u16, info: u32, sd: *const core::ffi::c_void) -> i32;
         fn GetFileSecurityW(file: *const u16, info: u32, sd: *mut u8, len: u32, needed: *mut u32) -> i32;
     }

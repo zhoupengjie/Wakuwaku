@@ -145,15 +145,7 @@ impl Edge {
 mod imp {
     use super::Edge;
     use std::ffi::c_void;
-
-    #[repr(C)]
-    #[derive(Default)]
-    struct Rect {
-        left: i32,
-        top: i32,
-        right: i32,
-        bottom: i32,
-    }
+    use crate::win32::{Hwnd, MonitorInfo, Point, Rect, EnumWindows, GetMonitorInfoW, GetWindowRect, IsWindowVisible, IsZoomed, MonitorFromPoint, MonitorFromWindow, SetWindowPos, SystemParametersInfoW};
 
     #[repr(C)]
     pub struct AppBarData {
@@ -168,36 +160,6 @@ mod imp {
     #[link(name = "shell32")]
     extern "system" {
         fn SHAppBarMessage(message: u32, data: *mut AppBarData) -> usize;
-    }
-
-    #[repr(C)]
-    #[derive(Default)]
-    struct MonitorInfo {
-        size: u32,
-        monitor: Rect,
-        work: Rect,
-        flags: u32,
-    }
-
-    #[repr(C)]
-    struct Point {
-        x: i32,
-        y: i32,
-    }
-
-    type Hwnd = *mut c_void;
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn MonitorFromPoint(pt: Point, flags: u32) -> *mut c_void;
-        fn GetMonitorInfoW(monitor: *mut c_void, info: *mut MonitorInfo) -> i32;
-        fn SystemParametersInfoW(action: u32, param: u32, pv: *mut c_void, flags: u32) -> i32;
-        fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
-        fn IsWindowVisible(hwnd: Hwnd) -> i32;
-        fn IsZoomed(hwnd: Hwnd) -> i32;
-        fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
-        fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
-        fn MonitorFromWindow(hwnd: Hwnd, flags: u32) -> *mut c_void;
     }
 
     const MONITOR_DEFAULTTONEAREST: u32 = 2;

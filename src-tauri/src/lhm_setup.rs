@@ -1399,22 +1399,9 @@ mod imp {
     use std::path::{Path, PathBuf};
 
     use super::Asked;
-
-    type Handle = isize;
-
-    #[repr(C)]
-    struct ProcessEntry {
-        size: u32,
-        usage: u32,
-        pid: u32,
-        heap: usize,
-        module: u32,
-        threads: u32,
-        parent: u32,
-        priority: i32,
-        flags: u32,
-        exe: [u16; 260],
-    }
+    use crate::win32::{Guid, Handle, ProcessEntry, CloseHandle, CoInitializeEx, CoTaskMemFree, CoUninitialize, ConvertSecurityDescriptorToStringSecurityDescriptorW, ConvertStringSecurityDescriptorToSecurityDescriptorW, CreateToolhelp32Snapshot, GetExitCodeProcess, GetLastError, LocalFree, OpenProcess, Process32FirstW, Process32NextW, QueryFullProcessImageNameW, ShellExecuteW, WaitForSingleObject};
+    #[cfg(test)]
+    use crate::win32::{GetCurrentProcess, GetTokenInformation, OpenProcessToken};
 
     // SHELLEXECUTEINFOW.
     #[repr(C)]
@@ -1436,35 +1423,11 @@ mod imp {
         process: Handle,
     }
 
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> Handle;
-        fn Process32FirstW(snap: Handle, entry: *mut ProcessEntry) -> i32;
-        fn Process32NextW(snap: Handle, entry: *mut ProcessEntry) -> i32;
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
-        fn QueryFullProcessImageNameW(process: Handle, flags: u32, name: *mut u16, size: *mut u32) -> i32;
-        fn CloseHandle(handle: Handle) -> i32;
-        fn WaitForSingleObject(handle: Handle, ms: u32) -> u32;
-        fn GetExitCodeProcess(process: Handle, code: *mut u32) -> i32;
-        fn GetLastError() -> u32;
-    }
-
-    #[link(name = "ole32")]
-    extern "system" {
-        fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
-        fn CoUninitialize();
-        fn CoTaskMemFree(memory: *mut c_void);
-    }
-
     #[link(name = "shell32")]
     extern "system" {
         fn ShellExecuteExW(info: *mut ExecInfo) -> i32;
-        fn ShellExecuteW(hwnd: *mut c_void, op: *const u16, file: *const u16, params: *const u16, dir: *const u16, show: i32) -> isize;
         fn SHGetKnownFolderPath(id: *const Guid, flags: u32, token: Handle, path: *mut *mut u16) -> i32;
     }
-
-    #[repr(C)]
-    struct Guid(u32, u16, u16, [u8; 8]);
 
     // FOLDERID_ProgramFiles.
     const PROGRAM_FILES: Guid = Guid(0x905E_63B6, 0xC1BF, 0x494E, [0xB2, 0x9C, 0x65, 0xB7, 0x32, 0xD3, 0xD2, 0x1A]);
@@ -1480,20 +1443,11 @@ mod imp {
     #[link(name = "kernel32")]
     extern "system" {
         fn CreateDirectoryW(path: *const u16, attributes: *const SecurityAttributes) -> i32;
-        fn LocalFree(memory: *mut c_void) -> *mut c_void;
-        #[cfg(test)]
-        fn GetCurrentProcess() -> Handle;
     }
 
     #[link(name = "advapi32")]
     extern "system" {
-        fn ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl: *const u16, revision: u32, descriptor: *mut *mut c_void, size: *mut u32) -> i32;
-        fn ConvertSecurityDescriptorToStringSecurityDescriptorW(descriptor: *mut c_void, revision: u32, info: u32, sddl: *mut *mut u16, len: *mut u32) -> i32;
         fn GetNamedSecurityInfoW(name: *const u16, kind: u32, info: u32, owner: *mut *mut c_void, group: *mut *mut c_void, dacl: *mut *mut c_void, sacl: *mut *mut c_void, descriptor: *mut *mut c_void) -> u32;
-        #[cfg(test)]
-        fn OpenProcessToken(process: Handle, access: u32, token: *mut Handle) -> i32;
-        #[cfg(test)]
-        fn GetTokenInformation(token: Handle, class: i32, info: *mut c_void, len: u32, needed: *mut u32) -> i32;
     }
 
     const SDDL_REVISION_1: u32 = 1;

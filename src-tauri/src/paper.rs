@@ -24,9 +24,7 @@ mod imp {
     use serde_json::{json, Value};
 
     use super::{EVERY, POSITIONS};
-
-    #[repr(C)]
-    struct Guid(u32, u16, u16, [u8; 8]);
+    use crate::win32::{Guid, CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, SHCreateItemFromParsingName, SystemParametersInfoW};
 
     const CLSID_DESKTOP_WALLPAPER: Guid = Guid(0xC2CF_3110, 0x460E, 0x4FC1, [0xB9, 0xD0, 0x8A, 0x1C, 0x0C, 0x9C, 0xC4, 0xBD]);
     const IID_IDESKTOP_WALLPAPER: Guid = Guid(0xB92B_56A9, 0x8B55, 0x4E14, [0x9A, 0x89, 0x01, 0x99, 0xBB, 0xB6, 0xF9, 0x3B]);
@@ -84,23 +82,9 @@ mod imp {
         spec: *const u16,
     }
 
-    #[link(name = "ole32")]
-    extern "system" {
-        fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
-        fn CoUninitialize();
-        fn CoCreateInstance(clsid: *const Guid, outer: *mut c_void, ctx: u32, iid: *const Guid, out: *mut *mut c_void) -> i32;
-        fn CoTaskMemFree(p: *mut c_void);
-    }
-
     #[link(name = "shell32")]
     extern "system" {
-        fn SHCreateItemFromParsingName(path: *const u16, bind: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> i32;
         fn SHCreateShellItemArrayFromShellItem(item: *mut Obj, iid: *const Guid, out: *mut *mut c_void) -> i32;
-    }
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn SystemParametersInfoW(action: u32, param: u32, pv: *mut c_void, flags: u32) -> i32;
     }
 
     // An object's method by its place, as a function of the shape asked.

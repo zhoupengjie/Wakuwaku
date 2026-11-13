@@ -102,9 +102,7 @@ mod imp {
     use std::ffi::c_void;
 
     use serde_json::{json, Value};
-
-    #[repr(C)]
-    struct Guid(u32, u16, u16, [u8; 8]);
+    use crate::win32::{Guid, CoTaskMemFree, SHCreateItemFromParsingName};
 
     #[repr(C)]
     struct PropertyKey {
@@ -130,12 +128,6 @@ mod imp {
     #[link(name = "shell32")]
     extern "system" {
         fn SHCreateItemFromIDList(pidl: *const c_void, iid: *const Guid, out: *mut *mut c_void) -> i32;
-        fn SHCreateItemFromParsingName(path: *const u16, ctx: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> i32;
-    }
-
-    #[link(name = "ole32")]
-    extern "system" {
-        fn CoTaskMemFree(p: *mut c_void);
     }
 
     // An object's method by its place, as a function of the shape asked.

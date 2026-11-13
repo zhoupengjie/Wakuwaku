@@ -26,74 +26,20 @@ pub const GUARD_ARG: &str = "--taskbar-guard";
 
 #[cfg(windows)]
 mod imp {
-    use std::ffi::c_void;
     use std::path::Path;
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use serde_json::{json, Value};
 
     use crate::appbar::{self, Edge};
-
-    type Hwnd = *mut c_void;
-    type Handle = isize;
-
-    #[repr(C)]
-    #[derive(Default)]
-    struct FileTime {
-        low: u32,
-        high: u32,
-    }
+    use crate::win32::{FileTime, Hwnd, MonitorInfo, Rect, CloseHandle, EnumWindows, FindWindowExW, FindWindowW, GetClassNameW, GetExitCodeProcess, GetModuleHandleW, GetMonitorInfoW, GetProcAddress, GetProcessTimes, GetShellWindow, GetWindowRect, GetWindowThreadProcessId, IsWindow, IsWindowVisible, MonitorFromWindow, OpenProcess, QueryFullProcessImageNameW, RegisterWindowMessageW, SetWindowPos, ShowWindow, WaitForSingleObject};
 
     #[link(name = "user32")]
     extern "system" {
-        fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
-        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
-        fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
-        fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
-        fn IsWindowVisible(hwnd: Hwnd) -> i32;
-        fn ShowWindow(hwnd: Hwnd, cmd: i32) -> i32;
-        fn RegisterWindowMessageW(name: *const u16) -> u32;
-        fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
-        fn MonitorFromWindow(hwnd: Hwnd, flags: u32) -> *mut c_void;
-        fn GetMonitorInfoW(monitor: *mut c_void, info: *mut MonitorInfo) -> i32;
-        fn GetShellWindow() -> Hwnd;
-        fn FindWindowW(class: *const u16, title: *const u16) -> Hwnd;
-        fn IsWindow(hwnd: Hwnd) -> i32;
         fn ShowWindowAsync(hwnd: Hwnd, cmd: i32) -> i32;
-        fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
-    }
-
-    #[repr(C)]
-    #[derive(Default)]
-    struct Rect {
-        left: i32,
-        top: i32,
-        right: i32,
-        bottom: i32,
-    }
-
-    #[repr(C)]
-    #[derive(Default)]
-    struct MonitorInfo {
-        size: u32,
-        monitor: Rect,
-        work: Rect,
-        flags: u32,
     }
 
     const MONITOR_DEFAULTTONEAREST: u32 = 2;
-
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
-        fn CloseHandle(handle: Handle) -> i32;
-        fn WaitForSingleObject(handle: Handle, ms: u32) -> u32;
-        fn GetProcessTimes(process: Handle, created: *mut FileTime, exited: *mut FileTime, kernel: *mut FileTime, user: *mut FileTime) -> i32;
-        fn GetExitCodeProcess(process: Handle, code: *mut u32) -> i32;
-        fn QueryFullProcessImageNameW(process: Handle, flags: u32, name: *mut u16, size: *mut u32) -> i32;
-        fn GetModuleHandleW(name: *const u16) -> isize;
-        fn GetProcAddress(module: isize, name: *const u8) -> *const ();
-    }
 
     const SW_HIDE: i32 = 0;
     const SW_SHOWNA: i32 = 8;

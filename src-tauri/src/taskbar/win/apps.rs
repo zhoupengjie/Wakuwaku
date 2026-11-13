@@ -38,15 +38,7 @@ extern "system" {
 
 #[link(name = "gdi32")]
 extern "system" {
-    pub(super) fn BitBlt(dst: isize, x: i32, y: i32, w: i32, h: i32, src: isize, sx: i32, sy: i32, rop: u32) -> i32;
     pub(super) fn GetDIBits(dc: isize, bmp: isize, start: u32, lines: u32, bits: *mut u8, info: *mut BitmapInfoHeader, usage: u32) -> i32;
-}
-
-#[link(name = "user32")]
-extern "system" {
-    pub(super) fn GetDC(hwnd: Hwnd) -> isize;
-    pub(super) fn ReleaseDC(hwnd: Hwnd, dc: isize) -> i32;
-    pub(super) fn MonitorFromWindow(hwnd: Hwnd, flags: u32) -> *mut c_void;
 }
 
 pub(super) const FOLDERID_APPS: KnownGuid = KnownGuid(0x1E87_508D, 0x89C2, 0x42F0, [0x8A, 0x7E, 0x64, 0x5A, 0x0F, 0x50, 0xCA, 0x58]);
@@ -69,11 +61,6 @@ pub(super) struct ItemVtbl {
 #[repr(C)]
 pub(super) struct Item {
     vtbl: *const ItemVtbl,
-}
-
-#[link(name = "ole32")]
-extern "system" {
-    pub(super) fn CoTaskMemFree(p: *mut c_void);
 }
 
 pub(super) const IID_SHELL_ITEM: KnownGuid = KnownGuid(0x4382_6D1E, 0xE718, 0x42EE, [0xBC, 0x55, 0xA1, 0xE2, 0x61, 0xC3, 0x7B, 0xFE]);

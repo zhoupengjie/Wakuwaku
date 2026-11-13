@@ -123,6 +123,7 @@ src-tauri/
     market.rs             插件市场：读目录（GitHub / Gitee 的 release「market」）、从市场装（大小和 SHA-256 对得上才交给 addons/）、每天看一次更新
     packs.rs              资源包（宠物、壁纸）：装进 <数据目录>/pets/<id> 或 wallpapers/<id>（标上 pack.json，不碰你自己的同名宠物）、更新、卸载时退回默认宠物和留住桌面那一张
     zip.rs                读 zip、解压（LHM 下载、插件包共用；原来在 lhm_setup.rs）
+    win32.rs              不止一个模块调用的 Windows 函数（user32、kernel32、gdi32、ole32……）和它们用到的结构体（Hwnd、Handle、Rect、Point、Msg……），各声明一次，用的地方 `use crate::win32::{…}`。只有一个模块调用的留在那个模块里；第二个模块要用时搬过来（它的测试从源码里查：同一个函数不能在两个文件里声明）。examples/ 里用 `#[path]` 引源文件的例子也要带上它
     scripts.rs            写出 waku 给终端用；邮件的 agent 启动 PowerShell 脚本时用的引号和 job object
     mail.rs, mail/        邮件：找服务器（像 Thunderbird 那样）、IMAP（io-imap）、每个邮箱一个线程盯着收件箱、收件箱和读信、写信和发信（SMTP）、走代理、交给 Claude / Codex / Antigravity、密码存进凭据管理器
     notify.rs             系统通知（登记 AppUserModelId 后发 toast）

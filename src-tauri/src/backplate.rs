@@ -66,42 +66,7 @@ mod imp {
     use std::time::Instant;
 
     use super::{Plate, ISLAND, PLATES};
-
-    type Hwnd = *mut c_void;
-
-    #[repr(C)]
-    struct WndClassExW {
-        size: u32,
-        style: u32,
-        wndproc: extern "system" fn(Hwnd, u32, usize, isize) -> isize,
-        cls_extra: i32,
-        wnd_extra: i32,
-        instance: isize,
-        icon: isize,
-        cursor: isize,
-        background: isize,
-        menu_name: *const u16,
-        class_name: *const u16,
-        icon_sm: isize,
-    }
-
-    #[repr(C)]
-    #[derive(Default, Clone, Copy)]
-    struct Point {
-        x: i32,
-        y: i32,
-    }
-
-    #[repr(C)]
-    struct Msg {
-        hwnd: Hwnd,
-        message: u32,
-        wparam: usize,
-        lparam: isize,
-        time: u32,
-        pt: Point,
-        private: u32,
-    }
+    use crate::win32::{Hwnd, Msg, WndClassExW, CreateSolidBrush, CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, DwmSetWindowAttribute, GetMessageW, GetModuleHandleW, GetProcAddress, KillTimer, LoadLibraryW, PostMessageW, RegisterClassExW, SetLayeredWindowAttributes, SetTimer, SetWindowPos, ShowWindow};
 
     // ACCENT_POLICY and WINDOWCOMPOSITIONATTRIBDATA, as the shell has them.
     #[repr(C)]
@@ -120,39 +85,6 @@ mod imp {
     }
 
     type SetComposition = unsafe extern "system" fn(Hwnd, *const CompositionData) -> i32;
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn RegisterClassExW(wc: *const WndClassExW) -> u16;
-        fn CreateWindowExW(ex: u32, class: *const u16, name: *const u16, style: u32, x: i32, y: i32, w: i32, h: i32, parent: Hwnd, menu: isize, instance: isize, param: *mut c_void) -> Hwnd;
-        fn DefWindowProcW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
-        fn GetMessageW(msg: *mut Msg, hwnd: Hwnd, min: u32, max: u32) -> i32;
-        fn DispatchMessageW(msg: *const Msg) -> isize;
-        fn PostMessageW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> i32;
-        fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
-        fn ShowWindow(hwnd: Hwnd, cmd: i32) -> i32;
-        fn SetLayeredWindowAttributes(hwnd: Hwnd, key: u32, alpha: u8, flags: u32) -> i32;
-        fn SetTimer(hwnd: Hwnd, id: usize, ms: u32, f: *const c_void) -> usize;
-        fn KillTimer(hwnd: Hwnd, id: usize) -> i32;
-        fn DestroyWindow(hwnd: Hwnd) -> i32;
-    }
-
-    #[link(name = "gdi32")]
-    extern "system" {
-        fn CreateSolidBrush(colour: u32) -> isize;
-    }
-
-    #[link(name = "dwmapi")]
-    extern "system" {
-        fn DwmSetWindowAttribute(hwnd: Hwnd, attribute: u32, value: *const c_void, size: u32) -> i32;
-    }
-
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn GetModuleHandleW(name: *const u16) -> isize;
-        fn LoadLibraryW(name: *const u16) -> isize;
-        fn GetProcAddress(module: isize, name: *const u8) -> *const ();
-    }
 
     const WS_POPUP: u32 = 0x8000_0000;
     const WS_EX_TOOLWINDOW: u32 = 0x80;

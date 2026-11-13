@@ -7,6 +7,7 @@
 // handover (strip_picture).
 use super::*;
 use crate::lock::Lock;
+use crate::win32::{FindWindowExW, GetWindowThreadProcessId};
 
 pub(super) struct Host {
     pub(super) hwnd: isize,
@@ -90,11 +91,6 @@ pub fn explorer_room(mon: (i32, i32, i32, i32)) -> Option<(i32, i32, i32, i32)> 
 // at once hand the tray's place back and forth twice a second, and her
 // menus change under the pointer (2026-10-10: a session's hook started
 // the live copy while a test copy held it).
-#[link(name = "user32")]
-extern "system" {
-    pub(super) fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
-    pub(super) fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
-}
 
 pub(super) static WAITING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

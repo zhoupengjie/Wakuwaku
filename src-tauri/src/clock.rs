@@ -75,18 +75,7 @@ pub use imp::tip;
 
 #[cfg(windows)]
 mod imp {
-    #[repr(C)]
-    #[derive(Default, Clone, Copy)]
-    struct SystemTime {
-        year: u16,
-        month: u16,
-        weekday: u16,
-        day: u16,
-        hour: u16,
-        minute: u16,
-        second: u16,
-        ms: u16,
-    }
+    use crate::win32::{SystemTime, GetLocalTime, GetLocaleInfoEx};
 
     // DYNAMIC_TIME_ZONE_INFORMATION.
     #[repr(C)]
@@ -104,12 +93,10 @@ mod imp {
 
     #[link(name = "kernel32")]
     extern "system" {
-        fn GetLocalTime(time: *mut SystemTime);
         fn GetSystemTime(time: *mut SystemTime);
         fn SystemTimeToTzSpecificLocalTimeEx(zone: *const Zone, utc: *const SystemTime, local: *mut SystemTime) -> i32;
         fn GetDateFormatEx(locale: *const u16, flags: u32, date: *const SystemTime, format: *const u16, out: *mut u16, len: i32, calendar: *const u16) -> i32;
         fn GetTimeFormatEx(locale: *const u16, flags: u32, time: *const SystemTime, format: *const u16, out: *mut u16, len: i32) -> i32;
-        fn GetLocaleInfoEx(locale: *const u16, what: u32, out: *mut u16, len: i32) -> i32;
     }
 
     #[link(name = "advapi32")]

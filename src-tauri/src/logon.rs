@@ -116,9 +116,7 @@ pub fn how_long(seconds: f64) -> String {
 mod imp {
     use std::ffi::c_void;
     use std::ptr::null_mut;
-
-    #[repr(C)]
-    struct Guid(u32, u16, u16, [u8; 8]);
+    use crate::win32::{Guid, CloseHandle, CoCreateInstance, CoInitializeEx, CoUninitialize, GetCurrentProcess, GetTokenInformation, LocalFree, OpenProcessToken};
 
     const CLSID_TASK_SCHEDULER: Guid = Guid(0x0F87_369F, 0xA4E5, 0x4CFC, [0xBD, 0x3E, 0x73, 0xE6, 0x15, 0x45, 0x72, 0xDD]);
     const IID_ITASK_SERVICE: Guid = Guid(0x2FAB_A4C7, 0x4DA9, 0x4013, [0x96, 0x97, 0x20, 0xCC, 0x3F, 0xD4, 0x0F, 0x85]);
@@ -225,13 +223,6 @@ mod imp {
         _current_time: i64,
     }
 
-    #[link(name = "ole32")]
-    extern "system" {
-        fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
-        fn CoUninitialize();
-        fn CoCreateInstance(clsid: *const Guid, outer: *mut c_void, ctx: u32, iid: *const Guid, out: *mut *mut c_void) -> i32;
-    }
-
     #[link(name = "oleaut32")]
     extern "system" {
         fn SysAllocStringLen(text: *const u16, len: u32) -> Bstr;
@@ -241,16 +232,11 @@ mod imp {
 
     #[link(name = "advapi32")]
     extern "system" {
-        fn OpenProcessToken(process: isize, access: u32, token: *mut isize) -> i32;
-        fn GetTokenInformation(token: isize, class: i32, info: *mut c_void, len: u32, needed: *mut u32) -> i32;
         fn ConvertSidToStringSidW(sid: *mut c_void, text: *mut *mut u16) -> i32;
     }
 
     #[link(name = "kernel32")]
     extern "system" {
-        fn GetCurrentProcess() -> isize;
-        fn CloseHandle(handle: isize) -> i32;
-        fn LocalFree(memory: *mut c_void) -> *mut c_void;
         fn GetSystemTimeAsFileTime(time: *mut i64);
     }
 

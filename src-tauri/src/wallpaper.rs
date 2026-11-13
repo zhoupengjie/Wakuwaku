@@ -76,23 +76,12 @@ mod imp {
     use std::path::PathBuf;
 
     use super::{Paper, POSITIONS};
-
-    #[repr(C)]
-    struct Guid(u32, u16, u16, [u8; 8]);
+    use crate::win32::{Guid, Rect, CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize};
 
     const CLSID_DESKTOP_WALLPAPER: Guid = Guid(0xC2CF_3110, 0x460E, 0x4FC1, [0xB9, 0xD0, 0x8A, 0x1C, 0x0C, 0x9C, 0xC4, 0xBD]);
     const IID_IDESKTOP_WALLPAPER: Guid = Guid(0xB92B_56A9, 0x8B55, 0x4E14, [0x9A, 0x89, 0x01, 0x99, 0xBB, 0xB6, 0xF9, 0x3B]);
     const COINIT_APARTMENTTHREADED: u32 = 0x2;
     const CLSCTX_ALL: u32 = 0x17;
-
-    #[repr(C)]
-    #[derive(Default, PartialEq)]
-    struct Rect {
-        left: i32,
-        top: i32,
-        right: i32,
-        bottom: i32,
-    }
 
     // IDesktopWallpaper's table, as far as what is asked of it (the
     // setters' places kept, never called).
@@ -115,14 +104,6 @@ mod imp {
     #[repr(C)]
     struct Obj {
         vtbl: *const Vtbl,
-    }
-
-    #[link(name = "ole32")]
-    extern "system" {
-        fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
-        fn CoUninitialize();
-        fn CoCreateInstance(clsid: *const Guid, outer: *mut c_void, ctx: u32, iid: *const Guid, out: *mut *mut c_void) -> i32;
-        fn CoTaskMemFree(p: *mut c_void);
     }
 
     // A string Windows handed over (CoTaskMemAlloc'd), read and freed.

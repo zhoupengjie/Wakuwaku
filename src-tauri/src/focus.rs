@@ -4,13 +4,7 @@
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetForegroundWindow() -> *mut c_void;
-        fn SetForegroundWindow(hwnd: *mut c_void) -> i32;
-        fn IsWindow(hwnd: *mut c_void) -> i32;
-    }
+    use crate::win32::{GetForegroundWindow, IsWindow, SetForegroundWindow};
 
     pub fn foreground() -> isize {
         // SAFETY: no arguments.

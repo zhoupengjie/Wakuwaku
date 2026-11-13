@@ -13,6 +13,11 @@
 #[path = "../src/lock.rs"]
 #[allow(dead_code)]
 mod lock;
+// Windows' calls its parts share are win32.rs's.
+#[cfg(windows)]
+#[path = "../src/win32.rs"]
+#[allow(dead_code)]
+mod win32;
 #[path = "../src/inputs.rs"]
 mod inputs;
 

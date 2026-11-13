@@ -649,22 +649,8 @@ pub fn local_hour() -> usize {
 pub(crate) fn local_now() -> (u16, u16, u16, u64) {
     #[cfg(windows)]
     {
-        #[repr(C)]
-        #[derive(Default)]
-        struct SystemTime {
-            year: u16,
-            month: u16,
-            weekday: u16,
-            day: u16,
-            hour: u16,
-            minute: u16,
-            second: u16,
-            ms: u16,
-        }
-        #[link(name = "kernel32")]
-        extern "system" {
-            fn GetLocalTime(time: *mut SystemTime);
-        }
+        use crate::win32::{SystemTime, GetLocalTime};
+
         let mut t = SystemTime::default();
         // SAFETY: fills our own struct.
         unsafe { GetLocalTime(&mut t) };
@@ -733,25 +719,7 @@ fn by_adapter(rows: impl IntoIterator<Item = ([u8; 8], u32, u32)>) -> (u64, u64)
 
 #[cfg(windows)]
 mod sys {
-    #[repr(C)]
-    #[derive(Default, Clone, Copy)]
-    struct FileTime {
-        low: u32,
-        high: u32,
-    }
-
-    #[repr(C)]
-    struct MemoryStatus {
-        length: u32,
-        load: u32,
-        total_phys: u64,
-        avail_phys: u64,
-        total_page: u64,
-        avail_page: u64,
-        total_virtual: u64,
-        avail_virtual: u64,
-        avail_extended: u64,
-    }
+    use crate::win32::{FileTime, MemoryStatus, GlobalMemoryStatusEx};
 
     #[repr(C)]
     #[derive(Default)]
@@ -767,7 +735,6 @@ mod sys {
     #[link(name = "kernel32")]
     extern "system" {
         fn GetSystemTimes(idle: *mut FileTime, kernel: *mut FileTime, user: *mut FileTime) -> i32;
-        fn GlobalMemoryStatusEx(status: *mut MemoryStatus) -> i32;
         fn GetSystemPowerStatus(status: *mut PowerStatus) -> i32;
     }
 

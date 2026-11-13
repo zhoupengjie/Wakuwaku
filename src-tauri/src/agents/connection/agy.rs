@@ -5,7 +5,7 @@
 // "wakuwaku". Its events: SessionStart; PreInvocation, each call of the model
 // (the first of a turn, invocationNum 0); PreToolUse (a tool call that asks
 // the person is held on her island/panel, answered with auto_approve / deny /
-// allow: events_agy.rs); PostToolUse; Stop.
+// allow: events/agy.rs); PostToolUse; Stop.
 //
 // Tried with agy 1.3.4 (2026-10-13): it runs a hook as `cmd /c "<command>"`,
 // the command's own double quotes escaped as Go escapes them (\"), which cmd

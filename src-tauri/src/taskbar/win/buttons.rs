@@ -193,7 +193,7 @@ pub(super) fn tasks_loop(sh: Arc<Shared>, notes: Receiver<Note>) {
 // gone out of sight (state.rs is_shown) marks none, its window's button
 // there as ever.
 pub(super) fn mark_sessions(sh: &Shared) {
-    let targets: Vec<(String, String, crate::state::Chain, Vec<String>)> = {
+    let targets: Vec<(String, String, crate::agents::state::Chain, Vec<String>)> = {
         let pet = sh.pet.lock().unwrap();
         let list = pet.list();
         list.as_array()
@@ -219,7 +219,7 @@ pub(super) fn mark_sessions(sh: &Shared) {
     looked.retain(|id, _| targets.iter().any(|t| t.0 == *id));
     let retry = Duration::from_secs(if sh.is_quiet() { 60 } else { 15 });
     let mut marks: HashMap<isize, Vec<Value>> = HashMap::new();
-    let mut asks: Vec<(crate::state::Chain, Vec<String>)> = Vec::new();
+    let mut asks: Vec<(crate::agents::state::Chain, Vec<String>)> = Vec::new();
     let mut asked: Vec<(String, String)> = Vec::new();
     for (id, mood, chain, hints) in targets {
         if let Some(&(hwnd, pid, at)) = found.get(&id) {
@@ -612,10 +612,10 @@ pub fn window(what: &str, hwnd: isize) -> bool {
                 // one in front before Start (not minimized), as on Windows'.
                 if front {
                     close_flyout();
-                    let brought = crate::jump::bring_window(hwnd);
+                    let brought = crate::agents::jump::bring_window(hwnd);
                     log(&format!("the next of its windows: {hwnd} brought {brought}"));
                 } else if close_flyout() {
-                    crate::jump::bring_window(hwnd);
+                    crate::agents::jump::bring_window(hwnd);
                 } else {
                     tasks::press(hwnd);
                 }
@@ -625,7 +625,7 @@ pub fn window(what: &str, hwnd: isize) -> bool {
         }
         "drag" => {
             std::thread::spawn(move || {
-                let brought = crate::jump::bring_window(hwnd);
+                let brought = crate::agents::jump::bring_window(hwnd);
                 log(&format!("a file held over its button: {hwnd} brought {brought}"));
                 wake_tasks();
             });

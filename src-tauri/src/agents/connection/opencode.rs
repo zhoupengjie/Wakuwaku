@@ -4,13 +4,13 @@
 // <its config folder>/plugins/ by itself (and again as one changes), into its
 // background service. Ours is integrations/opencode/wakuwaku.js, written
 // there with her port in it: it tells her port of its sessions and asks the
-// person there too (events_tests.rs opencode); no program of hers runs. Its config
+// person there too (events/others.rs opencode); no program of hers runs. Its config
 // folder, as OpenCode 2.0.29 finds it: OPENCODE_CONFIG_DIR, else
 // $XDG_CONFIG_HOME/opencode, else ~/.config/opencode (on Windows too).
 
 use super::*;
 
-const OPENCODE_PLUGIN: &str = include_str!("../../../integrations/opencode/wakuwaku.js");
+const OPENCODE_PLUGIN: &str = include_str!("../../../../integrations/opencode/wakuwaku.js");
 // The template's first line: ours, whatever port it was written with.
 const OPENCODE_MARK: &str = "// wakuwaku-opencode-plugin";
 const OPENCODE_PORT_LINE: &str = "const PORT = 47213";

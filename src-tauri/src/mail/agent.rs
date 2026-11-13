@@ -706,7 +706,7 @@ fn conf_of(all: &Value, agent: Agent) -> Conf {
 // The model and effort in Claude Code's own settings: what --restricted
 // would leave out, so they go on its command line instead.
 fn claude_own() -> (String, String) {
-    let file = crate::connection::claude_settings_file();
+    let file = crate::agents::connection::claude_settings_file();
     let settings: Value = std::fs::read(file).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null);
     let word = |v: &Value| v.as_str().filter(|s| is_word(s)).unwrap_or("").to_string();
     (word(&settings["model"]), word(&settings["effortLevel"]))
@@ -840,7 +840,7 @@ fn talk_args(agent: Agent, conf: &Conf, hooks: &Path, own: (String, String), cwd
 // person's settings out: <data>/mail/.wakuwaku-hooks.json.
 fn hooks_file(sh: &Shared) -> PathBuf {
     let file = home(sh).join(".wakuwaku-hooks.json");
-    let hooks = crate::connection::install(&json!({}), sh.port, false);
+    let hooks = crate::agents::connection::install(&json!({}), sh.port, false);
     let _ = std::fs::create_dir_all(home(sh));
     let _ = std::fs::write(&file, serde_json::to_string_pretty(&hooks).unwrap_or_default());
     file
@@ -946,7 +946,7 @@ fn read_models() -> Value {
         .iter()
         .map(|(id, name)| json!({ "id": id, "name": name, "efforts": claude_efforts }))
         .collect();
-    let cache: Value = std::fs::read(crate::connection::codex_home().join("models_cache.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null);
+    let cache: Value = std::fs::read(crate::agents::connection::codex_home().join("models_cache.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null);
     let mut codex: Vec<(i64, Value)> = cache["models"]
         .as_array()
         .into_iter()

@@ -245,7 +245,7 @@ pub fn write(agent: Agent, action: &str, w: &mut Writing) -> Result<(), String> 
         Agent::Zcode => write_zcode_hooks(action),
         Agent::Dsh => {
             let (action, registry) = match action.split_once(':') {
-                Some((action, "npmmirror")) => (action, Some(crate::dsh_bridge::NPMMIRROR)),
+                Some((action, "npmmirror")) => (action, Some(crate::agents::dsh_bridge::NPMMIRROR)),
                 _ => (action, None),
             };
             write_dsh_hooks(action, w.dsh_way, w.port, registry, w.log)
@@ -292,7 +292,7 @@ mod tests {
     // stale (dsh_view): those two count, and are among its own.
     #[test]
     fn connected_as_the_page_counts_it() {
-        let page = include_str!("../../../src/pet/agents.ts");
+        let page = include_str!("../../../../src/pet/agents.ts");
         let mut ins: Vec<(Agent, Vec<String>)> = Vec::new();
         for part in page.split("\n    id: '").skip(1) {
             let id = &part[..part.find('\'').unwrap()];

@@ -558,7 +558,7 @@ mod imp {
                 return true;
             }
         }
-        crate::jump::bring_window(hwnd)
+        crate::agents::jump::bring_window(hwnd)
     }
 
     const SWP_NOSIZE: u32 = 0x1;
@@ -726,7 +726,7 @@ mod imp {
         // coming to the front does (it may lay its own windows then): laid
         // too soon, the others stayed behind (2026-10-10). Looked at after,
         // and laid again once should they not lie there.
-        let brought = crate::jump::bring_window(top);
+        let brought = crate::agents::jump::bring_window(top);
         // SAFETY: plain queries.
         let front = || unsafe { GetForegroundWindow() } as isize;
         let asked = std::time::Instant::now();
@@ -955,7 +955,7 @@ mod imp {
         // SAFETY: a plain query.
         let down = unsafe { IsIconic(h) } != 0;
         if cmd != SC_MINIMIZE && cmd != SC_CLOSE {
-            crate::jump::bring_window(hwnd);
+            crate::agents::jump::bring_window(hwnd);
             if cmd == SC_RESTORE && down {
                 return;
             }

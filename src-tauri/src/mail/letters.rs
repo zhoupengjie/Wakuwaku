@@ -679,7 +679,7 @@ pub async fn mail_open_link(app: AppHandle, url: String) -> bool {
     };
     // ShellExecute may wait for the browser to start: not on the page's turn.
     crate::spawn_named("open link", move || {
-        if !crate::jump::open_url(&url) {
+        if !crate::agents::jump::open_url(&url) {
             sh.log("mail: a letter's link would not open (ShellExecute failed)");
         }
     });

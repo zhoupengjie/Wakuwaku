@@ -16,7 +16,7 @@ fn s<'a>(e: &'a Value, key: &str) -> &'a str {
 // Antigravity's user settings (~/.gemini/config/config.json), where its
 // permission preset, command policy and "Always Allow" grants live.
 pub fn config_file() -> PathBuf {
-    crate::connection::gemini_dir().join("config").join("config.json")
+    crate::agents::connection::gemini_dir().join("config").join("config.json")
 }
 
 pub fn read_config() -> Value {
@@ -30,7 +30,7 @@ pub fn read_config() -> Value {
 // toolPermission (always-proceed, request-review, strict, proceed-in-sandbox),
 // agentMode (accept-edits, auto), allowNonWorkspaceAccess and permissions.allow live.
 pub fn cli_settings_file() -> PathBuf {
-    crate::connection::gemini_dir().join("antigravity-cli").join("settings.json")
+    crate::agents::connection::gemini_dir().join("antigravity-cli").join("settings.json")
 }
 
 pub fn read_cli_settings() -> Value {
@@ -146,7 +146,7 @@ fn is_workspace_or_artifact_path(e: &Value, path: &str) -> bool {
     if !artifact.is_empty() && path_within(p, artifact) {
         return true;
     }
-    let gemini = crate::connection::gemini_dir();
+    let gemini = crate::agents::connection::gemini_dir();
     let agy_dir = gemini.join("antigravity");
     if path_within(p, &agy_dir.to_string_lossy()) {
         return true;

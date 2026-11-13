@@ -11,7 +11,7 @@ const session = fields => ({ id: 'a', project: 'pet', mood: 'working', detail: '
 test('every text the Rust side makes has words in both languages', () => {
   const dir = path.join(import.meta.dirname, '..', 'src-tauri', 'src')
   const used = new Set<string>()
-  for (const file of ['events.rs', 'state.rs', 'widgets.rs', 'shared.rs']) {
+  for (const file of ['agents/events/mod.rs', 'agents/state.rs', 'widgets.rs', 'shared.rs']) {
     const text = fs.readFileSync(path.join(dir, file), 'utf8')
     for (const m of text.matchAll(/"((?:step|detail|say|error|widget)\.[A-Za-z_]+)"/g)) used.add(m[1])
     // error.{kind}, for each kind events.rs knows

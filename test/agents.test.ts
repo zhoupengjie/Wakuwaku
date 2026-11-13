@@ -81,7 +81,7 @@ test('the table has every agent the server hears, and no other', () => {
   // connection/mod.rs ALL: the agents she connects and hears (server.rs
   // keeps when each was last heard by its place there), agent-core's names
   // for them, which are their ids in lower case.
-  const all = /pub const ALL: \[Agent; \d+\] = \[([^\]]*)\]/.exec(read('src-tauri/src/connection/mod.rs'))[1]
+  const all = /pub const ALL: \[Agent; \d+\] = \[([^\]]*)\]/.exec(read('src-tauri/src/agents/connection/mod.rs'))[1]
   const heard = [...all.matchAll(/Agent::(\w+)/g)].map(m => m[1].toLowerCase())
   assert.ok(heard.length >= 8, 'the scan is broken')
   assert.deepEqual(heard.sort(), Agents.TABLE.map(a => a.id).sort())
@@ -106,7 +106,7 @@ test('what she can do is what the code does', () => {
   // Today counts every agent; tokens only those tokens.rs reads.
   assert.deepEqual(lit('stats'), Agents.TABLE.map(a => a.id).sort())
   // (tokens.rs keeps a count for each agent it reads, by its id.)
-  const fields = /pub struct Tokens \{([\s\S]*?)\n\}/.exec(read('src-tauri/src/tokens.rs'))[1]
+  const fields = /pub struct Tokens \{([\s\S]*?)\n\}/.exec(read('src-tauri/src/agents/tokens.rs'))[1]
   const counted = new Set([...fields.matchAll(/\n\s+(\w+): /g)].map(m => m[1]))
   const withTokens = Agents.TABLE.filter(a => ['ag.cap.stats.tokens', 'ag.cap.stats.agy', 'ag.cap.stats.reasonix'].includes(a.caps.stats[1])).map(a => a.id)
   assert.deepEqual(withTokens, Agents.TABLE.filter(a => counted.has(a.id)).map(a => a.id))
@@ -271,7 +271,7 @@ test("DeepSeek Harness's other way: its own hook bridge", () => {
   assert.equal(STRINGS.zh['ag.dsh.viaNote.plugin'], '不用联网，事件即时，能在岛上批准和回答提问')
   assert.equal(STRINGS.zh['ag.dsh.viaNote.bridge'], 'DSH 官方的钩子桥，要从 npm 下载两个包，每个事件约 1 秒，不能审批')
   // Every kind connection/mod.rs error_kind gives the bridge's failures has its words.
-  const rust = read('src-tauri/src/connection/mod.rs')
+  const rust = read('src-tauri/src/agents/connection/mod.rs')
   for (const [, kind] of rust.matchAll(/=> "(bridge[A-Z]\w+)",/g)) assert.ok(`s.dshBK.${kind}` in STRINGS.zh, kind)
 })
 

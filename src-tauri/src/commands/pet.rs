@@ -6,7 +6,8 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, WebviewWindow};
 
 use super::is_island;
-use crate::{app_asks, i18n, island, mail, pet, shared, shortcuts, taskbar, tray};
+use crate::{i18n, island, mail, pet, shared, shortcuts, taskbar, tray};
+use crate::agents::app_asks;
 
 #[tauri::command]
 pub async fn pet_ready(app: AppHandle, window: WebviewWindow) {

@@ -189,7 +189,7 @@ pub fn take_keys(hwnd: isize, on: bool) {
                 BEFORE.store(before, std::sync::atomic::Ordering::SeqCst);
             }
             SetWindowLongPtrW(mine, GWL_EXSTYLE, ex & !WS_EX_NOACTIVATE);
-            crate::jump::bring_window(hwnd);
+            crate::agents::jump::bring_window(hwnd);
         } else {
             SetWindowLongPtrW(mine, GWL_EXSTYLE, ex | WS_EX_NOACTIVATE);
             if crate::focus::foreground() == hwnd {

@@ -9,7 +9,8 @@ use serde_json::{json, Map, Value};
 use tauri::{AppHandle, WebviewWindow};
 
 use crate::shared::{set_display, set_out};
-use crate::{connection, data, fetch, fullscreen, i18n, island, logon, mail, now_ms, pet, plugins, shared, Shared};
+use crate::{data, fetch, fullscreen, i18n, island, logon, mail, now_ms, pet, plugins, shared, Shared};
+use crate::agents::connection;
 use crate::config;
 
 const REPO: &str = "https://github.com/zhoupengjie/wakuwaku";
@@ -1082,7 +1083,7 @@ pub async fn settings_crash(app: AppHandle, what: String) -> Value {
         "send" => crate::crash::send_now(&sh),
         "open" => {
             if let Some(url) = crate::crash::open_last(&sh) {
-                crate::jump::open_url(&url);
+                crate::agents::jump::open_url(&url);
             }
         }
         _ => {}
@@ -1104,7 +1105,7 @@ pub async fn settings_open_site(app: AppHandle, place: String, account: Option<S
     // By ShellExecute, not `cmd /c start`: run from the installed pet (no
     // console), cmd got handles that were none and never started ("the
     // handle is invalid").
-    if !crate::jump::open_url(&url) {
+    if !crate::agents::jump::open_url(&url) {
         shared(&app).log(&format!("open {url}: ShellExecute failed"));
     }
 }

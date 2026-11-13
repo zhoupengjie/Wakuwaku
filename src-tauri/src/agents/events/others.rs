@@ -2,7 +2,7 @@
 // them (events.rs message_of, as agent-core reads them): Codex's, omp's,
 // OpenCode's, Reasonix's and ZCode's, each in a module of its own. Claude
 // Code's are events.rs's; Antigravity's and DeepSeek Harness's are with
-// their log lines (events_agy.rs, events_dsh.rs).
+// their log lines (events/agy.rs, events/dsh.rs).
 
 // Held by each test that reads Reasonix's events (the reasonix module here,
 // replay.rs): agent-core keeps when each session last asked in one table for
@@ -22,7 +22,7 @@ mod codex {
     use serde_json::{json, Value};
 
     fn to_message(e: &Value) -> Option<Value> {
-        agent_core::codex::to_event(e).map(|ev| crate::events::message_of(&ev))
+        agent_core::codex::to_event(e).map(|ev| crate::agents::events::message_of(&ev))
     }
 
     // As Codex 0.146 sends them (trimmed); the folder is no git repository.
@@ -97,7 +97,7 @@ mod omp {
     use serde_json::{json, Value};
 
     fn to_message(e: &Value) -> Option<Value> {
-        agent_core::omp::to_event(e).map(|ev| crate::events::message_of(&ev))
+        agent_core::omp::to_event(e).map(|ev| crate::agents::events::message_of(&ev))
     }
 
     // As the extension sends them from omp 18.11.1 (trimmed); the folder is no git repository.
@@ -171,9 +171,9 @@ mod omp {
         let m = to_message(&event("PostToolUseFailure", json!({ "tool_name": "bash", "tool_input": { "command": "false" }, "error": "exit 1" }))).unwrap();
         assert_eq!((m["event"].as_str(), m["react"].as_str(), &m["say"]["vars"]["tool"]), (Some("tool-failed"), Some("failed"), &json!("Bash")));
         // The edit made the turn's done a review.
-        let mut pet = crate::state::Pet::default();
+        let mut pet = crate::agents::state::Pet::default();
         for (e, at) in [(event("UserPromptSubmit", json!({ "prompt": "fix it" })), 1), (event("PostToolUse", json!({ "tool_name": "write", "tool_input": { "path": "b.txt" } })), 2), (event("Stop", json!({})), 3)] {
-            pet.apply(&agent_core::omp::to_event(&e).unwrap(), None, at, crate::state::Hold::Seen);
+            pet.apply(&agent_core::omp::to_event(&e).unwrap(), None, at, crate::agents::state::Hold::Seen);
         }
         assert_eq!((pet.get(4)["mood"].as_str(), pet.get(4)["agent"].as_str()), (Some("review"), Some("omp")));
     }
@@ -217,7 +217,7 @@ mod opencode {
     use agent_core::opencode::normalize;
 
     fn to_message(e: &Value) -> Option<Value> {
-        agent_core::opencode::to_event(e).map(|ev| crate::events::message_of(&ev))
+        agent_core::opencode::to_event(e).map(|ev| crate::agents::events::message_of(&ev))
     }
 
     // As her plugin sends them from OpenCode 2.0.29 (trimmed); the folder is no git repository.
@@ -323,9 +323,9 @@ mod opencode {
     // began and the time it counted.
     #[test]
     fn an_opencode_round_counts_its_turn_and_its_time() {
-        let mut pet = crate::state::Pet::default();
+        let mut pet = crate::agents::state::Pet::default();
         let mut feed = |kind: &str, more: Value, at: u64| {
-            agent_core::opencode::to_event(&normalize(&event(kind, more))).and_then(|ev| pet.apply(&ev, None, at, crate::state::Hold::Seen)).map_or((0, 0), |out| (out.turns, out.worked_ms))
+            agent_core::opencode::to_event(&normalize(&event(kind, more))).and_then(|ev| pet.apply(&ev, None, at, crate::agents::state::Hold::Seen)).map_or((0, 0), |out| (out.turns, out.worked_ms))
         };
         assert_eq!(feed("session.created", json!({}), 0), (0, 0));
         assert_eq!(feed("session.execution.started", json!({ "prompt": "Run the shell command: echo hi" }), 1_000), (1, 0));
@@ -349,7 +349,7 @@ mod reasonix {
     use agent_core::reasonix::SAME_ASK_MS;
 
     fn to_message_at(e: &Value, now: u64) -> Option<Value> {
-        agent_core::reasonix::to_event_at(e, now).map(|ev| crate::events::message_of(&ev))
+        agent_core::reasonix::to_event_at(e, now).map(|ev| crate::agents::events::message_of(&ev))
     }
 
     fn to_message(e: &Value) -> Option<Value> {
@@ -525,7 +525,7 @@ mod zcode {
     use serde_json::{json, Value};
 
     fn to_message(e: &Value) -> Option<Value> {
-        agent_core::claude::to_event(e, agent_core::event::Agent::Zcode).map(|ev| crate::events::message_of(&ev))
+        agent_core::claude::to_event(e, agent_core::event::Agent::Zcode).map(|ev| crate::agents::events::message_of(&ev))
     }
 
     // As the desktop app 3.15.3 sends them (trimmed), in a folder that is no

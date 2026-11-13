@@ -19,7 +19,8 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 #[cfg(windows)]
 use crate::frameless;
 use crate::lock::Lock;
-use crate::{app_asks, asks, backplate, bars, connection, crash, data, desk, focus, fullscreen, i18n, island, logon, mail, notify, pet, plugins, power, screen, settings, shortcuts, state, taskbar, tray, wallpaper, widgets};
+use crate::{backplate, bars, crash, data, desk, focus, fullscreen, i18n, island, logon, mail, notify, pet, plugins, power, screen, settings, shortcuts, taskbar, tray, wallpaper, widgets};
+use crate::agents::{app_asks, asks, connection, state};
 use crate::config;
 
 // The island's own animation of taking her in, before she counts as in.
@@ -544,7 +545,7 @@ impl Shared {
             // Reasonix's approvals never come to her, nor
             // DeepSeek Harness's through its hook bridge (through her plugin
             // they may: those given on her are counted all the same).
-            // Antigravity's approvals come to her since 2026-10-26 (events_agy).
+            // Antigravity's approvals come to her since 2026-10-26 (events/agy.rs).
             let without_approvals = matches!(ev.agent, Agent::Dsh | Agent::Reasonix);
             self.count_today(|t| {
                 t.begun(out.turns);
@@ -879,7 +880,7 @@ impl Shared {
             // for it) went to the window in front, its menu bar opened, the
             // keyboard left there (with Narrator on, 2026-10-14).
             #[cfg(windows)]
-            crate::jump::bring_window(mine);
+            crate::agents::jump::bring_window(mine);
             let _ = window.set_focus();
         } else {
             let _ = window.set_focusable(false);

@@ -434,23 +434,23 @@ pub fn codex_dir() -> PathBuf {
 // Antigravity's, a brain folder for each of its products: agy's, the 2.0
 // app's, and (by its docs, which name the folders) the IDE's.
 pub fn agy_dirs() -> Vec<PathBuf> {
-    let gemini = crate::connection::gemini_dir();
+    let gemini = crate::agents::connection::gemini_dir();
     ["antigravity-cli", "antigravity", "antigravity-ide"].iter().map(|product| gemini.join(product).join("brain")).collect()
 }
 
 // DeepSeek Harness's, its sessions' logs by project.
 pub fn dsh_dir() -> PathBuf {
-    crate::connection::dsh_home().join("sessions")
+    crate::agents::connection::dsh_home().join("sessions")
 }
 
 // oh-my-pi's sessions folder in each profile's agent folder.
 pub fn omp_dirs() -> Vec<PathBuf> {
-    crate::connection::omp_agent_dirs().into_iter().map(|d| d.join("sessions")).collect()
+    crate::agents::connection::omp_agent_dirs().into_iter().map(|d| d.join("sessions")).collect()
 }
 
 // Reasonix 2.x's daily stats folder.
 pub fn reasonix_dir() -> PathBuf {
-    crate::connection::reasonix_home().join("stats")
+    crate::agents::connection::reasonix_home().join("stats")
 }
 
 pub const EVERY: Duration = Duration::from_secs(60);

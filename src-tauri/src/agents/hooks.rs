@@ -8,7 +8,8 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-use crate::{connection, crash, data, detach, events_agy, jump, now_ms, starts};
+use crate::{crash, data, detach, now_ms, starts};
+use crate::agents::{connection, events, jump};
 
 // --- Started by the SessionStart hook ----------------------------------------------------
 
@@ -146,7 +147,7 @@ pub fn codex_hook(port: u16) {
 
 // Antigravity's hook (connection::AGY_FLAG and the event's name, which its
 // payload does not carry): PreToolUse prompts wait for her answer (printed
-// as Antigravity's decision: events_agy.rs to_output), handed on to her
+// as Antigravity's decision: events/agy.rs to_output), handed on to her
 // port; any other hook has its answer printed first, whatever comes after
 // (a hook that fails or answers nothing breaks agy's turn: connection/agy.rs),
 // then the event handed to her port with its name and let go (post_and_go:
@@ -182,7 +183,7 @@ pub fn agy_hook(port: u16, name: &str) {
                 }
             }
         }
-        if !events_agy::needs_approval(&event, &events_agy::read_config(), &events_agy::read_cli_settings()) {
+        if !events::agy::needs_approval(&event, &events::agy::read_config(), &events::agy::read_cli_settings()) {
             return allow();
         }
         let who = || starts::hook_who("Antigravity", name, &[], &hook_parents());
@@ -194,7 +195,7 @@ pub fn agy_hook(port: u16, name: &str) {
         if !jump::is_listening(port) {
             return allow();
         }
-        let mut ask = events_agy::for_ask(&event);
+        let mut ask = events::agy::for_ask(&event);
         if let Some(fields) = ask.as_object_mut() {
             fields.insert(jump::CODEX_CHAIN.into(), jump::chain_json(&jump::hook_chain(None)));
         }
@@ -202,7 +203,7 @@ pub fn agy_hook(port: u16, name: &str) {
         let reply = match agent.post(&format!("http://127.0.0.1:{port}/hook?from=wakuwaku&agent=agy")).send_json(&ask) {
             Ok(mut res) => {
                 let body = res.body_mut().read_to_string().unwrap_or_default();
-                events_agy::to_output(&body)
+                events::agy::to_output(&body)
             }
             Err(_) => r#"{"decision":"allow"}"#.to_string(),
         };

@@ -248,7 +248,7 @@ impl ProfileLock {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                 let owner: u32 = fs::read_to_string(&path).ok().and_then(|t| t.trim().parse().ok()).unwrap_or(0);
-                if owner != 0 && crate::jump::started_ms(owner).is_some() {
+                if owner != 0 && crate::agents::jump::started_ms(owner).is_some() {
                     return Err(Failure::new("busy", format!("{} (pid {owner})", path.display())));
                 }
                 let _ = fs::remove_file(&path);
@@ -272,7 +272,7 @@ impl Drop for ProfileLock {
 // .plugin-manager/run.json, naming a process still running).
 fn dsh_run_active(profile: &Path) -> bool {
     let Ok(text) = fs::read_to_string(profile.join(".plugin-manager").join("run.json")) else { return false };
-    serde_json::from_str::<Value>(&text).ok().and_then(|v| v["pid"].as_u64()).is_some_and(|pid| crate::jump::started_ms(pid as u32).is_some())
+    serde_json::from_str::<Value>(&text).ok().and_then(|v| v["pid"].as_u64()).is_some_and(|pid| crate::agents::jump::started_ms(pid as u32).is_some())
 }
 
 // The three files a pnpm run changes, as they were (None: not there).
@@ -301,7 +301,7 @@ impl Kept {
     fn copy_once(&self) -> Vec<PathBuf> {
         let mut made = Vec::new();
         for (path, bytes) in &self.0 {
-            let backup = crate::connection::backup_of(path);
+            let backup = crate::agents::connection::backup_of(path);
             if let (Some(bytes), false) = (bytes, backup.exists()) {
                 if fs::write(&backup, bytes).is_ok() {
                     made.push(backup);
@@ -353,7 +353,7 @@ pub fn without_release_age_exclusions(text: &str) -> String {
 // them put back, gone too. Anything not as expected stays, backups with it.
 fn tidy(profile: &Path) {
     let file = |name: &str| profile.join(name);
-    let backup = |name: &str| crate::connection::backup_of(&profile.join(name));
+    let backup = |name: &str| crate::agents::connection::backup_of(&profile.join(name));
     let json = |path: &Path| -> Option<Value> {
         let mut v: Value = serde_json::from_str(&fs::read_to_string(path).ok()?).ok()?;
         if let Some(fields) = v.as_object_mut() {
@@ -440,7 +440,7 @@ fn gist(output: &str) -> String {
     let lines: Vec<&str> = output.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
     let errors: Vec<&str> = lines.iter().copied().filter(|l| l.contains("ERR_") || l.contains("ERR!") || l.contains("Error") || l.contains("error")).collect();
     let pick = if errors.is_empty() { &lines[lines.len().saturating_sub(3)..] } else { &errors[errors.len().saturating_sub(3)..] };
-    crate::events::clip(&pick.join(" · "), 400)
+    crate::agents::events::clip(&pick.join(" · "), 400)
 }
 
 // Put both packages, at this version, into a profile (none if there already).

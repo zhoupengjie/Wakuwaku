@@ -5,7 +5,7 @@
 // once hooks.enabled is true: no trust asked for (a workspace's own
 // .zcode/config.json is, again after each change, so ours go in the user's).
 // Its 7 events, each with Claude Code's fields beside its own camelCase ones
-// (events_tests.rs zcode). A hook is a command for a shell or, ours, a program and
+// (events/others.rs zcode). A hook is a command for a shell or, ours, a program and
 // its arguments (process: no shell, no quoting); none over HTTP. So this
 // program with ZCODE_FLAG and the event's name hands each to her port
 // (hooks.rs zcode_hook), and prints her answer to a PermissionRequest in

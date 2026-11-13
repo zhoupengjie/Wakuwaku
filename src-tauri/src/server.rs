@@ -9,11 +9,11 @@
 //                      ?agent=agy, ?agent=zcode, ?agent=reasonix: the same for
 //                      Antigravity's, ZCode's and Reasonix's (hooks.rs agy_hook)
 //                      ?agent=dsh: a DeepSeek Harness one, from her plugin inside DSH
-//                      (integrations/dsh/wakuwaku.js, events_dsh.rs), or handed on by
+//                      (integrations/dsh/wakuwaku.js, events/dsh.rs), or handed on by
 //                      this program for its old hook bridge (hooks.rs dsh_hook)
-//                      ?agent=opencode: an OpenCode event, from her plugin in it (events_tests.rs opencode)
+//                      ?agent=opencode: an OpenCode event, from her plugin in it (events/others.rs opencode)
 //                      ?agent=omp: an oh-my-pi one, from her extension inside omp
-//                      (integrations/omp/wakuwaku.ts, events_tests.rs omp)
+//                      (integrations/omp/wakuwaku.ts, events/others.rs omp)
 //   GET  /v1/info      the agents' sessions told to other apps on this machine (agent-hub,
 //   GET  /v1/sessions  its lib.rs says how): the hub; the sessions; each event as it comes
 //   GET  /v1/events    (Server-Sent Events). The last two take the token in her data
@@ -50,7 +50,8 @@ use tiny_http::{Header, Request, Response, Server, StatusCode};
 
 use agent_core::event::{Agent, AgentEvent, Kind};
 
-use crate::{events, events_agy, events_dsh, island, jump, now_ms, pet, Responder, Shared};
+use crate::{island, now_ms, pet, Responder, Shared};
+use crate::agents::{events, jump};
 
 // Hook events carry whole files (an Edit's PostToolUse has the file before
 // the edit), so this is generous.
@@ -129,7 +130,7 @@ pub(crate) fn read_event(agent: Option<&str>, mut event: Value) -> Option<Value>
         }
     }
     if agent == Some("agy") {
-        events_agy::with_seen(&mut event);
+        events::agy::with_seen(&mut event);
     }
     if let (Some(agent), Some(fields)) = (agent, event.as_object_mut()) {
         fields.insert("agent".into(), json!(agent));
@@ -140,7 +141,7 @@ pub(crate) fn read_event(agent: Option<&str>, mut event: Value) -> Option<Value>
 // What an event she took (read_event) says a session is doing, each agent's
 // read its own way (agent-core) at `now`: Antigravity's given the person's
 // words and its reply from its transcript first (its PermissionRequest in
-// Claude Code's words, from events_agy::for_ask); a DSH prompt she does not
+// Claude Code's words, from events::agy::for_ask); a DSH prompt she does not
 // hold (`held`) to be approved in DSH. Her sessions are kept from it
 // (state.rs), and the apps listening are sent it (agent-hub).
 // Also the replay tests' way in (replay.rs).
@@ -251,7 +252,7 @@ fn read_json(req: &mut Request) -> Option<Value> {
 // hook and the runners under it are gone. Its chain after (chain_of_caller).
 enum Caller {
     // The chain its hook command brought.
-    Brought(crate::state::Chain),
+    Brought(crate::agents::state::Chain),
     // The process it came from (DSH's: the app's outermost).
     Process(u32),
 }
@@ -270,7 +271,7 @@ fn caller_of(sh: &Shared, req: &Request, event: &Value, agent: Option<&str>) -> 
     Some(Caller::Process(if agent == Some("dsh") { jump::outermost_of(client, "DeepSeek Harness.exe") } else { client }))
 }
 
-fn chain_of_caller(caller: Caller, event: &Value, agent: Option<&str>) -> Option<crate::state::Chain> {
+fn chain_of_caller(caller: Caller, event: &Value, agent: Option<&str>) -> Option<crate::agents::state::Chain> {
     let chain = match caller {
         Caller::Brought(chain) => chain,
         Caller::Process(client) if agent == Some("opencode") => {
@@ -304,23 +305,23 @@ fn take(sh: &Shared, hook: Hook) {
     // (her taskbar on another display counts: shared.rs asks_seen), it is the
     // terminal's at once.
     let holds = is_prompt && sh.asks_seen();
-    let dsh_home = crate::connection::dsh_home();
+    let dsh_home = crate::agents::connection::dsh_home();
     let now = now_ms();
     let ev = event_for(agent, &mut event, holds, now, &dsh_home);
     if let Some(ev) = &ev {
         sh.hub.publish(ev, now);
     }
     if agent == Some("agy") {
-        if let Some(line) = events_agy::log_line(&event) {
+        if let Some(line) = events::agy::log_line(&event) {
             sh.log(&line);
         }
     }
     if let Some(ev) = ev {
         // Where the session runs, for going to its window (jump.rs);
-        // none for one going (a DSH subagent's too: events_dsh.rs whose).
+        // none for one going (a DSH subagent's too: events/dsh.rs whose).
         let chain = if ev.kind == Kind::SessionEnd { None } else { caller.and_then(|c| chain_of_caller(c, &event, agent)) };
         if agent == Some("dsh") {
-            if let Some(line) = events_dsh::log_line(&event, chain.as_ref().and_then(|c| c.first()).map(|c| c.0), &dsh_home) {
+            if let Some(line) = events::dsh::log_line(&event, chain.as_ref().and_then(|c| c.first()).map(|c| c.0), &dsh_home) {
                 sh.log(&line);
             }
         }
@@ -328,7 +329,7 @@ fn take(sh: &Shared, hook: Hook) {
     } else if agent == Some("dsh") {
         // Her plugin's word as DSH loads it: said in her log, and the open
         // Connect page tells it loaded (connection/dsh.rs dsh_view).
-        if let Some(line) = events_dsh::log_line(&event, None, &dsh_home) {
+        if let Some(line) = events::dsh::log_line(&event, None, &dsh_home) {
             sh.log(&line);
             sh.push_settings();
         }
@@ -352,7 +353,7 @@ fn take(sh: &Shared, hook: Hook) {
                 wait = wait.min(CODEX_ASK_MS);
             }
             // DSH's in Claude Code's words, as the panel shows them.
-            let event = if agent == Some("dsh") { events_dsh::for_ask(&event) } else { event };
+            let event = if agent == Some("dsh") { events::dsh::for_ask(&event) } else { event };
             let added = sh.asks.lock().unwrap().add(event, respond, now_ms(), wait);
             match added {
                 Ok(id) => {
@@ -441,15 +442,15 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool, hooks: &SyncSender
         ("POST", "/hook") => {
             let Some(event) = read_json(&mut req) else { return reply(req, 200, json!({})) };
             // Heard from one: connected (the island stops asking).
-            if crate::connection::note_connected(true) {
+            if crate::agents::connection::note_connected(true) {
                 sh.redraw();
             }
             let agent = agent_of(req.url());
             // One that is nothing to her is answered at once.
             let Some(event) = read_event(agent, event) else { return reply(req, 200, json!({})) };
-            let seen = &sh.seen[crate::connection::slot(Agent::from_tag(agent))];
+            let seen = &sh.seen[crate::agents::connection::slot(Agent::from_tag(agent))];
             // Her DSH plugin's word on loading is no session's doing.
-            if !(agent == Some("dsh") && events_dsh::is_loaded(&event)) {
+            if !(agent == Some("dsh") && events::dsh::is_loaded(&event)) {
                 seen.store(now_ms(), std::sync::atomic::Ordering::SeqCst);
             }
             // A prompt, which she may hold for the person's answer (take).
@@ -504,7 +505,7 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool, hooks: &SyncSender
         // Started again while she runs: she comes back into sight.
         // Held till the person picks (app_asks.rs), or answered at once.
         ("POST", "/ask") => match read_json(&mut req) {
-            Some(v) => crate::app_asks::take(sh, &v, Box::new(move |code, body| reply(req, code, body))),
+            Some(v) => crate::agents::app_asks::take(sh, &v, Box::new(move |code, body| reply(req, code, body))),
             None => reply(req, 400, json!({ "error": "bad json" })),
         },
         ("POST", "/come-home") => {

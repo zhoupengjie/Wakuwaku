@@ -597,7 +597,7 @@ pub fn answer(sh: &Shared, id: u64, choice: &Value) -> bool {
         "open" if matches!(found, Found::Link(_)) => {
             dismiss(id);
             crate::spawn_named("open link", move || {
-                crate::jump::open_url(&value);
+                crate::agents::jump::open_url(&value);
             });
             true
         }

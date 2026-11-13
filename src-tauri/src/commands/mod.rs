@@ -6,7 +6,8 @@
 use serde_json::Value;
 use tauri::{AppHandle, WebviewWindow};
 
-use crate::{jump, plugins, shared, Shared};
+use crate::{plugins, shared, Shared};
+use crate::agents::jump;
 
 pub mod island;
 pub mod pet;

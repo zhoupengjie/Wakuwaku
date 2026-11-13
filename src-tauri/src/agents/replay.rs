@@ -29,7 +29,7 @@ use serde_json::{json, Map, Value};
 use agent_core::registry::SessionRegistry;
 
 use crate::server::{event_for, read_event};
-use crate::state::{Hold, Pet, IDLE_HIDE_MIN};
+use crate::agents::state::{Hold, Pet, IDLE_HIDE_MIN};
 
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("test").join("fixtures")
@@ -146,7 +146,7 @@ fn pretty(v: Option<&Value>) -> String {
 
 #[test]
 fn agents_sessions_replayed() {
-    let _asks = crate::events_tests::reasonix_asks_held();
+    let _asks = crate::agents::events::others::reasonix_asks_held();
     let bless = std::env::var("REPLAY_BLESS").as_deref() == Ok("1");
     let mut names: Vec<String> = std::fs::read_dir(folder())
         .unwrap()

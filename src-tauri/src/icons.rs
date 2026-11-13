@@ -45,29 +45,11 @@ mod imp {
     use std::ffi::c_void;
 
     use serde_json::{json, Value};
-
-    #[repr(C)]
-    struct Guid(u32, u16, u16, [u8; 8]);
+    use crate::win32::{Guid, Hwnd, Point, Rect, CloseHandle, CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, FindWindowExW, GetAncestor, GetWindowThreadProcessId, OpenProcess, SendMessageTimeoutW, SystemParametersInfoW};
 
     #[repr(C)]
     pub struct Obj {
         vtbl: *const *const c_void,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
-    pub struct Point {
-        pub x: i32,
-        pub y: i32,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy, Default, Debug)]
-    pub struct Rect {
-        pub left: i32,
-        pub top: i32,
-        pub right: i32,
-        pub bottom: i32,
     }
 
     // VARIANT: its type, then 8 bytes on 32-bit Windows, 16 on 64-bit.
@@ -124,36 +106,18 @@ mod imp {
     // IShellFolder:
     const SF_GET_DISPLAY_NAME_OF: usize = 11;
 
-    #[link(name = "ole32")]
-    extern "system" {
-        fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
-        fn CoUninitialize();
-        fn CoCreateInstance(clsid: *const Guid, outer: *mut c_void, ctx: u32, iid: *const Guid, out: *mut *mut c_void) -> i32;
-        fn CoTaskMemFree(p: *mut c_void);
-    }
-
     #[link(name = "shlwapi")]
     extern "system" {
         fn StrRetToStrW(strret: *mut c_void, pidl: *const c_void, out: *mut *mut u16) -> i32;
     }
 
-    // As the other modules declare them (one signature each across the crate).
-    type Hwnd = *mut c_void;
-
     #[link(name = "user32")]
     extern "system" {
-        fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
         fn MapWindowPoints(from: Hwnd, to: Hwnd, points: *mut Point, n: u32) -> i32;
-        fn SystemParametersInfoW(action: u32, param: u32, pv: *mut c_void, flags: u32) -> i32;
-        fn SendMessageTimeoutW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize, flags: u32, ms: u32, result: *mut usize) -> isize;
-        fn GetAncestor(hwnd: Hwnd, flags: u32) -> Hwnd;
-        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
     }
 
     #[link(name = "kernel32")]
     extern "system" {
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
-        fn CloseHandle(handle: isize) -> i32;
         fn VirtualAllocEx(process: isize, address: *mut c_void, size: usize, kind: u32, protect: u32) -> *mut c_void;
         fn VirtualFreeEx(process: isize, address: *mut c_void, size: usize, kind: u32) -> i32;
         fn ReadProcessMemory(process: isize, base: *const c_void, buffer: *mut c_void, size: usize, read: *mut usize) -> i32;
@@ -512,7 +476,10 @@ mod imp {
 // describe, Rect and the folder flags: for examples/icons.rs.
 #[cfg(windows)]
 #[allow(unused_imports)]
-pub use imp::{describe, desktop, with_com, Item, Point, Rect};
+pub use imp::{describe, desktop, with_com, Item};
+#[cfg(windows)]
+#[allow(unused_imports)]
+pub use crate::win32::{Point, Rect};
 
 // One at a time, and each but a moment: quitting waits on it (hold, given_back).
 #[cfg(windows)]

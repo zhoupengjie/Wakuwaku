@@ -208,10 +208,8 @@ pub fn recycle_bin() -> Value {
         fn SHGetStockIconInfo(siid: i32, flags: u32, info: *mut StockIconInfo) -> i32;
         fn SHQueryRecycleBinW(root: *const u16, info: *mut BinInfo) -> i32;
     }
-    #[link(name = "user32")]
-    extern "system" {
-        fn DestroyIcon(icon: isize) -> i32;
-    }
+    use crate::win32::DestroyIcon;
+
     const SIID_RECYCLER: i32 = 31;
     const SIID_RECYCLERFULL: i32 = 32;
     const SHGSI_ICON: u32 = 0x100;

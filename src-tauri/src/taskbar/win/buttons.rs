@@ -13,6 +13,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 
 use super::*;
 use crate::lock::Lock;
+use crate::win32::GetWindowRect;
 
 pub(super) static TASKS_STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 // The buttons as sent last (bars.rs, thumbs.rs and a new page read it).
@@ -277,11 +278,6 @@ pub(super) fn on_strip(hwnd: isize) -> bool {
     let Some(s) = strip_now() else { return false };
     // SAFETY: plain queries.
     unsafe { MonitorFromWindow(hwnd as Hwnd, MONITOR_DEFAULTTONEAREST) == MonitorFromPoint(Point { x: s.0 + s.2 / 2, y: s.1 + s.3 / 2 }, MONITOR_DEFAULTTONEAREST) }
-}
-
-#[link(name = "user32")]
-extern "system" {
-    pub(super) fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
 }
 
 // Over its display: maximized on it, or full screen there (all of the

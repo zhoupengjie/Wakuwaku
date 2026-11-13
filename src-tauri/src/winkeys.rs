@@ -242,7 +242,6 @@ fn said(act: Act) -> String {
 #[cfg(windows)]
 mod imp {
     use crate::lock::Lock;
-    use std::ffi::c_void;
     use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU16, AtomicU32, Ordering};
     use std::sync::{Arc};
     use std::thread::JoinHandle;
@@ -253,8 +252,7 @@ mod imp {
 
     use super::{decide, decode, encode, masks, ordered, said, target, watched, Act, How, Mods, Target, Verdict};
     use crate::{tasks, Shared};
-
-    type Hwnd = *mut c_void;
+    use crate::win32::{Hwnd, Input, InputUnion, KeybdInput, Msg, CallNextHookEx, EnumWindows, GetAsyncKeyState, GetCurrentThreadId, GetMessageW, GetModuleHandleW, GetTickCount, KillTimer, PeekMessageW, PostThreadMessageW, SendInput, SetTimer, SetWindowsHookExW, UnhookWindowsHookEx};
 
     #[repr(C)]
     struct KbdLl {
@@ -263,84 +261,6 @@ mod imp {
         flags: u32,
         time: u32,
         extra: usize,
-    }
-
-    #[repr(C)]
-    #[derive(Default, Clone, Copy)]
-    struct Point {
-        x: i32,
-        y: i32,
-    }
-
-    #[repr(C)]
-    struct Msg {
-        hwnd: Hwnd,
-        message: u32,
-        wparam: usize,
-        lparam: isize,
-        time: u32,
-        pt: Point,
-        private: u32,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct KeybdInput {
-        vk: u16,
-        scan: u16,
-        flags: u32,
-        time: u32,
-        extra: usize,
-    }
-
-    // The union's largest member (MOUSEINPUT), so INPUT has the size Windows expects.
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct MouseInput {
-        dx: i32,
-        dy: i32,
-        data: u32,
-        flags: u32,
-        time: u32,
-        extra: usize,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    union InputUnion {
-        mi: MouseInput,
-        ki: KeybdInput,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct Input {
-        kind: u32,
-        u: InputUnion,
-    }
-
-    type HookProc = extern "system" fn(i32, usize, isize) -> isize;
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn SetWindowsHookExW(id: i32, proc_: HookProc, module: isize, thread: u32) -> isize;
-        fn UnhookWindowsHookEx(hook: isize) -> i32;
-        fn CallNextHookEx(hook: isize, code: i32, wparam: usize, lparam: isize) -> isize;
-        fn GetAsyncKeyState(vk: i32) -> i16;
-        fn SendInput(count: u32, inputs: *const Input, size: i32) -> u32;
-        fn GetMessageW(msg: *mut Msg, hwnd: Hwnd, min: u32, max: u32) -> i32;
-        fn PeekMessageW(msg: *mut Msg, hwnd: Hwnd, min: u32, max: u32, remove: u32) -> i32;
-        fn PostThreadMessageW(thread: u32, msg: u32, wparam: usize, lparam: isize) -> i32;
-        fn SetTimer(hwnd: Hwnd, id: usize, ms: u32, func: *const c_void) -> usize;
-        fn KillTimer(hwnd: Hwnd, id: usize) -> i32;
-        fn EnumWindows(each: extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
-    }
-
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn GetModuleHandleW(name: *const u16) -> isize;
-        fn GetCurrentThreadId() -> u32;
-        fn GetTickCount() -> u32;
     }
 
     const WH_KEYBOARD_LL: i32 = 13;

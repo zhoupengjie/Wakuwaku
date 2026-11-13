@@ -21,6 +21,7 @@
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
+    use crate::win32::{ProcessEntry, CloseHandle, CreateToolhelp32Snapshot, GetCurrentProcess, GetCurrentProcessId, GetTickCount, OpenProcess, Process32FirstW, Process32NextW};
 
     // PROCESS_POWER_THROTTLING_STATE and THREAD_POWER_THROTTLING_STATE: the
     // same three numbers.
@@ -46,37 +47,14 @@ mod imp {
         time: u32,
     }
 
-    // PROCESSENTRY32W.
-    #[repr(C)]
-    struct ProcessEntry {
-        size: u32,
-        usage: u32,
-        pid: u32,
-        heap: usize,
-        module: u32,
-        threads: u32,
-        parent: u32,
-        priority: i32,
-        flags: u32,
-        exe: [u16; 260],
-    }
-
     // Handles as isize, as shared.rs declares GetCurrentProcess too.
     #[link(name = "kernel32")]
     extern "system" {
-        fn GetCurrentProcess() -> isize;
-        fn GetCurrentProcessId() -> u32;
         fn GetCurrentThread() -> isize;
         fn SetProcessInformation(process: isize, class: i32, info: *const c_void, size: u32) -> i32;
         fn GetProcessInformation(process: isize, class: i32, info: *mut c_void, size: u32) -> i32;
         fn SetThreadInformation(thread: isize, class: i32, info: *const c_void, size: u32) -> i32;
         fn SetThreadPriority(thread: isize, priority: i32) -> i32;
-        fn GetTickCount() -> u32;
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
-        fn CloseHandle(handle: isize) -> i32;
-        fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> isize;
-        fn Process32FirstW(snapshot: isize, entry: *mut ProcessEntry) -> i32;
-        fn Process32NextW(snapshot: isize, entry: *mut ProcessEntry) -> i32;
         fn SetPriorityClass(process: isize, class: u32) -> i32;
     }
 

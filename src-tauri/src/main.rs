@@ -46,6 +46,7 @@
 //                  the island's page (src/pet/addons.ts), their views in the cards
 //                  (src/pet/views.ts), served by wakuplugin://
 //   zip.rs         zips read and unpacked (LHM's download, a plugin's package)
+//   win32.rs       Windows' own calls that more than one part makes, each declared once
 //   tokens.rs      today's tokens, from Claude Code's, Codex's, Antigravity's, omp's, DSH's and Reasonix's own records
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // The settings' snapshot (settings.rs) is one json! with every agent's part
@@ -128,6 +129,8 @@ mod updates;
 mod wallpaper;
 mod webview;
 mod widgets;
+#[cfg(windows)]
+mod win32;
 mod winkeys;
 mod zip;
 

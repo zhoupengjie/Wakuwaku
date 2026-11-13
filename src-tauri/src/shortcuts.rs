@@ -121,6 +121,7 @@ pub fn has_duplicates(keys: &[&str]) -> bool {
 mod win {
     use super::*;
     use std::ptr::null_mut;
+    use crate::win32::{Msg, GetCurrentThreadId, GetLastError, GetMessageW, PostThreadMessageW};
 
     const WM_HOTKEY: u32 = 0x0312;
     const WM_USER_RELOAD: u32 = 0x0400 + 101;
@@ -129,31 +130,9 @@ mod win {
     const HOTKEY_DENY: i32 = 2;
     const HOTKEY_ISLAND: i32 = 3;
 
-    #[repr(C)]
-    struct Point {
-        x: i32,
-        y: i32,
-    }
-
-    // As winkeys.rs declares it (GetMessageW is declared once per signature).
-    #[repr(C)]
-    struct Msg {
-        hwnd: *mut std::ffi::c_void,
-        message: u32,
-        wparam: usize,
-        lparam: isize,
-        time: u32,
-        pt: Point,
-        private: u32,
-    }
-
     extern "system" {
         fn RegisterHotKey(hwnd: *mut std::ffi::c_void, id: i32, fs_modifiers: u32, vk: u32) -> i32;
         fn UnregisterHotKey(hwnd: *mut std::ffi::c_void, id: i32) -> i32;
-        fn GetMessageW(msg: *mut Msg, hwnd: *mut std::ffi::c_void, min: u32, max: u32) -> i32;
-        fn PostThreadMessageW(thread_id: u32, msg: u32, wparam: usize, lparam: isize) -> i32;
-        fn GetCurrentThreadId() -> u32;
-        fn GetLastError() -> u32;
     }
 
     static THREAD_ID: AtomicU32 = AtomicU32::new(0);

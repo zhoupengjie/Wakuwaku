@@ -36,47 +36,7 @@ pub fn wait(most: Duration) -> Option<Instant> {
 
 #[cfg(windows)]
 mod imp {
-    use std::ffi::c_void;
-
-    type Hwnd = *mut c_void;
-
-    #[repr(C)]
-    #[derive(Default)]
-    struct Rect {
-        left: i32,
-        top: i32,
-        right: i32,
-        bottom: i32,
-    }
-
-    #[repr(C)]
-    #[derive(Default)]
-    struct MonitorInfo {
-        size: u32,
-        monitor: Rect,
-        work: Rect,
-        flags: u32,
-    }
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetForegroundWindow() -> Hwnd;
-        fn IsWindowVisible(hwnd: Hwnd) -> i32;
-        fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
-        fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
-        fn GetWindowRect(hwnd: Hwnd, rect: *mut Rect) -> i32;
-        fn IsZoomed(hwnd: Hwnd) -> i32;
-        fn MonitorFromWindow(hwnd: Hwnd, flags: u32) -> *mut c_void;
-        fn GetMonitorInfoW(monitor: *mut c_void, info: *mut MonitorInfo) -> i32;
-        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
-    }
-
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
-        fn CloseHandle(handle: isize) -> i32;
-        fn QueryFullProcessImageNameW(process: isize, flags: u32, name: *mut u16, size: *mut u32) -> i32;
-    }
+    use crate::win32::{Hwnd, MonitorInfo, Rect, CloseHandle, GetClassNameW, GetForegroundWindow, GetMonitorInfoW, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible, IsZoomed, MonitorFromWindow, OpenProcess, QueryFullProcessImageNameW};
 
     const GWL_EXSTYLE: i32 = -20;
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;

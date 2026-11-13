@@ -148,7 +148,6 @@ pub struct Laid {
 #[cfg(windows)]
 mod imp {
     use crate::lock::Lock;
-    use std::ffi::c_void;
     use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
     use std::sync::{Arc, Condvar};
     use std::time::{Duration, Instant};
@@ -158,73 +157,22 @@ mod imp {
     use super::{gaps, overlap, pick, place_in, width_in, Laid, Rect, Side, Span, CAPSULE, MARGIN, NARROW, TIGHT};
     use crate::appbar::Edge;
     use crate::{island, shell, Shared};
-
-    type Hwnd = *mut c_void;
-
-    #[repr(C)]
-    #[derive(Default, Clone, Copy)]
-    struct WinRect {
-        left: i32,
-        top: i32,
-        right: i32,
-        bottom: i32,
-    }
-
-    #[repr(C)]
-    #[derive(Default, Clone, Copy)]
-    struct Point {
-        x: i32,
-        y: i32,
-    }
+    use crate::win32::{BitmapInfoHeader, Blend, Hwnd, Point, Rect as WinRect, BitBlt, CreateCompatibleDC, CreateDIBSection, CreateWindowExW, DefWindowProcW, DeleteDC, DeleteObject, DwmFlush, FindWindowExW, GetAncestor, GetClassNameW, GetCurrentThreadId, GetCursorPos, GetDC, GetDesktopWindow, GetForegroundWindow, GetLastError, GetModuleHandleW, GetWindow, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsWindow, IsWindowVisible, ReleaseDC, SelectObject, SetLayeredWindowAttributes, SetWindowLongPtrW, SetWindowPos, UpdateLayeredWindow};
 
     #[link(name = "user32")]
     extern "system" {
-        fn GetWindowRect(hwnd: Hwnd, rect: *mut WinRect) -> i32;
-        fn IsWindow(hwnd: Hwnd) -> i32;
-        fn IsWindowVisible(hwnd: Hwnd) -> i32;
         fn IsChild(parent: Hwnd, hwnd: Hwnd) -> i32;
         fn SetParent(child: Hwnd, parent: Hwnd) -> Hwnd;
-        fn GetWindowLongPtrW(hwnd: Hwnd, index: i32) -> isize;
-        fn SetWindowLongPtrW(hwnd: Hwnd, index: i32, value: isize) -> isize;
-        fn SetWindowPos(hwnd: Hwnd, after: isize, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
         fn ScreenToClient(hwnd: Hwnd, pt: *mut Point) -> i32;
         fn GetDpiForWindow(hwnd: Hwnd) -> u32;
-        fn SetLayeredWindowAttributes(hwnd: Hwnd, key: u32, alpha: u8, flags: u32) -> i32;
-        fn FindWindowExW(parent: Hwnd, after: Hwnd, class: *const u16, title: *const u16) -> Hwnd;
-        fn GetWindow(hwnd: Hwnd, cmd: u32) -> Hwnd;
-        fn GetWindowThreadProcessId(hwnd: Hwnd, pid: *mut u32) -> u32;
-        fn GetAncestor(hwnd: Hwnd, flags: u32) -> Hwnd;
-        fn GetDesktopWindow() -> Hwnd;
         fn IsWindowEnabled(hwnd: Hwnd) -> i32;
-        fn GetForegroundWindow() -> Hwnd;
-        fn GetClassNameW(hwnd: Hwnd, name: *mut u16, max: i32) -> i32;
         fn EnumThreadWindows(thread: u32, each: unsafe extern "system" fn(Hwnd, isize) -> i32, param: isize) -> i32;
-        // GDI's handles as isize, the module's too, as the other modules declare them.
-        fn GetDC(hwnd: Hwnd) -> isize;
-        fn ReleaseDC(hwnd: Hwnd, dc: isize) -> i32;
-        fn UpdateLayeredWindow(hwnd: Hwnd, dst: isize, at: *const Point, size: *const Point, src: isize, from: *const Point, key: u32, blend: *const Blend, flags: u32) -> i32;
         fn RegisterClassW(class: *const WndClass) -> u16;
-        fn CreateWindowExW(ex: u32, class: *const u16, title: *const u16, style: u32, x: i32, y: i32, w: i32, h: i32, parent: Hwnd, menu: isize, instance: isize, param: *mut c_void) -> Hwnd;
-        fn DefWindowProcW(hwnd: Hwnd, msg: u32, wparam: usize, lparam: isize) -> isize;
-        fn GetCursorPos(pt: *mut Point) -> i32;
-    }
-
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn GetLastError() -> u32;
-        fn GetCurrentThreadId() -> u32;
-        fn GetModuleHandleW(name: *const u16) -> isize;
     }
 
     #[link(name = "gdi32")]
     extern "system" {
-        fn CreateCompatibleDC(hdc: isize) -> isize;
-        fn CreateDIBSection(hdc: isize, info: *const BitmapInfoHeader, usage: u32, bits: *mut *mut u8, section: isize, offset: u32) -> isize;
-        fn SelectObject(hdc: isize, obj: isize) -> isize;
-        fn BitBlt(dst: isize, x: i32, y: i32, w: i32, h: i32, src: isize, sx: i32, sy: i32, rop: u32) -> i32;
         fn GdiFlush() -> i32;
-        fn DeleteObject(obj: isize) -> i32;
-        fn DeleteDC(hdc: isize) -> i32;
     }
 
     // WNDCLASSW.
@@ -240,37 +188,6 @@ mod imp {
         background: isize,
         menu: *const u16,
         name: *const u16,
-    }
-
-    // BITMAPINFOHEADER (BITMAPINFO's colours unused at 32 bits), as taskbar/ has it.
-    #[repr(C)]
-    struct BitmapInfoHeader {
-        size: u32,
-        width: i32,
-        height: i32,
-        planes: u16,
-        bit_count: u16,
-        compression: u32,
-        size_image: u32,
-        x_ppm: i32,
-        y_ppm: i32,
-        clr_used: u32,
-        clr_important: u32,
-    }
-
-    // BLENDFUNCTION.
-    #[repr(C)]
-    struct Blend {
-        op: u8,
-        flags: u8,
-        alpha: u8,
-        format: u8,
-    }
-
-    #[link(name = "dwmapi")]
-    extern "system" {
-        // Waits for DWM's next frame to be put on the screen.
-        fn DwmFlush() -> i32;
     }
 
     const GWL_EXSTYLE: i32 = -20;

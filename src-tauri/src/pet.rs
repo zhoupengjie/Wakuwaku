@@ -500,11 +500,8 @@ pub fn keep_on_screen(sh: &Shared) {
 // (None: cannot tell). With the buttons swapped, the primary is the right.
 #[cfg(windows)]
 pub fn primary_down() -> Option<bool> {
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetAsyncKeyState(key: i32) -> i16;
-        fn GetSystemMetrics(index: i32) -> i32;
-    }
+    use crate::win32::{GetAsyncKeyState, GetSystemMetrics};
+
     // SAFETY: plain user32 calls with no pointers.
     unsafe {
         let key = if GetSystemMetrics(23) != 0 { 0x02 } else { 0x01 };
@@ -521,10 +518,8 @@ pub fn primary_down() -> Option<bool> {
 // right, the middle (a tab closed), the two at the side.
 #[cfg(windows)]
 pub fn any_down() -> Option<bool> {
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetAsyncKeyState(key: i32) -> i16;
-    }
+    use crate::win32::GetAsyncKeyState;
+
     // SAFETY: a plain user32 call with no pointers.
     Some([0x01, 0x02, 0x04, 0x05, 0x06].iter().any(|&key| unsafe { GetAsyncKeyState(key) } as u16 & 0x8000 != 0))
 }

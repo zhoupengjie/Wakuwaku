@@ -44,6 +44,7 @@ mod imp {
     use std::ffi::c_void;
     use std::os::windows::ffi::OsStrExt;
     use std::path::Path;
+    use crate::win32::{ProcessEntry, CloseHandle, CreateToolhelp32Snapshot, GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, GetShellWindow, GetWindowThreadProcessId, OpenProcess, Process32FirstW, Process32NextW, TerminateProcess, WaitForSingleObject};
 
     #[repr(C)]
     struct StartupInfo {
@@ -79,20 +80,6 @@ mod imp {
         thread: isize,
         process_id: u32,
         thread_id: u32,
-    }
-
-    #[repr(C)]
-    struct ProcessEntry {
-        size: u32,
-        usage: u32,
-        process_id: u32,
-        heap_id: usize,
-        module_id: u32,
-        threads: u32,
-        parent_id: u32,
-        priority: i32,
-        flags: u32,
-        exe: [u16; 260],
     }
 
     // JOBOBJECT_BASIC_LIMIT_INFORMATION and the extended one around it,
@@ -135,27 +122,11 @@ mod imp {
             startup: *const StartupInfo,
             info: *mut ProcessInfo,
         ) -> i32;
-        fn CloseHandle(handle: isize) -> i32;
-        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
-        fn GetCurrentProcess() -> isize;
-        fn GetCurrentProcessId() -> u32;
         fn IsProcessInJob(process: isize, job: isize, result: *mut i32) -> i32;
         fn QueryInformationJobObject(job: isize, class: i32, info: *mut c_void, length: u32, returned: *mut u32) -> i32;
-        fn WaitForSingleObject(handle: isize, ms: u32) -> u32;
-        fn GetExitCodeProcess(process: isize, code: *mut u32) -> i32;
-        fn TerminateProcess(process: isize, code: u32) -> i32;
         fn InitializeProcThreadAttributeList(list: *mut c_void, count: u32, flags: u32, size: *mut usize) -> i32;
         fn UpdateProcThreadAttribute(list: *mut c_void, flags: u32, attribute: usize, value: *const c_void, size: usize, previous: *mut c_void, returned: *mut usize) -> i32;
         fn DeleteProcThreadAttributeList(list: *mut c_void);
-        fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> isize;
-        fn Process32FirstW(snapshot: isize, entry: *mut ProcessEntry) -> i32;
-        fn Process32NextW(snapshot: isize, entry: *mut ProcessEntry) -> i32;
-    }
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn GetShellWindow() -> *mut c_void;
-        fn GetWindowThreadProcessId(hwnd: *mut c_void, pid: *mut u32) -> u32;
     }
 
     const DETACHED_PROCESS: u32 = 0x0000_0008;
@@ -364,8 +335,8 @@ mod imp {
             let mut found = None;
             let mut ok = Process32FirstW(snap, &mut entry) != 0;
             while ok {
-                if entry.process_id == me {
-                    found = Some(entry.parent_id);
+                if entry.pid == me {
+                    found = Some(entry.parent);
                     break;
                 }
                 ok = Process32NextW(snap, &mut entry) != 0;

@@ -7,9 +7,7 @@
 #[cfg(windows)]
 mod imp {
     use std::ffi::c_void;
-
-    #[repr(C)]
-    struct Guid(u32, u16, u16, [u8; 8]);
+    use crate::win32::{Guid, CoCreateInstance, CoInitializeEx, CoUninitialize};
 
     const CLSID_MM_DEVICE_ENUMERATOR: Guid = Guid(0xBCDE_0395, 0xE52F, 0x467C, [0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E]);
     const IID_IMM_DEVICE_ENUMERATOR: Guid = Guid(0xA956_64D2, 0x9614, 0x4F35, [0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6]);
@@ -61,13 +59,6 @@ mod imp {
         _get_channel_volume_level_scalar: usize,
         _set_mute: usize,
         get_mute: extern "system" fn(*mut Obj, *mut i32) -> i32,
-    }
-
-    #[link(name = "ole32")]
-    extern "system" {
-        fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
-        fn CoUninitialize();
-        fn CoCreateInstance(clsid: *const Guid, outer: *mut c_void, ctx: u32, iid: *const Guid, out: *mut *mut c_void) -> i32;
     }
 
     // COM kept up on this thread while it lives: each read() then only

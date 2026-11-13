@@ -30,12 +30,7 @@ pub fn tidy_version(text: &str) -> Option<String> {
 pub(super) fn file_version(path: &Path, product: &str) -> Option<String> {
     use std::ffi::c_void;
     use std::os::windows::ffi::OsStrExt;
-    #[link(name = "version")]
-    extern "system" {
-        fn GetFileVersionInfoSizeW(name: *const u16, handle: *mut u32) -> u32;
-        fn GetFileVersionInfoW(name: *const u16, handle: u32, len: u32, data: *mut c_void) -> i32;
-        fn VerQueryValueW(block: *const c_void, sub: *const u16, buffer: *mut *mut c_void, len: *mut u32) -> i32;
-    }
+    use crate::win32::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
     let wide = |s: &std::ffi::OsStr| s.encode_wide().chain(std::iter::once(0)).collect::<Vec<u16>>();
     let file = wide(path.as_os_str());
     // SAFETY: a buffer of the size the call asks for; the values read point

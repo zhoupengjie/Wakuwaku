@@ -966,11 +966,8 @@ static QUITTING: AtomicBool = AtomicBool::new(false);
 fn end_now() -> ! {
     #[cfg(windows)]
     {
-        #[link(name = "kernel32")]
-        extern "system" {
-            fn GetCurrentProcess() -> isize;
-            fn TerminateProcess(process: isize, code: u32) -> i32;
-        }
+        use crate::win32::{GetCurrentProcess, TerminateProcess};
+
         // SAFETY: this process's own pseudo-handle.
         unsafe { TerminateProcess(GetCurrentProcess(), 0) };
     }

@@ -330,6 +330,9 @@ keys! {
     NOTIFY notify: Raw = "notify" => { "waiting": false, "done": false, "error": false },
     "sound" => false,
     PROMPT_WAIT_SEC prompt_wait_sec: UInt = "promptWaitSec" => 290,
+    // Approvals other programs on this computer ask for, on her prompt
+    // panel (app_asks.rs, POST /ask); off, they are told so at once.
+    APP_ASKS app_asks: On = "appAsks" => true,
     DND dnd: Flag = "dnd" => false,
     HIDE_IN_FULLSCREEN hide_in_fullscreen: Flag = "hideInFullscreen" => true,
     ONBOARDED onboarded: Flag = "onboarded" => false,
@@ -472,6 +475,7 @@ mod tests {
             "notify": { "waiting": false, "done": false, "error": false },
             "sound": false,
             "promptWaitSec": 290,
+            "appAsks": true,
             "dnd": false,
             "hideInFullscreen": true,
             "onboarded": false,

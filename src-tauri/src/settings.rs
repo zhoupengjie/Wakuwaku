@@ -648,6 +648,8 @@ fn is_ok(sh: &Shared, key: &str, v: &Value) -> bool {
         // Minutes a session at rest stays in sight, or 0: always (state.rs is_shown).
         "idleHideMin" => matches!(v.as_u64(), Some(0 | 15 | 30 | 60 | 120)),
         "promptWaitSec" => matches!(v.as_u64(), Some(30 | 60 | 120 | 290)),
+        // Other programs' approvals on her prompt panel (app_asks.rs).
+        "appAsks" => is_bool,
         "notify" => ["waiting", "done", "error"].iter().all(|k| v.get(k).is_some_and(Value::is_boolean)),
         "widgetsOff" | "widgetOrder" => v.as_array().is_some_and(|ids| ids.len() <= 64 && ids.iter().all(|id| id.as_str().is_some_and(crate::widgets::is_id))),
         "widgetSpin" => matches!(v.as_u64(), Some(0 | 5 | 8 | 15)),

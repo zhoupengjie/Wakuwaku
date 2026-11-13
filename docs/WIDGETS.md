@@ -53,8 +53,53 @@ Invoke-RestMethod -Method Post http://127.0.0.1:47213/widget -ContentType applic
 
 超出长度的字截断、末尾加「…」，所以发什么都撑不爆岛。天气的 `rows` 里 `kind: "hour"` 是逐小时（`icon`：`sun` `moon` `partly` `cloud` `fog` `rain` `snow` `storm`，画成 Windows 自己的图标），`kind: "day"` 是明后天；股票的一行是 `{ code, name, price, change, value }`（`value` 是成交量），`series` 是当天的价格。她自己的天气、股票、番茄钟、倒计时都这样发。
 
+## 请用户批准（POST /ask）
+
+插件只显示，不回传。要用户**批准或拒绝**一件事、再把结果拿回去（比如把聊天软件里带按钮、过一会儿就超时的审批转到桌面上），发到 `/ask`。它和 agent 的确认请求出现在同一个面板上：岛升起来、响提示音，批准和拒绝的快捷键也能用；面板上写明是哪个「外部程序」在问，不会被当成 Claude Code 的。
+
+这个请求**一直挂着，等用户点了才回复**，一个请求拿一个结果：不用注册、订阅，也不用开端口等回调。她退出时连接会断开。
+
+```powershell
+$body = @{ id = 'req-42'; app = 'Discord 桥'; title = 'Claude 想运行 npm run deploy'; text = '在 build-server 上'; expires = 120 } | ConvertTo-Json
+$r = Invoke-RestMethod -Method Post http://127.0.0.1:47213/ask -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 0
+$r.decision   # allow、deny，或者空：没人在这里回答，看 $r.reason
+```
+
+```js
+const res = await fetch('http://127.0.0.1:47213/ask', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ id: 'req-42', app: 'Discord 桥', title: 'Claude 想运行 npm run deploy', expires: 120 }),
+})
+const { decision, reason } = await res.json()
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `id` | 你自己给这个请求起的名字，1 到 128 个字 |
+| `app` | 谁在问，面板上这样称呼你，最长 40 个字 |
+| `title` | 要批准的是什么，一行，最长 120 个字 |
+| `text` | 可选，更多内容，显示在面板的框里，可以换行，最长 2000 个字 |
+| `expires` | 可选，最多等多少秒，默认 300，10 到 3600 |
+
+回复：
+
+| 回复 | 什么时候 |
+| --- | --- |
+| `{ id, decision: "allow" }` 或 `"deny"` | 用户点了批准或拒绝（或按了快捷键） |
+| `{ id, decision: null, reason }` | 这里没人回答，你自己另想办法（比如还是发到聊天软件里）。`reason`：`expired` 时间到了；`dismissed` 用户点了「交回」；`cancelled` 你自己撤回了；`replaced` 同一个 `id` 又发了一次，新的那个接着等；`away` 她现在看不见（隐藏了、勿扰、全屏时），和 agent 的请求交回终端一样；`off` 用户在设置里关掉了「其他程序的审批」 |
+| `{ id, decision, again: true }` | 这个 `id` 十分钟内已经有过结果：原样再告诉你一次，不再问用户。连接正好在她回答时断了，重发一次就能拿到 |
+| 400 和 `{ error }` | 哪里不对 |
+| 429 和 `{ error }` | 已经有 5 个在等了 |
+
+在别处先有了结果（比如聊天软件里有人点了），发 `{ "id": "req-42", "cancel": true }` 把面板上的撤掉，回 `{ ok }`；原来挂着的那个请求会收到 `reason: "cancelled"`。
+
+她只显示你给的字、把用户的选择交回给你，不替你做任何事。和 `/widget` 一样只收本机程序发的，网页发来的一律 403。要等得久的，注意你那边 HTTP 客户端自己的超时：PowerShell 的 `Invoke-RestMethod` 默认 100 秒（上面用 `-TimeoutSec 0` 不限），Node 的 `fetch` 等回复最多 300 秒，`expires` 超过 290 时改用 `http` 模块。
+
 ---
 
 **Your own widgets.** POST that JSON to `http://127.0.0.1:47213/widget` and it shows in the island while no session needs you; send it again within `ttl` seconds to keep it there. From a script or a program, or a browser extension (Thunderbird's); not from a web page, which is answered 403. The fields are in the table above. The weather, stocks, a pomodoro, a countdown, a stretch reminder, CI and dev servers are hers already: switch them on in the Plugins page.
 
 A widget is small at least (its icon and value). Its `detail`, as an object, says which sizes it has (`sizes`: `s`, `m`, `l`) and gives the larger ones more to show: `extra` (a few words, 24 characters: its second line), `series` (`points`, 120 at most, with `unit`, `hi`, `lo`) and `rows` (12 at most, each of `from code name when price change value unit kind icon`, 16 characters each, `subject text`, 60, `at` and `points`). Longer words are cut with "…"; anything else is dropped. A string `detail`, as before, is its extra.
+
+**Asking the person to approve something.** POST `{ id, app, title, text?, expires? }` to `http://127.0.0.1:47213/ask` and the request is held until the person picks Allow or Deny on her prompt panel, beside the agents' own and marked as another program's: the answer is `{ id, decision: "allow" | "deny" }`. When nobody answers here it is `{ id, decision: null, reason }` (`expired`, `dismissed`, `cancelled`, `replaced`, `away` while she is out of sight, `off` when the person turned it off), and you ask your own way. The same `id` asked again within ten minutes of a decision gets that decision again (`again: true`). `{ id, cancel: true }` takes one back. `expires` is 10 to 3600 seconds (300 by default); five wait at most (429); not from a web page (403). Mind your HTTP client's own timeout.

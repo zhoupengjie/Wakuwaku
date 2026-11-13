@@ -48,6 +48,7 @@ export interface Config {
   notify?: Record<string, any>
   sound?: boolean
   promptWaitSec?: number
+  appAsks?: boolean
   dnd?: boolean
   hideInFullscreen?: boolean
   onboarded?: boolean

@@ -53,6 +53,7 @@
 #![recursion_limit = "256"]
 
 mod addons;
+mod app_asks;
 mod appbar;
 mod asks;
 mod audio;

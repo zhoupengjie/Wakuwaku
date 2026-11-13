@@ -141,6 +141,9 @@
 
   // A permission prompt (asks.rs view).
   const ASK = { id: 1, kind: 'permission', tool: 'Bash', summary: 'npm test -- --watch=false', project: 'pet', session: 's1', always: { rules: ['Bash(npm test:*)'], dirs: [], modes: [], where: ['localSettings'] } }
+  // Another program asking for an approval (app_asks.rs views, POST /ask):
+  // a bridge that would have put it in a chat with buttons.
+  const APP_ASK = { id: 2 ** 41, kind: 'app', session: '', app: 'Discord 桥', title: 'Claude 想在 build-server 上运行命令', text: 'npm run deploy -- --prod', until: T0 + 280e3 }
   // DeepSeek Harness waiting on you (her plugin's, asks.rs views): its
   // sandbox to widen for a write outside the workspace, with its reason in
   // both languages; and its ask_user_question, as the test machine had them.
@@ -822,7 +825,7 @@
     },
   }
 
-  const api = { T0, appIcon, trayIcon, session, others, reading, ASK, dsh, DSH_ASK, DSH_QUESTION, MAIL, inboxWidget, WIDGETS, widget, widgets, PLUGINS, SLEEPING, ADDONS, ADDON_WIDGETS, ADDON_VIEWS, ADDON_BOARD, ADDONS_BROKEN, ADDON_FILES, MARKET, MARKET_UPDATES, PACKS, PACK_PETS, WINDOWS, TRAY, KEYS, DESK, TASKBAR, BOARD_SETS }
+  const api = { T0, appIcon, trayIcon, session, others, reading, ASK, APP_ASK, dsh, DSH_ASK, DSH_QUESTION, MAIL, inboxWidget, WIDGETS, widget, widgets, PLUGINS, SLEEPING, ADDONS, ADDON_WIDGETS, ADDON_VIEWS, ADDON_BOARD, ADDONS_BROKEN, ADDON_FILES, MARKET, MARKET_UPDATES, PACKS, PACK_PETS, WINDOWS, TRAY, KEYS, DESK, TASKBAR, BOARD_SETS }
   if (typeof module !== 'undefined' && module.exports) module.exports = api
   else root.Fixtures = api
 })(typeof window !== 'undefined' ? window : globalThis)

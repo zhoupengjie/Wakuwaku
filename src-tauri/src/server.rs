@@ -22,6 +22,9 @@
 //   POST /state        an AgentEvent (agent-core's, as /v1/events sends them): into her
 //                      sessions (state.rs) and to the apps listening, as a hook's is
 //   POST /widget       a widget for the island, from a script (widgets.rs)
+//   POST /ask          an approval another program asks the person for, held till
+//                      they pick on her prompt panel, it is taken back, or its time
+//                      is up (app_asks.rs says how)
 //   POST /come-home    started again while running: back into sight
 //   POST /after-update { pid, version }: a new version she started (an update, a restart) is
 //                      up, and waits for her to go (updates.rs hand_over)
@@ -499,6 +502,11 @@ fn handle(sh: &Arc<Shared>, mut req: Request, is_debug: bool, hooks: &SyncSender
             None => reply(req, 400, json!({ "error": "bad json" })),
         },
         // Started again while she runs: she comes back into sight.
+        // Held till the person picks (app_asks.rs), or answered at once.
+        ("POST", "/ask") => match read_json(&mut req) {
+            Some(v) => crate::app_asks::take(sh, &v, Box::new(move |code, body| reply(req, code, body))),
+            None => reply(req, 400, json!({ "error": "bad json" })),
+        },
         ("POST", "/come-home") => {
             crate::shared::come_home(sh);
             reply(req, 200, json!({ "ok": true }))

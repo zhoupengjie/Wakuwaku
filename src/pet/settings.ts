@@ -628,7 +628,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
         ${row(esc(T('settings.notifyError')), '', sw('notify.error', notify.error))}
         ${row(esc(T('settings.sound')), '', sw('sound', s.sound))}
       </div>
-      ${sec(T('settings.prompts'))}<div class="grp">${row(esc(T('settings.promptWait')), esc(T('settings.promptWaitNote')), seg('promptWaitSec', waits, s.promptWaitSec))}</div>
+      ${sec(T('settings.prompts'))}<div class="grp">${row(esc(T('settings.promptWait')), esc(T('settings.promptWaitNote')), seg('promptWaitSec', waits, s.promptWaitSec))}
+        ${row(esc(T('settings.appAsks')), esc(T('settings.appAsksNote')), sw('appAsks', s.appAsks !== false))}</div>
       ${sec(T('s.quiet'))}<div class="grp">
         ${row(esc(T('menu.dnd')), esc(T('s.dndNote')), sw('dnd', s.dnd))}
         ${row(esc(T('settings.hideInFullscreen')), '', sw('hideInFullscreen', s.hideInFullscreen, st.snap.fullscreenAvailable ? '' : 'disabled'))}
@@ -1153,6 +1154,8 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       if (key === 'widgetNudge') return patch({ widgetNudge: s.widgetNudge === false })
       // Mail's codes on the island: on unless turned off (mail/codes.rs).
       if (key === 'mailCodes') return patch({ mailCodes: s.mailCodes === false })
+      // Other programs' approvals on the panel: on unless turned off (app_asks.rs).
+      if (key === 'appAsks') return patch({ appAsks: s.appAsks === false })
       // On unless turned off (market.rs).
       if (key === 'pluginAutoUpdate') return patch({ pluginAutoUpdate: s.pluginAutoUpdate === false })
       // One of the monitor's parts on or off.

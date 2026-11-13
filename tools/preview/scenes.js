@@ -657,6 +657,18 @@
       world: F => ({ ...home(F), sessions: [F.dsh({ key: 'detail.approve', vars: { what: { key: 'step.write', vars: { file: 'note.txt' } } } })], asks: [F.DSH_ASK] }),
       settle: 900,
     },
+    // Another program asking (POST /ask): her words for who asks and that
+    // it is another program's, its words in the box, 交回 as the way out.
+    {
+      id: 'capsule-ask-app',
+      section: 'capsule',
+      title: '等你 · 外部程序请你批准（POST /ask）',
+      page: 'island',
+      home: 'taskbar',
+      view: [0, above(330), 520, 330],
+      world: F => ({ ...home(F), sessions: [F.session('working')], asks: [F.APP_ASK] }),
+      settle: 900,
+    },
     {
       id: 'capsule-question-dsh',
       section: 'capsule',

@@ -52,6 +52,15 @@ describe('global shortcuts behavioral tests', () => {
       assert.deepEqual(decideHotkeyAction({ which: 'allow', ...on, ask: { ...ask, copied: true } }), { type: 'open' })
     })
 
+    it("another program's approval (POST /ask, #149) is answered by the keys as by its buttons", () => {
+      const ask = { id: 2 ** 41, kind: 'app', app: 'Discord 桥', title: 'Claude 想运行 npm test' }
+      for (const which of ['allow', 'deny']) {
+        assert.deepEqual(decideHotkeyAction({ which, ask, shownId: ask.id, isArmed: true, islandOpen: true }), { type: 'answer', which, id: ask.id })
+      }
+      // Just come: the keys open the island, as for an agent's.
+      assert.deepEqual(decideHotkeyAction({ which: 'allow', ask, shownId: ask.id, isArmed: false, islandOpen: true }), { type: 'open' })
+    })
+
     it('if prompt is a question (ask.kind === "question"), only opens island and never answers blindly', () => {
       const ask = { id: 103, kind: 'question', questions: [{ question: 'Which branch?' }] }
       const res = decideHotkeyAction({

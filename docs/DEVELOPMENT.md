@@ -115,6 +115,7 @@ src-tauri/
     frameless.rs          她的窗口不留标题栏样式：tao 写回样式时拿掉 WS_CAPTION，分层窗口才不会被画上旧式外框（见「踩过的坑」）
     winkeys.rs            任务栏的 Win 键：Win+1…9、Win+T、Win+B 从藏起来的 Windows 任务栏接过来（低级键盘钩子，自己的线程），按她的顺序
     jump.rs               点会话就到它的窗口：会话的进程链、找窗口、叫到前面、桌面版的会话链接
+    app_asks.rs           本机别的程序请用户批准（POST /ask）：挂着等面板上的批准或拒绝再回复，到期、撤回、看不见时回「没人回答」和原因；和验证码提醒一样接进确认面板（docs/WIDGETS.md）
     widgets.rs            岛上的插件（第一层）：脚本发来的、内置的（今天、今天的 token、监控），什么时候冒头；她自己插件的按钮（actions）
     tokens.rs             今天的 token：读 Claude Code、Codex、Antigravity、omp、DeepSeek Harness 和 Reasonix 自己的会话记录
     plugins.rs, plugins/  她替你跑的插件（天气、股票、番茄钟、倒计时、久坐提醒、CI、开发服务器、日历、正在播放）：开关、参数、在她自己的进程里按各自的节拍跑；卡片上的按钮按回给插件（act）；calendar/ 里是农历和节气（lunar.rs）、.ics 的解析（ics.rs），media.rs 读 Windows 的媒体会话（SMTC）
@@ -380,6 +381,7 @@ hook 事件先由 agent-core 读成 `AgentEvent`（每家在它自己的模块�
 | `GET /v1/events` | Server-Sent Events：每个 AgentEvent 带编号和时间，一来就发；`?since=<n>` 或 `Last-Event-ID` 先补上漏掉的。要令牌 |
 | `POST /state` | 一个 AgentEvent（见「会话事件」）：进她的会话，也发给 /v1 的订阅者，和 hook 来的一样；回 `{ ok: true }`，格式不对回 400 和 `{ error }` |
 | `POST /widget` | 岛上的一个插件（见"岛上的插件"）；回 `{ ok: true }`，或者 400 和 `{ error }` |
+| `POST /ask` | 本机别的程序请用户批准一件事（`app_asks.rs`，用法见 `docs/WIDGETS.md`）：请求挂着，等用户在确认面板上点了批准或拒绝才回 `{ id, decision }`；到期、交回、撤回、她看不见、设置里关了时回 `decision: null` 和 `reason`。同一个 `id` 十分钟内有过结果就原样再回一次（`again: true`）；`{ id, cancel: true }` 撤回；最多 5 个在等（429） |
 | `POST /come-home` | 再次启动时用：她重新出现 |
 | `POST /after-update` | `{ pid, version }`：更新或重启时她启动的新版说自己起来了；她收到后再看 3 秒才退出（见"软件更新"） |
 | `POST /quit` | 像菜单里的「退出」一样退出（任务栏还回去），算主动退出：之后会话不再把她拉起来，直到她以别的方式启动（回 `{ ok, byChoice: true }`）；`?wake=1` 退出但会话可以再拉起她（`byChoice: false`）。换新版本时用（新的启动时清掉标记），别直接杀进程 |

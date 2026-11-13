@@ -484,6 +484,13 @@ body {
   font-family: inherit;
 }
 
+/* Another program's approval (panel.ts appBody): its title and text are
+   words, as a plan's are, not a command. */
+#panel .code.app-ask {
+  max-height: 140px;
+  font-family: inherit;
+}
+
 /* A code come by mail (panel.ts mailBody): large enough to read off and
    type by hand; a click on it copies it. Its colours are the look's .code. */
 #panel .code.mail-code {

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-use crate::{bars, desk, fullscreen, hw, island, lhm, mail, now_ms, pet, plugins, power, screen, settings, spawn_named, tokens, widgets, Shared};
+use crate::{app_asks, bars, desk, fullscreen, hw, island, lhm, mail, now_ms, pet, plugins, power, screen, settings, spawn_named, tokens, widgets, Shared};
 use crate::lock::Lock;
 
 // The monitor's thread woken from its wait (setup): its settings changed
@@ -224,8 +224,13 @@ pub fn ticker(sh: &Arc<Shared>) {
                 for id in &gone {
                     ticker.log(&format!("prompt {id} handed to the terminal: its time is up"));
                 }
+                // Another program's, its time up: told so (app_asks.rs).
+                let apps = app_asks::expire(now);
+                if apps > 0 {
+                    ticker.log(&format!("{apps} app ask(s) let go: their time is up"));
+                }
                 // A code come by mail, its minute up (or its "Copied" read).
-                if mail::codes::expire(now) || !gone.is_empty() {
+                if mail::codes::expire(now) || apps > 0 || !gone.is_empty() {
                     ticker.push_asks();
                 }
             }

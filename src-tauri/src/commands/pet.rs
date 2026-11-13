@@ -6,7 +6,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, WebviewWindow};
 
 use super::is_island;
-use crate::{i18n, island, mail, pet, shared, shortcuts, taskbar, tray};
+use crate::{app_asks, i18n, island, mail, pet, shared, shortcuts, taskbar, tray};
 
 #[tauri::command]
 pub async fn pet_ready(app: AppHandle, window: WebviewWindow) {
@@ -93,6 +93,15 @@ pub async fn pet_panel(app: AppHandle, window: WebviewWindow, measured: Value) {
 #[tauri::command]
 pub async fn pet_answer(app: AppHandle, id: u64, choice: Value) -> bool {
     let sh = shared(&app);
+    // Another program's: allow or deny handed back to it (app_asks.rs; no
+    // approval counted, as it is no agent's).
+    if app_asks::holds(id) {
+        let action = choice["action"].as_str().unwrap_or("?");
+        let ok = app_asks::answer(id, action);
+        sh.log(&format!("app ask {id}: {action} -> {ok}"));
+        sh.push_asks();
+        return ok;
+    }
     // A code come by mail: copied, opened or let go (nothing of it logged,
     // and no approval counted).
     if mail::codes::holds(id) {
@@ -117,6 +126,12 @@ pub async fn pet_answer(app: AppHandle, id: u64, choice: Value) -> bool {
 #[tauri::command]
 pub async fn pet_dismiss(app: AppHandle, id: u64) {
     let sh = shared(&app);
+    // Another program's: back to it, to ask its own way.
+    if app_asks::dismiss(id) {
+        sh.log(&format!("app ask {id} handed back to its program: asked to on her"));
+        sh.push_asks();
+        return;
+    }
     if mail::codes::dismiss(id) {
         sh.push_asks();
         return;

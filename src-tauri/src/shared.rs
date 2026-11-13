@@ -19,7 +19,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 #[cfg(windows)]
 use crate::frameless;
 use crate::lock::Lock;
-use crate::{asks, backplate, bars, connection, crash, data, desk, focus, fullscreen, i18n, island, logon, mail, notify, pet, plugins, power, screen, settings, shortcuts, state, taskbar, tray, wallpaper, widgets};
+use crate::{app_asks, asks, backplate, bars, connection, crash, data, desk, focus, fullscreen, i18n, island, logon, mail, notify, pet, plugins, power, screen, settings, shortcuts, state, taskbar, tray, wallpaper, widgets};
 use crate::config;
 
 // The island's own animation of taking her in, before she counts as in.
@@ -477,7 +477,9 @@ impl Shared {
     // links come by mail (mail/codes.rs), which never stand before a prompt.
     pub fn asks_views(&self) -> Value {
         let mut views = self.asks.lock().unwrap().views();
+        // Other programs' after the agents', before a code come by mail.
         if let Value::Array(list) = &mut views {
+            list.extend(app_asks::views());
             list.extend(mail::codes::views());
         }
         views
@@ -487,8 +489,10 @@ impl Shared {
     pub fn push_asks(&self) {
         let (none, handed) = {
             let mut asks = self.asks.lock().unwrap();
-            (asks.is_empty() && mail::codes::is_empty(), asks.take_handed())
+            (asks.is_empty(), asks.take_handed())
         };
+        // The others' read with the agents' let go: one lock at a time.
+        let none = none && app_asks::is_empty() && mail::codes::is_empty();
         let views = self.asks_views();
         // DeepSeek Harness's handed back to its own window: its session waits
         // to be answered there (asks.rs handed_event), as her line says and
@@ -775,9 +779,14 @@ impl Shared {
             if n > 0 {
                 self.log(&format!("{n} prompt(s) handed to the terminal: out of sight"));
             }
+            // Another program's: it asks its own way (app_asks.rs "away").
+            let apps = app_asks::clear("away");
+            if apps > 0 {
+                self.log(&format!("{apps} app ask(s) let go: out of sight"));
+            }
             // A code come by mail is a minute's thing: gone, not kept for later.
             let codes = mail::codes::clear();
-            if n > 0 || codes > 0 {
+            if n > 0 || apps > 0 || codes > 0 {
                 self.push_asks();
             }
         }

@@ -8,8 +8,10 @@
 // (approve: it is executed; deny: omp refines it), with omp's own review
 // open meanwhile; and ZCode's (allow or deny) beside its own. DeepSeek
 // Harness's approvals (allow or deny, with why it asks) and its questions,
-// its own dialog open all the while. After them, a code or a link to sign
-// in with come by mail (mail/codes.rs): Copy, Open for a link, Ignore.
+// its own dialog open all the while. After them, approvals other programs
+// ask for (app_asks.rs, POST /ask): allow or deny handed back to them,
+// 交回 lets them ask their own way. Then a code or a link to sign in with
+// come by mail (mail/codes.rs): Copy, Open for a link, Ignore.
 //
 // Everything shown comes from the tool call, so it is set as text, never HTML.
 import { t } from '../shared/i18n.ts'
@@ -18,8 +20,9 @@ import type { HerTalkFace } from './pet.ts'
 import type { IslandFace } from './island.ts'
 import type { Config } from '../shared/config.ts'
 
-// A prompt as the panel is given it (agent-core's asks.rs view_of; a code
-// or a link come by mail, mail/codes.rs views): loose JSON from Rust, each
+// A prompt as the panel is given it (agent-core's asks.rs view_of; another
+// program's, app_asks.rs views; a code or a link come by mail, mail/codes.rs
+// views): loose JSON from Rust, each
 // kind with fields of its own, read as its kind has them. What every kind
 // has, and what tells them apart, is typed.
 export interface Ask {
@@ -70,9 +73,10 @@ const STEP_ARM_MS = 150
 // The keys answer what the buttons do: an approval or a plan, theirs too
 // (zcode, dsh), whose own dialog closes as the answer reaches it
 // (zhoupengjie/Wakuwaku#97). A code come by mail: approve copies it,
-// deny lets it go (until it says it is copied).
+// deny lets it go (until it says it is copied). Another program's: allow
+// or deny, as an approval's.
 const isMail = (ask: Ask | null | undefined) => !!ask && (ask.kind === 'mailCode' || ask.kind === 'mailLink')
-const canAnswerWithHotkey = (ask: Ask | null | undefined) => !!ask && (ask.kind === 'permission' || ask.kind === 'plan' || (isMail(ask) && !ask.copied)) && ask.canAnswer !== false
+const canAnswerWithHotkey = (ask: Ask | null | undefined) => !!ask && (ask.kind === 'permission' || ask.kind === 'plan' || ask.kind === 'app' || (isMail(ask) && !ask.copied)) && ask.canAnswer !== false
 
 // Hers while she is out and her window up (her page not put away with
 // it), else the island's: one of the two, so a prompt shows in one place.
@@ -256,6 +260,23 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
     ]
   }
 
+  // An approval another program asks for (app_asks.rs): her own words for
+  // who asks and that it is another program's (so it cannot pass for an
+  // agent's prompt), its title and text in the box as they came, Allow and
+  // Deny handed back to it.
+  function appBody(ask: Ask) {
+    return [
+      el('div', { class: 'head' }, el('span', { class: 'title' }, T('panel.appAsk', { app: ask.app || '?' })), el('span', { class: 'chip' }, T('panel.appChip'))),
+      el('pre', { class: 'code app-ask' }, [ask.title, ask.text].filter(Boolean).join('\n\n')),
+      el(
+        'div',
+        { class: 'row' },
+        button(T('panel.allow'), 'allow', () => answer({ action: 'allow' }), 'primary', keyHintOf('shortcutApprove', ask)),
+        button(T('panel.deny'), 'deny', () => answer({ action: 'deny' }), 'danger', keyHintOf('shortcutDeny', ask)),
+      ),
+    ]
+  }
+
   function planBody(ask: Ask) {
     return [
       header(T('panel.planTitle'), ask),
@@ -427,7 +448,7 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
       letGoOfKeyboard()
     }
 
-    const body = isMail(ask) ? mailBody(ask) : ask.kind === 'question' ? questionBody(ask) : ask.kind === 'plan' ? planBody(ask) : permissionBody(ask)
+    const body = isMail(ask) ? mailBody(ask) : ask.kind === 'app' ? appBody(ask) : ask.kind === 'question' ? questionBody(ask) : ask.kind === 'plan' ? planBody(ask) : permissionBody(ask)
     const more = asks.length > 1 ? el('span', { class: 'more' }, T('panel.more', { n: asks.length - 1 })) : null
     panel.append(
       ...body.filter(Boolean) as HTMLElement[],
@@ -440,8 +461,20 @@ export function panelPage(Island: IslandFace | null, HerTalk: HerTalkFace | null
             el(
               'div',
               { class: 'foot' },
-              // An app's prompt (ZCode's, DSH's dialog stays open meanwhile) is handled there.
-              button(ask.kind === 'question' && !ask.canAnswer ? T('panel.gotIt') : IN_APP.has(ask.from!) ? T('panel.toApp', { app: FROM[ask.from as From] }) : T('panel.toTerminal'), 'dismiss', dismiss, 'ghost'),
+              // An app's prompt (ZCode's, DSH's dialog stays open meanwhile) is handled there;
+              // another program's goes back to it, to ask its own way.
+              button(
+                ask.kind === 'question' && !ask.canAnswer
+                  ? T('panel.gotIt')
+                  : ask.kind === 'app'
+                    ? T('panel.backTo', { app: ask.app || '?' })
+                    : IN_APP.has(ask.from!)
+                      ? T('panel.toApp', { app: FROM[ask.from as From] })
+                      : T('panel.toTerminal'),
+                'dismiss',
+                dismiss,
+                'ghost',
+              ),
               more,
             ),
           ]),

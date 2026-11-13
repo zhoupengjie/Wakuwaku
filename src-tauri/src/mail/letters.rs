@@ -663,6 +663,48 @@ pub async fn mail_letter(app: AppHandle, id: String, uid: u32, folder: Option<St
     json!({ "ok": true, "letter": letter, "talk": agent::talk_view(&sh, &key) })
 }
 
+// A link in a letter, clicked on the Mail page (or its menu's 打开链接),
+// opened in the default browser (zhoupengjie/Wakuwaku#150). Whatever the
+// page sends, a web address alone (web_address): ShellExecute opens
+// anything it is handed, a program, a file, a share, another app's scheme,
+// and a letter's sender writes the link. The page warns first about one
+// that is not where it says it goes (settings-letter.ts linkWarning). Not
+// said in her log: the address is the letter's.
+#[tauri::command]
+pub async fn mail_open_link(app: AppHandle, url: String) -> bool {
+    let sh = shared(&app);
+    let Some(url) = web_address(&url) else {
+        sh.log("mail: a letter's link not to a web page was not opened");
+        return false;
+    };
+    // ShellExecute may wait for the browser to start: not on the page's turn.
+    crate::spawn_named("open link", move || {
+        if !crate::jump::open_url(&url) {
+            sh.log("mail: a letter's link would not open (ShellExecute failed)");
+        }
+    });
+    true
+}
+
+// An address the default browser is to open: http or https, with a host,
+// nothing in it a browser's command line could take for its end (a quote,
+// a space, a control character; the page sends it as its URL serializes
+// it, all of those escaped), 8 KB at most (a tracker's links are long).
+fn web_address(url: &str) -> Option<String> {
+    let url = url.trim();
+    if url.len() > 8192 || url.chars().any(|c| c.is_whitespace() || c.is_control() || c == '"') {
+        return None;
+    }
+    let rest = ["https://", "http://"].iter().find_map(|scheme| url.get(..scheme.len()).filter(|s| s.eq_ignore_ascii_case(scheme)).map(|_| &url[scheme.len()..]))?;
+    let authority = rest.split(['/', '?', '#', '\\']).next().unwrap_or("");
+    let host = authority.rsplit('@').next().unwrap_or("");
+    let host = match host.strip_prefix('[') {
+        Some(v6) => v6.split(']').next().unwrap_or(""),
+        None => host.split(':').next().unwrap_or(""),
+    };
+    (!host.is_empty()).then(|| url.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -681,6 +723,47 @@ mod tests {
         let replied = parse(b"From: a@b.test\r\nReply-To: List <list@b.test>\r\nReferences: <r1@x> <r2@x>\r\nSubject: s\r\n\r\nhi\r\n").unwrap();
         assert_eq!((view(&replied)["replyTo"][0]["address"].as_str(), view(&replied)["references"].clone()), (Some("list@b.test"), json!(["r1@x", "r2@x"])));
         assert_eq!(v["date"], 1_791_512_100_000i64);
+    }
+
+    // A letter's link opened in the browser: a web page's address alone,
+    // whatever the page is made to send.
+    #[test]
+    fn only_a_web_address_is_opened() {
+        for url in [
+            "https://example.test/",
+            "http://example.test",
+            "HTTPS://Example.test/a?b=1&c=%22x%22#top",
+            "https://u123.ct.sendgrid.net/ls/click?upn=48f7e6d5c4b3a210fedcba98&u=1",
+            "https://user@example.test:8443/x",
+            "http://[::1]:8080/",
+            "https://xn--pple-43d.test/login",
+            " https://example.test/padded ",
+        ] {
+            assert_eq!(web_address(url).as_deref(), Some(url.trim()), "{url}");
+        }
+        for url in [
+            "",
+            "example.test",
+            "//example.test/x",
+            "file:///C:/Windows/System32/calc.exe",
+            "C:\\Windows\\System32\\calc.exe",
+            "\\\\server\\share\\run.exe",
+            "javascript:alert(1)",
+            "mailto:a@example.test",
+            "ms-settings:privacy",
+            "search-ms:query=x",
+            "https://",
+            "https:///path",
+            "https://user@/x",
+            "http://[]/",
+            "https://example.test/a b",
+            "https://example.test/\" --new-window \"file:///c:/x",
+            "https://example.test/\nfile:///c:/x",
+            "https://example.test/\u{0}",
+        ] {
+            assert_eq!(web_address(url), None, "{url:?}");
+        }
+        assert_eq!(web_address(&format!("https://example.test/{}", "a".repeat(8200))), None, "too long");
     }
 
     #[test]

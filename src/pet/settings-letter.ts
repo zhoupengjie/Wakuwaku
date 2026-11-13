@@ -44,6 +44,145 @@ type LetterFrame = HTMLIFrameElement & { _fitDoc?: Document; _fit?: () => void; 
 const REMOTE = /(?:\b(?:src|srcset|background|poster)\s*=\s*["']?|url\(\s*(?:["']|&quot;|&#39;)?)\s*(?:https?:)?\/\//i
 export const hasRemote = (html: string) => REMOTE.test(html)
 
+// --- A letter's links (zhoupengjie/Wakuwaku#150) ----------------------------------------------
+// What a link in a letter is to her: a web page, opened in the default
+// browser (letters.rs mail_open_link), or an address to write to (mailto:,
+// a letter begun here); anything else (a picture's cid:, tel:, about:blank
+// where letters.rs took a script out, an address of her own page's)
+// nothing.
+export type LetterLink = { kind: 'web'; url: string } | { kind: 'mail'; to: string; cc: string; bcc: string; subject: string; text: string }
+
+export function linkOf(href: unknown): LetterLink | null {
+  const raw = String(href ?? '').trim()
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(raw)?.[1].toLowerCase()
+  if (scheme === 'mailto') return mailtoOf(raw.slice(7))
+  if (scheme !== 'http' && scheme !== 'https') return null
+  try {
+    const u = new URL(raw)
+    return u.hostname ? { kind: 'web', url: u.href } : null
+  } catch (e) {
+    return null
+  }
+}
+
+// A mailto: link's parts (RFC 6068): the addresses, and cc, bcc, subject
+// and body after its ?, each cut to a size a letter has.
+function mailtoOf(rest: string): LetterLink | null {
+  // Each run of escapes on its own: a broken one (%ZZ, half a character) is itself, the rest read.
+  const decode = (s: string) =>
+    s.replace(/(?:%[0-9a-f]{2})+/gi, run => {
+      try {
+        return decodeURIComponent(run)
+      } catch (e) {
+        return run
+      }
+    })
+  const line = (s: string, most: number) => s.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, most)
+  const q = rest.indexOf('?')
+  const fields: Record<string, string> = { to: decode(q < 0 ? rest : rest.slice(0, q)), cc: '', bcc: '', subject: '', body: '' }
+  for (const pair of q < 0 ? [] : rest.slice(q + 1).split('&')) {
+    const eq = pair.indexOf('=')
+    const key = decode(eq < 0 ? pair : pair.slice(0, eq)).toLowerCase()
+    const value = decode(eq < 0 ? '' : pair.slice(eq + 1))
+    if (key === 'to') fields.to = [fields.to, value].filter(Boolean).join(', ')
+    else if (key in fields && !fields[key]) fields[key] = value
+  }
+  const mail = {
+    kind: 'mail' as const,
+    to: line(fields.to, 2000),
+    cc: line(fields.cc, 2000),
+    bcc: line(fields.bcc, 2000),
+    subject: line(fields.subject, 500),
+    text: fields.body.replace(/\r\n?/g, '\n').slice(0, 20000),
+  }
+  return mail.to || mail.cc || mail.bcc || mail.subject || mail.text ? mail : null
+}
+
+// The end of a site's name a link's words may show, taken for an address
+// when not begun with http:// or www. ("paypal.com"), and not a file's
+// ("report.pdf", "photo.zip"), nor a short word ("log.in").
+const NAMED_TLDS = new Set(
+  'com net org edu gov mil int io co ai app dev me info biz tv cc xyz top site online tech store shop cloud cn hk tw mo jp kr sg de uk fr es nl eu ru us ca au br ch se dk fi pl cz ie nz'.split(' '),
+)
+
+// The site a link's words show, when they are an address as a whole
+// ("https://paypal.com/login", "www.paypal.com", "paypal.com"); else none
+// ("点击这里", "Visit example.com", "report.pdf").
+function siteShown(text: string): string | null {
+  const t = String(text || '').trim().replace(/[.。]+$/, '')
+  if (!t || t.length > 2048 || /\s/.test(t)) return null
+  const m = /^(?:(https?):\/\/)?([^/?#@:]+)(?::\d+)?(?:[/?#].*)?$/i.exec(t)
+  if (!m) return null
+  let host: string
+  try {
+    host = new URL(`http://${m[2]}`).hostname
+  } catch (e) {
+    return null
+  }
+  const tld = host.split('.').pop() || ''
+  if (!host.includes('.') || /^\d+$/.test(tld)) return null
+  return m[1] || host.startsWith('www.') || NAMED_TLDS.has(tld) || tld.startsWith('xn--') ? host : null
+}
+
+// The same site: the same name (www. or not), or one under the other.
+function sameSite(a: string, b: string) {
+  const bare = (h: string) => h.replace(/^www\./, '')
+  const [x, y] = [bare(a), bare(b)]
+  return x === y || x.endsWith(`.${y}`) || y.endsWith(`.${x}`)
+}
+
+// Why a web link is to be asked about before it opens (Thunderbird asks
+// the same): its words show one site and it goes to another (a name before
+// an @ is not where it goes: https://paypal.com@evil.test), it goes to a
+// number and not a name, or its name is spelled with letters of other
+// alphabets (punycode, xn--: аpple.com with a Cyrillic а). None for the rest.
+export type LinkWarning = { why: 'differs'; shown: string; real: string } | { why: 'ip' | 'idn'; real: string }
+
+export function linkWarning(url: string, text: string): LinkWarning | null {
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch (e) {
+    return null
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
+  const real = u.hostname.toLowerCase()
+  if (u.username || u.password) {
+    let shown = u.username
+    try {
+      shown = decodeURIComponent(shown)
+    } catch (e) {}
+    return { why: 'differs', shown, real }
+  }
+  if (/^\d+(\.\d+){3}$/.test(real) || real.startsWith('[')) return { why: 'ip', real }
+  if (real.split('.').some(label => label.startsWith('xn--'))) return { why: 'idn', real }
+  const shown = siteShown(text)
+  return shown && !sameSite(shown, real) ? { why: 'differs', shown, real } : null
+}
+
+// A letter's plain text, its web addresses made links (data-mail-link,
+// clicked as a link in its HTML is): each from http:// or https:// to the
+// first space or bracket of a sentence's, less the stop after it and a
+// closing parenthesis it never opened.
+const TEXT_LINK = /\bhttps?:\/\/[^\s<>"'\[\]{}，。、；！？「」《》（）]+/gi
+export function textWithLinks(text: unknown, esc: (value: unknown) => string) {
+  const s = String(text ?? '')
+  let out = ''
+  let at = 0
+  for (const m of s.matchAll(TEXT_LINK)) {
+    let url = m[0]
+    for (;;) {
+      const last = url[url.length - 1]
+      if ('.,;:!?'.includes(last) || (last === ')' && url.split('(').length < url.split(')').length)) url = url.slice(0, -1)
+      else break
+    }
+    if (!linkOf(url)) continue
+    out += `${esc(s.slice(at, m.index!))}<a class="m-link" data-mail-link="${esc(url)}">${esc(url)}</a>`
+    at = m.index! + url.length
+  }
+  return out + esc(s.slice(at))
+}
+
 export function letterPart(core: SettingsCore) {
   const {
     st, pieces, AGENTS, COLOR, MOST_FILES, T, Widgets, body, draw, esc, expanded, inbox, keepDraft, layer,
@@ -87,9 +226,10 @@ export function letterPart(core: SettingsCore) {
   // A letter begun: new (from the account fromAccount picks), a reply to
   // the sender or to all (from the account it came to; the letter quoted
   // under it, words an agent wrote on top, if given), or one passed on
-  // (with its attachments). One half written is not thrown away for it:
-  // it shows.
-  function write(kind: string, l?: Letter, words?: string) {
+  // (with its attachments); a new one with its people, subject and text
+  // given (`fill`: a letter's mailto: link, from the account it came to).
+  // One half written is not thrown away for it: it shows.
+  function write(kind: string, l?: Letter, words?: string, fill?: { to: string; cc: string; bcc: string; subject: string; text: string }) {
     closeMenu()
     if (st.draft && (st.draft.touched || st.draft.files.length)) {
       st.draft.note = T('mail.w.unsent')
@@ -120,15 +260,20 @@ export function letterPart(core: SettingsCore) {
       d.text = `\n\n${forwarded(l)}`
       d.forward = { account: l.account, folder: l.folder || 'inbox', uid: l.uid, files: (l.attachments || []).map((f: { name: string; size: number }, i: number) => ({ index: i, name: f.name, size: f.size })) }
     }
+    if (fill && kind === 'new') {
+      Object.assign(d, { to: fill.to, cc: fill.cc, bcc: fill.bcc, subject: fill.subject, text: fill.text })
+      d.showCc = !!(fill.cc || fill.bcc)
+    }
     st.draft = d
     st.writing = true
     st.dropSure = false
     keepDraft()
     draw(true)
     core.relayout()
-    // The caret where one writes first: the people, or above the quote.
+    // The caret where one writes first: the people (none given yet), or
+    // above the quote.
     requestAnimationFrame(() => {
-      const box = body.querySelector(kind === 'reply' || kind === 'all' ? '[data-w="text"]' : '[data-w="to"]')
+      const box = body.querySelector(kind === 'reply' || kind === 'all' || d.to ? '[data-w="text"]' : '[data-w="to"]')
       box?.focus()
       if (box?.matches('textarea')) {
         box.setSelectionRange(0, 0)
@@ -376,7 +521,7 @@ export function letterPart(core: SettingsCore) {
   function mailBodyHTML(l: Letter) {
     const html = String(l.html || '')
     if (!html.trim()) {
-      return `<div class="m-text">${esc(l.text)}</div>${l.cut ? `<div class="d">${esc(T('mail.cut'))}</div>` : ''}`
+      return `<div class="m-text">${textWithLinks(l.text, esc)}</div>${l.cut ? `<div class="d">${esc(T('mail.cut'))}</div>` : ''}`
     }
     const light = document.body.classList.contains('set-light')
     const fg = light ? '#1b1b1b' : '#f5f5f7'
@@ -428,12 +573,117 @@ export function letterPart(core: SettingsCore) {
     page.setAttribute('data-filled', id)
   }
 
+  // --- Its links (zhoupengjie/Wakuwaku#150) -------------------------------------------------------
+  // A link in a letter's HTML (its frame's a or area with an href), or in
+  // its plain text (textWithLinks: data-mail-link, on this page).
+  const frameLink = (target: EventTarget | null) => ((target as Element | null)?.closest?.('a[href], area[href]') as HTMLElement | null) || null
+  const hrefOf = (el: HTMLElement) => (el.hasAttribute('data-mail-link') ? el.dataset.mailLink : el.getAttribute('href'))
+
+  // A web link's warning (linkWarning) in words.
+  function warningText(w: LinkWarning) {
+    return w.why === 'differs' ? T('mail.link.differs', { shown: w.shown, real: w.real }) : T(`mail.link.${w.why}`, { real: w.real })
+  }
+
+  // Where a link pointed at goes, at the foot of the letter as a browser
+  // shows it (its address, an address to write to), amber when it would be
+  // asked about; gone when the pointer leaves it or it goes.
+  const tipEl = document.createElement('div')
+  tipEl.className = 'mtip'
+  tipEl.hidden = true
+  layer.append(tipEl)
+  // What it is shown for, on this page: the link, or the frame it is in.
+  let tipFor: HTMLElement | null = null
+
+  function showTip(el: HTMLElement | null, frame?: HTMLIFrameElement) {
+    const link = el ? linkOf(hrefOf(el)) : null
+    tipFor = link ? frame || el : null
+    if (!link || !el) {
+      tipEl.hidden = true
+      return
+    }
+    tipEl.textContent = link.kind === 'web' ? link.url : `✉ ${link.to || link.subject}`
+    tipEl.classList.toggle('warn', link.kind === 'web' && !!linkWarning(link.url, el.textContent || ''))
+    tipEl.hidden = false
+    // The letter's part of the page that shows: its pane (two), or the page.
+    const shows = ((frame || el).closest('.pane-r-body') as HTMLElement | null) || body
+    const box = shows.getBoundingClientRect()
+    const lay = layer.getBoundingClientRect()
+    tipEl.style.maxWidth = `${Math.max(120, box.width - 16)}px`
+    tipEl.style.left = `${box.left - lay.left + 8}px`
+    tipEl.style.top = `${box.bottom - lay.top - tipEl.offsetHeight - 8}px`
+  }
+
+  // A link clicked (or its middle button): a web page opened in the
+  // browser, at once, or after its menu says why it is asked about
+  // (linkWarning); an address, a letter to it begun here; the rest nothing.
+  function linkClicked(el: HTMLElement, frame?: HTMLIFrameElement) {
+    closeMenu()
+    const link = linkOf(hrefOf(el))
+    if (!link) return
+    if (link.kind === 'mail') return writeTo(link)
+    if (!linkWarning(link.url, el.textContent || '')) return openWeb(link.url)
+    // Asked under the link.
+    const r = el.getBoundingClientRect()
+    const box = frame?.getBoundingClientRect() || { left: 0, top: 0 }
+    linkMenu(link, el.textContent || '', box.left + r.left, box.top + r.bottom + 4)
+  }
+
+  // A link's menu (a right-click on it, or the question before one asked
+  // about opens): why it is asked about, where it goes, and open it (anyway)
+  // and copy it; an address's, write to it and copy it.
+  function linkMenu(link: LetterLink, text: string, x: number, y: number) {
+    showTip(null)
+    const warn = link.kind === 'web' ? linkWarning(link.url, text) : null
+    const why = warn ? `<div class="mi-warn">⚠ ${esc(warningText(warn))}</div>` : ''
+    const where = `<div class="mi-url">${esc(link.kind === 'web' ? link.url : link.to || link.subject)}</div>`
+    const items =
+      link.kind === 'web'
+        ? `<button class="mi" data-pick="open">${esc(T(warn ? 'mail.link.openAnyway' : 'mail.link.open'))}</button><button class="mi" data-pick="copy">${esc(T('mail.link.copy'))}</button>`
+        : `<button class="mi" data-pick="write">${esc(T('mail.link.write'))}</button>${link.to ? `<button class="mi" data-pick="copy">${esc(T('mail.link.copyAddress'))}</button>` : ''}`
+    menuEl.innerHTML = `${why}${where}<div class="mi-sep"></div>${items}`
+    st.menuPick = v => {
+      if (v === 'open' && link.kind === 'web') openWeb(link.url)
+      if (v === 'write' && link.kind === 'mail') writeTo(link)
+      if (v === 'copy') copyText(link.kind === 'web' ? link.url : link.to)
+    }
+    placeMenu(x, y)
+  }
+
+  async function openWeb(url: string) {
+    closeMenu()
+    const opened = await pet.mail.openLink(url).catch(() => false)
+    if (!opened) pieces.market.toast(T('mail.link.failed'))
+  }
+
+  // A letter begun to a mailto: link's address, from the account the
+  // letter open came to.
+  function writeTo(link: Extract<LetterLink, { kind: 'mail' }>) {
+    write('new', st.reading?.letter || undefined, undefined, link)
+  }
+
+  // The panel has the focus while it is open (a click in it): the page's
+  // own copy, else the old way.
+  function copyText(text: string) {
+    const done = () => pieces.market.toast(T('mail.link.copied'))
+    navigator.clipboard?.writeText(text).then(done, () => {
+      const area = document.createElement('textarea')
+      area.value = text
+      layer.append(area)
+      area.select()
+      document.execCommand('copy')
+      area.remove()
+      done()
+    })
+  }
+
   // The frame as tall as the letter in it: the page measures it (the frame
   // is of her own origin and runs nothing) and gives it the height. Measured
   // again as its pictures arrive and its fonts settle — the first measure is
   // of a letter whose pictures are not there yet, and a letter 3,000px tall
   // was left showing its first 160 (the user's letter, 2026-10-20).
   function fitFrames() {
+    // A link's address shown for a letter no longer there (another opened by ↑ ↓).
+    if (tipFor && !tipFor.isConnected) showTip(null)
     for (const frame of body.querySelectorAll<LetterFrame>('iframe.m-html')) {
       const fitWidth = (doc: Document) => {
         const w = doc.documentElement.clientWidth
@@ -474,16 +724,40 @@ export function letterPart(core: SettingsCore) {
           frame._fitDoc = doc
           doc.addEventListener('load', fit, true)
           doc.addEventListener('error', fit, true)
+          // Its links (none goes anywhere in the frame): one to a place in
+          // the letter scrolls there, the rest as linkClicked says; the
+          // middle button the same. A right-click on one, its menu (on the
+          // rest of the letter WebView2's own, to copy what is selected);
+          // pointed at, where it goes (showTip). The frame's events stay
+          // in it: a click in it closes the menu here too.
           doc.addEventListener('click', e => {
-            const a = (e.target as Element).closest?.('a[href]')
-            if (!a) return
-            const href = a.getAttribute('href') || ''
-            if (href.startsWith('#') && href.length > 1) {
-              const target = doc.getElementById(href.slice(1))
-              if (target) target.scrollIntoView({ block: 'nearest' })
-            }
+            const a = frameLink(e.target)
+            if (!a) return closeMenu()
             e.preventDefault()
+            const href = a.getAttribute('href') || ''
+            if (href.startsWith('#')) {
+              closeMenu()
+              const target = href.length > 1 && doc.getElementById(href.slice(1))
+              if (target) target.scrollIntoView({ block: 'nearest' })
+              return
+            }
+            linkClicked(a, frame)
           })
+          doc.addEventListener('auxclick', e => {
+            const a = frameLink(e.target)
+            if (!a) return
+            e.preventDefault()
+            if (e.button === 1 && !(a.getAttribute('href') || '').startsWith('#')) linkClicked(a, frame)
+          })
+          doc.addEventListener('contextmenu', e => {
+            const a = frameLink(e.target)
+            const link = a && linkOf(a.getAttribute('href'))
+            if (!link) return
+            e.preventDefault()
+            const box = frame.getBoundingClientRect()
+            linkMenu(link, a.textContent || '', box.left + e.clientX, box.top + e.clientY)
+          })
+          doc.addEventListener('mouseover', e => showTip(frameLink(e.target), frame))
           doc.fonts?.ready?.then(fit).catch(() => {})
         } catch (e) {}
       }
@@ -491,6 +765,7 @@ export function letterPart(core: SettingsCore) {
       if (!frame._fitHooked) {
         frame._fitHooked = true
         frame.addEventListener('load', () => frame._fit?.())
+        frame.addEventListener('mouseleave', () => showTip(null))
       }
       watch()
       for (const t of frame._fitTimers || []) clearTimeout(t)
@@ -877,6 +1152,14 @@ export function letterPart(core: SettingsCore) {
   }
 
   layer.addEventListener('contextmenu', e => {
+    // A link in a letter's plain text: its menu.
+    const linkEl = st.tab === 'mail' && (e.target as HTMLElement).closest<HTMLElement>('[data-mail-link]')
+    const link = linkEl && linkOf(hrefOf(linkEl))
+    if (linkEl && link) {
+      e.preventDefault()
+      e.stopPropagation()
+      return linkMenu(link, linkEl.textContent || '', e.clientX, e.clientY)
+    }
     const letter = st.tab === 'mail' && (e.target as HTMLElement).closest('[data-letter]')
     if (!letter || (e.target as HTMLElement).closest('.talk')) return
     // Ours, not the island's menu.
@@ -886,6 +1169,10 @@ export function letterPart(core: SettingsCore) {
     openMenu(letter.dataset.account!, Number(letter.dataset.letter), letter.dataset.folder || 'inbox', e.clientX, e.clientY)
   })
   body.addEventListener('scroll', closeMenu)
+  // A link in a letter's plain text pointed at; the address shown no more
+  // once the letter scrolls (its pane's too).
+  body.addEventListener('mouseover', e => showTip((e.target as HTMLElement).closest<HTMLElement>('[data-mail-link]')))
+  body.addEventListener('scroll', () => showTip(null), true)
 
-  return { addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu, openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setPictures, setProxy, star, step, waySetting, write, writeAbout }
+  return { addFiles, closeMenu, fitFrames, hand, handMenu, linkClicked, loadInbox, menuEl, netNow, openChoices, openLetter, openMenu, openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft, setPictures, setProxy, star, step, waySetting, write, writeAbout }
 }

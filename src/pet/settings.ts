@@ -734,7 +734,7 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
   // In settings-letter.ts:
   pieces.letter = letterPart(core)
   const {
-    addFiles, closeMenu, fitFrames, hand, handMenu, loadInbox, menuEl, netNow, openChoices, openLetter,
+    addFiles, closeMenu, fitFrames, hand, handMenu, linkClicked, loadInbox, menuEl, netNow, openChoices, openLetter,
     openMenu, openPicker, pageMail, pageNet, proxyAddress, proxySetting, replyIn, runNetTest, say, sendDraft,
     setPictures, setProxy, star, step, waySetting, write, writeAbout,
   } = pieces.letter
@@ -1532,6 +1532,13 @@ export function settingsPage(Island: IslandFace | null, Picker: PickerFace | nul
       const [agent, how] = handing.dataset.hand!.split(':')
       const ref = handing.dataset.account ? handing.dataset : { account: st.reading?.account, uid: st.reading?.uid, folder: st.reading?.folder }
       if (!handing.disabled) hand(ref.account!, Number(ref.uid), agent, how, ref.folder || 'inbox')
+      return true
+    }
+    // A link in an open letter's plain text (one in its HTML is its
+    // frame's: settings-letter.ts fitFrames).
+    const mailLink = at('[data-mail-link]')
+    if (mailLink) {
+      linkClicked(mailLink)
       return true
     }
     // An open letter's pictures from elsewhere: shown this once, for its

@@ -24,7 +24,7 @@ use serde_json::{json, Map, Value};
 use agent_core::event::{AgentEvent, Kind};
 use agent_core::registry::{Session, SessionRegistry, Status, FORGET_MS};
 
-use crate::events;
+use crate::agents::events;
 
 // The processes a session runs in, its own first and those above it, each
 // a pid with when it started (a number Windows has handed to another

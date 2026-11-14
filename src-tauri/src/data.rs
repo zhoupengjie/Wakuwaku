@@ -274,7 +274,7 @@ impl PetInfo {
 
 // The pets Codex has: only read, never written.
 pub fn codex_pets() -> PathBuf {
-    crate::connection::codex_home().join("pets")
+    crate::agents::connection::codex_home().join("pets")
 }
 
 // Downloaded pets: <her folder>/pets, then the project's pets/ (a build

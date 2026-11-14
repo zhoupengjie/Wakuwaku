@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-use crate::{app_asks, bars, desk, fullscreen, hw, island, lhm, mail, now_ms, pet, plugins, power, screen, settings, spawn_named, tokens, widgets, Shared};
+use crate::{bars, desk, fullscreen, hw, island, lhm, mail, now_ms, pet, plugins, power, screen, settings, spawn_named, widgets, Shared};
+use crate::agents::{app_asks, tokens};
 use crate::lock::Lock;
 
 // The monitor's thread woken from its wait (setup): its settings changed

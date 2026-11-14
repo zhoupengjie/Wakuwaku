@@ -516,7 +516,7 @@ pub fn said_by(by: Option<&str>) -> &'static str {
 #[cfg_attr(not(windows), allow(dead_code))]
 mod rules {
     use super::{AT_LOGIN_FLAG, BY_RUN, BY_TASK};
-    use crate::connection::same_path;
+    use crate::agents::connection::same_path;
     use crate::logon::TaskSeen;
 
     // The Run value for this program, and what its logon task gives it.
@@ -612,7 +612,7 @@ mod rules {
 
 #[cfg(windows)]
 mod login {
-    use crate::connection::launch_command;
+    use crate::agents::connection::launch_command;
     use super::rules::{login_of, run_command, run_fix, task_args, task_fix, Login, RunFix, TaskFix};
     use crate::logon;
     use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE};

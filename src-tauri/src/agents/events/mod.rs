@@ -12,6 +12,13 @@
 //   reaction what she plays once over the mood (reaction_of)
 use serde_json::{json, Value};
 
+// Antigravity's and DeepSeek Harness's log lines; and, for her tests, what
+// she makes of the others' events.
+pub mod agy;
+pub mod dsh;
+#[cfg(test)]
+pub(crate) mod others;
+
 use agent_core::codex::patched;
 use agent_core::event::{Agent, AgentEvent, AnswerIn, Call, Failure, Kind, Wait, What};
 #[cfg(test)]

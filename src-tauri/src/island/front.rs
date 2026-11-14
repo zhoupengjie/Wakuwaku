@@ -41,7 +41,7 @@ pub fn settings_closed(sh: &Arc<Shared>) {
     // Set up once Claude Code or Codex is connected, not as the settings
     // close (a click outside closed them, and a new user, nothing
     // connected, was never asked again: the test session, 2026-10-12).
-    if !sh.config().onboarded && crate::connection::seems_connected() {
+    if !sh.config().onboarded && crate::agents::connection::seems_connected() {
         sh.change(json!({ "onboarded": true }));
     } else {
         sh.redraw();

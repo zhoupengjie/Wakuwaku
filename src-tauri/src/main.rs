@@ -10,9 +10,12 @@
 //
 //   shared.rs      what every part shares (Shared): the settings, her moods, the windows'
 //                  states, the prompts, the widgets, each behind its lock; the log; the quit
+//   agents/        the agents' side (its own list: agents/mod.rs): how she is connected to each
+//                  (connection/, hooks.rs), their events into her words (events/), the
+//                  sessions' moods (state.rs), prompts (asks.rs, app_asks.rs), to a
+//                  session's window (jump.rs), today's tokens (tokens.rs)
 //   commands/      what the pages call: her window's and both pages' (pet.rs), the island's
 //                  (island/), the rest (mod.rs); others' in their own modules
-//   hooks.rs       her exe run as an agent's hook: the event handed to her port
 //   loops.rs       her threads that look every so often: the pointer, the widgets, the
 //                  monitor, full screen, the ticker
 //   webview.rs     what WebView2 is started with, and where it keeps its files
@@ -24,20 +27,14 @@
 //                  the volume (audio.rs); its parts on Windows in taskbar/win/
 //   settings.rs    what the settings show and change
 //   pointer.rs     click-through, for both windows; screen.rs the work areas
-//   asks.rs        prompts answered on her or the island
-//   connection/    each agent's hooks, plugin or extension, written and read (one file each)
 //   logon.rs       start at login: the Run value and her logon task; the session's logon
 //   hw.rs          the monitor's built-in hardware readings (Windows' own: PDH, D3DKMT, the drives)
 //   lhm.rs         hardware sensors from LibreHardwareMonitor's web server (the monitor)
 //   lhm_setup.rs   LibreHardwareMonitor downloaded, set up and started, on the person's click
 //   fetch.rs       pets from codex-pets.net
 //   fullscreen.rs, focus.rs, notify.rs   bits of Windows
-//   jump.rs        to a session's window, when you click the session
 //   tray.rs        the tray icon and the menu
 //   server.rs      the port the hooks report to
-//   state.rs       per-session moods; events.rs the agents' events into her
-//                  words (events_agy.rs, events_dsh.rs: their log lines;
-//                  events_tests.rs: what she makes of the others')
 //   data.rs        her folder, settings and pets; the mark of a quit by choice
 //   starts.rs      what starts her (the hooks, at login, by hand), whether it may, and who did
 //   widgets.rs     plugins in the island: widgets from scripts, and the built-in ones
@@ -47,33 +44,24 @@
 //                  (src/pet/views.ts), served by wakuplugin://
 //   zip.rs         zips read and unpacked (LHM's download, a plugin's package)
 //   win32.rs       Windows' own calls that more than one part makes, each declared once
-//   tokens.rs      today's tokens, from Claude Code's, Codex's, Antigravity's, omp's, DSH's and Reasonix's own records
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // The settings' snapshot (settings.rs) is one json! with every agent's part
 // in it: past the default 128 it no longer expands.
 #![recursion_limit = "256"]
 
 mod addons;
-mod app_asks;
+mod agents;
 mod appbar;
-mod asks;
 mod audio;
 mod backplate;
 mod bars;
 mod clock;
 mod commands;
 mod config;
-mod connection;
 mod crash;
 mod data;
 mod desk;
 mod detach;
-mod events;
-mod events_agy;
-mod events_dsh;
-#[cfg(test)]
-mod events_tests;
-mod dsh_bridge;
 mod embed;
 mod fetch;
 mod focus;
@@ -81,13 +69,11 @@ mod focus;
 mod frameless;
 mod fullscreen;
 mod gpu;
-mod hooks;
 mod hw;
 mod i18n;
 mod icons;
 mod inputs;
 mod island;
-mod jump;
 mod lhm;
 mod lhm_setup;
 mod lock;
@@ -107,8 +93,6 @@ mod pointer;
 mod power;
 mod pri;
 mod proxy;
-#[cfg(test)]
-mod replay;
 mod screen;
 mod scripts;
 mod sensors;
@@ -118,12 +102,10 @@ mod shared;
 mod shell;
 mod shortcuts;
 mod starts;
-mod state;
 mod systray;
 mod taskbar;
 mod tasks;
 mod theme;
-mod tokens;
 mod tray;
 mod updates;
 mod wallpaper;
@@ -145,6 +127,8 @@ use tauri::Manager;
 pub use shared::{now_ms, spawn_named, Responder, Shared};
 pub(crate) use shared::shared;
 use shared::DEFAULT_PORT;
+// The agents' side, named here as it was when it lived here.
+use agents::{connection, hooks, jump};
 
 fn main() {
     // Her exe again, as the taskbar's guard (shell.rs): it waits for her to

@@ -61,14 +61,14 @@ mod tests {
         let handed: Vec<AgentEvent> = asks.take_handed().iter().map(handed_event).collect();
         assert_eq!((handed.len(), handed[0].session.as_str(), handed[0].agent, handed[0].within), (1, "session-ed6a", Agent::Dsh, true));
         assert_eq!(
-            crate::events::detail_of(&handed[0]),
+            crate::agents::events::detail_of(&handed[0]),
             json!({ "key": "detail.approveIn", "vars": { "app": "DeepSeek Harness", "what": { "key": "step.write", "vars": { "file": "probe1.txt" } } } })
         );
         // A question handed back ("去 DeepSeek Harness 处理"): to be answered there.
         let id = asks.add(dsh_question(), none(), 0, 1000).ok().unwrap();
         assert!(asks.dismiss(id));
         let handed = handed_event(&asks.take_handed()[0]);
-        assert_eq!(crate::events::detail_of(&handed), json!({ "key": "detail.answerIn", "vars": { "app": "DeepSeek Harness", "what": "test1 or test2?" } }));
+        assert_eq!(crate::agents::events::detail_of(&handed), json!({ "key": "detail.answerIn", "vars": { "app": "DeepSeek Harness", "what": "test1 or test2?" } }));
         // So the apps listening are told: an event as any.
         assert_eq!(serde_json::to_value(&handed).unwrap()["wait"], json!({ "for": "question", "question": "test1 or test2?", "answerIn": { "in": "app", "name": "DeepSeek Harness" } }));
     }

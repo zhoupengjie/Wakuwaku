@@ -4,7 +4,7 @@
 // file of its own: everything in it is a Cordis plugin, mounted by the rows
 // of a profile's patch layers. Ours is integrations/dsh/wakuwaku.js, a small
 // plugin with no dependencies that runs in DSH's own process and tells her
-// port of its sessions (events_dsh.rs reads them). Install writes it, with a
+// port of its sessions (events/dsh.rs reads them). Install writes it, with a
 // package.json of its own (an ES module asking nothing of DSH's versions),
 // into a folder in DSH's home, <DSH home>/wakuwaku/, and inserts a row for
 // it into the home-level patch layer ($DSH_HOME/cordis.patch.yml, ~/.dsh by
@@ -44,15 +44,15 @@
 use super::*;
 
 pub const DSH_FLAG: &str = "--wakuwaku-dsh-hook";
-const DSH_PLUGIN: &str = include_str!("../../../integrations/dsh/wakuwaku.js");
-const DSH_PACKAGE: &str = include_str!("../../../integrations/dsh/package.json");
+const DSH_PLUGIN: &str = include_str!("../../../../integrations/dsh/wakuwaku.js");
+const DSH_PACKAGE: &str = include_str!("../../../../integrations/dsh/package.json");
 // Its folder in DSH's home, its file there, and the row's name for it: its
 // path beside the patch file.
 const DSH_DIR: &str = "wakuwaku";
 const DSH_PLUGIN_FILE: &str = "wakuwaku.js";
 const DSH_ROW_NAME: &str = "./wakuwaku/wakuwaku.js";
 // The other way's rows insert DSH's own Claude Code hook bridge (and 0.3.2's did).
-const DSH_BRIDGE: &str = crate::dsh_bridge::HOOKS_PACKAGE;
+const DSH_BRIDGE: &str = crate::agents::dsh_bridge::HOOKS_PACKAGE;
 // The two ways' rows by ids of their own (the bridge's as 0.3.2 wrote it):
 // DSH's loader, as a running row of the same id changes its name, keeps the
 // plugin it has and only gives it the new config, so a switch while DSH runs
@@ -383,12 +383,12 @@ pub fn dsh_desktop_version() -> Option<String> {
 // How the bridge's packages stand: ok (or carried by the app itself, as
 // 0.2.0-rc.2 does), missing, version (dsh_bridge.rs packages_state).
 pub fn dsh_packages() -> &'static str {
-    if crate::dsh_bridge::app_dir().is_some_and(|app| crate::dsh_bridge::bundled(&app)) {
+    if crate::agents::dsh_bridge::app_dir().is_some_and(|app| crate::agents::dsh_bridge::bundled(&app)) {
         return "ok";
     }
-    let found = crate::dsh_bridge::found_in(&crate::dsh_bridge::profiles(&dsh_home()));
+    let found = crate::agents::dsh_bridge::found_in(&crate::agents::dsh_bridge::profiles(&dsh_home()));
     match dsh_desktop_version() {
-        Some(version) => crate::dsh_bridge::packages_state(&found, &version),
+        Some(version) => crate::agents::dsh_bridge::packages_state(&found, &version),
         None if !found.is_empty() && found.iter().flatten().all(Option::is_some) => "ok",
         None => "missing",
     }
@@ -585,12 +585,12 @@ pub fn dsh_view(port: u16, setting: &Value, seen_at: u64) -> Value {
     }
     if way == "bridge" {
         let written = fs::metadata(dsh_hooks_file()).and_then(|m| m.modified()).map_or(0, ms_of);
-        view["load"] = json!({ "state": dsh_bridge_load(&crate::jump::started_named(DSH_APP), seen_at, written) });
+        view["load"] = json!({ "state": dsh_bridge_load(&crate::agents::jump::started_named(DSH_APP), seen_at, written) });
         return view;
     }
     let dir = dsh_plugin_dir();
     let written = fs::metadata(dir.join(DSH_PLUGIN_FILE)).and_then(|m| m.modified()).map_or(0, ms_of);
-    let load = dsh_load_of(&dsh_markers(&dir), crate::jump::started_ms, &crate::jump::started_named(DSH_APP), written, ms_of(std::time::SystemTime::now()), &dsh_plugin_sha(), dsh_plugin_version());
+    let load = dsh_load_of(&dsh_markers(&dir), crate::agents::jump::started_ms, &crate::agents::jump::started_named(DSH_APP), written, ms_of(std::time::SystemTime::now()), &dsh_plugin_sha(), dsh_plugin_version());
     view["load"] = json!({ "state": load.word() });
     if let DshLoad::Loaded(m) | DshLoad::Older(m) = &load {
         view["load"] = json!({ "state": load.word(), "at": m.at, "version": m.version, "profile": m.profile, "pid": m.pid });
@@ -691,12 +691,12 @@ fn remove_bridge_leftovers(log: &mut Vec<String>) {
     if noted.is_empty() {
         return;
     }
-    let runtime = crate::dsh_bridge::app_dir().and_then(|app| crate::dsh_bridge::runtime_in(&app));
+    let runtime = crate::agents::dsh_bridge::app_dir().and_then(|app| crate::agents::dsh_bridge::runtime_in(&app));
     let mut kept = Vec::new();
     for (profile, names) in noted {
         let gone = match &runtime {
-            Some(runtime) => crate::dsh_bridge::remove(runtime, &profile, &names),
-            None => Err(crate::dsh_bridge::Failure { kind: "runtime", detail: String::new() }),
+            Some(runtime) => crate::agents::dsh_bridge::remove(runtime, &profile, &names),
+            None => Err(crate::agents::dsh_bridge::Failure { kind: "runtime", detail: String::new() }),
         };
         match gone {
             Ok(()) => log.push(format!("dsh: the hook bridge's packages taken out of {}", profile.display())),
@@ -746,14 +746,14 @@ pub fn write_dsh_hooks(action: &str, way: &str, port: u16, registry: Option<&str
         }
         ("install", "bridge") => {
             // The packages first: should they fail, nothing else has changed.
-            let app = crate::dsh_bridge::app_dir();
-            if !app.as_deref().is_some_and(crate::dsh_bridge::bundled) {
+            let app = crate::agents::dsh_bridge::app_dir();
+            if !app.as_deref().is_some_and(crate::agents::dsh_bridge::bundled) {
                 let failed = |kind: &str, detail: &str| format!("{DSH_BRIDGE_FAILED} [{kind}]: {detail}");
-                let runtime = app.as_deref().and_then(crate::dsh_bridge::runtime_in).ok_or_else(|| failed("runtime", "DeepSeek Harness's own Node and pnpm were not found"))?;
+                let runtime = app.as_deref().and_then(crate::agents::dsh_bridge::runtime_in).ok_or_else(|| failed("runtime", "DeepSeek Harness's own Node and pnpm were not found"))?;
                 let version = dsh_desktop_version().ok_or_else(|| failed("runtime", "DeepSeek Harness's version could not be read"))?;
                 let mut added = Vec::new();
-                for profile in crate::dsh_bridge::profiles(&dsh_home()) {
-                    match crate::dsh_bridge::install(&runtime, &profile, &version, registry) {
+                for profile in crate::agents::dsh_bridge::profiles(&dsh_home()) {
+                    match crate::agents::dsh_bridge::install(&runtime, &profile, &version, registry) {
                         Ok(names) => {
                             log.push(format!("dsh: the hook bridge's packages {version} in {}{}", profile.display(), if names.is_empty() { " (there already)" } else { "" }));
                             added.push((profile, names));

@@ -25,7 +25,8 @@ use tauri::{Emitter, Manager};
 
 use crate::appbar::Edge;
 use crate::systray::{self, Press};
-use crate::{jump, shell, tasks, wallpaper, Shared};
+use crate::{shell, tasks, wallpaper, Shared};
+use crate::agents::jump;
 use crate::lock::Lock;
 use crate::win32::{BitmapInfoHeader, Hwnd, Input, InputUnion, KeybdInput, MonitorInfo, Msg, Point, Rect, WndClassExW, BitBlt, CoTaskMemFree, CreateCompatibleDC, CreateDIBSection, CreateSolidBrush, CreateWindowExW, DefWindowProcW, DeleteDC, DeleteObject, DestroyWindow, DispatchMessageW, GetClassNameW, GetCursorPos, GetDC, GetMessageW, GetModuleHandleW, GetMonitorInfoW, GetSystemMetrics, IsWindowVisible, KillTimer, MonitorFromPoint, MonitorFromWindow, PostMessageW, PostQuitMessage, RegisterClassExW, RegisterWindowMessageW, ReleaseDC, SelectObject, SendInput, SetForegroundWindow, SetLayeredWindowAttributes, SetTimer, SetWinEventHook, SetWindowPos, ShowWindow, SystemParametersInfoW, TranslateMessage, UnhookWinEvent};
 

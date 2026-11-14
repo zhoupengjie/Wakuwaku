@@ -383,7 +383,7 @@ keys! {
     "endCue" => "ring" set OneOf(&["open", "ring", "none"]),
     // A session at rest out of sight after this many minutes with nothing
     // new from it (15, 30, 60, 120; 0 never: state.rs is_shown).
-    IDLE_HIDE_MIN idle_hide_min: UInt = "idleHideMin" => (crate::state::IDLE_HIDE_MIN) set UIntOf(&[0, 15, 30, 60, 120]),
+    IDLE_HIDE_MIN idle_hide_min: UInt = "idleHideMin" => (crate::agents::state::IDLE_HIDE_MIN) set UIntOf(&[0, 15, 30, 60, 120]),
     NOTIFY notify: Raw = "notify" => { "waiting": false, "done": false, "error": false } set With(crate::settings::is_notify),
     "sound" => false set Bool,
     PROMPT_WAIT_SEC prompt_wait_sec: UInt = "promptWaitSec" => 290 set UIntOf(&[30, 60, 120, 290]),
@@ -545,7 +545,7 @@ mod tests {
             "endCue": "ring",
             // A session at rest out of sight after this many minutes with nothing
             // new from it (15, 30, 60, 120; 0 never: state.rs is_shown).
-            "idleHideMin": crate::state::IDLE_HIDE_MIN,
+            "idleHideMin": crate::agents::state::IDLE_HIDE_MIN,
             "notify": { "waiting": false, "done": false, "error": false },
             "sound": false,
             "promptWaitSec": 290,

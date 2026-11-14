@@ -557,7 +557,7 @@ pub fn open_page(sh: &Shared) {
     if page.is_empty() || !allowed(&page) {
         return;
     }
-    if !crate::jump::open_url(&page) {
+    if !crate::agents::jump::open_url(&page) {
         sh.log(&format!("update: could not open {page}"));
     }
 }

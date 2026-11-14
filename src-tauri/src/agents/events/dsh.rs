@@ -58,7 +58,7 @@ pub fn log_line(e: &Value, found: Option<u32>, home: &Path) -> Option<String> {
 
 #[cfg(test)]
 fn to_message(e: &Value, home: &Path) -> Option<Value> {
-    agent_core::dsh::to_event(e, home).map(|ev| crate::events::message_of(&ev))
+    agent_core::dsh::to_event(e, home).map(|ev| crate::agents::events::message_of(&ev))
 }
 
 // The message for a prompt she does not hold: to be answered in DSH.
@@ -66,7 +66,7 @@ fn to_message(e: &Value, home: &Path) -> Option<Value> {
 fn not_held(e: &Value, home: &Path) -> Value {
     let mut ev = agent_core::dsh::to_event(e, home).unwrap();
     agent_core::dsh::answered_in_dsh(&mut ev);
-    crate::events::message_of(&ev)
+    crate::agents::events::message_of(&ev)
 }
 #[cfg(test)]
 mod tests {
@@ -125,8 +125,8 @@ mod tests {
     // c96167f1 the CLI reading note.txt and writing copy.txt, one turn;
     // 6aa5a96d the desktop app, a question then a write it was refused, two
     // turns. (agent-core's dsh.rs reads their last words.)
-    const C96: &[u8] = include_bytes!("../../test/fixtures/dsh/session-c96167f1.v4.jsonl.zstd");
-    const A6A: &[u8] = include_bytes!("../../test/fixtures/dsh/session-6aa5a96d.v4.jsonl.zstd");
+    const C96: &[u8] = include_bytes!("../../../../test/fixtures/dsh/session-c96167f1.v4.jsonl.zstd");
+    const A6A: &[u8] = include_bytes!("../../../../test/fixtures/dsh/session-6aa5a96d.v4.jsonl.zstd");
     #[test]
     fn where_dsh_keeps_a_session_s_log() {
         assert_eq!(project_key("C:\\Users\\waku\\Documents\\deepseek-harness\\default-workspace"), "--C-Users-waku-Documents-deepseek-harness-default-workspace--");

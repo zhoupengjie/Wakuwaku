@@ -600,7 +600,7 @@ pub fn view(sh: &Shared, status: &str, shown: bool) -> Value {
         json!({
             "exe": i.exe.to_string_lossy(),
             "dir": i.exe.parent().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default(),
-            "shown": crate::connection::shown_path(i.exe.parent().unwrap_or(&i.exe)),
+            "shown": crate::agents::connection::shown_path(i.exe.parent().unwrap_or(&i.exe)),
             "from": i.from,
             "hers": i.hers,
             "config": i.config,
